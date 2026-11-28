@@ -294,6 +294,108 @@ def test_verify_reports_a_drifted_clip_as_FAIL_not_as_REFUSED(profile):
     assert any(ln.startswith("FAIL") for ln in lines)
 
 
+def _reword_refusals(monkeypatch):
+    """Replace every refusal the REAL `load_clip` raises with one sentence,
+    keeping the class it was raised as.
+
+    `verify()` has to tell an absent clip from a drifted one by the KIND of
+    refusal, never by its wording (#1859). The wrapper re-raises `type(why)`,
+    so it does not know which class the absent-file site raises and cannot
+    smuggle the answer in: the class is the real raise site's, and only the
+    sentence is gone."""
+    real = rp.load_clip
+
+    def reworded(clip_id, profile=None):
+        try:
+            return real(clip_id, profile)
+        except rp.Refused as why:
+            raise type(why)("the test replaced this refusal's wording") from why
+
+    monkeypatch.setattr(rp, "load_clip", reworded)
+
+
+@pytest.mark.parametrize("reworded", [False, True], ids=["as-written", "reworded"])
+def test_an_absent_clip_is_ABSENT_and_REFUSED_however_its_refusal_is_worded(
+        profile, monkeypatch, reworded):
+    """**The #1859 control.** An absent file is a precondition that failed:
+    nothing was compared, so the verdict is REFUSED (2), never FAIL (1).
+
+    `[reworded]` is the case the string match got wrong. `verify()` used to
+    recognise an absent clip by `"not in the cache" in str(why)`, so once that
+    sentence moved every absent clip read as a broken reference -- the inverse
+    of #1821, a refusal reported as a failure, with no test the wiser."""
+    _, dest = profile
+    dest.unlink()
+    if reworded:
+        _reword_refusals(monkeypatch)
+    code, lines = rp.verify()
+    assert code == rp.REFUSED
+    assert [ln for ln in lines if ln.startswith("ABSENT")] == ["ABSENT   fake/clip"]
+    assert not any(ln.startswith("FAIL") for ln in lines)
+    assert lines[-1] == "0 verified, 0 failed, 1 absent"
+
+
+def test_the_absent_file_refusal_is_Unverifiable_which_is_still_a_Refused(profile):
+    """The class is what `verify()` classifies by, so the raise site has to
+    carry it -- and it has to stay a `Refused`, because every other consumer
+    of `load_clip` catches exactly that."""
+    _, dest = profile
+    dest.unlink()
+    with pytest.raises(rp.Unverifiable) as e:
+        rp.load_clip("fake/clip")
+    assert isinstance(e.value, rp.Refused)
+
+
+def _drift_the_clip(kind, prof, dest):
+    """Make the cached clip disagree with the profile in exactly one way: a
+    comparison that RAN. Bytes and hash pass through the file alone; rate and
+    frames re-freeze the file so only that field is left to disagree."""
+    if kind == "bytes":
+        b = dest.read_bytes()
+        dest.write_bytes(b[: len(b) // 2])
+    elif kind == "hash":
+        b = bytearray(dest.read_bytes())
+        b[-3] ^= 0x01
+        dest.write_bytes(bytes(b))
+    else:
+        rp.write_clip(dest, _tone(seconds=0.25 if kind == "frames" else 0.5),
+                      sr=44100 if kind == "rate" else SR)
+        prof["clips"]["fake/clip"]["bytes"] = dest.stat().st_size
+        prof["clips"]["fake/clip"]["sha256"] = rp.file_sha256(dest)
+
+
+@pytest.mark.parametrize("kind", ["bytes", "hash", "rate", "frames"])
+def test_verify_reports_every_way_a_present_clip_disagrees_as_FAIL(profile, monkeypatch, kind):
+    """The other side of the class boundary. A clip that is THERE and is not
+    what the profile describes is a failure, and must never be raised as
+    `Unverifiable`: that would turn a drifted reference into a no-verdict.
+    With the wording replaced, the class is all `verify()` has left."""
+    prof, dest = profile
+    _drift_the_clip(kind, prof, dest)
+    _reword_refusals(monkeypatch)
+    code, lines = rp.verify(prof)
+    assert code == rp.FAIL
+    assert any(ln.startswith("FAIL     fake/clip") for ln in lines)
+    assert not any(ln.startswith("ABSENT") for ln in lines)
+    assert lines[-1] == "0 verified, 1 failed, 0 absent"
+
+
+def test_a_failed_clip_outvotes_an_absent_one_however_its_refusal_is_worded(
+        profile, monkeypatch):
+    """Both kinds in one cache: each is reported in its own word, and the exit
+    code is FAIL (1), because a reference on this disk is wrong and somebody
+    has to look -- whether or not another clip is also missing."""
+    prof, dest = profile
+    _drift_the_clip("hash", prof, dest)
+    prof["clips"]["fake/gone"] = dict(prof["clips"]["fake/clip"], file="cache/fake/gone.wav")
+    _reword_refusals(monkeypatch)
+    code, lines = rp.verify(prof)
+    assert code == rp.FAIL
+    assert "ABSENT   fake/gone" in lines
+    assert any(ln.startswith("FAIL     fake/clip") for ln in lines)
+    assert lines[-1] == "0 verified, 1 failed, 1 absent"
+
+
 def test_verify_is_OK_when_the_cache_matches(profile):
     code, lines = rp.verify()
     assert code == rp.OK
