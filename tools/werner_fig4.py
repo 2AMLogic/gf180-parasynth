@@ -901,8 +901,11 @@ def from_artifact(path: pathlib.Path = ARTIFACT):
     if not path.exists():
         raise Refused(f"{path} is absent; run --json with the paper present")
     blob = json.loads(path.read_text())
-    # `level_stage` and `decimation` are read by main() off the returned blob
-    mf.require_keys(blob, ("curves", "level_stage", "decimation"),
+    # Only `curves` is read here. `level_stage` and `decimation` are read by
+    # main() off the returned blob and are asserted there, so a caller that
+    # discards the blob (cymbal_band_balance.filter_record) is not refused for
+    # keys it never reads, and its own specific diagnostics stay reachable.
+    mf.require_keys(blob, ("curves",),
                     f"the Figure 4 artifact at {path}", refused=Refused)
     return {k: (np.array(v["hz"]), np.array(v["db"]))
             for k, v in blob["curves"].items()}, blob
@@ -958,6 +961,9 @@ def main(argv=None) -> int:
                   f"{cal['pt_per_db']:.4f} pt/dB")
         else:
             data, blob = from_artifact(pathlib.Path(a.artifact))
+            mf.require_keys(blob, ("level_stage", "decimation"),
+                            f"the Figure 4 artifact at {a.artifact}",
+                            refused=Refused)
             level = blob["level_stage"]
             print(f"from {a.artifact} (decimation {blob['decimation']})")
     except Refused as exc:
