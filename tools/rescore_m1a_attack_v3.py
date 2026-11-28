@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 import mono_m1a_score as bass                                       # noqa: E402
 import sweep_m1a_attack as sweep                                    # noqa: E402
+import refusal                                                      # noqa: E402
 
 SETTINGS_MS = (10.0, 4.0, 5.0)
 
@@ -50,7 +51,9 @@ def main():
                       f"({'Q' if e['reference']['qualified'] else 'U'})  {e['grade']}")
         (bass.QUALIFICATION / "rescore.json").write_text(json.dumps(out, indent=2, default=float) + "\n")
         return 0
-    except bass.Refused as exc:
+    except refusal.Refused as exc:      # any module's refusal, by class (#1671):
+        # compare_audio reaches attack_fit_v3, whose Refused is
+        # measure_mono_m5a_reference's -- a sibling of bass.Refused
         print(f"REFUSED: {exc}")
         return 2
 
