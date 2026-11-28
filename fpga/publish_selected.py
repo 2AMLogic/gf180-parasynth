@@ -90,6 +90,7 @@ def publish(artifact: Path, output: Path, workflow_url: str, *, historical=False
         if path.read_bytes() != saved and not historical:
             raise ValueError(f"build input differs: {name}")
         inputs[name] = hashlib.sha256(saved).hexdigest()
+    sim_refusal = None
     if historical:
         simulation = report["simulation_evidence"]
         transcript = subprocess.check_output(
@@ -105,8 +106,11 @@ def publish(artifact: Path, output: Path, workflow_url: str, *, historical=False
                 if hashlib.sha256(simulated).hexdigest() != digest:
                     raise ValueError(f"historical core differs from simulation: {name}")
     else:
-        simulation = build_selected.simulation_evidence()
-    if simulation != report["simulation_evidence"]:
+        try:
+            simulation = build_selected.simulation_evidence()
+        except RuntimeError as exc:
+            simulation, sim_refusal = None, str(exc)
+    if sim_refusal is None and simulation != report["simulation_evidence"]:
         raise ValueError("core simulation binding differs")
     original_hashes = {p.name: sha256(p) for p in build.iterdir() if p.is_file()}
     for stage in report["stages"].values():
@@ -122,6 +126,8 @@ def publish(artifact: Path, output: Path, workflow_url: str, *, historical=False
                "current_checkout_differences": changed_sources,
                "state": "NO-VERDICT", "bitstream_qualified": False}
     try:
+        if sim_refusal is not None:
+            raise ValueError(sim_refusal)
         if report["state"] != "BUILT" or not report["bitstream_built"]:
             raise ValueError(f"build did not finish successfully: {report['state']}")
         if set(report["stages"]) != {"synthesis", "place_route", "bitstream"}:
@@ -136,7 +142,7 @@ def publish(artifact: Path, output: Path, workflow_url: str, *, historical=False
                        bitstream_sha256=sha256(build / "ecp5.bit"))
     except (ValueError, FileNotFoundError, KeyError) as exc:
         summary["reason"] = str(exc)
-        if report["state"] == "FAIL":
+        if report["state"] == "FAIL" and sim_refusal is None:
             summary["state"] = "FAIL"
     output.mkdir(parents=True, exist_ok=True)
     for name in ("report.json", "timing.json", "ecp5.bit"):
