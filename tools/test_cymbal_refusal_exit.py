@@ -32,8 +32,7 @@ WHAT EACH CALLER OWES, and what these controls assert:
                     drive died in _trim's IndexError after calibrating)
   cymbal_low_tail   a refusing record is RECORDED as data and the run exits 0
                     -- this module's designed per-file degradation, same as
-                    its short-record refusals; the defect was the escape. The
-                    controls gate is pinned green in that control (#1869)
+                    its short-record refusals; the defect was the escape
   cymbal_tone_knob  the windowed measurement refuses into NO VERDICT and the
                     gate still answers on its corpus-free properties
   cymbal_tone_render  a cymbal_bands refusal maps to 3, this module's
@@ -168,17 +167,9 @@ def test_cymbal_mid_fischer_maps_silent_corpus_to_refused_2(tmp_path, capsys):
 # ---------------------------------------------------------------------------
 # cymbal_low_tail: the refusal is recorded as data, the run must not die
 # ---------------------------------------------------------------------------
-def test_cymbal_low_tail_full_run_records_prepare_refusal_not_traceback(tmp_path, monkeypatch):
-    """The designed per-file degradation, with the controls gate pinned green.
-
-    On the current tree the real gate REFUSES: FORWARD_INTEGRAL has refused
-    since step 6 (#1869) and since #1839 that is no longer credited as a
-    detection. Unpinned, the run would stop before any record is read and
-    hide the path this control exists for. The gate's own three outcomes are
-    tools/test_cymbal_low_tail.py's to assert."""
+def test_cymbal_low_tail_full_run_records_prepare_refusal_not_traceback(tmp_path):
     import cymbal_low_tail as clt
 
-    monkeypatch.setattr(clt, "control_matrix", lambda: (True, [], []))
     refs = _refs_dir(tmp_path, _write_onset_cut, "CY5025.WAV")
     out = tmp_path / "o.json"
     rc_ = clt.main(["--refs", str(refs), "--out", str(out)])

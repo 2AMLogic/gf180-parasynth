@@ -619,10 +619,10 @@ def test_the_transformation_asserted_blind_really_is_blind(blind):
 # replaced by a stand-in with a known matrix -- every property passes clean,
 # every injected defect turns exactly `rho-tracks` red, the transformation
 # asserted blind moves nothing -- and refusals are planted on top of it. A
-# stand-in rather than the real instrument because the real one refuses under
-# FORWARD_INTEGRAL today (#1869, pinned below): a refusal planted there would
-# be indistinguishable from the one already there, and these controls would
-# then pass or fail with the instrument instead of with the loop.
+# stand-in isolates the loop from the instrument (which renders and filters
+# synthetic strikes per call, and before #1869 refused under FORWARD_INTEGRAL
+# itself): these controls pass or fail with the loop's accounting, not with
+# `properties()`, and a planted refusal cannot collide with an instrument one.
 # --------------------------------------------------------------------------
 PLANTED = "apparatus off (planted)"
 BLIND = lt.BLIND_BY_CONSTRUCTION[0]
@@ -762,11 +762,12 @@ def test_the_full_run_reports_no_result_while_a_control_refuses(monkeypatch, tmp
 # the current tree, unstubbed
 # --------------------------------------------------------------------------
 def test_the_measured_verdict_is_ok_on_the_current_tree():
-    """Nothing MEASURED fails: every property passes and every control that
-    ran did its job. That is not the same as a green gate; the two controls
-    below hold the difference."""
+    """Run the gate against the current state before relying on it -- an
+    unsatisfiable gate trains everyone to ignore gates. Nothing measured fails
+    and no control refuses, so the clean-tree gate is green."""
     ok, lines, refused = lt.control_matrix()
     assert ok, "\n".join(lines)
+    assert not refused, refused
 
 
 # --------------------------------------------------------------------------
