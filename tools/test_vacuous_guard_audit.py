@@ -139,6 +139,25 @@ def test_helpers_that_are_not_verdict_shaped_are_skipped():
     assert _hits(src) == []
 
 
+def test_own_nodes_does_not_descend_into_a_nested_def_that_is_a_body_statement():
+    """`_own_nodes` feeds the gate's `assertion_sites` and the audit's
+    `_population_tests`: an `if` inside a nested `def` was being read as the
+    OUTER function's own population test, and that def's loop as its own."""
+    tree = ast.parse(
+        "def check_outer(xs):\n"
+        "    def helper(ys):\n"
+        "        if not ys:\n"
+        "            raise Refused('empty')\n"
+        "        return ys\n"
+        "    for x in xs:\n"
+        "        pass\n"
+    )
+    outer = next(f for f in vga._functions(tree) if f.qual == "check_outer")
+    assert [ast.unparse(t) for t in vga._population_tests(outer.node, 99)] == []
+    assert not any(isinstance(n, ast.For) and ast.unparse(n.iter) == "ys"
+                   for n in vga._own_nodes(outer.node))
+
+
 def test_the_audit_runs_over_the_real_tree_and_finds_something():
     """A scan that found nothing in 100+ files would be a broken scan."""
     hits = vga.audit_tree()

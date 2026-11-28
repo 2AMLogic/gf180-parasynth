@@ -199,14 +199,17 @@ def _functions(tree: ast.Module):
 
 
 def _own_nodes(fn):
-    """Every node in the function's own body, not descending into nested defs."""
+    """Every node in the function's own body, not descending into nested defs
+    -- including a `def` that is itself a statement of that body (#1957)."""
+    nested = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
     stack = list(fn.body)
     while stack:
         n = stack.pop()
+        if isinstance(n, nested):
+            continue
         yield n
         for c in ast.iter_child_nodes(n):
-            if not isinstance(c, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda,
-                                  ast.ClassDef)):
+            if not isinstance(c, nested):
                 stack.append(c)
 
 
