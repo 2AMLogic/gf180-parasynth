@@ -53,6 +53,7 @@ import io
 import json
 import os
 import pathlib
+import re
 import shlex
 import sys
 import wave
@@ -88,6 +89,11 @@ R1_RUN_IDENTITY = {
 }
 # Sources whose bytes do not reach the simulation (constraints only).
 NOT_SIMULATED = {"fpga/boards/arty-a7-100.xdc"}
+#: The only form `image.source_commit` may take: the full object ID the
+#: manifest writer emits (fpga/release/release_manifest.py). Hex cannot begin
+#: with `-`, so git never reads it as an option, and a full ID is no mutable
+#: name -- not `HEAD`, not a branch, which the unguarded `cat-file -e` accepts.
+_IMAGE_COMMIT = re.compile(r"[0-9a-f]{40}")
 # The declared calibration window of each reference: from the first period
 # whose |sample| reaches CAL_ONSET_LSB, CAL_WINDOW_S long. Declared here, once,
 # for every command -- never chosen per take or per candidate.
@@ -303,6 +309,8 @@ def stage(manifest: dict, dest: pathlib.Path) -> list:
     commit = manifest["image"].get("source_commit")
     if not commit:
         raise Refused("the manifest names no image.source_commit")
+    if not isinstance(commit, str) or not _IMAGE_COMMIT.fullmatch(commit):
+        raise Refused(f"the manifest's image.source_commit is not a full object name: {commit!r}")
     dest = pathlib.Path(dest)
     if dest.exists() and any(dest.iterdir()):
         raise Refused(f"{dest} exists and is not empty")

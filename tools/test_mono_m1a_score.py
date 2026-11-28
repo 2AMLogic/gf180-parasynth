@@ -1,4 +1,7 @@
+import hashlib
+import itertools
 import json
+import subprocess
 import numpy as np
 import pytest
 from scipy.io import wavfile
@@ -293,3 +296,177 @@ def test_qualification_refuses_a_stale_attack_suite(monkeypatch):
     monkeypatch.setattr(bass, "sha", lambda p: "0" * 64 if str(p).endswith("attack_fit_v3.py") else real(p))
     with pytest.raises(bass.Refused, match="stale"):
         bass.qualify_envelope_basis()
+
+
+# --- the cached record's source_commit reaches git in the object position ------
+# `git diff --exit-code <source_commit> -- model audition`: a recorded value
+# beginning with `-` is git's option, not an object (#2082, #2104). The form is
+# checked first, the name is then resolved, and only the resolved ID goes on.
+
+RESOLVED_CEA5525 = "cea552573a80b89f2f7860a7c294d272da692f1a"      # what `cea5525` names
+DIFF = ["git", "diff", "--exit-code"]
+REV_PARSE = ["git", "rev-parse", "--verify", "-q"]
+
+
+def _cacheable_record(tmp_path, source_commit):
+    """A record that passes every check before the git one: a real int16 WAV
+    at `bass.SR`, bound to the reference manifest the checkout ships."""
+    pcm_path = tmp_path / "model.wav"
+    wavfile.write(pcm_path, bass.SR, np.zeros(480, dtype="<i2"))
+    return {"audio": str(pcm_path), "engine": "fixed-model", "source_commit": source_commit,
+            "diagnostics": {"configuration": {"patch": {}, "engine": {}, "inject": None},
+                            "model_audio_sha256": bass.sha(pcm_path)},
+            "provenance": {"inputs": {"frozen:M1A:manifest": "sha256:" + bass.sha(bass.MANIFEST)}}}
+
+
+def _record_git(monkeypatch, answer):
+    """Every `subprocess.run` the module makes is recorded and answered by
+    `answer(argv, real, kwargs)`, which may hand a call to real git."""
+    real = subprocess.run
+    calls = []
+
+    def run(argv, **kwargs):
+        calls.append(list(argv))
+        return answer(list(argv), real, kwargs)
+    monkeypatch.setattr(subprocess, "run", run)
+    return calls
+
+
+def _resolve_then_stub_diff(argv, real, kwargs):
+    """Real git resolves the name; the diff that follows is answered "no
+    change", so a control does not depend on the DSP tree being unchanged
+    since the recorded commit."""
+    if argv[:len(REV_PARSE)] == REV_PARSE:
+        return real(argv, **kwargs)
+    assert argv[:3] == DIFF, argv
+    return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+
+def _no_git(argv, real, kwargs):
+    """Were the unguarded code to reach git, nothing is written: exit 1."""
+    return subprocess.CompletedProcess(argv, 1, stdout="", stderr="")
+
+
+def _scratch_repo(path, *dirs):
+    """A committed repository under `path` holding `dirs`."""
+    path.mkdir(parents=True, exist_ok=True)
+    for d in dirs:
+        (path / d).mkdir(parents=True)
+        (path / d / "dsp.py").write_text("x = 1\n")
+    for args in (["init", "-q"], ["add", "."],
+                 ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "init"]):
+        subprocess.run(["git", *args], cwd=path, check=True, capture_output=True)
+    return path
+
+
+def test_control_recorded_option_truncates_a_file_and_exits_zero(tmp_path):
+    """The input that defeats the unguarded check, on real git. With the
+    record's text in the object position, `--output=PATH` is git's own option:
+    git writes the diff to PATH -- creating it, truncating it if it exists --
+    compares the working tree with the index because no object was named, and
+    exits 0 on a clean tree. So `returncode != 0` saw a pass and no commit was
+    ever compared. Pinned on a scratch repository so the answer does not
+    depend on this checkout's state; if it fails, git changed, and the guard's
+    premise changed with it."""
+    repo = _scratch_repo(tmp_path / "repo", "model")
+    fresh, victim = tmp_path / "fresh", tmp_path / "victim"
+    assert not fresh.exists()
+    victim.write_bytes(b"keep me\n")
+    for target in (fresh, victim):
+        diffed = subprocess.run([*DIFF, f"--output={target}", "--", "model"],
+                                cwd=repo, capture_output=True, text=True)
+        assert diffed.returncode == 0, diffed.stderr
+        assert target.read_bytes() == b"", target
+
+
+@pytest.mark.parametrize("preexisting", [False, True], ids=["created", "truncated"])
+def test_recorded_option_in_source_commit_is_refused_before_git(tmp_path, monkeypatch, preexisting):
+    """The guard: the same input, refused by its form before any git runs, and
+    the named file is neither created nor truncated. Every call is handed to
+    real git, so an absent guard truncates the file here too."""
+    target = tmp_path / "target"
+    if preexisting:
+        target.write_bytes(b"keep me\n")
+    calls = _record_git(monkeypatch, lambda argv, real, kwargs: real(argv, **kwargs))
+    with pytest.raises(bass.Refused, match="source_commit is not a hex object name"):
+        bass.load_model_cache(_cacheable_record(tmp_path, f"--output={target}"), {}, {})
+    assert calls == []
+    if preexisting:
+        assert target.read_bytes() == b"keep me\n"
+    else:
+        assert not target.exists()
+
+
+@pytest.mark.parametrize("source_commit", [
+    "CEA5525", "CEA552573A80B89F2F7860A7C294D272DA692F1A",
+    "cea", "cea552573a80b89f2f7860a7c294d272da692f1aa",
+    "cea5525\n", " cea5525", "cea5525 ", "cea-5525", "cea5525^", "cea5525~1", "cea5525:",
+    "HEAD", "", "-cea5525", "--output=/tmp/x", "--",
+    None, 212, 3.5, b"cea5525", ["cea5525"], {"commit": "cea5525"},
+], ids=repr)
+def test_malformed_source_commit_is_refused_before_git(tmp_path, monkeypatch, source_commit):
+    """Uppercase hex, 3 and 41 characters, surrounding whitespace, every
+    revision syntax git would otherwise read, and a non-string."""
+    calls = _record_git(monkeypatch, _no_git)
+    with pytest.raises(bass.Refused, match="source_commit is not a hex object name"):
+        bass.load_model_cache(_cacheable_record(tmp_path, source_commit), {}, {})
+    assert calls == []
+
+
+@pytest.mark.parametrize("recorded", ["cea5525", RESOLVED_CEA5525])
+def test_shipped_id_resolves_to_the_full_object_id_git_is_given(tmp_path, monkeypatch, recorded):
+    """Positive control: the guard does not refuse everything.
+    `docs/scorecard/results/M1A.json` records `cea5525`, because provenance
+    writes `rev-parse --short`; it passes, real git resolves it, and `git diff`
+    is given the commit it names -- the 40-hex ID, never the record's text."""
+    shipped = json.loads((bass.ROOT / "docs/scorecard/results/M1A.json").read_text())["source_commit"]
+    assert shipped == "cea5525"
+    calls = _record_git(monkeypatch, _resolve_then_stub_diff)
+    assert len(bass.load_model_cache(_cacheable_record(tmp_path, recorded), {}, {})) == 480
+    assert calls == [[*REV_PARSE, f"{recorded}^{{commit}}"],
+                     [*DIFF, RESOLVED_CEA5525, "--", "model", "audition"]]
+
+
+def test_a_resolved_commit_whose_tree_differs_still_refuses(tmp_path, monkeypatch):
+    """The check the diff existed for is unchanged: a change is a refusal."""
+    def changed(argv, real, kwargs):
+        done = _resolve_then_stub_diff(argv, real, kwargs)
+        return done if argv[:len(REV_PARSE)] == REV_PARSE else subprocess.CompletedProcess(argv, 1)
+    _record_git(monkeypatch, changed)
+    with pytest.raises(bass.Refused, match="DSP sources differ"):
+        bass.load_model_cache(_cacheable_record(tmp_path, "cea5525"), {}, {})
+
+
+def test_hex_naming_no_commit_is_refused_before_the_diff(tmp_path, monkeypatch):
+    """The form passes and the name does not: real git is asked to resolve it,
+    answers that it names nothing, and no diff follows."""
+    calls = _record_git(monkeypatch, _resolve_then_stub_diff)
+    with pytest.raises(bass.Refused, match="source_commit names no single commit"):
+        bass.load_model_cache(_cacheable_record(tmp_path, "f" * 40), {}, {})
+    assert [c[:len(REV_PARSE)] for c in calls] == [REV_PARSE]
+
+
+def test_abbreviation_naming_two_objects_is_refused_before_the_diff(tmp_path, monkeypatch):
+    """An abbreviation that names two objects is not a commit. Real git answers
+    `rev-parse --verify -q` with exit 1 and nothing else for it -- the same
+    silence as a name matching nothing (probed on git 2.43) -- so both are one
+    refusal; this one is built, with two blobs sharing a four-character prefix."""
+    repo = _scratch_repo(tmp_path / "repo")
+    fmt = subprocess.run(["git", "rev-parse", "--show-object-format"], cwd=repo,
+                         check=True, capture_output=True, text=True).stdout.strip()
+    assert fmt == "sha1", fmt
+    seen = {}
+    for i in itertools.count():
+        body = f"candidate {i}".encode()
+        oid = hashlib.sha1(b"blob %d\0" % len(body) + body).hexdigest()
+        first = seen.setdefault(oid[:4], (oid, body))
+        if first[0] != oid:
+            break
+    for oid, content in (first, (oid, body)):
+        assert subprocess.run(["git", "hash-object", "-w", "--stdin"], cwd=repo, input=content,
+                              check=True, capture_output=True).stdout.strip().decode() == oid
+    monkeypatch.setattr(bass, "ROOT", repo)
+    calls = _record_git(monkeypatch, _resolve_then_stub_diff)
+    with pytest.raises(bass.Refused, match="source_commit names no single commit"):
+        bass.load_model_cache(_cacheable_record(tmp_path, oid[:4]), {}, {})
+    assert [c[:len(REV_PARSE)] for c in calls] == [REV_PARSE]
