@@ -280,6 +280,8 @@ def commands() -> dict:
                 setup, kit = emitted_setup(full)
             except dx.KitRefused as exc:          # the CLI refused R1's kit: say why
                 raise Refused(f"the host refuses R1's kit: {exc}") from None
+            except refusal.Refused as exc:
+                raise Refused(str(exc)) from None
             probs = check_init(setup, kit_expected=kit)
             if probs:
                 raise Refused(f"{name}: emitted setup is not the frozen R1 target: {probs}")
