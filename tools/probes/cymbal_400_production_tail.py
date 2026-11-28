@@ -66,7 +66,7 @@ _REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
 if _REFUSAL_TOOLS not in sys.path:
     sys.path.append(_REFUSAL_TOOLS)
 import refusal  # noqa: E402
-import manifest  # noqa: E402
+import manifest as mf  # noqa: E402
 
 
 class Refused(refusal.Refused, RuntimeError):
@@ -344,8 +344,8 @@ def load_frozen(path: pathlib.Path) -> dict:
     (#1774 AC 3). Only those are caught -- an implementation error is still a
     traceback, never a refusal."""
     try:
-        return manifest.load_json_refused(path, "the frozen record")
-    except manifest.Refused as e:
+        return mf.load_json_refused(path, "the frozen record")
+    except mf.Refused as e:
         raise Refused(str(e)) from e
     except FileNotFoundError:
         raise

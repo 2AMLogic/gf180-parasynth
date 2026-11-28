@@ -855,6 +855,6 @@ def test_the_loader_refuses_only_what_it_names(tmp_path, monkeypatch):
 
     def boom(path, what):
         raise TypeError("an implementation error inside the reader, not a refusal")
-    monkeypatch.setattr(td.manifest, "load_json_refused", boom)
+    monkeypatch.setattr(td.mf, "load_json_refused", boom)
     with pytest.raises(TypeError, match="not a refusal"):
         td.load_record(rec, "the judge record")

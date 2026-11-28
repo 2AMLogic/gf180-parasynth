@@ -48,7 +48,7 @@ _REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
 if _REFUSAL_TOOLS not in sys.path:
     sys.path.append(_REFUSAL_TOOLS)
 import refusal  # noqa: E402
-import manifest  # noqa: E402
+import manifest as mf  # noqa: E402
 
 FAMILY = ("LT", "MT", "HT", "LC", "MC", "HC")
 PREREG = ROOT / "docs" / "scorecard" / "tom-conga-558" / "prereg.json"
@@ -98,8 +98,8 @@ def load_record(path: pathlib.Path, what: str) -> dict:
     half is `OSError`: a missing file, a directory, an unreadable one. Only those two
     are caught -- an implementation error is still a traceback, never a refusal."""
     try:
-        return manifest.load_json_refused(path, what)
-    except manifest.Refused as e:
+        return mf.load_json_refused(path, what)
+    except mf.Refused as e:
         raise Refused(str(e)) from e
     except OSError as e:
         raise Refused(f"{what} at {path} cannot be read ({e.strerror or e}) -- nothing was judged; "
