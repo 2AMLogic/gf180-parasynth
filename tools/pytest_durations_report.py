@@ -34,6 +34,8 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 
+import refusal
+
 REFUSED = 2
 PHASES = ("setup", "call", "teardown")
 
@@ -55,7 +57,7 @@ LOG_PREFIX_RE = re.compile(
 JUNIT_PER_TEST_TOL_S = 3 * 0.005 + 0.0005
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """The input cannot yield a trustworthy table; no number is reported."""
 
 
