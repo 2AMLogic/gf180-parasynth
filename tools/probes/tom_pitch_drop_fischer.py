@@ -1410,7 +1410,8 @@ def main(argv=None) -> int:
             res = {"rows": measure_rows(a.refs, load_prereg(), a.split)}
         elif a.cmd == "fit":
             rec = json.loads(a.record.read_text())
-            mf.require_keys(rec, "rows", f"the fit record at {a.record}", refused=Refused)
+            mf.require_keys(rec, "rows", f"the fit record at {a.record}", refused=Refused,
+                            kinds={"rows": dict})
             res = fit(rec["rows"], load_prereg())
             res["from_record"] = {"path": str(a.record), "sha256": _sha(a.record)}
             print(json.dumps(_json(res), indent=1))

@@ -157,3 +157,31 @@ def test_an_empty_frozen_manifest_is_refused_naming_every_key(monkeypatch, tmp_p
 def test_a_frozen_manifest_with_a_null_identity_is_refused(monkeypatch, tmp_path, capsys):
     code, out, _ = _capture(monkeypatch, tmp_path, capsys, {**_committed_manifest(), "identity": None})
     assert code == 2 and "'identity'" in out
+
+
+@pytest.mark.parametrize("identity", [5, "x", []])
+def test_a_frozen_manifest_with_a_wrong_typed_identity_is_refused(monkeypatch, tmp_path, capsys,
+                                                                  identity):
+    # #1679: `manifest["identity"][key]` is a TypeError past #1619's guard, and
+    # a TypeError is not in main()'s refusal handler -- exit 1 by traceback on
+    # a capture host, where `_plugin_metadata()` returns (measured with that
+    # call stubbed). Without the plugin -- here, and in CI -- the reader
+    # refuses one line EARLIER, "Mini V3 bundle metadata is missing", naming
+    # neither the record nor the key. Red before the repair on both kinds of
+    # host, for a different reason on each; green after.
+    code, out, refused = _capture(monkeypatch, tmp_path, capsys,
+                                  {**_committed_manifest(), "identity": identity})
+    assert code == 2 and "REFUSED" in out
+    assert "'identity'" in out and "dict" in out
+    assert json.loads((refused / "refused.json").read_text())["state"] == "REFUSED"
+
+
+def test_a_frozen_manifest_with_a_wrong_typed_rate_is_refused_by_the_comparison(
+        monkeypatch, tmp_path, capsys):
+    # per key, not a blanket container rule: the rate is an int that is only
+    # COMPARED, so it declares no kind -- any other type simply differs, and
+    # the reader's own refusal names that. Pinned so the per-key design is a
+    # measured decision and not an omission.
+    code, out, _ = _capture(monkeypatch, tmp_path, capsys,
+                            {**_committed_manifest(), "sample_rate_hz": str(c.ref.SR)})
+    assert code == 2 and "REFUSED" in out and "host rate/block differ" in out

@@ -1085,16 +1085,93 @@ def test_require_keys_refuses_a_null_and_reads_a_bare_string_as_one_key():
     assert "'takes'" in str(raised.value) and "'t'" not in str(raised.value)
 
 
-def test_require_keys_pins_the_limit_that_a_values_type_is_not_checked():
-    # Pins what the docstring discloses (#1639): presence and non-null are all
-    # this function asserts. `{"takes": 5}` passes here and then dies in the
-    # reader -- `record["takes"].items()` is the AttributeError that exits 1
-    # in place of the REFUSED (2) a `null` or absent key gets. That is a stated
-    # limit, not an oversight. A type check is a deliberate change: it turns
-    # this red, and must update the docstring in the same commit.
-    record = {"state": "CAPTURED", "takes": 5}
-    assert mf.require_keys(record, "takes", "the capture record",
+# =============================================================================
+# require_keys: a key that is PRESENT, is not null, and is of a type the
+# reader cannot dereference is REFUSED too (#1679). `kinds` is optional and
+# per key.
+# =============================================================================
+def test_require_keys_refuses_a_key_of_the_wrong_type_in_the_callers_class():
+    # the issue's own input: present and not null, so #1619's guard passes it,
+    # and `record["takes"].items()` one line later is an AttributeError -- the
+    # traceback #1604 removed, reached by a one-character edit to the record
+    with pytest.raises(_CallerRefused) as raised:
+        mf.require_keys({"state": "CAPTURED", "takes": 5}, "takes", "the capture record",
+                        refused=_CallerRefused, kinds={"takes": dict})
+    msg = str(raised.value)
+    assert "'takes'" in msg and "dict" in msg and "int" in msg
+    assert not isinstance(raised.value, mf.Refused)
+
+
+def test_require_keys_without_kinds_leaves_behaviour_unchanged():
+    # omitting `kinds` is exactly the helper #1619 merged: it does not refuse a type
+    assert mf.require_keys({"state": "CAPTURED", "takes": 5}, "takes", "the capture record",
                            refused=_CallerRefused) is None
-    with pytest.raises(AttributeError,
-                       match="'int' object has no attribute 'items'"):
-        record["takes"].items()
+
+
+def test_require_keys_accepts_a_key_of_the_declared_type():
+    assert mf.require_keys({"state": "CAPTURED", "takes": {"A": {}}}, ("state", "takes"),
+                           "the capture record", refused=_CallerRefused,
+                           kinds={"takes": dict}) is None
+
+
+@pytest.mark.parametrize("value, named, kind", [
+    (5, "a JSON int", dict), ("x", "a JSON str", dict), ([], "a JSON list", dict),
+    ({}, "a JSON dict", list), (True, "a JSON bool", dict), (1.5, "a JSON float", dict)])
+def test_require_keys_names_the_actual_and_the_expected_type(value, named, kind):
+    with pytest.raises(_CallerRefused, match="the capture record carries the wrong type") as raised:
+        mf.require_keys({"grid": value}, "grid", "the capture record",
+                        refused=_CallerRefused, kinds={"grid": kind})
+    assert f"'grid' ({named}, read as {kind.__name__})" in str(raised.value)
+
+
+def test_require_keys_states_a_wrong_type_with_every_other_offence_in_one_refusal():
+    # every offending key in ONE refusal, as for missing and null: a record is
+    # not regenerated once per key
+    with pytest.raises(_CallerRefused) as raised:
+        mf.require_keys({"takes": 5, "grid": "x", "identity": None},
+                        ("takes", "grid", "rows", "identity"), "the plan",
+                        refused=_CallerRefused, kinds={"takes": dict, "grid": list})
+    msg = str(raised.value)
+    assert "is missing required key(s) 'rows'" in msg
+    assert "carries null for required key(s) 'identity'" in msg
+    assert ("carries the wrong type for required key(s) 'takes' (a JSON int, read as dict), "
+            "'grid' (a JSON str, read as list)") in msg
+
+
+def test_require_keys_a_key_named_in_kinds_is_required_even_if_not_listed():
+    # the input that defeats a looser design: if `kinds` checked only the keys
+    # that are PRESENT, a caller who names a kind and forgets `required` would
+    # pass an empty record here and meet the KeyError #1604 removed
+    with pytest.raises(_CallerRefused, match=r"is missing required key\(s\) 'takes'"):
+        mf.require_keys({}, (), "the capture record", refused=_CallerRefused, kinds={"takes": dict})
+    with pytest.raises(_CallerRefused, match=r"carries null for required key\(s\) 'takes'"):
+        mf.require_keys({"takes": None}, (), "the capture record",
+                        refused=_CallerRefused, kinds={"takes": dict})
+
+
+def test_require_keys_a_key_listed_in_both_required_and_kinds_is_named_once():
+    with pytest.raises(_CallerRefused) as raised:
+        mf.require_keys({"takes": 5}, "takes", "the capture record",
+                        refused=_CallerRefused, kinds={"takes": dict})
+    msg = str(raised.value)
+    assert msg.count("'takes'") == 1 and "missing" not in msg
+
+
+@pytest.mark.parametrize("value", [True, 1.0, "1", []])
+def test_require_keys_a_bool_is_not_an_int_even_though_isinstance_says_so(value):
+    # `isinstance(True, int)` is True in Python; in JSON `true` is not a number,
+    # and a rate of `true` is not a rate
+    with pytest.raises(_CallerRefused, match="carries the wrong type"):
+        mf.require_keys({"sample_rate_hz": value}, "sample_rate_hz", "the manifest",
+                        refused=_CallerRefused, kinds={"sample_rate_hz": int})
+    assert mf.require_keys({"sample_rate_hz": 48000}, "sample_rate_hz", "the manifest",
+                           refused=_CallerRefused, kinds={"sample_rate_hz": int}) is None
+
+
+def test_require_keys_accepts_a_tuple_of_types_and_still_excludes_bool():
+    kw = dict(refused=_CallerRefused, kinds={"gain_db": (int, float)})
+    assert mf.require_keys({"gain_db": 1}, "gain_db", "the record", **kw) is None
+    assert mf.require_keys({"gain_db": -4.5}, "gain_db", "the record", **kw) is None
+    with pytest.raises(_CallerRefused,
+                       match=r"'gain_db' \(a JSON bool, read as int or float\)"):
+        mf.require_keys({"gain_db": True}, "gain_db", "the record", **kw)

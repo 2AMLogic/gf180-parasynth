@@ -283,8 +283,11 @@ def main():
         if dirty:
             raise Refused("commit the capture instrument before capturing:\n" + dirty)
         manifest = json.loads((FROZEN / "manifest.json").read_text())
+        # `identity` is subscripted below; the rate and block are ints that are
+        # only compared, so they declare no kind (#1679: per key)
         mf.require_keys(manifest, ("sample_rate_hz", "block_size_samples", "identity"),
-                        f"the frozen manifest at {FROZEN / 'manifest.json'}", refused=Refused)
+                        f"the frozen manifest at {FROZEN / 'manifest.json'}", refused=Refused,
+                        kinds={"identity": dict})
         if manifest["sample_rate_hz"] != ref.SR or manifest["block_size_samples"] != ref.BLOCK:
             raise Refused("host rate/block differ from the frozen manifest")
         identity = ref._plugin_metadata()

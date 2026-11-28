@@ -364,7 +364,8 @@ def load_capture():
     record = json.loads(path.read_text())
     if not isinstance(record, dict) or record.get("state") != "CAPTURED":
         raise Refused("capture record is not CAPTURED")
-    mf.require_keys(record, "takes", f"the capture record at {path}", refused=Refused)
+    mf.require_keys(record, "takes", f"the capture record at {path}", refused=Refused,
+                    kinds={"takes": dict})
     takes = {}
     for name, take in record["takes"].items():
         audio = {}

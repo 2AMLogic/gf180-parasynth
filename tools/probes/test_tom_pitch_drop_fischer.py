@@ -698,3 +698,22 @@ def test_a_fit_record_without_rows_is_refused(monkeypatch, tmp_path, capsys):
 def test_a_fit_record_with_null_rows_is_refused(monkeypatch, tmp_path, capsys):
     code, out, written = _fit(monkeypatch, tmp_path, capsys, {"rows": None})
     assert code == 2 and "'rows'" in out and not written.exists()
+
+
+@pytest.mark.parametrize("rows", [5, "x", [], True])
+def test_a_fit_record_with_a_wrong_typed_rows_is_refused(monkeypatch, tmp_path, capsys, rows):
+    # #1679: present and not null, so #1604's guard passes it, and
+    # `fit(rows, ...)` -> `rows.items()` is an AttributeError -- exit 1 by
+    # traceback. `rows` is a MAPPING keyed by condition id (`measure_rows`
+    # returns one and `misbound_rows` / `fit` both call `.items()`); a list is
+    # the knownanswer record's shape, not the measure record's
+    code, out, written = _fit(monkeypatch, tmp_path, capsys, {"rows": rows})
+    assert code == 2 and "REFUSED" in out and "'rows'" in out and "dict" in out
+    assert not written.exists()
+
+
+def test_the_committed_measure_record_carries_rows_as_the_mapping_fit_reads():
+    # the declared kind must be satisfiable against the record that ships --
+    # here the development record that the committed `fit.json` was fitted from
+    dev = json.loads((tp.PREREG.parent / "development.json").read_text())
+    assert isinstance(dev["rows"], dict) and dev["rows"]

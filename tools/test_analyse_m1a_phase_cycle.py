@@ -88,8 +88,9 @@ def _analyse(monkeypatch, tmp_path, capsys, record):
 
 
 def test_the_committed_capture_carries_the_key_the_analysis_reads():
-    # the guard below must be satisfiable against the record that ships
-    assert json.loads((a.CAPTURE / "capture.json").read_text())["takes"] is not None
+    # the guard below must be satisfiable against the record that ships: the
+    # key is there, and it is the mapping `load_capture` dereferences it as
+    assert isinstance(json.loads((a.CAPTURE / "capture.json").read_text())["takes"], dict)
 
 
 def test_a_capture_record_without_takes_is_refused(monkeypatch, tmp_path, capsys):
@@ -104,6 +105,18 @@ def test_a_capture_record_without_takes_is_refused(monkeypatch, tmp_path, capsys
 def test_a_capture_record_with_null_takes_is_refused(monkeypatch, tmp_path, capsys):
     code, out = _analyse(monkeypatch, tmp_path, capsys, {"state": "CAPTURED", "takes": None})
     assert code == 2 and "'takes'" in out
+
+
+@pytest.mark.parametrize("takes", [5, "x", [], True])
+def test_a_capture_record_with_a_wrong_typed_takes_is_refused(monkeypatch, tmp_path, capsys, takes):
+    # #1679: present and not null, so the guard passes it, and
+    # `record["takes"].items()` one line later is an AttributeError -- exit 1
+    # by traceback, the outcome #1604 removed, reached by a one-character edit
+    code, out = _analyse(monkeypatch, tmp_path, capsys, {"state": "CAPTURED", "takes": takes})
+    assert code == 2 and "REFUSED" in out
+    assert "'takes'" in out and "dict" in out
+    assert not (tmp_path / "report.json").exists()
+    assert json.loads((tmp_path / "analysis-refused.json").read_text())["state"] == "REFUSED"
 
 
 @pytest.mark.parametrize("record", [[], 5, None])

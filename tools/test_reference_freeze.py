@@ -172,13 +172,34 @@ def test_a_corpus_manifest_missing_a_frozen_key_is_refused(frozen_scope_copy, ca
      "carries null for required key(s) 'plugin_reference_suites'"),
     (b"", "is not valid JSON"),
     (b'{"plugin_reference_suites": ', "is not valid JSON"),
-], ids=["null", "array", "null-key", "empty", "truncated"])
+    # #1679, measured: a key of the frozen path that is PRESENT with a type
+    # the walk cannot enter is refused by the next step's own object check
+    (b'{"plugin_reference_suites": 5}', "is a JSON int, not a JSON object"),
+    (b'{"plugin_reference_suites": {"suites": []}}', "is a JSON list, not a JSON object"),
+], ids=["null", "array", "null-key", "empty", "truncated", "int-mid-path", "list-mid-path"])
 def test_an_unreadable_corpus_manifest_is_refused(frozen_scope_copy, capsys, payload, named):
     (frozen_scope_copy / cf.CORPUS_MANIFEST).write_bytes(payload)
     code, out = _run(frozen_scope_copy, capsys)
     assert code == cf.REFUSED
     assert out.startswith("REFUSED") and named in out
     assert "FAIL" not in out and "PASS" not in out
+
+
+def test_a_wrong_typed_value_at_the_end_of_the_frozen_path_is_a_broken_freeze(frozen_scope_copy,
+                                                                              capsys):
+    """#1679, measured, and `_resolve` left alone on purpose. The walk refuses
+    a non-object at every step BUT the last, which it returns unchecked -- and
+    that is right: the freeze check's whole question is whether that value
+    still hashes to what was frozen. A number where the suite declaration was
+    is an edited frozen value: FAIL, named, not a refusal."""
+    p = frozen_scope_copy / cf.CORPUS_MANIFEST
+    corpus = json.loads(p.read_text())
+    corpus["plugin_reference_suites"]["suites"]["miniv3-frozen"] = 5
+    p.write_text(json.dumps(corpus))
+    code, out = _run(frozen_scope_copy, capsys)
+    assert code == cf.FAIL
+    assert out.startswith("FAIL") and "plugin_reference_suites.suites.miniv3-frozen" in out
+    assert "REFUSED" not in out
 
 
 def test_a_missing_corpus_manifest_is_refused(frozen_scope_copy, capsys):

@@ -66,7 +66,7 @@ import hashlib
 import json
 import pathlib
 import wave
-from typing import Callable
+from typing import Callable, Mapping
 
 import numpy as np
 
@@ -180,9 +180,33 @@ def load_json_refused(path, what: str) -> dict:
             f"re-seeds it") from e
 
 
-def require_keys(record, required, what: str, *, refused: Callable[[str], Exception]) -> None:
-    """REFUSE a record that parses but cannot be read: not a JSON object, or
-    missing -- or carrying `null` for -- any key in `required` (#1604).
+def _json_kind(value) -> str:
+    """`null`, or the JSON type of `value`, in the words the refusals use."""
+    return "null" if value is None else f"a JSON {type(value).__name__}"
+
+
+def _is_of_kind(value, kind) -> bool:
+    """`isinstance(value, kind)` under JSON's typing. `kind` is a type or a
+    tuple of them, and `true` is NOT a number even though Python's `bool`
+    subclasses `int` (`isinstance(True, int)` is True): a rate of `true` is
+    not a rate."""
+    if isinstance(kind, tuple):
+        return any(_is_of_kind(value, k) for k in kind)
+    if kind in (int, float) and isinstance(value, bool):
+        return False
+    return isinstance(value, kind)
+
+
+def _kind_name(kind) -> str:
+    return " or ".join(k.__name__ for k in kind) if isinstance(kind, tuple) else kind.__name__
+
+
+def require_keys(record, required, what: str, *, refused: Callable[[str], Exception],
+                 kinds: Mapping[str, type | tuple[type, ...]] | None = None) -> None:
+    """REFUSE a record that parses but cannot be read: not a JSON object;
+    missing -- or carrying `null` for -- any key in `required` (#1604); or
+    carrying, for a key named in `kinds`, a value of a type the reader cannot
+    dereference (#1679).
 
     `load_json_refused` refuses a record it cannot PARSE. This refuses one it
     can parse but cannot READ. `record["takes"]` on `{"state": "CAPTURED"}`
@@ -201,7 +225,7 @@ def require_keys(record, required, what: str, *, refused: Callable[[str], Except
     sound. Any class taking one message string qualifies, and every
     `Refused` in the tree is one.
 
-    All three of these are refusals rather than a pass:
+    All four of these are refusals rather than a pass:
 
       * the record is not a JSON object (`5`, `null`, `[]`). Checked here
         because `key not in record` cannot answer it -- on a list that is
@@ -213,40 +237,60 @@ def require_keys(record, required, what: str, *, refused: Callable[[str], Except
         `None` there is the same traceback as no key. A key whose `null` is a
         VALUE -- `measurement()`'s `value=None` is an explicit refusal -- must
         not be listed in `required`: read it with `.get()` and say what the
-        `null` means.
+        `null` means;
+      * a key named in `kinds` is present, is not null, and is not of the
+        type the reader dereferences it as. Present and non-null is not the
+        same as readable: `{"state": "CAPTURED", "takes": 5}` passed the
+        first three and died one line later on `record["takes"].items()` --
+        the traceback this function exists to replace, from a one-character
+        edit to the record (#1679, verification-rules rule 8).
 
-    What is NOT checked is the value's TYPE. Presence and non-`null` are all
-    this asserts; that is a decision (#1639), not an oversight. The `null`
-    argument above applies verbatim to a value the reader cannot dereference:
-    `{"takes": 5}` passes here and then fails in the reader, where
-    `record["takes"].items()` is an `AttributeError` -- a traceback and
-    exit 1, the outcome an absent or `null` key is refused to prevent. It is
-    left so because a mistyped record is an authoring error rather than the
-    truncated write this guard exists for, and each caller alone knows the
-    type it dereferences. The limit is pinned -- so that closing it cannot
-    happen unnoticed -- by
-    `test_require_keys_pins_the_limit_that_a_values_type_is_not_checked`
-    in test_manifest.py: a type check is a deliberate change that turns that
-    test red and rewrites this paragraph.
+    `kinds` is `{key: type}`, or a tuple of types, and it is PER KEY because
+    the expectation is: `takes` is read as a mapping while
+    `sample_rate_hz` is an int that is only compared, so a blanket "must be
+    a container" rule refuses a legitimate record. Name the kind a reader
+    DEREFERENCES, not every key it touches -- a value that is only compared
+    already refuses or mismatches cleanly whatever its type. Omitting
+    `kinds` is exactly the behaviour #1619 shipped.
+
+    A key named in `kinds` is required whether or not `required` lists it.
+    Checking only the keys that are PRESENT would let a caller who names a
+    kind and forgets `required` pass an empty record straight to the
+    `KeyError` this function exists to replace. A `null` is reported as
+    null, never also as a wrong type.
+
+    What is NOT checked is the TYPE of a key the caller does not name in
+    `kinds` (#1639, closed for named keys by #1679). Presence and non-`null`
+    are all that is asserted for such a key, so `{"takes": 5}` with no
+    `kinds={"takes": dict}` passes here and fails in the reader, where
+    `record["takes"].items()` is an `AttributeError` -- a traceback and exit 1.
+    Each caller alone knows the type it dereferences, so the caller must
+    name it; a reader that dereferences a key and omits `kinds` for it
+    keeps that gap.
 
     Names every offending key, not only the first (as `validate_measurement`
     does), so a record is not regenerated once per key. A bare string in
     `required` is one key, not an iterable of characters.
     """
-    if isinstance(required, str):
-        required = (required,)
+    required = [required] if isinstance(required, str) else list(required)
     if not isinstance(record, dict):
-        kind = "null" if record is None else f"a JSON {type(record).__name__}"
-        raise refused(f"{what} is {kind}, not a JSON object -- it carries no keys at "
-                      f"all, so none of the required ones can be read: the wrong file, "
-                      f"or a partial write")
+        raise refused(f"{what} is {_json_kind(record)}, not a JSON object -- it carries no "
+                      f"keys at all, so none of the required ones can be read: the wrong "
+                      f"file, or a partial write")
+    required += [k for k in (kinds or {}) if k not in required]
     missing = [k for k in required if k not in record]
     null = [k for k in required if k in record and record[k] is None]
+    mistyped = [k for k in (kinds or {}) if k in record and record[k] is not None
+                and not _is_of_kind(record[k], kinds[k])]
     stated = []
     if missing:
         stated.append(f"is missing required key(s) {', '.join(map(repr, missing))}")
     if null:
         stated.append(f"carries null for required key(s) {', '.join(map(repr, null))}")
+    if mistyped:
+        stated.append("carries the wrong type for required key(s) "
+                      + ", ".join(f"{k!r} ({_json_kind(record[k])}, read as {_kind_name(kinds[k])})"
+                                  for k in mistyped))
     if stated:
         raise refused(f"{what} {' and '.join(stated)} -- a partial record is not a result: "
                       f"regenerate it with the tool that writes it rather than add the "

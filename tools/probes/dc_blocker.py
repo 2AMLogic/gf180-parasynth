@@ -1319,7 +1319,7 @@ def report_k_sweep(path=None):
                              capture_output=True, text=True)
     if st.returncode != 0 or st.stdout.strip() or tracked.returncode != 0:
         raise Refused(f"{K_PLAN.name} is not committed and clean: the grid must precede the points")
-    mf.require_keys(plan, "grid", f"the sweep plan at {K_PLAN}", refused=Refused)
+    mf.require_keys(plan, "grid", f"the sweep plan at {K_PLAN}", refused=Refused, kinds={"grid": list})
     grid = [int(v) for v in plan["grid"]]
     base, nb = render("CY", dx.COUPLE_OFF)
     phi = dc_fraction(base)

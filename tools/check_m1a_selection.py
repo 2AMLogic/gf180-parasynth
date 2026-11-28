@@ -107,14 +107,21 @@ def check(record: dict, candidate: dict, baseline: dict, manifest: dict) -> list
     """Every reason the record is not the selected candidate; [] when it is.
 
     REFUSES (`mf.Refused`) a record that lacks a key this function reads with
-    `[]` (#1604): that is a partial record, not a mismatch. And one whose v3
-    event attack is not a finite number (#2081): a NaN `max()` would silently
-    drop is not a mismatch either."""
-    for rec, keys, what in ((record, ("diagnostics", "audio", "metrics"), "the M1A board record"),
-                            (candidate, ("patch", "sha256", "measurements", "metrics"),
-                             "the -4 dB candidate record"),
-                            (baseline, ("measurements",), "the pre-selection baseline record")):
-        mf.require_keys(rec, keys, what, refused=mf.Refused)
+    `[]` (#1604), or carries one of a type it dereferences (#1679): that is a
+    partial record, not a mismatch. And one whose v3 event attack is not a
+    finite number (#2081): a NaN `max()` would silently drop is not a mismatch
+    either."""
+    # `kinds` names what each key is DEREFERENCED as, per key (#1679). The one
+    # key left without a kind is measured, not forgotten: the candidate's
+    # `patch` is only COMPARED, so a wrong type there is a clean named mismatch.
+    for rec, keys, kinds, what in (
+            (record, ("diagnostics", "audio", "metrics"),
+             {"diagnostics": dict, "audio": str, "metrics": dict}, "the M1A board record"),
+            (candidate, ("patch", "sha256", "measurements", "metrics"),
+             {"sha256": str, "measurements": dict, "metrics": dict}, "the -4 dB candidate record"),
+            (baseline, ("measurements",), {"measurements": dict},
+             "the pre-selection baseline record")):
+        mf.require_keys(rec, keys, what, refused=mf.Refused, kinds=kinds)
     problems = []
     config = record["diagnostics"]["configuration"]
     selected = _norm(bass.patch_for_reference(manifest, bass.SELECTED_PATCH))
