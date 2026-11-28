@@ -6,6 +6,13 @@
     python3 tools/compare_ladder_candidates.py --json build/ladder-candidates.json
     python3 -m pytest model/test_ladder_candidates.py -q          # its ground truth
 
+Exit status: 0 when a verdict was reached (RETAIN, or a candidate that clears
+the bar); 2 REFUSED either when an apparatus precondition failed (nothing
+runs, nothing is printed but the refusal) or when no verdict could be drawn
+from what `--only` ran -- `--only` without `shipped`, `--only shipped` alone,
+or an input to the comparison unmeasured on either side (the stages' report is
+still printed; `tools/test_ladder_candidates_verdict_refusal.py`, #2036).
+
 The filters are in `model/ladder_candidates.py`; this file only measures them.
 Issue #46 names six questions every candidate must face, and they are the
 six stages below, run on IDENTICAL conditions -- the same stimuli, the same
@@ -30,7 +37,7 @@ together, and the report prints them in separate columns.
 
 WHAT MAKES THIS A MEASUREMENT AND NOT A SELF-PORTRAIT
 -----------------------------------------------------
-Three things, in the order they can go wrong:
+Four things, in the order they can go wrong:
 
   * **the yardstick is not one of us.** Tuning and resonance are scored
     against the ladder's transfer function, which is textbook and checkable by
@@ -43,6 +50,11 @@ Three things, in the order they can go wrong:
     4-entry `tanh` and a 32 Hz control quantum, each of which must move its own
     dimension by more than the whole spread between candidates -- otherwise the
     dimension cannot see a real difference either.
+  * **it withholds the verdict when it could not compare.** A candidate
+    that was not compared cannot be called "no better", so when the shipped
+    ladder or any candidate has an unmeasured input the verdict is REFUSED
+    (exit 2) rather than RETAIN (exit 0) -- which is what a run printed in
+    which every ladder was dead and every score `nan` (#2036).
 
 WHAT IT DOES NOT SETTLE
 -----------------------
@@ -561,11 +573,162 @@ def compare(quick: bool = False, names=None) -> dict:
     return rep
 
 
+BASE = "shipped"
+#: the summaries `_verdict` compares, each from `stage_linear`
+MATCH_INPUTS = ("worst_cents", "worst_peak_db", "worst_pass_db")
+
+
+def _measured(value) -> bool:
+    """A number that is a measurement: finite, and not a bool (which is an
+    `int` in Python and would otherwise pass `isfinite`)."""
+    return (isinstance(value, (int, float)) and not isinstance(value, bool)
+            and math.isfinite(value))
+
+
+def _points(row) -> tuple:
+    """`(refused, total)` over a stage row's operating points, or None when
+    the row records no points -- a stub's shape; a run always has them."""
+    pts = row.get("points") if isinstance(row, dict) else None
+    if not pts:
+        return None
+    return sum(1 for p in pts.values() if isinstance(p, dict) and "refused" in p), len(pts)
+
+
+def _refused_points(rep: dict, name) -> dict:
+    """`<refused>/<total>` per stage that records points, so a reader of the
+    verdict can see how thin a compared verdict is."""
+    out = {}
+    for stage in ("linear", "resonance"):
+        tally = _points(rep.get(stage, {}).get(name))
+        out[stage] = None if tally is None else f"{tally[0]}/{tally[1]}"
+    return out
+
+
+def _evidence_gaps(rep: dict, names) -> list:
+    """Why no verdict can be drawn from `rep`, one entry per reason; empty
+    when one can (#2036).
+
+    A verdict compares every candidate against the shipped ladder. It cannot
+    be drawn when the baseline was not run (`--only` without `shipped`), when
+    no candidate was run (`--only shipped`: "no candidate improves" is then
+    true of nothing), or when an input to the comparison is unmeasured on
+    either side. Unmeasured means either of
+
+      * a stage that refused EVERY point. It measured nothing, whatever its
+        summary says, so the points are counted and the summary is not
+        trusted over them. The ring must be read this way: `sings_everywhere`
+        cannot say it on its own, because a refused point is booked `False`
+        (#1851);
+      * a `matches` summary that is not a finite number. `stage_linear`
+        leaves all three `nan` when every point refused, and every
+        comparison against `nan` is False -- which is how RETAIN was reached
+        by default rather than by evidence.
+
+    SOME points refused is not unmeasured -- on the full grid the shipped
+    ladder refuses 2 of its 8 linear points on real input -- so it does not
+    withhold; the counts ride on every verdict row as `refused_points`."""
+    base = BASE
+    ran = [n for n in names if n in rep["candidates"]]
+    gaps = []
+    if base not in ran:
+        rivals = [n for n in names if n != base]
+        gaps.append(dict(
+            candidate=None, stage=None, inputs=[], points=None,
+            say=f"{base} (the baseline) was not run -- --only must name it -- so there "
+                f"is nothing to compare "
+                f"{', '.join(rivals) if rivals else 'any candidate'} against"))
+    if not [n for n in names if n != base]:
+        gaps.append(dict(
+            candidate=None, stage=None, inputs=[], points=None,
+            say=f"no candidate was run against {base} (--only named none), so "
+                "\"no candidate improves\" is true of nothing"))
+    for n in ran:
+        who = f"{n} (the baseline)" if n == base else n
+        for stage, keys, group in (("linear", MATCH_INPUTS, "matches"),
+                                   ("resonance", ("sings_everywhere",), "bigger")):
+            tally = _points(rep.get(stage, {}).get(n))
+            lost = []
+            for key in keys:
+                value = rep["candidates"][n][group].get(key)
+                # a stage that refused every point measured nothing, whatever
+                # its summary says; the points win
+                unmeasured = bool(tally) and tally[0] == tally[1]
+                if stage == "linear":
+                    unmeasured = unmeasured or not _measured(value)
+                # the ring's bool is never read on its own: #1851 books a
+                # refused point as False
+                if unmeasured:
+                    lost.append((key, value))
+            if not lost:
+                continue
+            which = ", ".join(k for k, _ in lost)
+            if tally and tally[0] == tally[1]:
+                why = f"{stage} {tally[0]}/{tally[1]} points refused"
+            else:
+                count = "" if tally is None else f" over {tally[0]}/{tally[1]} points refused"
+                why = f"{stage} reports {', '.join(repr(v) for _, v in lost)}{count}"
+            gaps.append(dict(candidate=n, stage=stage, inputs=[k for k, _ in lost],
+                             points=tally, say=f"{who}: {which} unmeasured -- {why}"))
+    return gaps
+
+
+def _withheld(rep: dict, names, gaps) -> dict:
+    """The verdict when the comparison cannot be made. `retain` is None and
+    every merit is None: unknown is unknown, and must not print as False,
+    which is a measurement.
+
+    Withheld as a whole. A candidate whose own inputs are measured is still
+    NOT COMPARED when another's are not, because "no candidate improves"
+    cannot be said while one was not compared."""
+    base = BASE
+    own = {n: [k for g in gaps if g["candidate"] == n for k in g["inputs"]]
+           for n in names}
+    if base not in rep["candidates"]:
+        own[base] = ["not run"]
+    notes = []
+    for n in names:
+        if n == base:
+            continue
+        c = rep["candidates"][n]
+        notes.append(dict(
+            candidate=n, state="NOT COMPARED",
+            better_tuning=None, better_peak=None, sings_where_we_do_not=None,
+            wins_on_merit=None,
+            fits_budget_worst_case_divider=bool(c["cost"]["fits"][DIV_CLOCKS[-1]]),
+            max_divider_latency_that_fits=c["cost"]["max_divider_latency_that_fits"],
+            refused_points=_refused_points(rep, n),
+            unmeasured=dict(candidate=own[n], shipped=own.get(base, []))))
+    lines = ["NO VERDICT -- the comparison could not be made, so nothing is said "
+             "for or against the current filter: a candidate that was not "
+             "compared cannot be called \"no better\" (#2036)."]
+    lines += [f"  NOT COMPARED  {g['say']}" for g in gaps]
+    bystanders = [n for n in names if n != base and not own[n]]
+    if bystanders:
+        whose = "its" if len(bystanders) == 1 else "their"
+        if base not in rep["candidates"]:
+            why = "with no baseline to be compared against"
+        else:
+            why = "and not compared because the verdict is withheld as a whole"
+        lines.append("  NOT COMPARED  " + ", ".join(bystanders)
+                     + f": measured on {whose} own side, {why}")
+    return dict(retain=None, winners=[], blocked_by_cost=[], per_candidate=notes,
+                not_compared=[n for n in names if n != base], withheld=gaps,
+                text="\n".join(lines))
+
+
 def _verdict(rep: dict, names) -> dict:
     """Issue #46's own bar: **retain the current filter unless a candidate
     gives a useful, reproducible improvement within budget.** Derived from the
-    numbers, not written."""
-    base = "shipped"
+    numbers, not written.
+
+    And only from numbers. When the baseline was not run, no candidate was,
+    or an input to the comparison is unmeasured on either side, the verdict
+    is WITHHELD (`_withheld`): `retain` is None, which `main` reports as
+    REFUSED at exit 2, and RETAIN is never reached by default (#2036)."""
+    base = BASE
+    gaps = _evidence_gaps(rep, names)
+    if gaps:
+        return _withheld(rep, names, gaps)
     b = rep["candidates"][base]
     wins, blocked, notes = [], [], []
     for n in names:
@@ -584,12 +747,14 @@ def _verdict(rep: dict, names) -> dict:
             # the whole of DR 0001's reversal condition, and burying it in a
             # boolean would hide the one result a reader must not miss.
             blocked.append((n, c["cost"]["max_divider_latency_that_fits"]))
-        notes.append(dict(candidate=n, better_tuning=bool(better_tuning),
+        notes.append(dict(candidate=n, state="COMPARED",
+                          better_tuning=bool(better_tuning),
                           better_peak=bool(better_peak), sings_where_we_do_not=bool(sings),
                           wins_on_merit=on_merit,
                           fits_budget_worst_case_divider=bool(fits),
                           max_divider_latency_that_fits=c["cost"][
-                              "max_divider_latency_that_fits"]))
+                              "max_divider_latency_that_fits"],
+                          refused_points=_refused_points(rep, n)))
     if wins:
         text = ("A candidate clears the bar: " + ", ".join(wins) +
                 " improves on the shipped ladder by more than the harness's own "
@@ -607,7 +772,7 @@ def _verdict(rep: dict, names) -> dict:
                              for n, d in blocked) + ".")
     return dict(retain=not wins, winners=wins,
                 blocked_by_cost=[n for n, _ in blocked],
-                per_candidate=notes, text=text)
+                per_candidate=notes, not_compared=[], withheld=[], text=text)
 
 
 def _print(rep: dict) -> None:
@@ -672,7 +837,14 @@ def main(argv=None) -> int:
         with open(a.json, "w") as fh:
             json.dump(rep, fh, indent=1, sort_keys=True, default=str)
         print(f"\nwrote {a.json}")
-    return 0 if rep["verdict"] is not None else 1
+    v = rep["verdict"]
+    if v["retain"] is None:
+        # the stages ran and the report above is theirs; only the verdict is
+        # withheld, and REFUSED -- not RETAIN, not exit 0 -- is what says so
+        print("REFUSED: no verdict -- " + "; ".join(g["say"] for g in v["withheld"]),
+              file=sys.stderr)
+        return 2
+    return 0
 
 
 if __name__ == "__main__":

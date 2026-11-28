@@ -579,6 +579,7 @@ controls:
 	  "$(PY) tools/control_dag_issue_only.py" \
 	  "$(PY) tools/control_dag_verdictless_evidence.py" \
 	  "$(PY) tools/control_dag_churn.py" \
+	  "$(PY) tools/control_ladder_verdict_refusal.py" \
 	  "$(PY) -m pytest tools/test_rungs_gate.py -q" \
 	  "$(PY) -m pytest tools/test_signoff_klt_version.py -q" \
 	  "$(PY) tools/measure_promoted_bands.py validate" \
