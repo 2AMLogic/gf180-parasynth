@@ -455,7 +455,14 @@ def main(argv=None) -> int:
         jobs_in = [(n, s, amp, a.inject) for n, s in CANDIDATES.items() for amp in AMPS]
         with cf.ProcessPoolExecutor(max_workers=a.workers) as ex:
             jobs = list(ex.map(run_job, jobs_in))
-    except refusal.Refused as e:
+    # `am.InsufficientEvidence` is the estimator's own refusal, listed BY CLASS
+    # beside the base (#1751, #1763): it subclasses AssertionError, so
+    # `except refusal.Refused` could not see it, and a capture with one silent
+    # tone left `surge_side` as an exit-1 traceback -- through
+    # `reference_rigs.tone_project`'s `.require()`, a raise origin the census
+    # of direct `raise` statements does not list. Not AssertionError, not
+    # Exception: an unrelated fault stays an execution error.
+    except (refusal.Refused, am.InsufficientEvidence) as e:
         print(f"REFUSED  {e}")
         return 2
 

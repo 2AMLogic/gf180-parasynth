@@ -168,6 +168,25 @@ renders read is the downward one: `rho-tracks` is a planted SLOWER low component
 its own skirt baseline). A suite with only the first would have had no control
 at all on the sign it is actually used to report.
 
+`FORWARD_INTEGRAL` must ANSWER WRONG, never refuse (#1869). It integrates
+from the strike instead of from the end, so its curve is the cumulative energy
+ARRIVED, rising to 0 dB, and the level crossing is read where that curve
+REACHES the depth: T(d) becomes the time by which a fraction 10^(d/10) of the
+energy has arrived, -(tau/2)ln(1-10^(d/10)) for one exponential -- 1/21.9 of
+the Schroeder time at -10 dB. That reddens `edt-known` on a NUMBER (0.052 of
+the planted time), which no defect had ever done. Until #1869 the defect
+normalised by `sch[0]`, the first sample rather than the total, and produced
+no measurement at all: it raised Refused where that sample sat below the
+floor and answered None at every depth where it sat above, and `check()`
+credited the refusal as a catch. Two readings were traced first and rejected.
+Normalised by its own total but still read as the first sample AT OR BELOW the
+depth, the rising curve answers 0.00 ms at every depth on every record, and
+`measure()` then dies on 0/0 computing rho. Integrated forward and read
+back-to-front, it crosses late and the end-margin guard refuses every depth:
+red through None, which is the refusal again. All four readings are re-run by
+`tools/probes/cymbal_low_tail_forward_trace.py`, which fails if any of them
+stops behaving this way.
+
 Wrong-then-right rate of this module: 5 of the numbers below were wrong before
 they were right, and the controls caught all five rather than inspection.
   1. `t_edt` said a Schroeder curve falls 2*8.686/tau dB/s, so every planted
@@ -286,17 +305,19 @@ def schroeder_times(x, sr, depths=DEPTHS, *, defect=None) -> dict:
         raise Refused("band is silent")
     q = p - (0.0 if defect == "NO_FLOOR_SUB" else floor)
     q = np.maximum(q, 0.0)
-    sch = np.cumsum(q[::-1])[::-1] if defect != "FORWARD_INTEGRAL" else np.cumsum(q)
-    if sch[0] <= 0:
+    fwd = defect == "FORWARD_INTEGRAL"
+    sch = np.cumsum(q) if fwd else np.cumsum(q[::-1])[::-1]
+    ref = float(sch[-1] if fwd else sch[0])     # the band's total energy, whichever end it lands at
+    if ref <= 0:
         raise Refused("band holds no energy above its floor")
-    c = 10 * np.log10(np.maximum(sch / sch[0], 1e-30))
+    c = 10 * np.log10(np.maximum(sch / ref, 1e-30))
     t = np.arange(len(c)) / sr
     lvl_end = 10 * math.log10(max(float(np.mean(env[-sm:])), 1e-30) / pk)
     floor_db = 10 * math.log10(max(floor, 1e-30) / pk)
     out = {"floor_db_re_peak": round(floor_db, 2), "times_ms": {}, "refused": {}, "margin_db": {}}
     for d in depths:
         key = f"{d:.0f}"
-        i = np.nonzero(c <= d)[0]
+        i = np.nonzero(c >= d)[0] if fwd else np.nonzero(c <= d)[0]
         if not len(i):
             out["times_ms"][key] = None
             out["refused"][key] = f"the energy curve never reaches {d:.0f} dB"
