@@ -314,6 +314,120 @@ def test_the_filter_record_refuses_a_curve_that_disagrees_with_the_pinned_consta
     assert "BP_PEAK_DB[low]" in str(e.value)
 
 
+# ---- #1837: a non-finite ordinate is REFUSED, not read as a NaN peak ------
+# The cross-check above asks `abs(v - want) > FILTER_TOL_DB`, and a NaN makes
+# every ordering comparison False (#134's shape). `wf.peak` answers a NaN
+# ordinate with a NaN peak and raises nothing, so that peak was in no mismatch
+# list: the artifact was accepted, cached, and `preconditions()` counted the
+# figure present.
+
+FIG4_CURVES = ("Hbp1", "Hbp2", "Hh1", "Hh2", "Hh3")
+
+
+def _fig4_variant(folder, name, curve, axis, which, value):
+    """`werner-fig4.json` with ordinate(s) `which` of one curve replaced by
+    `value`, written the way the committed one is. `json.dumps` writes a
+    non-finite float as the bare token `NaN` / `Infinity` and `json.loads`
+    reads it back: that is the path a non-finite ordinate takes from the file
+    to the reader."""
+    curves, _ = wf.from_artifact()
+    out = {k: {"hz": [float(v) for v in h], "db": [float(v) for v in d]}
+           for k, (h, d) in curves.items()}
+    out[curve][axis][which] = value
+    p = folder / name
+    p.write_text(json.dumps({"curves": out}))
+    return p
+
+
+def test_the_committed_filter_record_still_passes():
+    """The guards are satisfiable on the current state: every ordinate of the
+    committed artifact is finite, and its band-pass peaks read 22.95 dB (low)
+    and 24.10 dB (high)."""
+    got = bb.filter_record()
+    assert got["peak_db"]["low"] == pytest.approx(22.95, abs=0.01)
+    assert got["peak_db"]["high"] == pytest.approx(24.10, abs=0.01)
+
+
+@pytest.mark.parametrize("curve", FIG4_CURVES)
+@pytest.mark.parametrize("axis", ["hz", "db"])
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")],
+                         ids=["nan", "inf", "-inf"])
+def test_the_filter_record_refuses_a_non_finite_ordinate_naming_the_curve(
+        tmp_path, curve, axis, value):
+    """Ordinate 0 is away from every peak. For Hbp1/Hbp2 the reader never
+    looked there: a NaN in `hz`, or a -inf in `db`, left the artifact accepted
+    with its peak reading exactly right."""
+    p = _fig4_variant(tmp_path, "one-ordinate.json", curve, axis, 0, value)
+    with pytest.raises(bb.Refused) as e:
+        bb.filter_record(p)
+    assert f"curve {curve!r}" in str(e.value) and "non-finite" in str(e.value)
+    assert str(p) not in bb._FILTER_CACHE
+
+
+@pytest.mark.parametrize("every", [False, True], ids=["one-ordinate", "every-ordinate"])
+def test_a_nan_low_band_pass_peak_is_refused_and_not_cached(tmp_path, every):
+    """The issue's own control: one NaN in `Hbp1.db`, and every `Hbp1.db`
+    ordinate NaN, were each ACCEPTED with `peak_db['low'] = nan` and written
+    to `_FILTER_CACHE`."""
+    curves, _ = wf.from_artifact()
+    at = int(np.argmax(curves["Hbp1"][1]))
+    which, value = ((slice(None), [float("nan")] * len(curves["Hbp1"][1])) if every
+                    else (at, float("nan")))
+    p = _fig4_variant(tmp_path, "nan-peak.json", "Hbp1", "db", which, value)
+    with pytest.raises(bb.Refused, match="non-finite") as e:
+        bb.filter_record(p)
+    assert "curve 'Hbp1'" in str(e.value)
+    assert str(p) not in bb._FILTER_CACHE
+
+
+def test_finite_ordinates_whose_parabola_overflows_are_refused(tmp_path):
+    """The adversary for the ordinate guard itself (verification-rules rule
+    8): every ordinate finite, and the peak still NaN. Three finite dB
+    ordinates around Hbp1's peak with a second difference near the float range
+    overflow `np.polyfit`, and `wf.peak` returns NaN without raising. The
+    premise is asserted, so a numpy that stopped overflowing fails this test
+    at its premise instead of passing on a peak that is finite."""
+    curves, _ = wf.from_artifact()
+    at = int(np.argmax(curves["Hbp1"][1]))
+    p = _fig4_variant(tmp_path, "overflow.json", "Hbp1", "db", slice(at - 1, at + 2),
+                      [0.0, 1e308, 1e308 - 2e304])
+    hz, db = wf.from_artifact(p)[0]["Hbp1"]
+    assert np.isfinite(hz).all() and np.isfinite(db).all()
+    with np.errstate(all="ignore"):
+        assert not np.isfinite(wf.peak(hz, db)[1])
+        with pytest.raises(bb.Refused, match="non-finite") as e:
+            bb.filter_record(p)
+    assert "curve 'Hbp1'" in str(e.value)
+    assert str(p) not in bb._FILTER_CACHE
+
+
+@pytest.mark.parametrize("not_a_number", [None, "x"], ids=["null", "string"])
+def test_an_ordinate_that_is_not_a_number_at_all_is_still_refused(tmp_path, not_a_number):
+    """JSON `null`, or a string, gives `np.array` a dtype `np.isfinite` cannot
+    read. That must stay a REFUSAL naming the curve, not a TypeError out of
+    the guard added to catch it."""
+    p = _fig4_variant(tmp_path, "not-a-number.json", "Hbp2", "db", 4, not_a_number)
+    with pytest.raises(bb.Refused) as e:
+        bb.filter_record(p)
+    assert "curve 'Hbp2'" in str(e.value) and "non-finite" in str(e.value)
+    assert str(p) not in bb._FILTER_CACHE
+
+
+def test_a_nan_peak_at_the_filter_figure_path_does_not_lift_the_refusal(monkeypatch):
+    """Through the acceptance path, not only the reader: `preconditions()`
+    counted `filter-figure` present for this artifact. As in the #431 test
+    below, the substitute is a sibling of the real artifact, because the
+    table reports each path relative to the repo root."""
+    p = _fig4_variant(bb.wf.ARTIFACT.parent, "_test_1837_nan_werner-fig4.json",
+                      "Hbp1", "db", 0, float("nan"))
+    monkeypatch.setattr(bb.wf, "ARTIFACT", p)
+    try:
+        by_name = {q["name"]: q for q in bb.preconditions()}
+        assert by_name["filter-figure"]["present"] is False
+    finally:
+        p.unlink()
+
+
 def test_an_empty_file_at_the_filter_figure_path_does_not_lift_the_refusal(monkeypatch):
     """`preconditions()` reports each path relative to the repo root, so the
     substitute has to live under it too -- this is the real configured path
