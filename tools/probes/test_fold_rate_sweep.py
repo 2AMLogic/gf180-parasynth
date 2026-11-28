@@ -205,3 +205,68 @@ def test_the_report_parses_as_the_sensitivity_gate_reads_it():
         assert "rate_gap" in r and "sees_jit" in r and "walks" in r
     assert "stride_error" in tables
     assert len(tables["stride_error"]) == len(D.MPD_PERIODS_S)
+
+
+# ---------------------------------------------------------------------------
+# the report's destination (#2100, a slice of #2040's class)
+#
+# RED FIRST on main @ 8eb04e5b (2026-11-28), through the real CLI:
+# `--taps 16 --f0 300 -o no/such/dir/a.txt` exited 1 on `FileNotFoundError`
+# after the sweep had run and printed. This probe always exited 0, so the
+# destination refusals below are the repository's REFUSED, 2.
+# ---------------------------------------------------------------------------
+
+def _nothing(*_a, **_k):
+    raise AssertionError("the sweep ran: a refusal must happen BEFORE anything runs")
+
+
+def _unwritable(tmp_path, kind):
+    """A directory given as the file, or a parent that is a regular file."""
+    if kind == "a directory":
+        target = tmp_path / "sweep.txt"
+        target.mkdir()
+        return target
+    (tmp_path / "not-a-dir").write_text("a file")
+    return tmp_path / "not-a-dir" / "sweep.txt"
+
+
+def test_a_report_under_a_missing_directory_is_written(tmp_path, capsys):
+    target = tmp_path / "no" / "such" / "dir" / "sweep.txt"
+    assert S.main(["--taps", str(D.FOLD_SINC_TAPS), "--f0", "300", "-o", str(target)]) == 0
+    text = target.read_text()
+    assert capsys.readouterr().out == text, "-o is 'write the report here too'"
+    assert text.startswith("fold_rate_sweep -- #767") and "detail_taps16" in text
+
+
+@pytest.mark.parametrize("kind", ["a directory", "a parent that is a file"])
+def test_an_unwritable_destination_is_refused_before_the_sweep_runs(tmp_path, capsys, monkeypatch, kind):
+    """`--octave-margin` is in the argument list because it is a probe hook on
+    a MODULE CONSTANT: a refused run must not reach the line that sets it."""
+    target = _unwritable(tmp_path, kind)
+    before = D.JIT_OCTAVE_MARGIN_PERMILLE
+    monkeypatch.setattr(S, "sweep", _nothing)
+    code = S.main(["--octave-margin", "0", "-o", str(target)])
+    assert code == 2
+    assert D.JIT_OCTAVE_MARGIN_PERMILLE == before
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and str(target) in out, out
+    assert "fold_rate_sweep -- #767" not in out, "a refused run must not print a report"
+
+
+def test_a_write_failure_after_the_sweep_is_refused_with_the_report_printed(tmp_path, capsys, monkeypatch):
+    """The pre-flight passed and the destination became unwritable before the
+    write -- what a disk filling or a permission changing mid-run looks like."""
+    target = tmp_path / "sweep.txt"
+    real_sweep = S.sweep
+
+    def sweep_then_occupy(*a, **k):
+        rows = real_sweep(*a, **k)
+        target.mkdir()
+        return rows
+
+    monkeypatch.setattr(S, "sweep", sweep_then_occupy)
+    assert S.main(["--taps", str(D.FOLD_SINC_TAPS), "--f0", "300", "-o", str(target)]) == 2
+    out = capsys.readouterr().out
+    assert "fold_rate_sweep -- #767" in out, "the report must still be printed"
+    assert "REFUSED" in out and str(target) in out, out
+

@@ -577,3 +577,140 @@ def test_control_a_word_match_flags_the_unprefixed_string(probe):
     m = _mutant("node.startswith(REFUSED_PREFIX)", '"refused" in node.lower()')
     assert probe._refusals(UNPREFIXED) == [] and m._refusals(UNPREFIXED)
     assert m._refusals(NESTED) == probe._refusals(NESTED)
+
+
+# ---------------------------------------------------------------------------
+# #2100 (a slice of #2040's class): the destination of `--json`
+# ---------------------------------------------------------------------------
+# The record is written after all nine experiments. With `--json` under a
+# directory that does not exist, the real CLI exited 1 on `FileNotFoundError`
+# at `a.json.write_text` -- after every row had measured and with the report
+# never printed, since the write precedes it. FAIL, "the comparison ran and
+# disagreed", for a run that measured, and the record lost.
+#
+# RED FIRST on main @ 8eb04e5b (2026-11-28), the real CLI before the fix:
+# `--json no/such/dir/a.json` on the synthetic corpus exited 1 on
+# `FileNotFoundError` after all nine experiments; `--json <a directory>` and
+# `--json <a file>/a.json`, with no corpus, exited 2 for the CORPUS's own
+# refusal -- E0 had already run, and the destination was never consulted. The
+# 34 controls of this slice (seven probes) failed together in 110.77 s, 33 of
+# them again in 5.32 s without the full run below. WHAT IS UNDER TEST: the
+# destination, before anything loads, and the write itself.
+#
+#   --json a directory, or under a file     the real process. The refusal is
+#                                            at argument parsing, so no
+#                                            experiment, no corpus and no
+#                                            soundfile are reached: exit 2,
+#                                            REFUSED on stdout, no report.
+#   --json under a missing directory         the real process, a whole run
+#                                            (60-70 s, the cost of the three
+#                                            controls above): the directory
+#                                            is made, exit 0, the record
+#                                            parses.
+#   the write failing after the run          in-process `main`, E1-E9 doubled
+#                                            (below): what is asserted is
+#                                            `main`'s handling of `OSError`
+#                                            at the write, and a second full
+#                                            run would repeat 81 % of its
+#                                            time on experiments that are not
+#                                            under test.
+#
+# A write that fails is REFUSED, exit 2, with the report still printed: the
+# rows measured and are evidence (the #1699 ruling, which writes the report
+# and the record first for the same reason), but a batch runner reads the
+# record, and the exit status must not say PASS over a record that is not there.
+
+def _assert_destination_refused(p: subprocess.CompletedProcess, target: pathlib.Path) -> None:
+    assert p.returncode == exit_contract.REFUSED, (p.returncode, p.stdout[-400:], p.stderr[-400:])
+    assert "REFUSED" in p.stdout and str(target) in p.stdout, p.stdout[-400:]
+    assert "Traceback" not in p.stderr and "Traceback" not in p.stdout, p.stderr[-600:]
+    assert "E1  two renders" not in p.stdout, "a refused run must not start a report"
+
+
+@pytest.mark.parametrize("kind", ["a directory", "a parent that is a file"])
+def test_an_unwritable_json_destination_is_refused_before_any_experiment(tmp_path, kind):
+    if kind == "a directory":
+        target = tmp_path / "record.json"
+        target.mkdir()
+    else:
+        (tmp_path / "not-a-dir").write_text("a file")
+        target = tmp_path / "not-a-dir" / "record.json"
+    p = _probe(tmp_path, "--json", str(target))      # no corpus: none must be read
+    _assert_destination_refused(p, target)
+
+
+def test_full_run_with_json_under_a_missing_directory_writes_it_and_exits_0(tmp_path, sf):
+    """The green control for the class: the directory is made, the run keeps
+    its own status, and the record is the one a run without the missing
+    directory writes."""
+    root = _corpus(sf, tmp_path)
+    out = tmp_path / "no" / "such" / "dir" / "full-run.json"
+    p = _probe(root, "--json", str(out))
+    assert p.returncode == exit_contract.PASS, (p.returncode, p.stdout[-600:], p.stderr[-600:])
+    assert "Traceback" not in p.stderr and "REFUSED:" not in p.stdout, p.stderr[-600:]
+    assert f"wrote {out}" in p.stdout, p.stdout[-600:]
+    data = json.loads(out.read_text())
+    assert data["E0_ground_truth"]["ok"] is True and "refused" not in json.dumps(data)
+    assert len(data["E4_sweeps"]) and data["reference_file"] == "bd8/BD2550.WAV"
+
+
+def _stub_experiments(probe, monkeypatch) -> None:
+    """E1-E9 as stand-ins shaped for `report()`: rows of zeros, nothing
+    refused. E0, `load_ref`, `prepare`, the T20, `_refusals`, `report` and
+    the write are the probe's own."""
+    def zero():
+        return dict.fromkeys(DISTANCE_KEYS, 0.0)
+
+    monkeypatch.setattr(probe, "e1_determinism", lambda: zero() | {"bit_identical": True})
+    monkeypatch.setattr(probe, "e2_e3_alignment", lambda x, sr: {"1 samples (0.023 ms)": zero()})
+    monkeypatch.setattr(probe, "e4_sweeps", lambda x, sr: {"decay_pct": {"0": zero()},
+                                                          "f0_cents_floor_equivalent": 0.0})
+    monkeypatch.setattr(probe, "e4b_pure_f0", lambda: {"base_hz": 49.4,
+                                                       "rungs": {"0 cents": zero() | {"f0_hz": 49.4,
+                                                                                      "f0_error_pct": 0.0}}})
+    monkeypatch.setattr(probe, "e5_tom", lambda: {"full_clip_s": 1.2, "drop_window_ms": 60.0,
+                                                  "floor_same_patch_twice": zero(),
+                                                  "floor_1_sample_shift": zero(),
+                                                  "floor_1_sample_shift_first_60ms": zero(),
+                                                  "vs_shipped": {}, "per_property_pitch_drop_hz": {},
+                                                  "alignment_on_this_signal": {}})
+    monkeypatch.setattr(probe, "e6_exchange", lambda x, sr: {"target_5pct_decay": zero(),
+                                                            "equivalent_gain_db": zero()})
+    monkeypatch.setattr(probe, "e7_ceiling", lambda: {})
+    monkeypatch.setattr(probe, "e8_blind_spot", lambda: {"floor_1_sample_shift": zero(), "injections": {}})
+    monkeypatch.setattr(probe, "e9_noise_floor", lambda: {})
+
+
+def test_a_write_failure_after_the_run_is_refused_with_the_report_printed(probe, monkeypatch, tmp_path, sf, capsys):
+    """The pre-flight passed and the destination became a directory before the
+    write -- what a disk filling or a permission changing mid-run looks like
+    from the write's side: an `OSError`, after everything has measured."""
+    monkeypatch.setattr(probe, "REFDIR", _corpus(sf, tmp_path))
+    _stub_experiments(probe, monkeypatch)
+    target = tmp_path / "record.json"
+
+    def last_experiment_then_occupy():
+        target.mkdir()
+        return {}
+
+    monkeypatch.setattr(probe, "e9_noise_floor", last_experiment_then_occupy)
+    code = probe.main(["--json", str(target)])
+    out = capsys.readouterr().out
+    assert code == exit_contract.REFUSED, out[-600:]
+    assert "E9  how much of a log-domain distance" in out, "the report was not printed"
+    assert f"REFUSED: {target} was not written" in out, out[-600:]
+    assert "wrote" not in out, out[-600:]
+
+
+def test_the_stubs_alone_write_a_record_and_exit_0(probe, monkeypatch, tmp_path, sf, capsys):
+    """The control for the test above, on the same stubs: without the fault
+    the same run writes the record and passes, so its REFUSED is the write's
+    and not the stand-ins'."""
+    monkeypatch.setattr(probe, "REFDIR", _corpus(sf, tmp_path))
+    _stub_experiments(probe, monkeypatch)
+    target = tmp_path / "no" / "such" / "dir" / "record.json"
+    code = probe.main(["--json", str(target)])
+    out = capsys.readouterr().out
+    assert code == exit_contract.PASS, out[-600:]
+    assert f"wrote {target}" in out and "REFUSED" not in out, out[-600:]
+    assert json.loads(target.read_text())["E0_ground_truth"]["ok"] is True

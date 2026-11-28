@@ -4,10 +4,12 @@ Four assertions and one pin. The fourth is the one that distinguishes a repair
 from a goalpost: the repaired gate must still go red on a decay that really
 did get faster.
 """
+import json
 import pathlib
 import sys
 
 import numpy as np
+import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 import dc_blocker as db                                    # noqa: E402
@@ -84,3 +86,69 @@ def test_the_qualification_refuses_rather_than_reports_when_its_premise_fails():
     not print a number that looks like a qualification."""
     assert q.main(["--json", "/dev/null"]) == 0        # the real case qualifies
     assert q.main(["--pedestal-frac", "1e-12"]) == 1   # premise removed
+
+
+# ---------------------------------------------------------------------------
+# the record's destination (#2100, a slice of #2040's class)
+#
+# RED FIRST on main @ 8eb04e5b (2026-11-28), through the real CLI:
+# `--json no/such/dir/a.json` exited 1 on `FileNotFoundError` after
+# `QUALIFIED` had been printed -- indistinguishable from `NOT QUALIFIED`, which
+# is also 1. This probe's own convention (1 = measured, and the gate did not
+# qualify) is kept; a destination that cannot be written measured nothing, so
+# it is the repository's REFUSED, 2, and the two must not collide.
+# ---------------------------------------------------------------------------
+
+def _nothing(*_a, **_k):
+    raise AssertionError("the case ran: a refusal must happen BEFORE anything is measured")
+
+
+def _unwritable(tmp_path, kind):
+    """A directory given as the file, or a parent that is a regular file."""
+    if kind == "a directory":
+        target = tmp_path / "record.json"
+        target.mkdir()
+        return target
+    (tmp_path / "not-a-dir").write_text("a file")
+    return tmp_path / "not-a-dir" / "record.json"
+
+
+def test_a_record_under_a_missing_directory_is_written(tmp_path):
+    target = tmp_path / "no" / "such" / "dir" / "record.json"
+    assert q.main(["--json", str(target)]) == 0
+    assert json.loads(target.read_text())["true_t20_ms"] == q.TRUE_T20_MS
+
+
+@pytest.mark.parametrize("kind", ["a directory", "a parent that is a file"])
+def test_an_unwritable_destination_is_refused_before_the_case_runs(tmp_path, capsys, monkeypatch, kind):
+    target = _unwritable(tmp_path, kind)
+    monkeypatch.setattr(q, "case", _nothing)
+    assert q.main(["--json", str(target)]) == 2
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and str(target) in out, out
+    assert "truth (by construction)" not in out, "a refused run must not report a measurement"
+
+
+def test_a_refused_destination_is_not_the_status_of_not_qualified(tmp_path, capsys):
+    """A caller that only sees the exit code must be able to tell "measured,
+    and the gate did not qualify" (this probe's 1) from "nothing was measured"."""
+    assert q.main(["--pedestal-frac", "1e-12"]) == 1
+    assert q.main(["--json", str(tmp_path)]) == 2
+
+
+def test_a_write_failure_after_the_case_is_refused_with_the_verdict_printed(tmp_path, capsys, monkeypatch):
+    """The pre-flight passed and the destination became unwritable before the
+    write -- what a disk filling or a permission changing mid-run looks like."""
+    target = tmp_path / "record.json"
+    real_case = q.case
+
+    def case_then_occupy(*a, **k):
+        result = real_case(*a, **k)
+        target.mkdir()
+        return result
+
+    monkeypatch.setattr(q, "case", case_then_occupy)
+    assert q.main(["--json", str(target)]) == 2
+    out = capsys.readouterr().out
+    assert "QUALIFIED: the decay gate" in out, "the verdict must still be printed"
+    assert "REFUSED" in out and str(target) in out, out
