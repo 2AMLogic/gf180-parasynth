@@ -30,6 +30,7 @@ import json
 import os
 import pathlib
 import sys
+import time
 
 import pytest
 
@@ -349,6 +350,24 @@ def test_a_run_that_crashes_is_refused_with_its_traceback():
     assert any("RuntimeError: the probe itself broke" in ln for ln in rec["tail"]), rec["tail"]
     problems = P.verify({"boom": [rec]}, None, _cands("boom"), headline="boom", smoke=True)
     assert "exit" in _codes(problems) and "the probe itself broke" in problems[0][1], problems
+
+
+def test_the_plugin_s_sweep_costs_far_less_than_a_test():
+    """The sweep runs after collection and around every test, over every module
+    in `sys.modules`. Its first version resolved each module's path on every
+    sweep, and the instrument's own pytest runs came back 3.7x slower than
+    their bare twins: REFUSED by the bare gate on the instrument's first
+    hosted run, after forty minutes. A sweep must stay far below what a test
+    costs, and this is the input that defeated it -- a process with hundreds
+    of modules loaded, as every pytest run has."""
+    with P.Reader() as reader:
+        t0 = time.perf_counter()
+        for _ in range(200):
+            reader.sweep()
+        per = (time.perf_counter() - t0) / 200
+        n = len(sys.modules)
+    assert n > 100, n
+    assert per < 2e-3, f"{per * 1e3:.2f} ms per sweep over {n} modules"
 
 
 def test_the_wrapper_is_what_the_shipped_fold_calls_while_it_is_installed():

@@ -105,6 +105,7 @@ SCHEMA = "fold-read-profile/1"
 
 FAMILY_FILE = "model/discrimination_features.py"
 FAMILY_PATH = ROOT / FAMILY_FILE
+FAMILY_BASENAME = "discrimination_features.py"
 FAMILY = ("_read_at", "_fold_at", "mpd_features", "jitter_features", "extra_features",
           "dphase_row_state")
 MODULE_NAMES = ("discrimination_features", "model.discrimination_features")
@@ -117,7 +118,7 @@ BARE_FACTOR = 1.5
 OVERHEAD_MAX = 0.10
 DOMINANT = 0.5
 CONTROL_REPEATS = 20
-CONTROL_TARGET = 2.0
+CONTROL_TARGET = 1.5
 CONTROL_SEEN = 0.5
 CONTROL_WALL_SEEN = 0.8
 WINDOW_S = 0.24
@@ -259,15 +260,26 @@ class Reader:
                 row[3] += dt
         return read_at
 
-    @staticmethod
-    def _is_family(m) -> bool:
+    _family_files: dict[str, bool] = {}
+
+    @classmethod
+    def _is_family(cls, m) -> bool:
+        """Whether `m` was loaded from the family's file. Answered per module
+        from `__file__`, and resolved on disk at most once per distinct path:
+        this runs for every module in `sys.modules` on every sweep, and
+        resolving each one every time cost about 40 ms a test on a hosted
+        runner -- the instrument slowing the runs it was timing."""
         f = getattr(m, "__file__", None)
-        if not f:
+        if not isinstance(f, str) or not f.endswith(FAMILY_BASENAME):
             return False
-        try:
-            return pathlib.Path(f).resolve() == FAMILY_PATH
-        except (TypeError, ValueError, OSError):
-            return False
+        known = cls._family_files.get(f)
+        if known is None:
+            try:
+                known = pathlib.Path(f).resolve() == FAMILY_PATH
+            except (OSError, RuntimeError):
+                known = False
+            cls._family_files[f] = known
+        return known
 
     def holds(self, m) -> bool:
         """`m`'s `_read_at` is this reader's wrapper."""
@@ -279,6 +291,13 @@ class Reader:
         fn = m.__dict__.get(caller)
         return (fn is not None and getattr(fn, "__globals__", None) is m.__dict__
                 and self.holds(m))
+
+    def __enter__(self):
+        self.install()
+        return self
+
+    def __exit__(self, *exc):
+        self.remove()
 
     def _wrap(self, m) -> None:
         real = m.__dict__.get("_read_at")
