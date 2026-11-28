@@ -48,6 +48,18 @@ def _rms(x: np.ndarray) -> float:
     return float(math.sqrt(np.mean(np.square(x, dtype=np.float64))))
 
 
+def last_gate_frames(sr, off_s):
+    """Frames a render needs to hold everything a window here reads.
+
+    `held_rms` and `attack_ms` convolve the WHOLE render with a centred 5 ms
+    boxcar (`rms_envelope`, mode="same") and only then slice at `off`, so the
+    envelope at `off - 1` reads `(k - 1) // 2` frames past it (119 at 48 kHz),
+    zero-padded when the render is shorter. The 1 ms envelope's lookahead is
+    smaller and subsumed."""
+    k = max(1, int(round(5.0e-3 * sr)))
+    return max(k, int(round(off_s * sr)) + (k - 1) // 2)
+
+
 def held_rms(x, sr, on_s, off_s):
     """Median 5 ms RMS envelope over the last 40 ms of the gate (scorer's rule)."""
     env = am.rms_envelope(x, ms=5.0, sr=sr)
@@ -124,6 +136,20 @@ def verdict(per_wave):
 
 
 def measure(src: Path = SRC):
+    """One row per frozen render: its residual and both attacks.
+
+    Each render's hash is checked against its row before anything is measured.
+    So is its length (#2080). The hash binds the bytes and says nothing about
+    how many, and a render cut short and re-hashed went on to have its held
+    level, attack and residual read from windows it no longer contained --
+    or was refused as having "no measurable held level", which blames the
+    instrument for the cut. The row states no length, so what is asserted is
+    the minimum: the render reaches the end of the last note's gate plus the
+    5 ms envelope's centred-window lookahead (`last_gate_frames`), past which
+    no sample here is read. A render that ends exactly there holds every
+    sample a window reads and passes; one truncated anywhere after it is, by
+    everything this tool reads, the whole render. The gate end alone is not
+    enough: the envelope at the last gate frame reads 119 frames beyond it."""
     rep = json.loads((src / "report.json").read_text())
     rows = []
     for row in rep["renders"]:
@@ -134,6 +160,13 @@ def measure(src: Path = SRC):
         x = pcm.astype(np.float64) / 32768.0 if pcm.dtype.kind == "i" else pcm.astype(np.float64)
         t = row["events"][-1]
         on, off = t["on_s"], t["on_s"] + t["gate_s"]
+        need = last_gate_frames(sr, off)
+        if len(x) < need:
+            raise Refused(
+                f"{row['wav']}: {len(x)} frames, needs {need} for the last note's gate "
+                f"(to {off:g} s, plus the 5 ms envelope's lookahead) -- the residual, "
+                f"held and attack windows all read up to there, and each was being "
+                f"cut short without a word")
         r, floored = residual_db(x, sr, on, off)
         rows.append({"wave": row["wave"], "condition": row["condition"], "repeat": row["repeat"],
                      "r_db": r, "floor_limited": floored,

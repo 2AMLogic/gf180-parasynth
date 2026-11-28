@@ -169,7 +169,9 @@ from filenames or labels was left out of #1407.
 `tools/measure_osc_drift_reference.py` selects each of its three M1A pairs
 by label prefix and note together (`m1a/phrase0/` with 36, `m1a/osc1_open/`
 with 36 and `m1a/osc2_open/` with 48). Each prefix identifies one WAV that
-the M1A capture script wrote from a single render.
+the M1A capture script wrote from a single render. Re-read after the
+WAV-length checks of #2080 were added to the tool: its selectors are
+unchanged by them.
 [M1A capture script](https://github.com/2AMLogic/gf180-parasynth/blob/91123a05807213ad767f9d0fca80a2720b13feae/tools/measure_mono_m1a_reference.py#L144-L169)
 <!-- claim: grep='startswith\("m1a/phrase0/"\)' in=tools/measure_osc_drift_reference.py covers=tools/measure_osc_drift_reference.py -->
 <!-- claim: grep='startswith\("m1a/osc1_open/"\)' in=tools/measure_osc_drift_reference.py covers=tools/measure_osc_drift_reference.py -->
@@ -187,7 +189,7 @@ MIDI-48 pair still identifies `n0-midi48` and `n2-midi48` and returns
 <!-- claim: test=tools/test_measure_osc_drift_reference.py::test_altered_osc2_wav_refuses_each_window_and_the_pair[mismatch] -->
 
 The fourth pair, `m5a-midi84-saw-vs-pulse`, selects every report with the
-`m5a/` prefix and note 84.
+`m5a/` prefix and note 84 (re-read after #2080: unchanged).
 <!-- claim: grep='r\["label"\]\.startswith\("m5a/"\)' in=tools/measure_osc_drift_reference.py covers=tools/measure_osc_drift_reference.py note="the fourth pair's predicate reads the m5a/ label prefix and the note, so no M1A report can join it" -->
 
 The M5A picker takes every window from the manifest's one WAV,

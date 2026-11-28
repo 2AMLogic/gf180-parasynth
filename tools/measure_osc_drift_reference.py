@@ -27,6 +27,9 @@ with the specific missing precondition.
 
 Every window's hash is checked against the manifest before it is measured. A
 clip that is absent or does not hash is REFUSED for that reason, never skipped.
+So is a clip that is not as long as its record says (CLIP_LENGTH) or does not
+reach the end of the last window measured from it (CLIP_SHORT): the hash binds
+the bytes and says nothing about how many (#2080).
 
 WHAT THE FROZEN MATERIAL CAN SUPPORT, AND WHAT IT CANNOT
 --------------------------------------------------------
@@ -86,6 +89,8 @@ CAPTURE_HISTORY = {
         "8ea0aa3705d907aa6b6260ee5bb611e48b32e7b9e6ebdd97ecca9f5b117e0e9a"),
 }
 
+_DECLARED_FRAMES = {"mono-m5a-miniv3": ("audio", "samples")}
+
 
 def held_window(x, sr: int, f0: float, trim_db: float = TRIM_DB):
     """The contiguous run of `x` that is actually a HELD tone at f0.
@@ -134,10 +139,32 @@ def sha256(path: str) -> str:
     return h.hexdigest()
 
 
-def _clip(case: str, name: str, want_sha: str | None) -> tuple | dict:
+def _frame(t: float, sr: int) -> int:
+    """The sample a time in seconds is cut at: the one expression both the
+    window slice and the check that the clip reaches it are written in."""
+    return int(t * sr)
+
+
+def _clip(case: str, name: str, want_sha: str | None, *, reach_s: float = 0.0,
+          man: dict | None = None) -> tuple | dict:
     """(sr, x) for a frozen clip, or a refusal dict. The hash is a
     PRECONDITION: audio that is not the audio the manifest describes is not the
-    reference, and measuring it would produce a number nobody can reproduce."""
+    reference, and measuring it would produce a number nobody can reproduce.
+    So is the length (#2080). The hash binds the bytes and says nothing about
+    how many: a clip cut short and re-hashed passed it, and every window past
+    the cut was then measured on a shorter segment, or on none.
+
+    Two lengths are checked, in the order the record states them. A clip whose
+    record declares a frame count (`_DECLARED_FRAMES`) must hold exactly that
+    many (CLIP_LENGTH); a record that declares none, or not an integer, REFUSES
+    rather than skipping the check. And every clip must reach `reach_s`, the
+    end of the last window measured from it (CLIP_SHORT), by the same index
+    rule the window is sliced by -- a clip that ends exactly there holds every
+    sample any window reads, and passes. An M1A manifest declares no frame
+    count for a clip: its `duration_s` describes the render before
+    `latency_removed` samples came off the clip's head, so no field in it is
+    the length on disk. For its clips the reach is therefore the whole guard,
+    and a clip truncated after its last window is not seen."""
     path = os.path.join(SCOREBOARD, case, name)
     if not os.path.exists(path):
         return {"verdict": odp.REFUSED, "refusal": "CLIP_ABSENT",
@@ -156,6 +183,23 @@ def _clip(case: str, name: str, want_sha: str | None) -> tuple | dict:
             "refusal_detail": f"{name}: {got[:12]} != {want_sha[:12]}",
         }
     sr, x = odp.read_wav(path)
+    n = len(x)
+    where = _DECLARED_FRAMES.get(case)
+    if where is not None:
+        rec = man.get(where[0]) if isinstance(man, dict) else None
+        want = rec.get(where[1]) if isinstance(rec, dict) else None
+        if type(want) is not int:
+            return {"verdict": odp.REFUSED, "refusal": "CLIP_LENGTH",
+                    "refusal_detail": f"{name}: its record says {where[0]}.{where[1]}={want!r}, "
+                                      f"not a frame count; the clip holds {n} frames"}
+        if n != want:
+            return {"verdict": odp.REFUSED, "refusal": "CLIP_LENGTH",
+                    "refusal_detail": f"{name}: {n} frames, its record says {want} samples"}
+    need = _frame(reach_s, sr)
+    if n < need:
+        return {"verdict": odp.REFUSED, "refusal": "CLIP_SHORT",
+                "refusal_detail": f"{name}: {n} frames, needs {need} for its windows "
+                                  f"(to {reach_s:.3f} s)"}
     return sr, x
 
 
@@ -288,18 +332,22 @@ def measure_miniv3() -> dict:
             continue
         man = json.load(open(mpath))
         pinned = _pinned(case, man)
-        for fn, sha, label, note, t0, t1, capture in picker(man):
+        wins = picker(man)
+        reach = {}
+        for fn, _sha, _label, _note, _t0, t1, _capture in wins:
+            reach[fn] = max(reach.get(fn, 0.0), t1)
+        for fn, sha, label, note, t0, t1, capture in wins:
             if not isinstance(sha, str):
                 sha = None
             key = (case, fn, sha)
             if key not in cache:
-                cache[key] = _clip(case, fn, sha)
+                cache[key] = _clip(case, fn, sha, reach_s=reach[fn], man=man)
             got = cache[key]
             if isinstance(got, dict):
                 reports.append(dict(got, label=label, note=note))
                 continue
             sr, x = got
-            seg = x[max(0, int(t0 * sr)):min(len(x), int(t1 * sr))]
+            seg = x[max(0, _frame(t0, sr)):min(len(x), _frame(t1, sr))]
             f0 = note_hz(note)
             i0, i1 = held_window(seg, sr, f0)
             r = odp.drift_report(seg[i0:i1], sr, f0, sr_expected=48000,
