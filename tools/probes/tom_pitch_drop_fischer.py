@@ -825,6 +825,26 @@ def load_prereg(path: pathlib.Path = PREREG) -> dict:
     return json.loads(path.read_text())
 
 
+def load_record(path: pathlib.Path, what: str) -> dict:
+    """Read a record the OPERATOR handed the tool (`confirm --fit`, `fit
+    <record>`), refusing with its path when it cannot be read (#1758): the
+    file is missing or unreadable (an `OSError`, a directory included), is
+    not UTF-8, or is not JSON. Each was an exit-1 traceback out of `main()`,
+    which catches only this module's `Refused`, where the declared refusal is
+    exit 2 and nothing was measured. `manifest.load_json_refused` raises
+    `manifest`'s own class, so it is re-typed here rather than called bare;
+    and only that class and `OSError` are caught -- anything else is an
+    execution error (tools/refusal.py) and still escapes. `load_prereg` is a
+    tracked file (a repo defect, not an operator's stray one) and is not
+    routed through here."""
+    try:
+        return mf.load_json_refused(path, what)
+    except mf.Refused as e:
+        raise Refused("unreadable-record", str(e)) from e
+    except OSError as e:
+        raise Refused("unreadable-record", f"{what} at {path} cannot be read ({e})") from e
+
+
 def take_rel(cond: str) -> str:
     return f"{cond[:2].lower()}8/{cond}.WAV"
 
@@ -938,7 +958,7 @@ def claim_reserved_evaluation() -> pathlib.Path:
 
 
 def confirm_record(refs: pathlib.Path, pr: dict, fit_path: pathlib.Path) -> dict:
-    fit_rec = json.loads(fit_path.read_text())
+    fit_rec = load_record(fit_path, "the fit record")
     res = {"fit_record": {"path": str(fit_path), "sha256": _sha(fit_path)}}
     if fit_rec.get("status") != "FITTED":
         # Nothing was fitted, so there is no hypothesis to confirm. Measuring
@@ -1409,7 +1429,7 @@ def main(argv=None) -> int:
         elif a.cmd == "measure":
             res = {"rows": measure_rows(a.refs, load_prereg(), a.split)}
         elif a.cmd == "fit":
-            rec = json.loads(a.record.read_text())
+            rec = load_record(a.record, "the fit record")
             mf.require_keys(rec, "rows", f"the fit record at {a.record}", refused=Refused)
             res = fit(rec["rows"], load_prereg())
             res["from_record"] = {"path": str(a.record), "sha256": _sha(a.record)}
