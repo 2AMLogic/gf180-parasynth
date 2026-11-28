@@ -1,0 +1,93 @@
+{
+ "verdict": "FAIL",
+ "reason": "",
+ "property": "",
+ "expected": 6678,
+ "missing": [],
+ "extra": [],
+ "duplicate": [],
+ "outcome_diffs": [
+  {
+   "nodeid": "tools/test_audio_distance_floor_refusal.py::test_full_run_with_bd5050_cut_into_the_strike_exits_refused_2",
+   "baseline": "PASSED",
+   "candidate": "FAILED"
+  },
+  {
+   "nodeid": "tools/test_audio_distance_floor_refusal.py::test_full_run_with_mt50_cut_into_the_strike_exits_refused_2",
+   "baseline": "PASSED",
+   "candidate": "FAILED"
+  },
+  {
+   "nodeid": "tools/test_audio_distance_floor_refusal.py::test_full_run_on_an_unmodified_corpus_exits_0",
+   "baseline": "PASSED",
+   "candidate": "FAILED"
+  },
+  {
+   "nodeid": "tools/test_m1a_refusal_boundaries.py::test_unqualified_reference_manifest_exits_refused_2[analyse_m1a_phase_cycle.py-docs/scorecard/mono-m1a-miniv3/phase-cycle-capture/report.json]",
+   "baseline": "PASSED",
+   "candidate": "FAILED"
+  },
+  {
+   "nodeid": "tools/test_m1a_refusal_boundaries.py::test_non_refused_exception_is_not_swallowed_by_cli_boundary[analyse_m1a_phase_cycle.py-docs/scorecard/mono-m1a-miniv3/phase-cycle-capture/report.json]",
+   "baseline": "PASSED",
+   "candidate": "FAILED"
+  },
+  {
+   "nodeid": "tools/test_mem_peak.py::test_samples_scale_with_the_child_lifetime_and_do_not_spin",
+   "baseline": "PASSED",
+   "candidate": "FAILED"
+  },
+  {
+   "nodeid": "tools/test_midi_session_kit_refusal.py::test_cli_drifted_r1_kit_or_sound_table_exits_refused_2[kit]",
+   "baseline": "PASSED",
+   "candidate": "SKIPPED"
+  },
+  {
+   "nodeid": "tools/test_midi_session_kit_refusal.py::test_cli_drifted_r1_kit_or_sound_table_exits_refused_2[presets]",
+   "baseline": "PASSED",
+   "candidate": "SKIPPED"
+  },
+  {
+   "nodeid": "tools/test_midi_session_kit_refusal.py::test_cli_r2_is_sent_r1s_frozen_kit_and_refuses_the_same_way",
+   "baseline": "PASSED",
+   "candidate": "SKIPPED"
+  },
+  {
+   "nodeid": "tools/test_midi_session_kit_refusal.py::test_cli_a_sound_table_that_leaves_a_circuit_in_both_sounds_refuses_2",
+   "baseline": "PASSED",
+   "candidate": "SKIPPED"
+  },
+  {
+   "nodeid": "tools/test_midi_session_kit_refusal.py::test_cli_unrelated_errors_at_the_same_kit_read_still_exit_1[a_corrupt_kit_file-_corrupt-none-json.decoder.JSONDecodeError]",
+   "baseline": "PASSED",
+   "candidate": "SKIPPED"
+  },
+  {
+   "nodeid": "tools/test_midi_session_kit_refusal.py::test_cli_unrelated_errors_at_the_same_kit_read_still_exit_1[a_kit_file_without_its_writes_key-_without_writes-none-KeyError: 'writes']",
+   "baseline": "PASSED",
+   "candidate": "SKIPPED"
+  },
+  {
+   "nodeid": "tools/test_midi_session_kit_refusal.py::test_cli_unrelated_errors_at_the_same_kit_read_still_exit_1[a_runtime_error_injected_at_the_kit_read-None-image-kit-runtime-error-RuntimeError: injected at the kit read]",
+   "baseline": "PASSED",
+   "candidate": "SKIPPED"
+  }
+ ],
+ "counts": {
+  "PASSED": 6636,
+  "FAILED": 6,
+  "SKIPPED": 34,
+  "XFAILED": 2
+ },
+ "baseline_counts": {
+  "PASSED": 6649,
+  "SKIPPED": 27,
+  "XFAILED": 2
+ },
+ "summary": {
+  "failed": 6,
+  "passed": 6636,
+  "skipped": 34,
+  "xfailed": 2
+ }
+}

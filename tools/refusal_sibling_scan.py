@@ -97,6 +97,21 @@ WHAT THIS SCAN RESOLVES that the #1160 one-off dotted-call grep could not:
     stays a candidate -- the price, a row to triage; a `with
     contextlib.suppress(...)` around a re-raise is not modelled and reads
     the same way;
+  * a SUBCLASS of the module's family, raised under its own name, is a raise
+    of that family (#1956): the raise was keyed on the NAME `Refused`, so a
+    def whose raises were all of a local `class Unbindable(Refused)` read as
+    raising nothing and its callers left the census -- the optimistic
+    direction again. #1843's `f1_level_capture.load_capture` raised only
+    such subclasses and its one caller, guarded at the CLI boundary, vanished
+    (397 -> 396 sites). A class defined at module level with a family name
+    for a base, or an earlier such class, is a family subclass to any depth
+    and resolves to the origin its root family name has: the module's own,
+    or the lender's through a re-export when the family is borrowed. Bases
+    are read as of the class statement, as Python reads them, so a family
+    name rebound by a LATER import does not reach a class defined before
+    it; an import that rebinds the subclass's own name afterwards does --
+    the name is then no longer the class -- and a def's own import of that
+    name binds it there and only there, as for any name.
 
 WHAT IT CANNOT TELL YOU, and why the per-site list is an inventory, not a
 verdict. A dotted call is not necessarily a raising call on the CLI's input
@@ -108,6 +123,15 @@ is decided by tracing the caller with a known-answer input, as #1160 and
   * only raises written in the CALLED DEF's own subtree are collected; a
     refusal raised one frame deeper (the def calls a helper that raises)
     is invisible unless the helper is the credited def;
+  * a family subclass is found by its base NAMES, at module level. Not
+    resolved: a dotted base (`class Sub(x.Refused)`), which on this tree is
+    the shape of a family kept under another name (`class
+    Refusal(refusal.Refused)`, whose raise and handlers the census cannot
+    see at all: #2011); a class defined inside a function; a base reached
+    through an assignment alias; and a subclass raised under ANOTHER
+    module's name (`from x import Unbindable`, `x.Unbindable(...)`), which
+    is neither the callee's family name nor a class of the callee's
+    (#2015). Each leaves the raise unread;
   * bindings are per scope, not per statement: within a module or within a
     function the LAST import of a name in SOURCE order wins for that whole
     scope, so a call written above a later rebinding of its head is read
@@ -218,9 +242,11 @@ def tracked_files() -> list[pathlib.Path]:
 
 
 def _bind(stmt: ast.stmt, imports: dict[str, str],
-          from_imports: dict[str, tuple[str, str]]) -> None:
+          from_imports: dict[str, tuple[str, str]]) -> list[str]:
     """Record ONE import statement's names in the given bindings, the way a
-    rebinding does: the last import of a name in a scope wins there."""
+    rebinding does: the last import of a name in a scope wins there. Returns
+    the local names it bound (a relative from-import binds none here)."""
+    bound: list[str] = []
     if isinstance(stmt, ast.Import):
         for a in stmt.names:
             stem = a.name.split(".")[0]
@@ -229,6 +255,7 @@ def _bind(stmt: ast.stmt, imports: dict[str, str],
             # from-import of it: the last binding wins across BOTH forms
             from_imports.pop(nm, None)
             imports[nm] = stem
+            bound.append(nm)
     elif isinstance(stmt, ast.ImportFrom) and stmt.module and stmt.level == 0:
         stem = stmt.module.split(".")[0]
         for a in stmt.names:
@@ -237,6 +264,8 @@ def _bind(stmt: ast.stmt, imports: dict[str, str],
             # the ORIGINAL name is kept (`from x import f as g`):
             # a `g()` call resolves to f's def, not to a missing g
             from_imports[nm] = (stem, a.name)
+            bound.append(nm)
+    return bound
 
 
 class _Bindings:
@@ -257,6 +286,8 @@ class ModInfo:
         self.funcs: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {}
         self.refused_origin: str | None = None   # stem whose class our Refused is
         self.refused_names: dict[str, str] = {}  # family name -> stem it last resolved to
+        # module-level class -> the lender stems of the family it subclasses
+        self.family_subclasses: dict[str, frozenset[str]] = {}
         self.has_local_family = False            # a local `class Refused` def (maybe shadowed)
         self.has_family = False                  # a family name bound anywhere: module level or a def
         self.parents: dict[ast.AST, ast.AST] = {}          # child -> parent, for the scope walk
@@ -304,6 +335,28 @@ class ModInfo:
                 return ent[0] if ent[1] == FAMILY_NAME else None
         return self.refused_names.get(name)
 
+    def family_subclasses_at(self, name: str, at: ast.AST | None = None) -> frozenset[str]:
+        """The lender stems a module-level class `name` subclasses the family
+        through, where `at` sits; empty when `name` is no such class there.
+        Function scopes are read first, innermost first, as `family_name_at`
+        does: a def's own import of the name binds it there and only there
+        (#1956)."""
+        for b in self._enclosing_scopes(at):
+            if name in b.imports or name in b.from_imports:
+                return frozenset()
+        return self.family_subclasses.get(name, frozenset())
+
+    def _family_through(self, base: ast.expr) -> set[str]:
+        """The lender stems a class BASE puts the class being defined in the
+        family of: a family name's lender, or an earlier local subclass's
+        own. Called while the module's bindings are those of the class
+        statement, which is when Python reads a base (#1956)."""
+        txt = ast.unparse(base)
+        fam = self.family_name_at(txt, base)
+        if fam is not None:
+            return {fam}
+        return set(self.family_subclasses.get(txt, ()))
+
     def _enclosing_scopes(self, at: ast.AST | None):
         """The bindings of the function scopes `at` sits in, innermost
         first: a nested def reads its enclosing def's imports, and a
@@ -326,7 +379,9 @@ class ModInfo:
     def _read_bindings(self) -> None:
         for node in self.tree.body:
             if isinstance(node, (ast.Import, ast.ImportFrom)):
-                _bind(node, self.imports, self.from_imports)
+                # the name is an import's now, whatever class it named before
+                for nm in _bind(node, self.imports, self.from_imports):
+                    self.family_subclasses.pop(nm, None)
                 if isinstance(node, ast.Import):
                     for a in node.names:
                         self.refused_names.pop(a.asname or a.name.split(".")[0], None)
@@ -344,10 +399,21 @@ class ModInfo:
                             if nm == FAMILY_NAME:
                                 self.refused_origin = stem
                             self.refused_names[nm] = stem
-            elif isinstance(node, ast.ClassDef) and node.name == FAMILY_NAME:
-                self.refused_origin = self.path.stem      # a local class
-                self.refused_names[FAMILY_NAME] = self.path.stem
-                self.has_local_family = True
+            elif isinstance(node, ast.ClassDef):
+                # a local subclass of the family (#1956): read while the
+                # bindings are those of THIS statement, as Python reads the
+                # bases, so only names bound above and classes defined above
+                # are reachable -- which is the fixpoint, in source order
+                fams: set[str] = set()
+                for base in node.bases:
+                    fams |= self._family_through(base)
+                self.family_subclasses.pop(node.name, None)
+                if fams:
+                    self.family_subclasses[node.name] = frozenset(fams)
+                if node.name == FAMILY_NAME:
+                    self.refused_origin = self.path.stem      # a local class
+                    self.refused_names[FAMILY_NAME] = self.path.stem
+                    self.has_local_family = True
             elif isinstance(node, ast.Assign):
                 for t in node.targets:
                     if (isinstance(t, ast.Name) and t.id == FAMILY_NAME
@@ -424,10 +490,12 @@ def origin_of(by_stem: dict[str, list[ModInfo]], stem: str,
 
 def raise_origins(mod: ModInfo, fname: str,
                   by_stem: dict[str, list[ModInfo]] | None = None) -> set[str]:
-    """The family origins the named def of `mod` raises itself. Given
-    `by_stem`, a re-exported class resolves to the module that DEFINES it, as
-    `handler_origins` resolves the guard side: both sides must name one class
-    by one origin or a re-export reads as two."""
+    """The family origins the named def of `mod` raises itself: through a
+    family name, or through a module-local subclass of the family raised
+    under its own name (#1956). Given `by_stem`, a re-exported class resolves
+    to the module that DEFINES it, as `handler_origins` resolves the guard
+    side: both sides must name one class by one origin or a re-export reads
+    as two."""
     def defining(stem: str) -> str:
         return (origin_of(by_stem, stem) if by_stem is not None else None) or stem
 
@@ -442,8 +510,13 @@ def raise_origins(mod: ModInfo, fname: str,
                 exc = exc.func
             txt = ast.unparse(exc)
             fam = mod.family_name_at(txt, node)
+            subs = mod.family_subclasses_at(txt, node) if fam is None else ()
             if fam is not None:
                 out.add(defining(fam))
+            elif subs:
+                # a class DEFINED in this module is the definer of what
+                # derives from it, whatever its family name is bound to by now
+                out.update(s if s == mod.path.stem else defining(s) for s in subs)
             elif "." in txt:
                 head = txt.split(".")[0]
                 stem = mod.resolve_head(head, node) or head
