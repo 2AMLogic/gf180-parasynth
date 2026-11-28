@@ -21,6 +21,7 @@ sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
 import audio_measure as am
 import mono_m5a_score as m5a
+import repo_output_path
 import voice_fx as vf
 
 
@@ -174,11 +175,8 @@ def main(argv=None) -> int:
                     help="controlled oscillator challenger: use the naive saw before the same 2x decimator")
     ap.add_argument("--out", default="build/scorecard/m5a-signal-path.json")
     args = ap.parse_args(argv)
-    out = pathlib.Path(args.out)
-    if not out.is_absolute():
-        out = ROOT / out
-    out = out.resolve()
-    if not out.is_relative_to(ROOT):
+    out = repo_output_path.confine(args.out, ROOT)
+    if out is None:
         print("measure_m5a_signal_path: REFUSED -- output must stay inside the repository")
         return 2
     report = measure(args.cutoff, args.drive, blep=not args.disable_polyblep)

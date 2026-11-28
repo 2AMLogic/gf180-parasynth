@@ -22,6 +22,7 @@ sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
 import audio_measure as am
 import mono_m5a_score as m5a
+import repo_output_path
 import run_all
 import voice_fx as vf
 
@@ -152,17 +153,11 @@ def main(argv=None):
     parser.add_argument("--shapes", nargs="+", choices=SHAPES, default=list(SHAPES))
     parser.add_argument("--out", default="docs/scorecard/mono-m5a-miniv3/pulse-duty-v1.json")
     args = parser.parse_args(argv)
-    requested = pathlib.Path(args.out)
-    if not requested.is_absolute():
-        requested = ROOT / requested
     # write_json replaces the directory entry it is given, so validate that
     # entry (resolved parent + leaf name) as well as where the leaf points.
     # A leaf symlink is therefore replaced, never followed.
-    if requested.name in ("", ".", ".."):
-        print("measure_m5a_pulse_duty: REFUSED -- output must name a file")
-        return 2
-    path = requested.parent.resolve() / requested.name
-    if not (path.is_relative_to(ROOT) and path.resolve().is_relative_to(ROOT)):
+    path = repo_output_path.confine(args.out, ROOT, replace_leaf=True)
+    if path is None:
         print("measure_m5a_pulse_duty: REFUSED -- output must stay inside the repository")
         return 2
     report = measure(args.shapes)
