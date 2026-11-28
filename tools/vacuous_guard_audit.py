@@ -9,9 +9,10 @@ WHY THIS EXISTS
 
 `all([])` is True. A `for` loop over zero items raises nothing. `a != b` holds
 when both sides were emptied the same way. So a verdict whose only refusal path
-lives inside a loop, or inside `all(...)`, PASSES when the population it was
-meant to check is empty -- and "empty" is exactly what a deleted child, a
-missing file or a dropped section looks like. Found by hand, one site at a time:
+lives inside a loop, or inside `all(...)`, or whose only evidence is a count a
+loop increments, PASSES when the population it was meant to check is empty --
+and "empty" is exactly what a deleted child, a missing file or a dropped
+section looks like. Found by hand, one site at a time:
 #118 (schroeder_t20's truncation guard), #283 (trial receipt with zero required
 children), #431 (preconditions that gated on a file existing and never read it),
 #582 (`release_manifest.image_identity`, still open). This is the standing check
@@ -34,8 +35,15 @@ must name the iterated expression itself (`pub["published_sha256"]`), so
 `if pub["configuration"] != CONFIG` earlier in the function does not excuse a
 later loop over `pub["published_sha256"]`.
 
+A loop that never refuses but only counts is listed too (`for-loop counts`,
+#1957) when a later `return` or summary `print` of the same function reads the
+counter: the pre-#1843 `f1_level_capture.verify` printed `0 verified, 0
+failed` over a manifest naming no clip and returned OK -- nothing had been
+compared. The same population assertion excuses it.
+
 What the audit cannot see (stated so a clean row is not read as proof): a
-verdict accumulated into a list that is later returned as `not problems`; an
+verdict accumulated into a list that is later returned as `not problems`; a
+counter read only by a later `if`, or counted inside a nested `def`; an
 emptiness test made by a helper; a population emptied after the assertion.
 
 **The boundary check (`--check`) is the gate, and it is deliberately narrow.**
@@ -244,6 +252,39 @@ def _population_tests(fn, before: int) -> list[ast.expr]:
     return out
 
 
+def _loop_counters(body) -> set[str]:
+    """Names a loop body assigns or augments (`bad += 1`, `n = n + 1`)."""
+    out: set[str] = set()
+    for stmt in body:
+        for sub in ast.walk(stmt):
+            if isinstance(sub, ast.AugAssign) and isinstance(sub.target, ast.Name):
+                out.add(sub.target.id)
+            elif isinstance(sub, ast.Assign):
+                for t in sub.targets:
+                    for elt in (t.elts if isinstance(t, (ast.Tuple, ast.List)) else (t,)):
+                        if isinstance(elt, ast.Name):
+                            out.add(elt.id)
+    return out
+
+
+def _counts_read_later(loop: ast.For, own) -> bool:
+    """Does this loop count into a name that a `return` or `print` AFTER it
+    reads? That is a verdict computed from the loop's count (#1957), and an
+    empty population leaves the counter at its initial value."""
+    counters = _loop_counters(loop.body)
+    if not counters:
+        return False
+    last = max((n.lineno for n in ast.walk(loop) if hasattr(n, "lineno")),
+               default=loop.lineno)
+    for n in own:
+        if not hasattr(n, "lineno") or n.lineno <= last:
+            continue
+        if isinstance(n, ast.Return) or (isinstance(n, ast.Call) and _call_name(n) == "print"):
+            if any(isinstance(x, ast.Name) and x.id in counters for x in ast.walk(n)):
+                return True
+    return False
+
+
 def audit_source(src: str, rel: str) -> list[Hit]:
     tree = ast.parse(src)
     hits: list[Hit] = []
@@ -267,6 +308,10 @@ def audit_source(src: str, rel: str) -> list[Hit]:
             # (b) a `for` loop whose body is the only thing that can refuse
             if isinstance(n, ast.For) and _contains_refusal(n.body):
                 pops.append((n.lineno, "for-loop refuses", _iter_base(n.iter)))
+            # (c) a loop that cannot refuse but counts, and a later `return` or
+            # summary `print` reads the count (#1957). Same population test.
+            elif isinstance(n, ast.For) and _counts_read_later(n, own):
+                pops.append((n.lineno, "for-loop counts", _iter_base(n.iter)))
             for lineno, kind, base in pops:
                 base_text = ast.unparse(base)
                 if any(_asserts_population(t, base_text)

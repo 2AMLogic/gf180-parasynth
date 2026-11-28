@@ -139,6 +139,106 @@ def test_helpers_that_are_not_verdict_shaped_are_skipped():
     assert _hits(src) == []
 
 
+# ---------------------------------------------------------------------------
+# the audit: a verdict computed from counters a loop only increments (#1957)
+# ---------------------------------------------------------------------------
+# `tools/f1_level_capture.py::verify` on 85e2e835, reduced to its shape. The
+# loop's body never refuses: it counts. With `"clips": {}` it printed
+# `0 verified, 0 failed` and returned OK, and the audit never listed it.
+COUNTING = '''
+def verify():
+    try:
+        m = load_manifest()
+    except Refused as e:
+        print(f"REFUSED  {e}")
+        return REFUSED
+    bad = 0
+    for key, meta in sorted(m["clips"].items()):
+        try:
+            load_capture(key, m)
+            print(f"ok       {key}")
+        except Refused as e:
+            bad += 1
+            print(f"FAIL     {e}")
+    print(f"{len(m['clips']) - bad} verified, {bad} failed")
+    return FAIL if bad else OK
+'''
+
+COUNTING_GUARDED = COUNTING.replace(
+    "    bad = 0\n",
+    '    if not m["clips"]:\n        raise Refused("no clips")\n    bad = 0\n')
+
+
+def test_a_counter_loop_that_feeds_a_later_verdict_is_flagged():
+    hits = _hits(COUNTING)
+    assert [(h.func, h.kind, h.text, h.mark) for h in hits] == [
+        ("verify", "for-loop counts", "over m['clips']", "")]
+
+
+def test_a_counter_loop_with_a_population_assertion_is_not_flagged():
+    assert _hits(COUNTING_GUARDED) == []
+
+
+def test_a_counter_over_a_constant_domain_is_advisory_like_the_other_kinds():
+    src = (
+        "def verify_n(x):\n"
+        "    n = 0\n"
+        "    for k in KEYS:\n"
+        "        if k not in x:\n"
+        "            n += 1\n"
+        "    return FAIL if n else OK\n"
+    )
+    assert [(h.kind, h.mark) for h in _hits(src)] == [("for-loop counts", "const?")]
+
+
+def test_the_counter_control_is_red_against_an_audit_without_the_counter_rule(monkeypatch):
+    """The control above is green because of the counter rule and nothing
+    else: with the rule off -- the audit as it was before #1957 -- the same
+    source is not listed at all."""
+    monkeypatch.setattr(vga, "_counts_read_later", lambda loop, own: False)
+    assert _hits(COUNTING) == []
+
+
+def test_a_loop_that_refuses_and_counts_is_one_row_not_two():
+    """Both kinds ask for the same population assertion, so a loop that
+    already carries a refusal is not listed twice."""
+    src = (
+        "def check_rows(rows):\n"
+        "    soft = 0\n"
+        "    for r in rows:\n"
+        "        if r['x'] is None:\n"
+        "            raise Refused('malformed')\n"
+        "        if r['x'] < 0:\n"
+        "            soft += 1\n"
+        "    return FAIL if soft else OK\n"
+    )
+    assert [(h.kind, h.text) for h in _hits(src)] == [("for-loop refuses", "over rows")]
+
+
+def test_a_counter_nobody_reads_after_the_loop_is_not_a_verdict():
+    src = (
+        "def verify_count(m):\n"
+        "    n = 0\n"
+        "    for key in m['clips']:\n"
+        "        n += 1\n"
+        "        print(f'{n} seen')\n"
+    )
+    assert _hits(src) == []
+
+
+def test_a_counter_loop_inside_a_nested_function_is_the_helpers_blind_spot():
+    src = (
+        "def verify_all(xs):\n"
+        "    def count_bad(ys):\n"
+        "        n = 0\n"
+        "        for y in ys:\n"
+        "            n += 1\n"
+        "        return n\n"
+        "    return FAIL if count_bad(xs) else OK\n"
+    )
+    assert _hits(src) == []
+
+
 def test_own_nodes_does_not_descend_into_a_nested_def_that_is_a_body_statement():
     """`_own_nodes` feeds the gate's `assertion_sites` and the audit's
     `_population_tests`: an `if` inside a nested `def` was being read as the
