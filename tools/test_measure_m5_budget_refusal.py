@@ -3,16 +3,16 @@
 operating-level tools (#1694): a drive outside the frozen budget must leave the
 process as REFUSED (2), never as a FAIL (1).
 
-THE DEFECT, AS MEASURED ON origin/main @ be426416 (2026-11-28): the fence was
-`raise SystemExit("REFUSED: ...")` in both tools, so `--drives 0.9` exited 1
-with the refusal text on stderr and nothing on stdout -- a missing precondition
-rendered as a FAIL, the inversion tools/exit_contract.py exists to prevent --
-while a handler that renders it correctly (`except refusal.Refused` in
-`main()`) sat one frame above the fence, bypassed. Red-first on that tree,
-2026-11-28: 6 of the 12 controls failed -- the four CLI controls with the
-process at exit 1 and the refusal on stderr, the two class controls with no
-`Refused` in either module -- and the six in-budget controls were green, as
-they must be on any tree.
+THE DEFECT, AS MEASURED ON origin/main @ be426416 (2026-11-28): the fence
+raised a bare `SystemExit` whose string began `REFUSED: ...` in both tools, so
+`--drives 0.9` exited 1 with the refusal text on stderr and nothing on stdout
+-- a missing precondition rendered as a FAIL, the inversion
+tools/exit_contract.py exists to prevent -- while a handler that renders it
+correctly (`except refusal.Refused` in `main()`) sat one frame above the
+fence, bypassed. Red-first on that tree, 2026-11-28: 6 of the 12 controls
+failed -- the four CLI controls with the process at exit 1 and the refusal on
+stderr, the two class controls with no `Refused` in either module -- and the
+six in-budget controls were green, as they must be on any tree.
 
 THE KNOWN ANSWER, independent of anything this repository models: 0.9 is not
 the baseline 0.75 and not one of the three frozen candidates, so the request
