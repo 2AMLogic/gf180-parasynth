@@ -235,6 +235,7 @@ VCA" is a square-wave generator and no longer anything §10 describes.
 from __future__ import annotations
 
 import argparse
+import decimal
 import json
 import math
 import pathlib
@@ -484,6 +485,82 @@ def thd_db(drive, asym=ASYM, *, f0=1000.0, n=1 << 15, sr=SR):
     rest[max(0, k - 3):k + 4] = 0.0
     rest[:8] = 0.0
     return 20.0 * math.log10(max(float(np.sqrt(np.sum(rest ** 2))), 1e-30) / max(fund, 1e-30))
+
+
+# ---------------------------------------------------------------------------
+# the clipper against its own definition, in decimal (#2147)
+# ---------------------------------------------------------------------------
+# Where the reference check looks. At the documented asymmetries (ASYM 0.5 and
+# ASYM_SWEEP 0.15-0.8) the clipper is exact to 3e-16 in whichever form it is
+# written, so a check there is blind to the cancelling form it was written in
+# until #2147 -- which every other property in this module runs through. 19 is
+# the largest integer inside the domain (|asym| from 19.07 is refused), where
+# that form's output is roundoff end to end.
+KA_ASYM = 19.0
+# The renders put the clipper's argument at |g x| = 237 at +12 dB: the short
+# band's 20 ms tau concentrates its energy in a few ms while g is set by the
+# whole record's RMS, so peak/RMS at the clipper is 59.6 (measured, staircase
+# source, post_vca). The reference check is driven at that crest as well as at
+# the unit sine's own.
+KA_CREST = 60.0
+KA_N_CLIP = 128
+# Sample-by-sample relative error allowed between `clip()` and its definition.
+CLIP_REL_ERR_MAX = 1e-12
+
+
+def _gain(drive, r) -> float:
+    """The clipper's gain for `drive` dB relative to the RMS `r`: the one
+    expression `clip()` and its decimal reference both read."""
+    return 10.0 ** (drive / 20.0) / r
+
+
+def _decimal_tanh(z: decimal.Decimal) -> decimal.Decimal:
+    """tanh(z) as (e^2z - 1)/(e^2z + 1), in decimal arithmetic: an answer from
+    the definition, not from libm's tanh and not from float64."""
+    e = (2 * z).exp()
+    return (e - 1) / (e + 1)
+
+
+def clip_input(crest=1.0, n=KA_N_CLIP) -> np.ndarray:
+    """One period of a sine of amplitude `crest`, sampled halfway between its
+    zero crossings so every sample's true output is non-zero and a relative
+    error is defined at each. Driven with `rms=sqrt(0.5)`, the unit sine's own,
+    the argument reaches 10^(drive/20) * crest * sqrt(2)."""
+    return crest * np.sin(2.0 * math.pi * (np.arange(n) + 0.5) / n)
+
+
+def clip_rel_error(x, drive, asym, *, defect=None, rms=None) -> float:
+    """The largest relative error, sample by sample, of `clip()` against its
+    DEFINITION `(tanh(u + b) - tanh(b)) / (g (1 - tanh(b)^2))` evaluated in
+    80-digit decimal arithmetic at the gain `clip()` itself uses.
+
+    Sample by sample, not against the largest sample: at `KA_CREST` and asym 19
+    the true output spans sixteen orders of magnitude between its two halves,
+    and an error taken against the peak is blind to all but the peak. A sample
+    whose true output is 0 (x = 0) must come out exactly 0; a non-finite output
+    is an infinite error rather than one `max` would skip (#134's shape).
+    """
+    x = np.asarray(x, dtype=np.float64)
+    r = float(rms if rms is not None else np.sqrt(np.mean(x ** 2)))
+    b = 0.0 if defect == "SYMMETRIC_NL" else asym
+    got = np.atleast_1d(clip(x, drive, asym, defect=defect, rms=r)).ravel()
+    with decimal.localcontext() as ctx:
+        ctx.prec = 80
+        g, bias = decimal.Decimal(_gain(drive, r)), decimal.Decimal(float(b))
+        tb = _decimal_tanh(bias)
+        norm = g * (1 - tb * tb)
+        worst = 0.0
+        for xi, yi in zip(x.ravel(), got):
+            want = (_decimal_tanh(g * decimal.Decimal(float(xi)) + bias) - tb) / norm
+            if not want:
+                if yi != 0.0:
+                    return math.inf
+                continue
+            if not math.isfinite(yi):
+                return math.inf
+            err = abs(decimal.Decimal(float(yi)) - want) / abs(want)
+            worst = max(worst, float(err))
+    return worst
 
 
 # ---------------------------------------------------------------------------

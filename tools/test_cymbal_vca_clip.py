@@ -15,7 +15,14 @@ The module makes two claims and they need different kinds of test:
 Plus the usual: every named property must be moved by some injected defect, the
 two blind defects must be blind, and the numbers quoted in the docstring must
 come from the artifacts rather than from the prose.
+
+And one answer from outside float64 (#2147): the clipper against its own
+definition in 80-digit decimal arithmetic. `clip()` is DEFINED as a difference
+of two tanh over `1 - tanh(b)^2`, and at the documented bias that form is exact
+-- so every property in the module passed while the same expression, at
+`--asym 19`, returned roundoff.
 """
+import decimal
 import math
 import pathlib
 import sys
@@ -143,6 +150,88 @@ def test_thd_rises_with_drive_and_the_refusal_threshold_is_reachable():
     t = [v.thd_db(d) for d in v.DRIVE_DB]
     assert all(b > a for a, b in zip(t, t[1:]))
     assert max(t) > v.MAX_THD_DB or min(t) < v.MAX_THD_DB
+
+
+# ---------------------------------------------------------------------------
+# the clipper against its own definition, in decimal (#2147)
+# ---------------------------------------------------------------------------
+GRID_ASYM = (0.5, 5.0, 12.0, 19.0)
+GRID_DRIVE_DB = (-12.0, 0.0, 12.0)
+UNIT_SINE_RMS = math.sqrt(0.5)
+
+
+def _errors(asym, *, crests=(1.0, v.KA_CREST), n=v.KA_N_CLIP, defect=None) -> dict:
+    """{(crest, drive): the clipper's largest sample-by-sample relative error
+    against its definition} on one period of a sine at that crest."""
+    return {(c, d): v.clip_rel_error(v.clip_input(c, n), d, asym, defect=defect, rms=UNIT_SINE_RMS)
+            for c in crests for d in GRID_DRIVE_DB}
+
+
+@pytest.mark.parametrize("asym", GRID_ASYM)
+def test_the_clipper_is_its_own_definition_in_decimal_arithmetic_at_every_point(asym):
+    """The grid of #2147 -- asym 0.5, 5, 12 and 19 against drive -12, 0 and
+    +12 dB -- at the unit sine's crest and at `KA_CREST`, the one the module's
+    own renders reach. Every sample must be within `CLIP_REL_ERR_MAX` of
+    `(tanh(u+b) - tanh(b)) / (g (1 - tanh(b)^2))` in 80-digit decimal.
+
+    Relative sample by sample on purpose: at crest 60 and asym 19 the true
+    output runs from 0.09 to -3e15, and an error taken against the peak would
+    not see the half of the waveform that is small.
+    """
+    err = _errors(asym)
+    assert max(err.values()) < v.CLIP_REL_ERR_MAX, err
+
+
+@pytest.mark.parametrize("asym", [-a for a in GRID_ASYM])
+def test_a_negative_bias_is_as_exact_as_its_mirror(asym):
+    """The bias is swept positive only, but `--asym -19` is inside the domain
+    too, and it is the half where the output explodes (the positive bias
+    clips one side; the negative bias amplifies the other)."""
+    err = _errors(asym)
+    assert max(err.values()) < v.CLIP_REL_ERR_MAX, err
+
+
+def test_the_definition_check_knows_its_own_answers():
+    """The reference is a definition, and a definition can be mistranscribed.
+    By hand, at b = ln3/2: tanh(b) = 1/2 and tanh(2b) = 4/5, so the function is
+    (tanh(u+b) - 1/2) / (3/4), which is 2/5 at u = b, -2/3 at u = -b and
+    2/3 and -2 at u = +-inf. Asserted on `clip()` directly at g = 1, so three
+    routes -- decimal, libm's tanh and this arithmetic -- have to agree.
+
+    A zero input has a zero output by the definition, and must come out as
+    exactly that. Before #2147 `clip()` returned 0.1256 for it at asym 19 and
+    drive +12 dB (numpy 2.5.5, glibc 2.39, x86-64 AVX2): the array's
+    `np.tanh(19)` is 1.0 there while the scalar `math.tanh(19)` the normaliser
+    read is one ulp below it, and at that bias an ulp is most of the output."""
+    b = math.log(3.0) / 2.0
+    u = np.array([b, -b, 800.0, -800.0])
+    assert v.clip(u, 0.0, b, rms=1.0) == pytest.approx([0.4, -2.0 / 3.0, 2.0 / 3.0, -2.0],
+                                                       rel=1e-12, abs=0.0)
+    assert v.clip(np.zeros(4), 12.0, 19.0, rms=1.0).tolist() == [0.0] * 4
+    with decimal.localcontext() as ctx:
+        ctx.prec = 80
+        for n in (2, 3, 5, 13):
+            # tanh(ln(n)/2) = (n - 1)/(n + 1)
+            want = decimal.Decimal(n - 1) / decimal.Decimal(n + 1)
+            got = v._decimal_tanh(decimal.Decimal(n).ln() / 2)
+            assert abs(got - want) < decimal.Decimal("1e-70"), (n, got)
+        for z in np.linspace(-10.0, 10.0, 41):
+            assert abs(float(v._decimal_tanh(decimal.Decimal(float(z)))) - math.tanh(float(z))) \
+                <= 4 * math.ulp(1.0), z
+
+
+def test_the_second_order_coefficient_has_no_subtraction_and_is_exact_at_every_bias():
+    """`clip_a2` is -tanh(b) g: one product, no difference of two numbers that
+    both approach 1, so the cancellation cannot reach it. #2147 asked for that
+    to be checked and stated rather than assumed. Read the way `_im_amp` reads
+    it, divided by the RMS, since its own gain stops at 10^(drive/20)."""
+    with decimal.localcontext() as ctx:
+        ctx.prec = 80
+        for asym in GRID_ASYM:
+            for d in GRID_DRIVE_DB:
+                want = -v._decimal_tanh(decimal.Decimal(asym)) * decimal.Decimal(v._gain(d, UNIT_SINE_RMS))
+                got = decimal.Decimal(float(v.clip_a2(d, asym))) / decimal.Decimal(UNIT_SINE_RMS)
+                assert abs(got - want) / abs(want) < v.CLIP_REL_ERR_MAX, (asym, d)
 
 
 # ---------------------------------------------------------------------------
