@@ -622,8 +622,8 @@ def stale_control(case: str, out: Path) -> int:
         stale_path.write_text(json.dumps(stale, indent=2) + "\n")
         verdict, detail = check(stale_path, fresh)
         print(f"  | substituted:     {PREFIX}{verdict} -- {detail}")
-    except (Refused, rm.Refused) as exc:            # rm.Refused: a sibling
-        return say("REFUSED", str(exc))             # RuntimeError subclass (#784)
+    except refusal.Refused as exc:
+        return say("REFUSED", str(exc))
     if verdict == "BOUND":
         return say("BOUND", f"r1_release ACCEPTED a manifest with {changed} substituted: "
                             "not caught")

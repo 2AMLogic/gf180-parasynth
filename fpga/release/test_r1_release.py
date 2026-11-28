@@ -169,6 +169,19 @@ def test_stale_control_host_reports_refused_when_the_cli_refuses(tmp_path, monke
     assert "stale_control: REFUSED" in capsys.readouterr().out
 
 
+def test_a_non_refusal_error_from_the_capture_still_propagates(tmp_path, monkeypatch):
+    """The control for the test above: the handler catches refusals by class
+    and nothing wider (tools/refusal.py). An implementation error at the same
+    call site is an EXECUTION ERROR; it must leave stale_control untouched,
+    never become `stale_control: REFUSED`."""
+    def broke(argv, outdir):
+        raise ValueError("not a refusal: the capture broke")
+
+    monkeypatch.setattr(rm, "_capture", broke)
+    with pytest.raises(ValueError, match="the capture broke"):
+        rr.stale_control("host", tmp_path)
+
+
 def test_the_trial_passes_with_both_controls_caught(tmp_path):
     run_dir, rec = trial.run_trial("T-RELEASE-BOUND-R1", out_base=tmp_path)
     assert rec["verdict"] == trial.PASS, rec["verdict_reasons"]
