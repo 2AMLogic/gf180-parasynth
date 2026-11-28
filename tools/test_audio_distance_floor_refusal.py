@@ -122,8 +122,9 @@ THE E5 HANDLER (#1771), a second defect in this file and the one site #1646
 did not touch: `e5_tom` wrapped the per-property estimator
 (`rc._pitch_drop("LT")`) in `except Exception` and filed whatever it raised as
 a `refused:` row -- the inverse defect, an execution error relabelled as a
-refusal. On main @ 02394528 that row sits in a run that exits 0; #1699 (PR
-#1773, open on 2026-11-28) would make the run exit 2, where 1 and a traceback
+refusal. Before #1699 (main @ 02394528) that row sat in a run that exited 0;
+since #1699 (#1773, ed00ea2c; read on origin/main @ 474bd2ff) `_refusals`
+matches its `"refused: "` prefix and the run exits 2, where 1 and a traceback
 are right either way.
 The two controls at the end of this file pair as the ones above do: an
 injected `ValueError` must propagate out of `e5_tom`, and a refusal the
@@ -134,7 +135,8 @@ green before AND after the fix by design, so its teeth were checked by
 mutation instead: with the handler narrowed to the probe's LOCAL `Refused`
 (#1646's shape) the injected cross-module refusal escapes as
 `preparation_contract.Refused` and that control fails. With the fix: 19
-passed (31.7 s and 36.9 s over two runs).
+passed pre-#1699 (31.7 s and 36.9 s over two runs); 29 passed after merging
+#1699 (401.7 s).
 
 WHAT THE POSITIVE CONTROL DOES NOT CLAIM: the real estimator cannot raise a
 `Refused` of any module, so no input is known that reaches the repaired
@@ -144,7 +146,7 @@ not a production path. `run_case.pitch_drop_hz` refuses IN BAND -- an
 only exceptions on its path are execution errors: `audio_measure` defines
 `InsufficientEvidence(AssertionError)` and `NonFiniteAudio`, imports no
 `refusal`, and its one `raise Refused("silent")` sits inside a docstring
-(read on origin/main @ 02394528, 2026-11-28).
+(read on origin/main @ 474bd2ff, 2026-11-28).
 
 WHAT IS NOT CLAIMED: the six other `rc.prepare` calls in this file (:441,
 :446, :467, :489, :490, :540) are not guarded, here or by this fix.
@@ -631,11 +633,11 @@ def _raise_refused(sound: str):
 
 def test_e5_tom_estimator_execution_error_propagates(probe, monkeypatch):
     """#1771's injected-bug control. `e5_tom`'s handler around the per-property
-    estimator was `except Exception`, which filed a `ValueError` from inside
-    the estimator as a `refused:` row: an execution error relabelled as a
+    estimator was `except Exception`, which filed a `ValueError` from the
+    estimator call as a `refused:` row: an execution error relabelled as a
     refusal (tools/refusal.py's "inverse defect"). A run carrying that row
-    exits 0 today and would exit 2 once #1699 lands; 1 and a traceback are
-    right either way."""
+    exited 0 before #1699 and exits 2 on main since #1699 (#1773, ed00ea2c);
+    1 and a traceback are right either way."""
     monkeypatch.setattr(rc, "_pitch_drop", _raise_value_error)
     with pytest.raises(ValueError, match="injected"):
         probe.e5_tom(seconds_full=E5_SECONDS)
