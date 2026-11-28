@@ -958,8 +958,10 @@ def test_the_one_refusal_still_rendered_moved_is_the_pinned_label_path(monkeypat
     is credited as caught through a refusal ('only 0.40 s after the onset, 2.00 s
     declared'). Relabelling it REFUSED leaves the defect caught by nothing,
     which is #1566's question (does a refusing control count as caught?) and
-    needs a property that catches it by MEASUREMENT. A second such cell is this
-    issue's defect arriving by the other door: the pin goes red so it is seen."""
+    needs a property that catches it by MEASUREMENT (at 96 kHz the defect
+    leaves the class alone and halves the window: `stats["n"]` 96 000 against
+    192 000). Tracked as #1811. A second such cell is this issue's defect
+    arriving by the other door: the pin goes red so it is seen."""
     assert _label_refusal_cells(monkeypatch) == [("fixed 48 kHz bin map", "sample-rate")]
 
 

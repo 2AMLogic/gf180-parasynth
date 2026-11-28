@@ -534,8 +534,9 @@ def _cell(f, est, clean=False):
     (`tools/exit_contract.py`) and MOVED asserts a measurement that did not
     happen. WHAT THIS CANNOT SEE: a refusal `classify` hands back as its REFUSED
     *label* never raises, so a property comparing that label reads as measured.
-    That path is live in one cell on the shipped tree and is pinned by
-    `test_the_one_refusal_still_rendered_moved_is_the_pinned_label_path`."""
+    That path is live in one cell on the shipped tree, is pinned by
+    `test_the_one_refusal_still_rendered_moved_is_the_pinned_label_path`,
+    and is tracked as #1811."""
     try:
         ok = bool(f(est))
     except Refused as e:
