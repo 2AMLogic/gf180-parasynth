@@ -1,6 +1,7 @@
 """The in-tree injected-defect harnesses REFUSE (exit 2) when their suite is
 red before any mutation: `tools/control_capability_verdicts.py` and
-`tools/control_dag_churn.py`, the two same-shape harnesses of issue #1125.
+`tools/control_dag_churn.py`, the two same-shape harnesses of issue #1125, and
+`tools/control_ladder_verdict_refusal.py` (#2036), which joined them.
 
 Before the fix each `run_one()` fired on `pytest exited non-zero` plus the
 declared `must_fail` name among the FAILED lines, and neither `main()` ever
@@ -38,6 +39,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import control_capability_verdicts as cv  # noqa: E402
 import control_dag_churn as cd            # noqa: E402
 import control_dag_lib as lib             # noqa: E402
+import control_ladder_verdict_refusal as lv  # noqa: E402
 
 REAL_ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -52,6 +54,8 @@ CASES = [
                  id="capability_verdicts"),
     pytest.param(cd, "test_compile_dag_churn.py",
                  cd.CONTROLS["FRESHNESS_LEG_DROPPED"][2], id="dag_churn"),
+    pytest.param(lv, lv.SUITE, lv.CONTROLS["GAP_CHECK_REMOVED"][1],
+                 id="ladder_verdict_refusal"),
 ]
 
 
