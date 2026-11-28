@@ -30,6 +30,11 @@ WHAT THIS SCAN RESOLVES that the #1160 one-off dotted-call grep could not:
     covers every origin; an exact/alias handler covers an origin only when its
     own class IS that origin (`Refused = pc.Refused` covers run_case's
     refusals because run_case.Refused is the same object);
+  * `covered` names the clause that catches the callee's refusal, NOT where
+    an exception it re-raises lands (#2007): when every crediting handler is
+    raise-only, `guard` carries `>reraise-translate` / `>reraise-bare`
+    (e.g. `exact>reraise-translate`); `classification` is unchanged and the
+    landing site is not traced;
   * a try is credited only when the call is in its BODY: a handler covers
     the body it guards, not the same statement's except/else/finally
     clauses, where the raised refusal propagates past it (#1188
@@ -603,6 +608,30 @@ def _rel_label(path: pathlib.Path) -> str:
         return str(path)
 
 
+def reraise_kind(handlers: list[ast.ExceptHandler]) -> str | None:
+    """Body kind when EVERY crediting handler does nothing but raise (#2007).
+
+    `translate` (`raise X(...)`) or `bare` (`raise`); None for no handlers or
+    any handler that does real work, so a mixed set is never annotated. A
+    field annotation only: `covered` names the clause that catches the
+    callee's refusal, not where the re-raised exception lands.
+    """
+    if not handlers:
+        return None
+    for h in handlers:
+        if not h.body or not all(isinstance(st, ast.Raise) for st in h.body):
+            return None
+    return ("bare" if all(st.exc is None for h in handlers for st in h.body)
+            else "translate")
+
+
+def _guard_field(shapes: list[str], crediting: list[ast.ExceptHandler]) -> str:
+    """`guard` string; raise-only crediting handlers add `>reraise-<kind>`."""
+    g = ",".join(shapes) or "none"
+    kind = reraise_kind(crediting)
+    return f"{g}>reraise-{kind}" if shapes and kind else g
+
+
 def scan(files: list[pathlib.Path], idx: dict[str, ModInfo]) -> list[dict]:
     by_stem = stem_map(idx)
     sites: list[dict] = []
@@ -646,16 +675,18 @@ def scan(files: list[pathlib.Path], idx: dict[str, ModInfo]) -> list[dict]:
                            for c in cands):
                     continue
                 ashapes = []
+                acredit: list[ast.ExceptHandler] = []
                 for tr in (enclosing_try_parents(mod.tree, node) if runs_here else []):
                     for h in tr.handlers:
                         _, shape = handler_origins(mod, by_stem, h)
                         if shape in ("base", "broad"):
                             ashapes.append(shape)
+                            acredit.append(h)
                 sites.append(dict(
                     site=f"{label}:{node.lineno}",
                     callee=f"{callee_stem}.{fname}",
                     origins=[],
-                    guard=",".join(ashapes) or "none",
+                    guard=_guard_field(ashapes, acredit),
                     classification=(f"covered({'+'.join(ashapes)})" if ashapes
                                     else "ambiguous-callee"),
                     uncovered=[],
@@ -669,15 +700,18 @@ def scan(files: list[pathlib.Path], idx: dict[str, ModInfo]) -> list[dict]:
             if not origins:
                 continue                      # this function raises no refusal
             covered, shapes = set(), []
+            credit: list[ast.ExceptHandler] = []
             for tr in (enclosing_try_parents(mod.tree, node) if runs_here else []):
                 for h in tr.handlers:
                     ho, shape = handler_origins(mod, by_stem, h)
                     if shape in ("base", "broad"):
                         covered |= origins
                         shapes.append(shape)
+                        credit.append(h)
                     elif shape != "other":
                         covered |= ho & origins
                         shapes.append(shape)
+                        credit.append(h)
             uncovered = origins - covered
             bguards = boundary if runs_here else []
             bshapes = {shape for _, shape in bguards}
@@ -701,7 +735,7 @@ def scan(files: list[pathlib.Path], idx: dict[str, ModInfo]) -> list[dict]:
                 site=f"{label}:{node.lineno}",
                 callee=f"{callee_stem}.{fname}",
                 origins=sorted(origins),
-                guard=",".join(shapes) or "none",
+                guard=_guard_field(shapes, credit),
                 classification=classification,
                 uncovered=sorted(uncovered),
             ))
