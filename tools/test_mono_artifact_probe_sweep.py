@@ -15,10 +15,13 @@ refuses; and q = 1.0 is past the self-oscillation boundary render_held refuses.
 """
 from __future__ import annotations
 
+import gzip
 import json
 import pathlib
 import sys
 import textwrap
+
+import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import exit_contract  # noqa: E402
@@ -124,3 +127,23 @@ def test_refusal_line_counts_every_shape_output_status_refuses():
     assert p._sweep_refusal_line(rows) == _line(7, 8, (
         f"r1 note 24: FAIL-ACTIVITY; r1 note 12: output REFUSED: 12.3 bins; "
         f"pulse2x note 48: {why}; pulse2x note 49: {why}; pulse2x note 50: {why}; and 2 more"))
+
+
+# the archived standard and fresh sweeps under docs/scorecard/m5-artifacts-333,
+# each in two shards, with the row counts the issue records for them
+ARCHIVED_SWEEPS = {"probe/sweep2": 310, "probe-rect074/sweep": 310, "pulse-level-repair/fresh": 224,
+                   "pulse-level-repair/sdrv": 310, "r2-compare/s074": 310}
+
+
+@pytest.mark.parametrize("rel", sorted(ARCHIVED_SWEEPS))
+def test_the_real_sweeps_hold_no_row_the_line_refuses(rel):
+    """The gate is satisfiable: every row of the archived sweeps measures (their
+    schedules use notes >= 24), so the real schedules do not trip the line."""
+    archive = p.ROOT / "docs/scorecard/m5-artifacts-333"
+    rows = []
+    for part in (0, 1):
+        record = gzip.decompress((archive / f"{rel}-{part}.json.gz").read_bytes())
+        rows += json.loads(record)["rows"]
+    assert len(rows) == ARCHIVED_SWEEPS[rel]
+    assert all(p._output_status(r) == "MEASURED" for r in rows)
+    assert p._sweep_refusal_line(rows) is None
