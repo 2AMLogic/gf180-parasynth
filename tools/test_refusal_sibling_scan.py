@@ -2167,6 +2167,325 @@ def test_with_the_await_rule_reverted_a_bare_call_borrows_the_trys_handler(tmp_p
     idx = mut.build_index(files)
     got = [s for s in mut.scan(files, idx) if "caller_async.py" in s["site"]]
     assert [(s["classification"], s["guard"]) for s in got] == [("covered(base)", "base")], got
+# ---------------------------------------------------------------------------
+# #1667: a callee that raises its refusal only through a DOTTED name --
+# `import relay` then `raise relay.Refused(...)` -- binds no family NAME, so
+# `scan`'s "callee has no family at all" pre-filter dropped every call into
+# it before `raise_origins` read the raise it already resolved.
+#
+# Dropping that pre-filter alone is not the fix (rule 8): `raise_origins`
+# credited ANY dotted raise with its root's stem -- `raise self.Error(...)`,
+# `raise e.with_traceback(tb)` -- a false origin the pre-filter had been
+# masking on family-less callees. So the raise side now counts a dotted raise
+# only when the name IS the family and an import binds its root, the rule the
+# call side already applies.
+#
+# The runtime control below is the answer the census controls are checked
+# against, known independently of the scanner. Against the unfixed scanner:
+# the four dotted-only census controls were red on 0 sites; the rule-8
+# control on the callee WITH a family was red on three invented origins, and
+# on the family-less callee its census assertion passed (the pre-filter's
+# doing) while its `raise_origins` assertion was red. One pin is green
+# throughout: a module with a family name AND a dotted raise, which must not
+# double count.
+# ---------------------------------------------------------------------------
+
+DOTTED_LENDER = '''
+import refusal
+
+class Refused(refusal.Refused, Exception):
+    pass
+'''
+
+DOTTED_RELAY = '''
+import dotted_lender
+
+Refused = dotted_lender.Refused       # a re-export: relay.Refused IS the lender's
+'''
+
+DOTTED_RAISER = '''
+import dotted_relay
+
+def boom(p):
+    raise dotted_relay.Refused(f"cannot use {p}")     # the module's ONLY family: dotted
+'''
+
+DOTTED_CALLER_SIBLING = '''
+import refusal
+import dotted_raiser
+
+class Refused(refusal.Refused, Exception):
+    pass
+
+def go(p):
+    try:
+        dotted_raiser.boom(p)
+    except Refused as e:               # the caller's OWN class: a sibling
+        print("REFUSED", e)
+'''
+
+DOTTED_CALLER_BASE = '''
+import refusal
+import dotted_raiser
+
+def go(p):
+    try:
+        dotted_raiser.boom(p)
+    except refusal.Refused as e:       # the common base: covers every origin
+        print("REFUSED", e)
+'''
+
+DOTTED_ALIAS_RAISER = '''
+import dotted_relay as rl              # `import x as y`: the root is the alias
+
+def boom(p):
+    raise rl.Refused(f"cannot use {p}")
+'''
+
+DOTTED_DIRECT_RAISER = '''
+import mod_a
+
+def fetch(p):
+    raise mod_a.Refused(f"cannot use {p}")     # dotted, no family name bound
+'''
+
+CALLER_AMBIG_DOTTED = '''
+from play import fetch
+
+def go(p):
+    return fetch(p)                    # one candidate raises only `mod_a.Refused`
+'''
+
+DOTTED_MIXED = '''
+import refusal
+import dotted_relay
+
+class Refused(refusal.Refused, Exception):   # the module's OWN family name
+    pass
+
+def both(p):
+    if p:
+        raise Refused("the module's own class")
+    raise dotted_relay.Refused("the lender's, through a dotted name")
+'''
+
+DOTTED_MIXED_CALLER = '''
+import dotted_mixed
+
+def go(p):
+    try:
+        dotted_mixed.both(p)           # guarded by the callee's OWN class
+    except dotted_mixed.Refused as e:
+        print("REFUSED", e)
+'''
+
+# rule 8: three NON-family dotted raises, in a module that binds no family
+NON_FAMILY_DOTTED = '''
+import json
+
+class Ctl:
+    Error = RuntimeError
+
+    def self_attr(self, p):            # a root that is not a module
+        raise self.Error(f"bad {p}")
+
+def with_tb(e, tb):                    # a local's method: `raise e.with_traceback(tb)`
+    raise e.with_traceback(tb)
+
+def other_module(p):                   # an import's root, but not the family
+    raise json.JSONDecodeError("x", "d", 0)
+'''
+
+CALLER_NON_FAMILY = '''
+import nf_dotted
+
+def go(p, e, tb):
+    nf_dotted.self_attr(p)
+    nf_dotted.with_tb(e, tb)
+    nf_dotted.other_module(p)
+'''
+
+# the same three raises beside a family NAME, so the unfixed scanner read them
+NON_FAMILY_DOTTED_WITH_FAMILY = NON_FAMILY_DOTTED + '''
+
+import refusal
+
+class Refused(refusal.Refused, Exception):
+    pass
+
+def own(p):
+    raise Refused(f"the module's own: {p}")
+'''
+
+CALLER_NON_FAMILY_WITH_FAMILY = '''
+import nff_dotted
+
+def go(p, e, tb):
+    nff_dotted.self_attr(p)
+    nff_dotted.with_tb(e, tb)
+    nff_dotted.other_module(p)
+    nff_dotted.own(p)                  # the one call that raises a refusal
+'''
+
+
+def _dotted_modules(tmp_path: pathlib.Path) -> list[pathlib.Path]:
+    """The issue's three modules written for real, under names no tracked
+    module shares, so the runtime control imports exactly what the census
+    controls index."""
+    files = []
+    for name, body in (("dotted_lender", DOTTED_LENDER), ("dotted_relay", DOTTED_RELAY),
+                       ("dotted_raiser", DOTTED_RAISER)):
+        p = tmp_path / f"{name}.py"
+        p.write_text(body)
+        files.append(p)
+    return files
+
+
+def test_dotted_refusal_escapes_a_sibling_handler_in_python(monkeypatch, tmp_path):
+    """Python, run for real: `raise dotted_relay.Refused` raises dotted_LENDER's
+    class (the relay re-exports it); the caller's own `except Refused` lets it
+    out and `except refusal.Refused` catches it. The repo's own `tools/refusal.py`
+    is the base, asserted at the point of use."""
+    _dotted_modules(tmp_path)
+    for name, body in (("dotted_caller_sibling", DOTTED_CALLER_SIBLING),
+                       ("dotted_caller_base", DOTTED_CALLER_BASE)):
+        (tmp_path / f"{name}.py").write_text(body)
+    names = ["dotted_lender", "dotted_relay", "dotted_raiser",
+             "dotted_caller_sibling", "dotted_caller_base"]
+    monkeypatch.syspath_prepend(str(tmp_path))
+    try:
+        import refusal
+        assert pathlib.Path(refusal.__file__).resolve() == (ROOT / "tools" / "refusal.py")
+        lender = __import__("dotted_lender")
+        relay = __import__("dotted_relay")
+        assert relay.Refused is lender.Refused
+        sib = __import__("dotted_caller_sibling")
+        assert sib.Refused is not lender.Refused            # siblings, not aliases
+        with pytest.raises(lender.Refused, match="cannot use x"):
+            sib.go("x")                                    # ESCAPED the sibling guard
+        assert __import__("dotted_caller_base").go("x") is None
+    finally:
+        for n in names:
+            sys.modules.pop(n, None)
+
+
+def test_dotted_only_raiser_under_a_sibling_guard_is_a_candidate_escape(tmp_path):
+    """The issue's reproduction, red first: 0 sites on the unfixed scanner.
+    The module-level assertions keep the control honest about which fix
+    passes it: the module binds no family NAME, and `raise_origins` already
+    resolved the raise -- only the pre-filter dropped the site."""
+    files, idx = _local_tree(tmp_path, {
+        "dotted_lender": DOTTED_LENDER, "dotted_relay": DOTTED_RELAY,
+        "dotted_raiser": DOTTED_RAISER,
+        "caller_dotted_sib": DOTTED_CALLER_SIBLING})
+    info = idx[str(tmp_path / "dotted_raiser.py")]
+    assert not info.refused_names and info.refused_origin is None, vars(info)
+    assert rss.raise_origins(info, "boom", rss.stem_map(idx)) == {"dotted_lender"}
+    got = _sites_for(files, idx, "caller_dotted_sib")
+    assert len(got) == 1, got
+    assert got[0]["callee"] == "dotted_raiser.boom", got[0]
+    assert got[0]["origins"] == ["dotted_lender"], got[0]
+    assert got[0]["guard"] == "local", got[0]
+    assert got[0]["classification"] == "candidate-escape", got[0]
+    assert got[0]["uncovered"] == ["dotted_lender"], got[0]
+
+
+def test_dotted_only_raiser_under_the_base_guard_is_covered(tmp_path):
+    """The same callee under `except refusal.Refused`: the site is still
+    listed, covered. Red first on the unfixed scanner (0 sites) -- so the
+    first control's absence was the pre-filter, not an unscannable fixture."""
+    files, idx = _local_tree(tmp_path, {
+        "dotted_lender": DOTTED_LENDER, "dotted_relay": DOTTED_RELAY,
+        "dotted_raiser": DOTTED_RAISER,
+        "caller_dotted_base": DOTTED_CALLER_BASE})
+    got = _sites_for(files, idx, "caller_dotted_base")
+    assert len(got) == 1, got
+    assert got[0]["origins"] == ["dotted_lender"], got[0]
+    assert got[0]["classification"] == "covered(base)", got[0]
+    assert got[0]["uncovered"] == [], got[0]
+
+
+def test_dotted_raise_through_an_import_alias_resolves_to_the_lender(tmp_path):
+    """`import dotted_relay as rl` then `raise rl.Refused(...)`: the root is
+    the alias, and the origin is still the definer's. Red first."""
+    files, idx = _local_tree(tmp_path, {
+        "dotted_lender": DOTTED_LENDER, "dotted_relay": DOTTED_RELAY,
+        "dotted_alias_raiser": DOTTED_ALIAS_RAISER,
+        "caller_dotted_alias": DOTTED_CALLER_SIBLING.replace(
+            "dotted_raiser", "dotted_alias_raiser")})
+    got = _sites_for(files, idx, "caller_dotted_alias")
+    assert len(got) == 1, got
+    assert got[0]["origins"] == ["dotted_lender"], got[0]
+    assert got[0]["classification"] == "candidate-escape", got[0]
+
+
+def test_module_with_a_family_name_and_a_dotted_raise_counts_each_origin_once(tmp_path):
+    """The pin that is green throughout: a callee that binds a family NAME
+    and also raises through a dotted name is ONE site with both origins, the
+    own class covered by the caller's exact guard and the lender's not. The
+    fix must neither drop the family-name path nor list the site twice."""
+    files, idx = _local_tree(tmp_path, {
+        "dotted_lender": DOTTED_LENDER, "dotted_relay": DOTTED_RELAY,
+        "dotted_mixed": DOTTED_MIXED, "caller_dotted_mixed": DOTTED_MIXED_CALLER})
+    got = _sites_for(files, idx, "caller_dotted_mixed")
+    assert len(got) == 1, got
+    assert got[0]["origins"] == ["dotted_lender", "dotted_mixed"], got[0]
+    assert got[0]["guard"] == "exact", got[0]
+    assert got[0]["classification"] == "candidate-escape", got[0]
+    assert got[0]["uncovered"] == ["dotted_lender"], got[0]
+
+
+def test_collision_where_the_raising_candidate_is_a_dotted_only_raiser_is_a_site(tmp_path):
+    """The same pre-filter in the same-stem-collision branch, which tested
+    each candidate for a family NAME before reading its raises: the one
+    raising candidate raises only `mod_a.Refused` dotted, so the caller was
+    dropped as unable to refuse under any resolution. Red first."""
+    files = _collision_tree(tmp_path, DOTTED_DIRECT_RAISER, PLAIN,
+                            "caller_dotted_amb", CALLER_AMBIG_DOTTED)
+    idx = rss.build_index(files)
+    got = _sites_for(files, idx, "caller_dotted_amb")
+    assert len(got) == 1, got
+    assert got[0]["classification"] == "ambiguous-callee", got[0]
+    assert len(got[0]["candidates"]) == 2, got[0]
+
+
+def test_non_family_dotted_raise_in_a_family_less_callee_is_not_a_site(tmp_path):
+    """Rule 8's guard-defeating input for the fix. The CENSUS assertion passed
+    on the unfixed scanner -- the pre-filter dropped the callee for having no
+    family -- and is what removing the pre-filter alone breaks; the
+    `raise_origins` assertion beside it was red there, as in the next
+    control. `raise self.Error`, `raise e.with_traceback(tb)` and
+    `raise json.JSONDecodeError` are not refusals, and a census that lists
+    them has invented three origins."""
+    files, idx = _local_tree(tmp_path, {"nf_dotted": NON_FAMILY_DOTTED,
+                                        "caller_nf_dotted": CALLER_NON_FAMILY})
+    info = idx[str(tmp_path / "nf_dotted.py")]
+    by = rss.stem_map(idx)
+    assert not info.refused_names and info.refused_origin is None, vars(info)
+    for fn in ("self_attr", "with_tb", "other_module"):
+        assert rss.raise_origins(info, fn, by) == set(), fn
+    assert _sites_for(files, idx, "caller_nf_dotted") == []
+
+
+def test_non_family_dotted_raise_beside_a_family_name_invents_no_origin(tmp_path):
+    """The same three raises in a callee that DOES bind a family name. Red on
+    the unfixed scanner, which read this callee's raises and credited each
+    with its root's stem (`self`, `e`, `json`): the pre-filter had been
+    masking that on family-less callees only. Exactly one call is a site,
+    the one that raises the module's own `Refused`."""
+    files, idx = _local_tree(tmp_path, {
+        "nff_dotted": NON_FAMILY_DOTTED_WITH_FAMILY,
+        "caller_nf_family": CALLER_NON_FAMILY_WITH_FAMILY})
+    info = idx[str(tmp_path / "nff_dotted.py")]
+    by = rss.stem_map(idx)
+    assert info.refused_origin == "nff_dotted", vars(info)
+    for fn in ("self_attr", "with_tb", "other_module"):
+        assert rss.raise_origins(info, fn, by) == set(), fn
+    assert rss.raise_origins(info, "own", by) == {"nff_dotted"}
+    got = _sites_for(files, idx, "caller_nf_family")
+    assert [s["callee"] for s in got] == ["nff_dotted.own"], got
+    assert got[0]["origins"] == ["nff_dotted"], got[0]
+    assert got[0]["classification"] == "candidate-escape", got[0]
 
 
 # --- #1641 controls: the CLI boundary reached through a wrapper ---------------
