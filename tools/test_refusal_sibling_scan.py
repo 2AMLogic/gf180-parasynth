@@ -2183,3 +2183,17 @@ def test_a_deferred_call_the_same_try_uses_on_the_spot_reads_candidate_escape(
     triage; a false covered is the defect this issue exists to remove."""
     s = _plant(tmp_path, monkeypatch, "scope_on_the_spot", src, ("caught", "not-run"))
     _reads(s, "candidate-escape")
+
+
+SCOPE_CLASS_TYPE_PARAM = _scope_try('''
+    class C[T: mod_a.load(path="x")]:
+        pass
+''', "C.__type_params__[0].__bound__")
+
+
+def test_call_in_a_class_type_param_bound_inside_the_try_escapes_it(tmp_path, monkeypatch):
+    """Python: a PEP 695 bound is evaluated lazily, on `__bound__` access,
+    after the try. ClassDef is transparent, so before TypeVar was a
+    boundary this read `covered(exact)` -- the optimistic direction."""
+    s = _plant(tmp_path, monkeypatch, "scope_class_tp", SCOPE_CLASS_TYPE_PARAM, "escaped")
+    _reads(s, "candidate-escape")

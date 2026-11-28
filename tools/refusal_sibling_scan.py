@@ -127,6 +127,10 @@ is decided by tracing the caller with a known-answer input, as #1160 and
     consume their argument, and whether an annotation is evaluated at all,
     is not in the AST. The price is a row to triage, never a false
     covered (#1702);
+  * PEP 695 type parameters are boundaries: a bound or constraint on a
+    class, def or `type` alias (`class C[T: mod.load()]`) is evaluated
+    lazily, on `C.__type_params__[0].__bound__`, so a try around the
+    `class` does not cover it (#1702);
 
 Four further gaps were filed against this list -- try-handler credit,
 stem collision and alias loss in #1188, the borrowed family in #1193 --
@@ -424,9 +428,14 @@ def raise_origins(mod: ModInfo, fname: str,
 # ---------------------------------------------------------------------------
 # a node whose body runs somewhere else than where the node is written: a
 # def, a lambda or a generator expression is only CREATED where it stands,
-# and a `type` alias (PEP 695) evaluates its value on first use
+# and a `type` alias (PEP 695) evaluates its value on first use. So do the
+# PEP 695 type parameters: a bound or constraint (`class C[T: f()]`) is
+# evaluated lazily, on `__bound__` access, not where the `class` statement
+# runs -- and a ClassDef is transparent, so without these a refusal raised
+# at the access reads `covered(exact)` (the optimistic, false-covered read)
 DEFERRED_NODES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda,
-                  ast.GeneratorExp, ast.TypeAlias)
+                  ast.GeneratorExp, ast.TypeAlias,
+                  ast.TypeVar, ast.ParamSpec, ast.TypeVarTuple)
 
 
 def _within(node: ast.AST, part: ast.AST) -> bool:
