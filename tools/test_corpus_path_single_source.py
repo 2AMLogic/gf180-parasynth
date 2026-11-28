@@ -114,7 +114,7 @@ CORPUS_ENV_TEST_FILES = {
     # them on the CHILD's, so the child's run_case.configured_refs() (evaluated
     # as the --refs default even when --refs is passed) cannot raise on a
     # disagreeing inherited pair. Resolution stays in the child.
-    pathlib.PurePosixPath("tools/test_clap_final_strike_refusal.py"): frozenset({"_cli"}),
+    pathlib.PurePosixPath("tools/test_clap_final_strike_reference_boundary.py"): frozenset({"_cli"}),
 }
 SELF = pathlib.PurePosixPath("tools/test_corpus_path_single_source.py")
 ENV_NAMES = {"GF180_TR808_REFS", "TR808_REFS", "GF180_TR808_REFS_DEFAULT"}   # env-var keys

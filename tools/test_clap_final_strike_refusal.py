@@ -1,98 +1,142 @@
 #!/usr/bin/env python3
-"""Known-answer exit-status controls for the CP final-strike experiment's
-reference boundary -- the trace of one row of the #1782 estimator-refusal
-census (#1887). NO HANDLER CHANGED: on `origin/main` every injection that
-gets past the corpus check is stopped, exit 2, by an earlier gate that no
-input controls (read at `560a1580`, the same at `8f3d8ed2`).
+"""Known-answer exit-status controls for tools/clap_final_strike_experiment.py
+(#2046).
 
-THE ROW. `tools/estimator_refusal_census.py` lists
-`tools/clap_final_strike_experiment.py`: `run_case.prepare` and
-`run_case.load_reference` call `audio_measure.require_finite`, and the only
-refusal handler the module defines names `probe.Refused` (`main`). An estimator
-refusal would pass every handler it defines. What that refusal is, by run:
+THE DEFECT, AS MEASURED ON main @ 616b8d63 (2026-11-28, red-first run of this
+file's ten controls against the untouched tool): 3 red, 7 green. `main()`
+handled `probe.Refused` alone, around `probe.basis`. `rc.load_reference` and
+`rc.prepare` raise `run_case.Refused` (= `preparation_contract.Refused`), a
+SIBLING of that class, so at :273 a non-finite reference left as a traceback
+and exit 1:
 
-  cp8/CP.WAV digitally silent    preparation_contract.Refused "reference
-                                 recording cp8/CP.WAV is silent"
-                                 (`load_reference`)
-  cp8/CP.WAV float32, all NaN    preparation_contract.Refused "... holds 4410
-                                 non-finite samples ..." (`load_reference`)
-  cp8/CP.WAV cut into the strike preparation_contract.Refused "the recording
-                                 begins at or above 2 % of its own peak"
-                                 (`prepare`)
+    File "tools/clap_final_strike_experiment.py", line 273, in main
+      rx, rsr, rel, _ = rc.load_reference("CP", refdir)
+    File "tools/run_case.py", line 1628, in load_reference
+      raise Refused(str(why)) from why
+    preparation_contract.Refused: reference recording cp8/CP.WAV holds 1
+    non-finite samples of 44100 (1 NaN, 0 Inf; first at index 1000) ...
 
-THE CENSUS LABEL IS A MISLABEL, which is how the other twenty `via run_case`
-rows of that census should be read: `NonFiniteAudio` never leaves either
-function. Both catch it and re-raise `Refused`, which is
-`preparation_contract.Refused` -- `run_case.Refused` -- a SIBLING of
-`probe.Refused` on `refusal.Refused` (the #1162 shape of
-`tools/test_rs_guard_band_refusal.py`). The class a handler would need is
-`rc.Refused`; `NonFiniteAudio` survives only as the `__cause__`.
+and at :274 a reference cut into the strike left the same way. The seven
+green were the controls of behaviour the fix must not touch (the declared
+status, the module's own refusal, the plain-error controls, a well-formed
+reference) and the pre-fix replay, which asserts the defect. This tool
+declares no exit 1: it returns 0, or 2 for a refusal. So the traceback was a
+crash, which a batch runner reports as FAIL where the same refusal handled is
+NO-VERDICT (`tools/run_all.py`, `exit_contract.NO_EVIDENCE`) -- the inversion
+`tools/exit_contract.py` exists to prevent.
 
-WHAT STOPPED IT -- not `probe.basis`. The corpus check is passable: a manifest
-that hashes the defective `cp8/CP.WAV` and a checkout whose HEAD begins with
-the pin (both built below; `test_the_corpus_check_passes_the_fixture` pins
-it). Of the injections here it stops only an absent listed file and an absent
-root. Every injection that passes it is stopped instead by the renderer
-precondition in `main` -- the two `render({}, ...)` calls against
-`render_drum_solo('CP')` -- which refuses EVERY run on this tree:
+WHAT STANDS IN FRONT OF THE SITES ON THAT TREE, as run, not read: two
+handled refusals, so no input to the untouched CLI reaches :273 today.
 
-    REFUSED: the experiment renderer does not reproduce render_drum_solo('CP') bit for bit
+  * the corpus pin. `probe.basis` checks the manifest and the corpus git
+    HEAD (pinned 85fbecf) before anything is loaded and refuses as
+    `probe.Refused` -- handled, exit 2. An altered CP.WAV passes it only
+    when the manifest beside the corpus names that altered file.
+  * the renderer precondition. With nothing but the pin bypassed and the
+    three renders REAL, `main()` returned 2 in 20.1 s with one line,
+    `REFUSED: the experiment renderer does not reproduce
+    render_drum_solo('CP') bit for bit`. The kit now ships this experiment's
+    own selected condition -- `CP_BURSTS = 3, CP_PERIOD = 511, CP_FINAL_TAU
+    = 20 ms, CP_TAIL_TAU = 80 ms` (model/drums_fx.py:750) is "L2 final
+    1.00" in docs/scorecard/clap-d12a/final-strike.json -- while its frozen
+    B0 is the earlier baseline (`probe.DEFAULT`: 2 strikes, period 480, tail
+    47 ms). Registers 0x60 and 0x66 differ, and with them 28101 of 105600
+    samples. That is the precondition doing its job on a kit that moved. It
+    is NOT pinned here: a test that reds on a re-frozen experiment reds on
+    someone else's legitimate work.
 
-because the shipped kit's CP envelope is now the L2 condition the experiment
-selected (`drums_fx.CP_BURSTS` 3, `CP_PERIOD` 511, `CP_FINAL_TAU` 20 ms,
-`CP_TAIL_TAU` 80 ms; 5124f48d), while the experiment's B0 renders
-`clap_d12a_probe.DEFAULT` -- the pre-L2 envelope (bursts 2, period 480, tail
-tau 47 ms, no final strike). That gate reads no input, so from the
-CLI `load_reference` is never called and the flagged sites are unreachable.
-Observed on the unmodified tree, each through the real CLI with the real
-environment (a corpus root named by both of `run_case`'s variables):
+So the defect is latent on that tree and live the moment either gate opens:
+a corpus-side manifest naming an altered file, or the experiment re-based on
+the kit that ships. The handler is missing either way, and this file proves
+it by run at the sites.
 
-    injection                            corpus check   exit   stopped by
-    cp8/CP.WAV silent                    passes          2    renderer precondition
-    cp8/CP.WAV float32 NaN               passes          2    renderer precondition
-    cp8/CP.WAV cut into the strike       passes          2    renderer precondition
-    cp8/CP.WAV text scipy cannot read    passes          2    renderer precondition
-    cp8/CP.WAV absent, listed            REFUSED         2    the manifest (probe.Refused)
-    corpus root absent                   REFUSED         2    manifest missing
+THE KNOWN ANSWERS, independent of anything this repository models:
 
-No traceback and no `--out` record in any row. The text-file row matters most:
-an EXECUTION ERROR is masked the same way, so no exit-1 control of any kind can
-be observed through the CLI today. The handler gap is real and masked; `main`
-is left as it is, as the issue directs for a candidate no input reaches.
+  * arithmetic on NaN is not audio, and a record that begins at its own
+    peak was cut into the strike. `run_case` refuses both, by classes this
+    module does not name.
+  * a tool that measured nothing owes `exit_contract.REFUSED` (2) with its
+    reason; an implementation error is not a precondition and owes exit 1.
 
-WHAT THESE CONTROLS ASSERT, and what turns each red:
+WHAT THE TOOL OWES, and what the controls below assert:
 
-  CLI, silent CP       exit `exit_contract.REFUSED` (2), `REFUSED` on stdout,
-                       no traceback, no record, and NOT a corpus-check reason:
-                       the run got past `probe.basis`. This is the tripwire --
-                       re-baselining the renderer on the shipped kit without a
-                       handler for `rc.Refused` makes it exit 1 and turns red.
-  CLI, absent root     the corpus check's own two refusals, exit 2, preserved.
-       / absent file
-  in process           the three defective recordings leave the loader as
-                       `rc.Refused` and never as `NonFiniteAudio`; the two
-                       `Refused` classes are siblings on the base; the fixture
-                       satisfies the corpus check.
-  dispatch, renderer   the renderer precondition is STUBBED to hold, because on
-  STUBBED to hold      main it does not: these are statements about `main`'s
-                       dispatch, not about what the CLI reaches today. A plain
-                       `AssertionError` at the `load_reference` boundary
-                       propagates -- never REFUSED (red under any
-                       `except Exception` / `AssertionError`). The contract
-                       itself is xfail(strict, raises=rc.Refused): each
-                       defective recording must one day leave `main` as
-                       REFUSED; when a handler lands, the strict xfail turns
-                       red and its marker is removed.
+  non-finite ref    a child interpreter: exit 2, the refusal's reason as the
+                    last line on stdout, `REFUSED: <reason>`; no traceback,
+                    no table, no record written
+  cut-into-strike   the same, through `main(argv)` in this process, from
+                    `prepare` at the next site
+  its own refusal   `probe.basis` refusing still exits 2 with its reason: one
+                    handler at the dispatch replaced the narrow one, and
+                    nothing that one caught is lost
+  other errors      a plain AssertionError at the same call exits 1 in a
+                    child and propagates unchanged in process (RuntimeError
+                    too): the handler catches `refusal.Refused` and nothing
+                    wider (tools/refusal.py's "inverse defect")
+  well-formed       an int16 record with lead passes both sites and the run
+                    goes on into the pool, where this control stops it: the
+                    refusals above are about the content they name
+  pre-fix replay    the source at `PRE_FIX`, read out of this repository's
+                    own history and run under the SAME seam, still exits 1
+                    with the traceback above, at line 273: the injected-bug
+                    control
+  the census        `tools/refusal_sibling_scan.py`, which read every site
+                    but `basis` as `candidate-escape`, reads the module
+                    `covered(cli-base)`; the four sites of the issue are
+                    still listed, by callee
 
-WRONG THEN RIGHT (fixture, caught by `git` rather than by a control): the
-first mined commit carried raw nonce bytes and `git hash-object` refused it
-(`nulInCommit`); the nonce is hex. `hash-object` takes the object's CONTENT and
-prepends `commit <len>\\0` itself.
+THE SEAM, and what it bypasses (docs/verification-rules.md rule 8). One text,
+`_SEAM`, run by the child interpreter and exec'd by the fixture, so no
+control runs a seam the others do not:
+
+  * `probe.basis` returns a dict. A fabricated corpus cannot carry the
+    pinned git HEAD, and the pin is not what is under test.
+  * the three precondition renders return one short finite record each.
+    A real render costs 6.5 s, none is on the path to the sites, and on
+    this tree they fail the precondition (above). The sha check they feed
+    is satisfied by three equal arrays.
+
+Everything else is real: a WAV on disk, `scipy.io.wavfile.read`,
+`run_case.load_reference`, `run_case.prepare`, the classes and `main(argv)`.
+What defeats this file: a `probe.basis` stub mistaken for production
+reachability. It is not -- see the two gates above.
+
+NOT REACHED BY RUN, stated rather than implied: the two rendered-side sites
+(`late_event`, and the headroom row), both `rc.prepare` on this model's own
+output. `render()` returns integer output over 32768 with 10 ms of true
+silence before the strike, so `prepare` has nothing to refuse there -- not
+non-finite, not cut into the strike -- and no input is known that changes
+that. The one handler covers them and the census reads them
+`covered(cli-base)`; they are not exercised here. Nor is the full live run
+(exit 0, the table): it needs the pinned corpus and a kit the experiment
+reproduces, this host has neither, and no control below claims it.
+
+MUTANTS, run against the fixed tree with the handler edited three ways and
+the tool restored byte for byte afterwards. Narrowed to `except
+probe.Refused` (the original shape): the two reference controls red. Widened
+to `except Exception`: the three plain-error controls red. Removed: those
+two and the module's-own-refusal control red. None survived.
+
+WRONG-THEN-RIGHT (3, all in the apparatus or the record, all caught before
+anything was committed):
+
+  1. The seam was planned as ONE bypass, the pin: with the pin alone
+     bypassed, the real renders were expected to carry the run to :273. The
+     first measurement said otherwise (`audio_sha` unequal, then the 20.1 s
+     run above) and the seam has two parts. Written to the plan, every
+     reference control would have been green on the untouched tool -- refused
+     by the precondition, for a reason that is not the defect.
+  2. The first draft of the non-finite control wrote the corpus directory
+     twice, a finite file and then the NaN one. Harmless as run, since the
+     second write won, and one slip from a control red for the wrong reason.
+     Caught by rereading before the red run, not by a control.
+  3. This record first said exit 1 is what the tool returns "when it has a
+     finding" -- the holdout probe's contract, carried over by analogy. The
+     tool declares no exit 1. Caught by reading its every `return` before the
+     sentence stood; nothing ran wrong, a claim was about to.
 """
 from __future__ import annotations
 
-import hashlib
-import os
+import json
 import pathlib
 import subprocess
 import sys
@@ -105,250 +149,217 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "model"))
 
-import audio_measure as am                     # noqa: E402
-import clap_d12a_probe as probe                # noqa: E402
-import clap_final_strike_experiment as ex      # noqa: E402
-import exit_contract                           # noqa: E402
-import preparation_contract                    # noqa: E402
-import refusal                                 # noqa: E402
-import run_case as rc                          # noqa: E402
+import clap_d12a_probe as probe                          # noqa: E402
+import clap_final_strike_experiment as ex                # noqa: E402
+import exit_contract                                     # noqa: E402
+import refusal                                           # noqa: E402
+import run_case as rc                                    # noqa: E402
 
 TOOL = ROOT / "tools" / "clap_final_strike_experiment.py"
-SR = 44100
-FRAMES = 4410                 # 100 ms: the rs_guard_band fixture spec
-REL = "cp8/CP.WAV"            # drum_verify.REF_MAIN["CP"]; asserted below
-MANIFEST_NAME = "tr808-fischer-85fbecf.sha256"    # clap_d12a_probe's pinned name
-#: the three reasons `probe.basis` can give; none means the run got past it
-CORPUS_REASONS = ("reference manifest missing", "reference files differ from", ", pinned ")
+TOOL_REL = "tools/clap_final_strike_experiment.py"
+SCAN = ROOT / "tools" / "refusal_sibling_scan.py"
+PRE_FIX = "616b8d63"
+SR = 44100                      # the Fischer corpus rate
+REFUSED, FAIL = exit_contract.REFUSED, exit_contract.FAIL
+TIMEOUT = 600
 
-#: A commit whose id begins with the corpus pin. `verify_manifest` reads
-#: `git -C <refs> rev-parse HEAD` and `basis` requires `PINNED_COMMIT` as a
-#: prefix; the real corpus commit is not in this repository and a unit test
-#: must not clone it. Mined once (28 bits, 34 s on two cores).
-MINED_COMMIT = (b"tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904\n"
-                b"author Fixture <fixture@example.invalid> 0 +0000\n"
-                b"committer Fixture <fixture@example.invalid> 0 +0000\n"
-                b"\n"
-                b"corpus fixture nonce 000000000662eba0\n")
-MINED_OID = "85fbecf5b92372d8883dc0c2f6221b53f9957f28"
+NAN_WAV = "reference recording cp8/CP.WAV holds 1 non-finite samples"
+CUT_WAV = "the recording begins at or above 2 % of its own peak"
 
+#: The one seam, as SOURCE: the child interpreter runs this text between the
+#: load and the call, and the in-process fixture execs the same text, so no
+#: control can run a seam the others do not.
+_SEAM = (
+    "import numpy as np\n"
+    "import clap_d12a_probe as probe\n"
+    "import run_case as rc\n"
+    "_tiny = np.zeros(4800)\n"
+    "_tiny[480] = 0.5\n"
+    "probe.basis = lambda refdir, manifest: {'seam': 'corpus pin not under test'}\n"
+    "v.render = lambda cond, accent=1.0, offset=0, force_subclass=False: "
+    "(_tiny, 48000, [0.0], _tiny)\n"
+    "rc.render_drum_solo = lambda sound, *a, **k: (_tiny, 48000)\n")
 
-def _git(*argv: str, **kw) -> str:
-    return subprocess.run(["git", *argv], check=True, capture_output=True, **kw).stdout.decode().strip()
-
-
-def _write_recording(path: pathlib.Path, kind: str) -> None:
-    if kind == "absent":
-        return
-    if kind == "silent":
-        wavfile.write(str(path), SR, np.zeros(FRAMES, dtype="<i2"))
-    elif kind == "nan":
-        wavfile.write(str(path), SR, np.full(FRAMES, np.nan, dtype=np.float32))
-    elif kind == "cut":
-        # a strike captured from its first sample: sample 0 IS the peak
-        t = np.arange(int(0.3 * SR)) / SR
-        x = np.round(20000 * np.exp(-t / 0.05) * np.cos(2 * np.pi * 800 * t)).astype("<i2")
-        wavfile.write(str(path), SR, x)
-    else:
-        raise ValueError(kind)
+_HEAD = (f"import sys\n"
+         f"sys.path.insert(0, {str(ROOT / 'model')!r})\n"
+         f"sys.path.insert(0, {str(ROOT / 'tools')!r})\n")
+_AS_MODULE = (f"import types\n"
+              f"v = types.ModuleType('clap_final_strike_experiment')\n"
+              f"v.__file__ = {str(TOOL)!r}\n"
+              f"exec(compile(sys.stdin.read(), {str(TOOL)!r}, 'exec'), v.__dict__)\n")
 
 
-def _corpus(home: pathlib.Path, kind: str) -> tuple[pathlib.Path, pathlib.Path]:
-    """A corpus root holding one `cp8/CP.WAV` of `kind`, a manifest that
-    hashes it, and a HEAD at the pin. Returns (refdir, the default manifest).
-
-    `home` stands in for `$HOME` so that `clap_d12a_probe.MANIFEST_DEFAULT`
-    resolves INSIDE the fixture on every host: on a box with `~/dev/refs`
-    present the module would otherwise read the real manifest and refuse
-    every row for a reason of its own. The module's fallback location, next
-    to the corpus root, holds the same bytes."""
-    refdir = home / "refs" / "corpus"
-    cp = refdir / REL
-    cp.parent.mkdir(parents=True)
-    _write_recording(cp, kind)
-    digest = hashlib.sha256(cp.read_bytes()).hexdigest() if cp.exists() else "0" * 64
-    text = f"{digest}  ./{REL}\n"
-    manifest = home / "dev" / "refs" / MANIFEST_NAME
-    manifest.parent.mkdir(parents=True)
-    manifest.write_text(text)
-    (refdir.parent / MANIFEST_NAME).write_text(text)
-    _pin(refdir)
-    return refdir, manifest
+def _argv(refdir: pathlib.Path, tmp_path: pathlib.Path) -> list[str]:
+    return ["--refs", str(refdir), "--out", str(tmp_path / "out.json"), "--jobs", "1"]
 
 
-def _pin(refdir: pathlib.Path) -> None:
-    """A checkout at `refdir` whose HEAD resolves to MINED_OID, asserted at
-    the point of use: the fixture must satisfy the module's pin as it stands,
-    and `rev-parse HEAD` -- what the module reads -- must return it."""
-    _git("init", "-q", str(refdir))
-    oid = _git("-C", str(refdir), "hash-object", "-w", "-t", "commit", "--stdin", input=MINED_COMMIT)
-    _git("-C", str(refdir), "symbolic-ref", "HEAD", "refs/heads/corpus")
-    _git("-C", str(refdir), "update-ref", "refs/heads/corpus", oid)
-    assert oid == MINED_OID, oid
-    assert MINED_OID.startswith(probe.PINNED_COMMIT), (MINED_OID, probe.PINNED_COMMIT)
-    assert _git("-C", str(refdir), "rev-parse", "HEAD") == MINED_OID
+def _main(argv, *, source=None, patch="") -> subprocess.CompletedProcess:
+    """`main(argv)` in a child interpreter, as a batch runner sees it: the
+    working tree's module, or `source` loaded as that module under the tool's
+    own path so its ROOT resolves; then the seam, then `patch`, then the call."""
+    load = _AS_MODULE if source is not None else "import clap_final_strike_experiment as v\n"
+    code = _HEAD + load + _SEAM + patch + f"raise SystemExit(v.main({list(argv)!r}))\n"
+    return subprocess.run([sys.executable, "-c", code], input=source or "",
+                          capture_output=True, text=True, timeout=TIMEOUT, check=False,
+                          cwd=str(ROOT))
 
 
-def _cli(refs: pathlib.Path, home: pathlib.Path) -> tuple[subprocess.CompletedProcess, pathlib.Path]:
-    """The real interpreter and the real environment a batch runner sees: both
-    of `run_case`'s corpus variables name the root (their NAMES come from
-    run_case), and `$HOME` is the fixture's. Returns the run and the `--out`
-    path the run was told to write."""
-    drop = (rc.REFS_ENV, rc.REFS_ALIAS_ENV)
-    env = {k: v for k, v in os.environ.items() if k not in drop}
-    env[rc.REFS_ENV] = env[rc.REFS_ALIAS_ENV] = str(refs)
-    env["HOME"] = str(home)
-    out = home / "final-strike.json"
-    p = subprocess.run(
-        [sys.executable, str(TOOL), "--refs", str(refs), "--out", str(out), "--jobs", "1"],
-        capture_output=True, text=True, timeout=300, env=env, cwd=str(ROOT))
-    return p, out
+def _pre_fix_source() -> str:
+    """The tool before the fix, out of this repository's own history, pinned
+    to the site the issue names. A `git show` that cannot run is NO VERDICT,
+    which is red -- never a skip that reads like a control that ran."""
+    r = subprocess.run(["git", "-C", str(ROOT), "show", f"{PRE_FIX}:{TOOL_REL}"],
+                       capture_output=True, text=True, timeout=60, check=False)
+    assert r.returncode == 0, (
+        f"NO VERDICT: git show {PRE_FIX}:{TOOL_REL} failed in this clone "
+        f"({r.stderr.strip()[:160]}); the handler-free tool cannot be read back")
+    lines = r.stdout.splitlines()
+    assert lines[272].strip() == 'rx, rsr, rel, _ = rc.load_reference("CP", refdir)', (
+        f"{PRE_FIX}:{TOOL_REL} line 273 is not the load_reference site this control replays: "
+        f"{lines[272].strip()!r}")
+    assert "except refusal.Refused" not in r.stdout, (
+        f"{PRE_FIX}:{TOOL_REL} carries the base handler: it is not the pre-fix tool")
+    assert "except probe.Refused as e:" in r.stdout, (
+        f"{PRE_FIX}:{TOOL_REL} lacks the narrow handler this control exists to replay")
+    return r.stdout
 
 
-# ---------------------------------------------------------------------------
-# the class relations the trace rests on, and the fixture's own preconditions
-# ---------------------------------------------------------------------------
-def test_the_two_refused_classes_are_siblings_on_the_base():
-    assert rc.Refused is preparation_contract.Refused
-    assert probe.Refused is not rc.Refused
-    for a, b in ((probe.Refused, rc.Refused), (rc.Refused, probe.Refused)):
-        assert not issubclass(a, b), (a, b)
-    for klass in (probe.Refused, rc.Refused):
-        assert issubclass(klass, refusal.Refused), klass
-        assert not issubclass(klass, am.InsufficientEvidence), klass
+def _corpus(tmp_path: pathlib.Path, x, dtype) -> pathlib.Path:
+    """A corpus directory holding one CP reference: `x` written as `dtype`, a
+    real WAV on disk for the real `run_case.load_reference` to read."""
+    refdir = tmp_path / "corpus"
+    (refdir / "cp8").mkdir(parents=True)
+    wavfile.write(refdir / "cp8" / "CP.WAV", SR, np.asarray(x, dtype=dtype))
+    return refdir
 
 
-def test_the_fixture_spells_the_modules_own_paths():
-    assert rc.REF_MAIN["CP"][0] == REL
-    assert probe.MANIFEST_DEFAULT.name == MANIFEST_NAME
-    assert probe.MANIFEST_DEFAULT.relative_to(pathlib.Path.home()) == pathlib.Path("dev") / "refs" / MANIFEST_NAME
+def _decay(tau: float, n: int = SR) -> np.ndarray:
+    return np.exp(-np.arange(n) / SR / tau)
 
 
-# ---------------------------------------------------------------------------
-# in process: what the loader raises, and what the corpus check does with it
-# ---------------------------------------------------------------------------
-@pytest.mark.parametrize("kind, boundary, words, cause", [
-    ("silent", "load_reference", "is silent", None),
-    ("nan", "load_reference", "non-finite samples", am.NonFiniteAudio),
-    ("cut", "prepare", "begins at or above 2 % of its own peak", None),
-])
-def test_defective_recording_leaves_the_loader_as_run_case_refused(tmp_path, kind, boundary, words, cause):
-    refdir, _ = _corpus(tmp_path, kind)
-    loaded = []
-    with pytest.raises(rc.Refused) as ei:
-        x, sr, rel, _ = rc.load_reference("CP", refdir)
-        loaded.append(rel)
-        rc.prepare(x, sr)
-    assert loaded == ([REL] if boundary == "prepare" else []), boundary
-    assert not isinstance(ei.value, am.NonFiniteAudio), "the census's class must not be what leaves"
-    assert words in str(ei.value)
-    if cause:
-        assert isinstance(ei.value.__cause__, cause), "the census's class is the CAUSE, not what leaves"
-    else:
-        assert ei.value.__cause__ is None
+def _non_finite() -> np.ndarray:
+    """A float32 reference with ONE NaN at index 1000: arithmetic on it is
+    not audio, whatever else the record holds."""
+    x = np.zeros(SR, dtype=np.float32)
+    x[:1001] = 0.5 * _decay(0.05)[:1001]
+    x[1000] = np.nan
+    return x
 
 
-def test_the_corpus_check_passes_the_fixture(tmp_path):
-    refdir, manifest = _corpus(tmp_path, "silent")
-    r = probe.basis(refdir, manifest)["reference"]
-    assert r["files_checked"] == 1 and r["files_mismatched"] == 0
-    assert r["corpus_git_head"] == MINED_OID
+@pytest.fixture
+def seam():
+    """The seam in this process, undone afterwards. Nothing here may also be
+    monkeypatched by a test: the restore is by assignment, not by undo."""
+    saved = probe.basis, ex.render, rc.render_drum_solo
+    exec(compile(_SEAM, "<seam>", "exec"), {"v": ex})
+    yield
+    probe.basis, ex.render, rc.render_drum_solo = saved
 
 
-def test_the_corpus_check_stops_an_absent_listed_file(tmp_path):
-    refdir, manifest = _corpus(tmp_path, "absent")
-    with pytest.raises(probe.Refused) as ei:
-        probe.basis(refdir, manifest)
-    assert "1 of 1 reference files differ from" in str(ei.value)
+def test_the_status_is_a_declared_no_evidence_one_and_the_classes_are_siblings():
+    assert exit_contract.REFUSED in exit_contract.NO_EVIDENCE
+    assert exit_contract.REFUSED != exit_contract.FAIL
+    assert rc.Refused is rc.prep_contract.Refused
+    assert issubclass(rc.Refused, refusal.Refused) and issubclass(probe.Refused, refusal.Refused)
+    assert not issubclass(rc.Refused, probe.Refused), (
+        "rc.Refused under probe.Refused: the narrow handler would have caught it and the defect "
+        "this file replays cannot exist")
 
 
-# ---------------------------------------------------------------------------
-# the CLI: every injection is REFUSED (2), with no traceback and no record
-# ---------------------------------------------------------------------------
-def test_cli_silent_reference_exits_refused_2_past_the_corpus_check(tmp_path):
-    """The tripwire. On main @ 8f3d8ed2 the reason printed is the renderer
-    precondition's ("does not reproduce render_drum_solo('CP') bit for
-    bit"); it is deliberately not pinned, so that re-baselining the renderer
-    on the shipped kit together with an `rc.Refused` handler stays green,
-    while the re-baseline alone (exit 1, a `preparation_contract.Refused`
-    traceback) turns this red."""
-    p, out = _cli(*_corpus(tmp_path, "silent"))
-    assert p.returncode == exit_contract.REFUSED, (p.returncode, p.stderr[-400:])
-    assert "REFUSED" in p.stdout, p.stdout[-400:]
-    assert not any(r in p.stdout for r in CORPUS_REASONS), ("stopped by the corpus check", p.stdout[-400:])
-    assert "Traceback" not in p.stderr and "Traceback" not in p.stdout, p.stderr[-400:]
-    assert "condition" not in p.stdout, "a refused run must not start its table"
-    assert not out.exists(), "a refused run must not write a record"
+def test_a_non_finite_reference_exits_refused_2_naming_the_reason(tmp_path):
+    refdir = _corpus(tmp_path, _non_finite(), np.float32)
+    p = _main(_argv(refdir, tmp_path))
+    assert p.returncode == REFUSED, (p.returncode, p.stderr[-600:], p.stdout[-300:])
+    lines = p.stdout.splitlines()
+    assert lines[-1].startswith(f"REFUSED: {NAN_WAV}"), p.stdout[-600:]
+    assert "Traceback" not in p.stderr and "Traceback" not in p.stdout, p.stderr[-600:]
+    assert not any(l.startswith("condition") for l in lines), "a refused run printed a table row"
+    assert not (tmp_path / "out.json").exists(), "a refused run wrote a record"
 
 
-def test_cli_absent_corpus_root_keeps_its_refused_2(tmp_path):
-    p, out = _cli(tmp_path / "no-such-refs", tmp_path)
-    assert p.returncode == exit_contract.REFUSED, (p.returncode, p.stderr[-400:])
-    assert "REFUSED" in p.stdout and "Traceback" not in p.stderr, (p.stdout[-400:], p.stderr[-400:])
-    assert not out.exists()
+def test_a_reference_cut_into_the_strike_is_refused_at_prepare(seam, tmp_path, capsys):
+    refdir = _corpus(tmp_path, (20000 * _decay(0.01)).astype(np.int16), np.int16)
+    assert ex.main(_argv(refdir, tmp_path)) == REFUSED
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[-1].startswith(f"REFUSED: {CUT_WAV}"), lines[-1]
 
 
-def test_cli_absent_listed_file_is_stopped_by_the_manifest(tmp_path):
-    p, out = _cli(*_corpus(tmp_path, "absent"))
-    assert p.returncode == exit_contract.REFUSED, (p.returncode, p.stderr[-400:])
-    assert "REFUSED" in p.stdout and "1 of 1 reference files differ from" in p.stdout, p.stdout[-400:]
-    assert "Traceback" not in p.stderr and not out.exists()
+def test_the_modules_own_refusal_is_still_rendered_the_same_way(tmp_path):
+    why = "corpus at 0deadbeef, pinned 85fbecf"
+    patch = (f"def _refusing(refdir, manifest):\n    raise probe.Refused({why!r})\n"
+             "probe.basis = _refusing\n")
+    p = _main(_argv(tmp_path / "nowhere", tmp_path), patch=patch)
+    assert p.returncode == REFUSED, (p.returncode, p.stderr[-600:])
+    assert p.stdout.splitlines()[-1] == f"REFUSED: {why}", p.stdout[-600:]
+    assert "Traceback" not in p.stderr, p.stderr[-600:]
 
 
-# ---------------------------------------------------------------------------
-# the dispatch with the renderer precondition STUBBED to hold
-# ---------------------------------------------------------------------------
-def _renderer_precondition_holds(monkeypatch) -> None:
-    """`main` hashes `render({}, ...)` twice against `render_drum_solo('CP')`;
-    one constant on both sides makes that check pass without a render."""
-    x = np.linspace(-0.5, 0.5, 64, dtype=np.float64)
-    monkeypatch.setattr(ex, "render", lambda *_, **__: (x, SR, [], None))
-    monkeypatch.setattr(rc, "render_drum_solo", lambda *_, **__: (x, SR))
+def test_pre_fix_source_under_the_same_seam_escapes_exit_1(tmp_path):
+    """The injected-bug control: with the handler reverted (the pre-fix
+    source), the seam the dead-reference control runs must still produce the
+    defect -- so that control cannot be green without the handler."""
+    refdir = _corpus(tmp_path, _non_finite(), np.float32)
+    p = _main(_argv(refdir, tmp_path), source=_pre_fix_source())
+    assert p.returncode == FAIL, (p.returncode, p.stderr[-600:])
+    assert "Traceback (most recent call last)" in p.stderr, p.stderr[-600:]
+    assert f"preparation_contract.Refused: {NAN_WAV}" in p.stderr, p.stderr[-600:]
+    assert f"line 273, in main" in p.stderr, p.stderr[-600:]
+    assert not any(l.startswith("REFUSED") for l in p.stdout.splitlines()), p.stdout[-600:]
 
 
-def _argv(refdir: pathlib.Path, home: pathlib.Path) -> list[str]:
-    return ["--refs", str(refdir), "--out", str(home / "final-strike.json"), "--jobs", "1"]
+def test_a_plain_error_at_the_same_call_still_exits_1(tmp_path):
+    patch = ("def _fault(*a, **k):\n"
+             "    raise AssertionError('plain fault at the load_reference call')\n"
+             "rc.load_reference = _fault\n")
+    p = _main(_argv(tmp_path / "nowhere", tmp_path), patch=patch)
+    assert p.returncode == FAIL, (p.returncode, p.stderr[-600:])
+    assert "Traceback (most recent call last)" in p.stderr, p.stderr[-600:]
+    assert "AssertionError: plain fault at the load_reference call" in p.stderr, p.stderr[-600:]
+    assert "REFUSED" not in p.stdout, p.stdout[-600:]
 
 
-def test_the_stubbed_dispatch_reaches_the_loader(tmp_path, monkeypatch):
-    """The apparatus of the three tests below: with the renderer stubbed and
-    the default manifest pointed at the fixture, `main` gets past the corpus
-    check AND the renderer precondition and calls `rc.load_reference`."""
-    _renderer_precondition_holds(monkeypatch)
-    refdir, manifest = _corpus(tmp_path, "silent")
-    monkeypatch.setattr(probe, "MANIFEST_DEFAULT", manifest)
+@pytest.mark.parametrize("exc_type", [RuntimeError, AssertionError])
+def test_other_errors_propagate_unchanged(seam, monkeypatch, tmp_path, capsys, exc_type):
+    fault = exc_type("unrelated fault at the load_reference call")
 
-    def reached(*_, **__):
-        raise RuntimeError("reached run_case.load_reference")
+    def raising(*a, **k):
+        raise fault
 
-    monkeypatch.setattr(rc, "load_reference", reached)
-    with pytest.raises(RuntimeError, match="reached run_case.load_reference"):
-        ex.main(_argv(refdir, tmp_path))
+    monkeypatch.setattr(rc, "load_reference", raising)
+    with pytest.raises(exc_type) as caught:
+        ex.main(_argv(tmp_path / "nowhere", tmp_path))
+    assert caught.value is fault
+    assert "REFUSED" not in capsys.readouterr().out
 
 
-@pytest.mark.xfail(strict=True, raises=rc.Refused,
-                   reason="masked gap (#1887): main has no handler for rc.Refused. Unreachable from "
-                          "the CLI on main because the renderer precondition refuses first; this "
-                          "control is red, as written, until a handler lands -- then remove the marker")
-@pytest.mark.parametrize("kind", ["silent", "nan", "cut"])
-def test_dispatch_refuses_a_defective_reference_when_the_renderer_precondition_holds(tmp_path, monkeypatch, kind):
-    _renderer_precondition_holds(monkeypatch)
-    refdir, manifest = _corpus(tmp_path, kind)
-    monkeypatch.setattr(probe, "MANIFEST_DEFAULT", manifest)
-    assert ex.main(_argv(refdir, tmp_path)) == exit_contract.REFUSED
-    assert not (tmp_path / "final-strike.json").exists()
+def test_a_well_formed_reference_passes_both_sites(seam, monkeypatch, tmp_path):
+    """The two refusals above are about the content they name: an int16 record
+    with lead passes `load_reference` and `prepare` alike and the run goes on
+    into the pool, which is where this control stops it."""
+    class Reached(Exception):
+        pass
+
+    def run_set(names, offsets, ref, jobs):
+        raise Reached
+
+    monkeypatch.setattr(ex, "run_set", run_set)
+    x = np.concatenate([np.zeros(int(0.005 * SR)), 20000 * _decay(0.05)]).astype(np.int16)
+    with pytest.raises(Reached):
+        ex.main(_argv(_corpus(tmp_path, x, np.int16), tmp_path))
 
 
-def test_a_plain_assertion_error_at_the_loader_boundary_is_never_a_refusal(tmp_path, monkeypatch):
-    """The inverse defect (tools/refusal.py): whatever handler is one day
-    added for `rc.Refused` must not take an `AssertionError` with it."""
-    _renderer_precondition_holds(monkeypatch)
-    refdir, manifest = _corpus(tmp_path, "silent")
-    monkeypatch.setattr(probe, "MANIFEST_DEFAULT", manifest)
-
-    def injected(*_, **__):
-        raise AssertionError("injected at the run_case.load_reference boundary")
-
-    monkeypatch.setattr(rc, "load_reference", injected)
-    with pytest.raises(AssertionError, match="injected at the run_case.load_reference boundary"):
-        ex.main(_argv(refdir, tmp_path))
+def test_the_census_reads_the_module_covered_by_the_base_handler():
+    """`tools/refusal_sibling_scan.py` read every site but `basis` as
+    `candidate-escape`, guard `none`, on main. Covered by a BASE handler at
+    the CLI boundary is the classification the fix owes: an exact one reads
+    `covered(cli-exact)` and covers one family alone."""
+    p = subprocess.run([sys.executable, str(SCAN), "--json"], capture_output=True, text=True,
+                       timeout=600, check=False, cwd=str(ROOT))
+    assert p.returncode == 0, p.stderr[-400:]
+    sites = {s["site"]: s for s in json.loads(p.stdout)["sites"]
+             if s["site"].startswith(TOOL_REL + ":")}
+    at_issue = [s for s in sites.values() if s["callee"] in ("run_case.prepare", "run_case.load_reference")]
+    assert len(at_issue) == 4, sites
+    assert sites, "the census no longer lists this module at all"
+    for site in sites.values():
+        assert site["classification"] == "covered(cli-base)" and site["uncovered"] == [], site
