@@ -1,7 +1,35 @@
+import json
+
 import pytest
 
 import measure_m5a_filter_oversample as experiment
 import mono_m5a_score as m5a
+
+_STUB_REPORT = {"source_commit": "stub", "source_dirty": False,
+                "comparisons": [], "decision": {}}
+
+
+def _output_tree(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (repo / "link").symlink_to(outside)
+    monkeypatch.setattr(experiment, "ROOT", repo.resolve())
+    return outside
+
+
+def _escape(outside, case):
+    return {"absolute": str(outside / "report.json"),
+            "dotdot": "../report.json",
+            "symlink": "link/report.json"}[case]
+
+
+def _stub_run(monkeypatch):
+    calls = []
+    monkeypatch.setattr(experiment, "run",
+                        lambda *args, **kwargs: calls.append(args) or _STUB_REPORT)
+    return calls
 
 
 def _row(target_error):
@@ -77,3 +105,36 @@ def test_incremental_gate_uses_declared_materiality_deadbands_not_case_limits():
     candidate["metrics"]["Gain"]["error"] = 0.2
     result = experiment._compare_incremental(baseline, candidate)
     assert result["accepts_incremental_improvement"] is False
+
+
+@pytest.mark.parametrize("case", ["absolute", "dotdot", "symlink"])
+def test_out_that_leaves_the_repository_is_refused_before_measuring(tmp_path, monkeypatch, capsys, case):
+    outside = _output_tree(tmp_path, monkeypatch)
+    calls = _stub_run(monkeypatch)
+    assert experiment.main(["--out", _escape(outside, case)]) == 2
+    assert "REFUSED" in capsys.readouterr().out
+    assert calls == []
+    assert not list(tmp_path.rglob("report.json"))
+
+
+def test_in_repo_out_is_written_and_named_relative_to_the_repository(tmp_path, monkeypatch, capsys):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    monkeypatch.setattr(experiment, "ROOT", repo.resolve())
+    calls = _stub_run(monkeypatch)
+    assert experiment.main(["--out", "build/scorecard/report.json"]) == 0
+    assert len(calls) == 1
+    assert json.loads((repo / "build/scorecard/report.json").read_text()) == _STUB_REPORT
+    assert json.loads(capsys.readouterr().out)["report"] == "build/scorecard/report.json"
+
+
+def test_in_repo_out_named_through_a_symlink_from_outside_is_written_in_repo(tmp_path, monkeypatch, capsys):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    monkeypatch.setattr(experiment, "ROOT", repo.resolve())
+    _stub_run(monkeypatch)
+    alias = tmp_path / "alias"
+    alias.symlink_to(repo)
+    assert experiment.main(["--out", str(alias / "build" / "report.json")]) == 0
+    assert (repo / "build" / "report.json").is_file()
+    assert json.loads(capsys.readouterr().out)["report"] == "build/report.json"

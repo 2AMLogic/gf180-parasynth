@@ -7,6 +7,7 @@ the refusal paths are tested first and the answer second.
 """
 from __future__ import annotations
 
+import json
 import pathlib
 import sys
 
@@ -18,6 +19,29 @@ sys.path.insert(0, str(ROOT / "model"))
 
 import measure_shark_blamp as msb                                   # noqa: E402
 import voice_fx as vf                                               # noqa: E402
+
+
+def _output_tree(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (repo / "link").symlink_to(outside)
+    monkeypatch.setattr(msb, "ROOT", repo.resolve())
+    return outside
+
+
+def _escape(outside, case):
+    return {"absolute": str(outside / "report.json"),
+            "dotdot": "../report.json",
+            "symlink": "link/report.json"}[case]
+
+
+def _stub_measurement(monkeypatch):
+    calls = []
+    monkeypatch.setattr(msb, "measure", lambda *args, **kwargs: calls.append(args) or {})
+    monkeypatch.setattr(msb, "render_table", lambda report: "table")
+    return calls
 
 
 def test_it_refuses_a_span_shorter_than_the_two_octaves_it_claims():
@@ -96,3 +120,40 @@ def test_the_reference_rig_arm_refuses_rather_than_substituting_our_own_numbers(
     present = [p for p in msb.REFERENCE_RIG_PATHS if pathlib.Path(p).exists()]
     rc = msb.main(["--require-references", "--note", "57", "81", "105"])
     assert rc == (0 if len(present) == len(msb.REFERENCE_RIG_PATHS) else 3)
+
+
+@pytest.mark.parametrize("case", ["absolute", "dotdot", "symlink"])
+def test_out_that_leaves_the_repository_is_refused_before_measuring(tmp_path, monkeypatch, capsys, case):
+    """An out-of-repo `--out` must be REFUSED (this tool's exit 3) with nothing
+    measured and nothing written, not a table on stdout followed by a
+    traceback, which reads as a measurement plus a FAIL."""
+    outside = _output_tree(tmp_path, monkeypatch)
+    calls = _stub_measurement(monkeypatch)
+    assert msb.main(["--note", "57", "81", "105", "--out", _escape(outside, case)]) == 3
+    assert "REFUSED" in capsys.readouterr().err
+    assert calls == []
+    assert not list(tmp_path.rglob("report.json"))
+
+
+def test_in_repo_out_is_written_and_named_relative_to_the_repository(tmp_path, monkeypatch, capsys):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    monkeypatch.setattr(msb, "ROOT", repo.resolve())
+    calls = _stub_measurement(monkeypatch)
+    assert msb.main(["--note", "57", "81", "105", "--out", "build/report.json"]) == 0
+    assert len(calls) == 1
+    assert json.loads((repo / "build" / "report.json").read_text()) == {}
+    assert "report: build/report.json" in capsys.readouterr().out
+
+
+def test_in_repo_out_named_through_a_symlink_from_outside_is_written_in_repo(tmp_path, monkeypatch, capsys):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    monkeypatch.setattr(msb, "ROOT", repo.resolve())
+    _stub_measurement(monkeypatch)
+    alias = tmp_path / "alias"
+    alias.symlink_to(repo)
+    asked = str(alias / "build" / "report.json")
+    assert msb.main(["--note", "57", "81", "105", "--out", asked]) == 0
+    assert (repo / "build" / "report.json").is_file()
+    assert "report: build/report.json" in capsys.readouterr().out
