@@ -22,6 +22,7 @@ import pytest
 from scipy.io import wavfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import exit_contract                                               # noqa: E402
 import measure_repeatability as mr                                 # noqa: E402
 import refaudio_local as rl                                        # noqa: E402
 
@@ -520,19 +521,21 @@ def _placeholders(d: pathlib.Path, names) -> pathlib.Path:
     return d
 
 
-def _loop(bpm: float, seed0: int, pasted: bool = False, pattern: bool = False) -> np.ndarray:
+def _loop(bpm: float, seed0: int, pasted: bool = False, pattern: bool = False,
+          tau: float = 0.06) -> np.ndarray:
     """Six bars of one bass drum per beat at `bpm`. Each strike is an
     independent take, a few samples off the grid as a sequencer free-running
     against the DAW puts them. `pasted` is one strike tiled; `pattern` adds a
     second strike on every off-beat. Every strike has the same shape, so a
     metric that reads it against its own onset (attack) reads a spread of
-    exactly zero, which the report table has to survive."""
+    exactly zero, which the report table has to survive. `tau` is each
+    strike's decay time constant; `LONG_TAU` is the one #1768's control uses."""
     beat = 60.0 / bpm * SR
     n = int(round(beat * 6))
     x = np.zeros(n)
     rng = np.random.default_rng(seed0)
     for bar in range(6):
-        s = _one(seed=seed0 if pasted else seed0 + bar)[:int(beat) - 60]
+        s = _one(seed=seed0 if pasted else seed0 + bar, tau=tau)[:int(beat) - 60]
         j = int(round(bar * beat)) + 20 + int(rng.integers(-6, 7))
         x[j:j + len(s)] += s
         if pattern:
@@ -542,7 +545,7 @@ def _loop(bpm: float, seed0: int, pasted: bool = False, pattern: bool = False) -
     return (x / np.abs(x).max()).astype(np.float32)
 
 
-def _loops_cli(monkeypatch, tmp_path, pattern=(), pasted=()):
+def _loops_cli(monkeypatch, tmp_path, pattern=(), pasted=(), tau=0.06):
     """`--loops` with the real audit and measurement over the whole committed
     inventory. The apparatus controls are the one thing stubbed: they are
     synthetic, and `test_loop_controls_all_pass` runs them."""
@@ -553,7 +556,7 @@ def _loops_cli(monkeypatch, tmp_path, pattern=(), pasted=()):
     for i, name in enumerate(names):
         bpm = float(mr.LOOP_BPM_RE.search(name)["bpm"])
         wavfile.write(str(d / name), SR, _loop(bpm, 100 * i, pasted=name in pasted,
-                                              pattern=name in pattern))
+                                              pattern=name in pattern, tau=tau))
     monkeypatch.setattr(mr, "LOOPS_DIR", d)
     monkeypatch.setattr(mr, "loop_controls",
                         lambda report=print: (True, {"stubbed": "not what these tests measure"}))
@@ -692,6 +695,137 @@ def test_per_loop_acoustic_exclusions_are_kept_on_a_complete_inventory(tmp_path,
     assert len(res["audit"]["admitted"]) == 25
 
 
+# ---------------------------------------------------------------------------
+# #1768: a question the loops run did not answer is a REFUSAL, not a measured
+# row. `loops_main` returned MEASURED whenever one loop was admitted, so a
+# metric whose row was `{"refused": "no loop yielded 3 readable strikes"}`
+# printed `REFUSED:` on its own line and the process exited 0 -- `run_all.py`
+# renders that PASS -- and the merged --json said `outcome: MEASURED` over a
+# metric with no number. #1699's ruling, on this sibling.
+#
+# The two refusal controls are reached through the REAL audit and measurement
+# over audio whose answer is constructed: nothing is patched to make a metric
+# refuse. START RED on `origin/main` @ `a3870ddb` (tools/measure_repeatability.py
+# identical to `6aa09d26`, the revision the issue cites): each returned 0. The
+# measured controls around them keep the gate satisfiable -- the real corpus
+# excludes 14 of 27 loops by design and must still exit 0.
+# ---------------------------------------------------------------------------
+#: A strike still sounding when the next one lands. One beat (0.47-0.5 s at the
+#: inventory's 120-128 bpm) is shorter than the -25 dB point plus the tail
+#: `schroeder_t20` requires after it (7.5 time constants, #118's length guard),
+#: so `decay` is refused on every strike of every loop and no loop yields
+#: three; the loop is still one strike per beat, so it is admitted. The other
+#: five plan metrics read on every strike at this value; at the default 0.06
+#: all six do.
+LONG_TAU = 0.10
+
+
+def test_the_loops_cli_exits_refused_when_a_plan_metric_has_no_spread(
+        tmp_path, monkeypatch, capsys):
+    """START RED on `origin/main` @ `a3870ddb`: printed
+    `decay  REFUSED: no loop yielded 3 readable strikes` and returned 0."""
+    _loops_cli(monkeypatch, tmp_path, tau=LONG_TAU)
+    out = tmp_path / "result.json"
+    assert mr.main(["--loops", "--json", str(out)]) == exit_contract.REFUSED
+    text = capsys.readouterr().out
+    assert "REFUSED: 1 metric with no readable spread: decay" in text, text[-700:]
+    res = json.loads(out.read_text(encoding="utf-8"))["take_to_take"]
+    assert res["outcome"] == "REFUSED", "the written record must agree with the exit status"
+    # The corpus is what it claims to be: every loop admitted, and `decay`
+    # alone unreadable -- on every strike, so no loop yields three.
+    assert len(res["audit"]["admitted"]) == 27 and res["audit"]["excluded_not_one_per_beat"] == []
+    rows = list(res["measure"]["per_loop"].values())
+    assert len(rows) == 27 and all(r["decay"]["n"] == 0 for r in rows)
+    # Everything that measured is kept, in the table and in the record.
+    measured = sorted(k for k, v in res["compare"].items() if "refused" not in v)
+    assert measured == sorted(set(mr.LOOP_METRICS) - {"decay"})
+    table = [ln for ln in text.splitlines() if ln.startswith("  ")]
+    assert all(any(ln.startswith(f"  {k:24s}") for ln in table) for k in measured)
+    assert res["compare"]["decay"] == {"refused": "no loop yielded 3 readable strikes"}
+
+
+def test_the_loops_cli_exits_refused_when_an_audited_loop_has_no_bpm(
+        tmp_path, monkeypatch, capsys):
+    """The other in-band refusal: the audit records a loop whose file name
+    carries no tempo as `{"refused": "no bpm in the file name"}` and skips it,
+    and the run was MEASURED over the rest. Every name in the committed
+    inventory carries a bpm, so on the real corpus this is a corrupted
+    inventory -- refused, not quietly measured over fewer loops."""
+    names = mr.expected_loops()
+    d, _ = _loops_cli(monkeypatch, tmp_path)
+    stray = "BD 4x4 Unlabelled.wav"
+    wavfile.write(str(d / stray), SR, _loop(120.0, 7))
+    inventory = tmp_path / "inventory.txt"
+    inventory.write_text("# a header\n" + "".join(f"{n}\n" for n in [*names, stray]),
+                         encoding="utf-8")
+    monkeypatch.setattr(mr, "LOOPS_INVENTORY", inventory)
+    out = tmp_path / "result.json"
+    assert mr.main(["--loops", "--json", str(out)]) == exit_contract.REFUSED
+    text = capsys.readouterr().out
+    assert ("REFUSED: 1 loop refused by the audit, not a copy-pasted strike: "
+            "Unlabelled (no bpm in the file name)") in text, text[-700:]
+    res = json.loads(out.read_text(encoding="utf-8"))["take_to_take"]
+    assert res["outcome"] == "REFUSED"
+    assert res["audit"]["loops"]["Unlabelled"] == {"refused": "no bpm in the file name"}
+    assert len(res["audit"]["admitted"]) == 27
+    # Nothing else was wrong: every plan metric measured, and all of it is kept.
+    assert sorted(res["compare"]) == sorted(mr.LOOP_METRICS)
+    assert not any("refused" in v for v in res["compare"].values())
+
+
+def _measured_row(strikes_refused: int = 0) -> dict:
+    """One pooled metric row as `loop_measure` writes it when it measured."""
+    return {"units": "ms", "loops": 1, "strikes_refused": strikes_refused,
+            "pairwise_abs_diff_median_of_loops": 0.0}
+
+
+def _stubbed_loops(monkeypatch, audited: dict, take: dict) -> None:
+    """`--loops` with the audit and the measurement replaced by records, for
+    the checks that are about how `loops_main` READS them."""
+    monkeypatch.setattr(mr, "loop_controls", lambda report=print: (True, {}))
+    monkeypatch.setattr(mr, "loop_audit",
+                        lambda report=print, files=None: ({"x": ([], SR)}, audited))
+    monkeypatch.setattr(mr, "loop_measure", lambda admitted, report=print: take)
+
+
+def test_by_design_exclusions_do_not_refuse_the_run(tmp_path, monkeypatch, capsys):
+    """What the refusal does NOT count, each placed where the ruling names it:
+    a loop `excluded` as not one strike per beat, a copy-pasted loop (whose
+    audit entry says `refused` too, and is the by-design one), and the
+    per-strike `strikes_refused` count inside a measured row. The real corpus
+    has 14 of the first and 15-16 of the third per metric; refusing on either
+    is a gate that corpus can never pass."""
+    audited = {"loops": {"Pattern": {"excluded": "8 onsets in 16 beats: not one strike per beat"},
+                         "Pasted": {"bpm": 120.0, "strikes": 16, "refused":
+                                    "strikes are bit-for-bit duplicates: a copy-pasted sample"},
+                         "x": {"bpm": 120.0, "strikes": 16}},
+               "admitted": ["x"], "excluded_not_one_per_beat": ["Pattern"],
+               "refused_copy_paste": ["Pasted"]}
+    _stubbed_loops(monkeypatch, audited,
+                   {"metrics": {k: _measured_row(16) for k in mr.LOOP_METRICS}})
+    out = tmp_path / "result.json"
+    assert mr.main(["--loops", "--json", str(out)]) == exit_contract.PASS
+    assert "REFUSED" not in capsys.readouterr().out
+    assert json.loads(out.read_text(encoding="utf-8"))["take_to_take"]["outcome"] == "MEASURED"
+
+
+def test_a_planned_metric_with_no_row_at_all_is_refused(tmp_path, monkeypatch, capsys):
+    """RULE-8 adversary for the refusal check. `loop_measure` writes every plan
+    metric, refused or measured, so "a row that says refused" and "a row with
+    no number" are the same set today -- and a `loop_measure` that DROPPED a
+    metric (#1427's shape: an enumeration that came up short, with nothing
+    recording the loss) satisfies a check keyed on the word `refused`. The
+    plan is read from `LOOP_METRICS`, so the missing row is seen."""
+    audited = {"loops": {"x": {"bpm": 120.0, "strikes": 16}}, "admitted": ["x"],
+               "excluded_not_one_per_beat": [], "refused_copy_paste": []}
+    _stubbed_loops(monkeypatch, audited,
+                   {"metrics": {k: _measured_row() for k in mr.LOOP_METRICS if k != "decay"}})
+    out = tmp_path / "result.json"
+    assert mr.main(["--loops", "--json", str(out)]) == exit_contract.REFUSED
+    assert "REFUSED: 1 metric with no readable spread: decay" in capsys.readouterr().out
+    assert json.loads(out.read_text(encoding="utf-8"))["take_to_take"]["outcome"] == "REFUSED"
+
+
 def test_the_loops_cli_refuses_a_missing_loop_and_leaves_the_json_intact(
         tmp_path, monkeypatch, capsys):
     names = mr.expected_loops()
@@ -770,9 +904,13 @@ def test_the_report_prints_a_metric_whose_take_to_take_is_exactly_zero(tmp_path,
     """A traceback, exit 1, after the whole corpus was measured and before
     --json was written. Found by #1427's complete-inventory test on built
     loops, whose attack reads the same in every strike. The table shows the
-    ratio as unbounded; the JSON keeps the None, which is the honest value."""
-    take = {"metrics": {"attack": {"units": "ms", "loops": 1, "strikes_refused": 0,
-                                   "pairwise_abs_diff_median_of_loops": 0.0}}}
+    ratio as unbounded; the JSON keeps the None, which is the honest value.
+
+    The stub holds every planned metric, each at 0: since #1768 a planned
+    metric with no row refuses the run, and this is the table of a measured one."""
+    take = {"metrics": {k: {"units": "ms", "loops": 1, "strikes_refused": 0,
+                            "pairwise_abs_diff_median_of_loops": 0.0}
+                        for k in mr.LOOP_METRICS}}
     monkeypatch.setattr(mr, "loop_controls", lambda report=print: (True, {}))
     monkeypatch.setattr(mr, "loop_audit", lambda report=print, files=None: ({"x": ([], 44100)}, {}))
     monkeypatch.setattr(mr, "loop_measure", lambda admitted, report=print: take)

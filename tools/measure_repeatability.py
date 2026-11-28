@@ -16,7 +16,12 @@ THREE OUTCOMES, kept apart, the repository's verifier convention:
 
     exit 0   the spread was measured
     exit 1   it was measured and something it asserts is false
-    exit 2   REFUSED -- a precondition is unmet, so nothing was measured
+    exit 2   REFUSED -- a precondition is unmet, so nothing was measured; or,
+             on --loops, loops were admitted and a planned metric still has no
+             spread, or an audited loop's file name carries no bpm (#1768).
+             Every row that measured is printed and written to --json first,
+             under outcome REFUSED: a report holding a metric with no number
+             is no verdict, and tools/run_all.py reports the run NO-VERDICT.
 
 WHAT IT REFUSES, AND THE ONE THAT FIRED
 ---------------------------------------
@@ -1363,6 +1368,32 @@ def loop_compare(take: dict, results_path: pathlib.Path | None = None) -> dict:
     return out
 
 
+def loop_unanswered(aud: dict, take: dict) -> tuple[list[str], list[tuple[str, str]]]:
+    """(#1768) What a loops run that admitted loops left unanswered: the planned
+    metrics with no spread, by name, and the loops the audit refused other than
+    as a copy-pasted strike, as (name, reason). Both empty means every question
+    was answered.
+
+    The plan is read from `LOOP_METRICS`, not from the output: a metric is
+    answered when its row carries a spread, so a row that says `refused`, a row
+    with no number and a metric `loop_measure` never wrote are all seen -- the
+    last is #1427's shape, an enumeration that came up short with nothing
+    recording the loss.
+
+    NOT counted, by design: a loop `excluded` as not one strike per beat, a
+    copy-pasted loop (`refused_copy_paste`), and the per-strike
+    `strikes_refused` count inside a measured row. The real corpus excludes 14
+    of 27 loops that way and declines 15-16 strikes per metric, and measures
+    all six; a gate that refused on those could never pass. What that leaves
+    open is stated: a spread resting on the three-strike minimum passes."""
+    rows = take.get("metrics", {})
+    blank = [k for k in LOOP_METRICS if "pairwise_abs_diff_median_of_loops" not in rows.get(k, {})]
+    pasted = set(aud.get("refused_copy_paste", ()))
+    refused = [(s, v["refused"]) for s, v in aud.get("loops", {}).items()
+               if "refused" in v and s not in pasted]
+    return blank, refused
+
+
 
 
 # ===========================================================================
@@ -1398,7 +1429,6 @@ def loops_main(a) -> int:
             out["measure"] = take
             cmp_ = loop_compare(take)
             out["compare"] = cmp_
-            out["outcome"] = "MEASURED"
             print("  metric                    units  take-to-take  session floor  take/session"
                   "  tol  tol/take   (loops, strikes refused)")
             for k, v in cmp_.items():
@@ -1415,7 +1445,23 @@ def loops_main(a) -> int:
                       + (f"{v['tolerance']:5.2f} {(tot if tot is not None else float('inf')):9.1f}"
                          if v['tolerance'] is not None else "  (no tolerance row)")
                       + f"   ({take['metrics'][k]['loops']}, {take['metrics'][k]['strikes_refused']})")
-            rc_ = MEASURED
+            # (#1768) This run was MEASURED whatever the table held: a metric
+            # with no spread printed its `REFUSED:` row and the process still
+            # exited 0, which `run_all.py` renders PASS, and the record said
+            # `MEASURED` over a metric with no number. Every row that measured
+            # is still printed above and written below -- a partial result is
+            # evidence, not garbage -- and the exit status and the outcome say
+            # the run is no verdict.
+            blank, refused = loop_unanswered(aud, take)
+            rc_ = REFUSED if (blank or refused) else MEASURED
+            out["outcome"] = "REFUSED" if rc_ == REFUSED else "MEASURED"
+            if blank:
+                print(f"REFUSED: {len(blank)} metric{'' if len(blank) == 1 else 's'} "
+                      f"with no readable spread: {', '.join(blank)}")
+            if refused:
+                print(f"REFUSED: {len(refused)} loop{'' if len(refused) == 1 else 's'} refused "
+                      "by the audit, not a copy-pasted strike: "
+                      + ", ".join(f"{s} ({why})" for s, why in refused))
     except refusal.Refused as why:
         # The widened CLI boundary (#1183, `run_case.*` family): the corpus
         # records pass through `rc.prepare`, whose
