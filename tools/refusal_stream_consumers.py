@@ -110,10 +110,14 @@ import argparse
 import ast
 import collections
 import json
+import os
 import pathlib
 import re
 import subprocess
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import refusal  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -152,7 +156,7 @@ Site = collections.namedtuple("Site", "file line func kind stream loose_only")
 Row = collections.namedtuple("Row", "tool file line kind capture reads verdict note")
 
 
-class Refused(Exception):
+class Refused(refusal.Refused, Exception):
     """A precondition of the census failed; it cannot answer."""
 
 
