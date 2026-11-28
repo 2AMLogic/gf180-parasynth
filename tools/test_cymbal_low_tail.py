@@ -25,10 +25,12 @@ import sys
 
 import numpy as np
 import pytest
+from scipy.io import wavfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import cymbal_low_tail as lt  # noqa: E402
 import cymbal_bands as cb  # noqa: E402
+import refusal  # noqa: E402
 
 SR = lt.SR
 
@@ -368,6 +370,295 @@ def test_the_two_frozen_windows_answer_and_refuse_the_settings_they_claim_to():
         else:
             assert "rho" in at20[s], (s, sorted(at20[s]))
         assert "rho" in at15[s], (s, sorted(at15[s]))
+
+
+# --------------------------------------------------------------------------
+# the process exit status of a run in which a row refused (#1765, the #1699 shape)
+# --------------------------------------------------------------------------
+# `main` records a refusal in band ({"refused": ...}) and prints it. It used to
+# `return 0` after doing so, which tools/run_all.py renders as PASS: a run whose
+# only 808 row held no number read as a pass to anything that looks at the exit
+# status. The #1699 ruling, applied here: a row that was SUPPOSED to answer and
+# did not makes the run REFUSED (2), while the refusals the module documents as
+# by design -- a Fischer record shorter than one window, which is what the three
+# frozen windows exist for -- leave it at 0.
+#
+# The corpora below are synthetic, on disk, and read by the REAL cb._load /
+# rc.prepare / measure through the real `fischer`: never a patched `fischer`,
+# so each refusal is raised by the loader or by `_trim` exactly as it would be
+# on a damaged or incomplete download of the real set. Their lengths are the
+# module docstring's DECAY table, so the by-design refusals fall where they do
+# on the real corpus (all 25 settings answer at 1.5 s, 20 at 2.0 s, 10 at 3.5 s).
+DECAY_LENGTH_S = {"00": 1.5, "25": 2.0, "50": 2.5, "75": 3.5, "10": 4.0}
+ALL_SETTINGS = tuple(f"CY{t}{d}" for t in cb.CODES for d in cb.CODES)
+BY_DESIGN_REFUSALS_PER_WINDOW = {"1.5s": 0, "2.0s": 5, "3.5s": 15}
+# Every corpus the controls below use, by name, so any test can run alone.
+CORPORA = {
+    "clean25": {},
+    "clean5025": {"settings": ("CY5025",)},
+    "too_short5025": {"settings": ("CY5025",), "broken": "CY5025"},
+    "not_int165025": {"settings": ("CY5025",), "broken": "CY5025", "how": "not_int16"},
+    "silent5025": {"settings": ("CY5025",), "broken": "CY5025", "how": "silent"},
+}
+
+
+def _raw_record(dur, seed=7):
+    """A strike as a Fischer file is before `rc.prepare` sees it: 20 ms of true
+    silence, then the onset, then `dur` seconds of signal."""
+    y, sr = lt.synth(tau_l=0.35, a_h=0.5, dur=dur, seed=seed)
+    onset = lt.rc.required_lead_samples(sr) + int(round(lt.rc.TRIM_MS * 1e-3 * sr))
+    return np.concatenate([np.zeros(int(0.02 * sr)), y[onset:]]), sr
+
+
+def write_corpus(root, *, settings=ALL_SETTINGS, broken=None, how="too_short", dur_s=1.0):
+    """`<root>/cy8/<SETTING>.WAV` in 16-bit PCM, one per setting, each as long
+    after t=0 as its DECAY code's record is on the real machine (1.501 s at
+    DECAY 00 ... 4.001 s at DECAY 10), so `rc.prepare` and every window treat
+    it as the real file. `broken` names the ONE setting that cannot be
+    measured, by a refusal raised at each of the three stages that can:
+    `how="too_short"` cuts it to `dur_s` after t=0 -- 1.0 s, shorter than the
+    1.5 s window every setting supports, so `_trim` refuses it in every window;
+    `how="not_int16"` writes it as float32, which `cb._load` refuses (#1117);
+    and `how="silent"` writes digital silence at full length, which `measure`
+    refuses band by band. Returns `root`."""
+    if how not in ("too_short", "not_int16", "silent"):
+        raise ValueError(how)
+    cy8 = pathlib.Path(root) / "cy8"
+    cy8.mkdir(parents=True, exist_ok=True)
+    for s in settings:
+        dur = dur_s if s == broken and how == "too_short" else DECAY_LENGTH_S[s[4:]]
+        x, sr = _raw_record(dur, seed=int(s[2:]))
+        if s == broken and how == "silent":
+            x = np.zeros_like(x)
+        if s == broken and how == "not_int16":
+            wavfile.write(cy8 / f"{s}.WAV", sr, x.astype(np.float32))
+        else:
+            wavfile.write(cy8 / f"{s}.WAV", sr, np.round(x * 20000).astype(np.int16))
+    return pathlib.Path(root)
+
+
+def _refused(res):
+    """The (window, setting) pairs whose Fischer row holds a refusal."""
+    return {(w, s) for w, wv in res["windows"].items() for s, m in wv["fischer"].items()
+            if "refused" in m}
+
+
+def _refused_lines(printed):
+    return [ln for ln in printed.splitlines() if ln.startswith("REFUSED: ")]
+
+
+@pytest.fixture(scope="module")
+def corpora(tmp_path_factory):
+    """Each corpus in CORPORA is written once per module run, under its own name."""
+    base, made = tmp_path_factory.mktemp("cy1765"), {}
+
+    def get(name):
+        if name not in made:
+            made[name] = write_corpus(base / name, **CORPORA[name])
+        return made[name]
+    return get
+
+
+SWEEPS = ("onset_sensitivity", "detection_floor", "detection_floor_fast", "skirt_baseline")
+
+
+@pytest.fixture(scope="module")
+def stand_ins():
+    """Computed once for the module: the real control matrix, the real four
+    synthetic sweeps, and a synthetic stand-in for our own kit's CY render
+    (3.6 s, like the real one)."""
+    return {"check": lt.check(), "ours": _raw_record(3.6, seed=99),
+            "sweeps": {name: getattr(lt, name)() for name in SWEEPS}}
+
+
+@pytest.fixture
+def main_fast(monkeypatch, stand_ins):
+    """The REAL `main` with four substitutions, none of which a refusal recorded
+    in a result can come from: our kit's CY render (10.6 s a call, five calls a
+    run) is a synthetic strike; `match_floor`'s bisection returns its input
+    unchanged, so the noise-floor control's own refusal logic runs on the real
+    corpus record; and the control matrix and the synthetic sweeps are the real
+    ones, computed once. `fischer`, `noise_floor_control`, the printer, `--out`
+    and the return value are the module's own."""
+    def run(refs, *argv, out):
+        return lt.main(["--refs", str(refs), *argv, "--out", str(out)])
+    monkeypatch.setattr(lt, "check", lambda: stand_ins["check"])
+    for name in SWEEPS:
+        monkeypatch.setattr(lt, name, lambda n=name: stand_ins["sweeps"][n])
+    monkeypatch.setattr(lt.rc, "render_drum_solo", lambda sound, *a, **k: stand_ins["ours"])
+    monkeypatch.setattr(lt, "match_floor",
+                        lambda y, sr, target, band="M", *, trim_s=lt.TRIM_S, seed=11: (y, 0.0, target))
+    return run
+
+
+@pytest.mark.parametrize("how, why", (("too_short", "common analysis window"),
+                                      ("not_int16", "16-bit PCM"),
+                                      ("silent", "band is silent")))
+def test_main_refuses_when_the_one_requested_record_cannot_be_measured_in_any_window(
+        corpora, main_fast, tmp_path, capsys, how, why):
+    """The red-first control, and the issue's own scenario: the default run
+    measures ONE Fischer setting, and that record cannot supply any window. On
+    origin/main this printed three REFUSED rows, wrote `--out`, and returned 0.
+
+    The measured rows -- ours, in every window -- must still be printed and
+    written: the refusal is of one row, not of the run's output. And because
+    the noise-floor control reads the same record, it refuses too, and both are
+    named. Each parameter is a refusal raised at a different stage by the real
+    code, from a file on disk: `_trim` (`too_short`), `cb._load` (`not_int16`)
+    and `measure` itself (`silent`, which the 3.5 s window then refuses as too
+    short -- the classifier must not let one by-design entry excuse the row)."""
+    refs = corpora(how + "5025")
+    out = tmp_path / "r.json"
+    rc = main_fast(refs, out=out)
+    assert rc == lt.REFUSED, rc
+    res = json.loads(out.read_text())
+    assert set(res["windows"]) == {"1.5s", "2.0s", "3.5s"}
+    assert _refused(res) == {(w, "CY5025") for w in ("1.5s", "2.0s", "3.5s")}
+    assert why in res["windows"]["1.5s"]["fischer"]["CY5025"]["refused"], res["windows"]["1.5s"]
+    for w in res["windows"].values():
+        assert w["shipped"]["rho"]["M"]["-10"] is not None, w["shipped"]
+    assert why in res["noise_floor_control"]["refused"], res["noise_floor_control"]
+    assert len(res["unexpected_refusals"]) == 2, res["unexpected_refusals"]
+    printed = capsys.readouterr().out
+    assert "808 CY5025" in printed and "shipped" in printed, printed
+    lines = _refused_lines(printed)
+    assert len(lines) == 1, printed
+    assert "808 CY5025" in lines[0] and "noise-floor control" in lines[0], lines[0]
+
+
+def test_a_clean_default_run_still_exits_0(corpora, main_fast, tmp_path, capsys):
+    """The control that proves the gate is satisfiable: CY5025 at its real
+    2.001 s answers at 1.5 s and 2.0 s, refuses the 3.5 s window as too short
+    BY DESIGN, the noise-floor control runs, and the exit status is 0 with no
+    REFUSED line of its own."""
+    refs = corpora("clean5025")
+    out = tmp_path / "r.json"
+    rc = main_fast(refs, out=out)
+    assert rc == 0, capsys.readouterr().out
+    res = json.loads(out.read_text())
+    assert _refused(res) == {("3.5s", "CY5025")}
+    assert "common analysis window" in res["windows"]["3.5s"]["fischer"]["CY5025"]["refused"]
+    for w in ("1.5s", "2.0s"):
+        assert res["windows"][w]["fischer"]["CY5025"]["rho"]["M"]["-10"] is not None, w
+    assert "refused" not in res["noise_floor_control"]
+    assert not any("refused" in r for r in res["noise_floor_control"]["runs"].values())
+    assert res["unexpected_refusals"] == []
+    assert not _refused_lines(capsys.readouterr().out)
+
+
+def test_a_clean_all_settings_run_exits_0_with_its_by_design_refusals_present(
+        corpora, main_fast, tmp_path, capsys):
+    """The edge the curation named: with `--all-settings` the five DECAY 00
+    records refuse the 2.0 s and 3.5 s windows by design and answer at 1.5 s.
+    Those ten in-band refusals must be present and unchanged -- a run that
+    hid them would have changed the measurement, not the exit status -- and
+    must not fail the run."""
+    refs = corpora("clean25")
+    out = tmp_path / "r.json"
+    rc = main_fast(refs, "--all-settings", out=out)
+    assert rc == 0, capsys.readouterr().out
+    res = json.loads(out.read_text())
+    got = _refused(res)
+    expected = {(w, s) for w in res["windows"] for s in ALL_SETTINGS
+                if DECAY_LENGTH_S[s[4:]] < float(w[:-1])}
+    assert got == expected, sorted(got ^ expected)
+    assert {w: sum(1 for ww, _ in got if ww == w) for w in BY_DESIGN_REFUSALS_PER_WINDOW} \
+        == BY_DESIGN_REFUSALS_PER_WINDOW
+    for w, s in got:
+        assert "common analysis window" in res["windows"][w]["fischer"][s]["refused"], (w, s)
+        assert res["windows"][w]["fischer"][s]["record_s"] == pytest.approx(DECAY_LENGTH_S[s[4:]] + 0.001,
+                                                                          abs=0.002), (w, s)
+    decay00 = {s for s in ALL_SETTINGS if s.endswith("00")}
+    for s in decay00:
+        assert res["windows"]["1.5s"]["fischer"][s]["rho"]["M"]["-10"] is not None, s
+    assert res["unexpected_refusals"] == []
+    assert not _refused_lines(capsys.readouterr().out)
+
+
+@pytest.mark.parametrize("corpus, argv, want", [
+    ("clean25", ("--windows", "3.5", "--all-settings"), 0),
+    ("clean5025", ("--windows", "3.5"), 0),
+    ("too_short5025", ("--windows", "3.5"), lt.REFUSED),
+    ("too_short5025", ("--windows", "1.5"), lt.REFUSED),
+])
+def test_a_restricted_window_run_refuses_only_a_record_no_frozen_window_covers(
+        corpora, main_fast, tmp_path, capsys, corpus, argv, want):
+    """The input that defeats the obvious rule, both ways. "Refused in every
+    window that was run" is NOT enough: `--windows 3.5` alone makes fifteen
+    settings refuse in the only window run, by design, and a rule that counted
+    them would make a documented run REFUSED for good (verification rule 8 --
+    an unsatisfiable gate). Excusing the short-record KIND alone is not enough
+    either: a 1.0 s CY5025 refuses with the same words as a 2.001 s one. The
+    rule needs both -- and rows 2 and 3 above print the identical REFUSED row
+    for CY5025 and get different verdicts on the record's length alone."""
+    refs = corpora(corpus)
+    out = tmp_path / "r.json"
+    rc = main_fast(refs, *argv, out=out)
+    assert rc == want, capsys.readouterr().out
+    res = json.loads(out.read_text())
+    assert set(res["windows"]) == {"3.5s" if "3.5" in argv else "1.5s"}
+    assert bool(res["unexpected_refusals"]) == (want == lt.REFUSED), res["unexpected_refusals"]
+    assert len(_refused_lines(capsys.readouterr().out)) == (1 if want == lt.REFUSED else 0)
+
+
+def test_main_refuses_when_a_noise_floor_control_run_refuses(
+        corpora, main_fast, tmp_path, monkeypatch, capsys):
+    """The second place a refusal is recorded and the run continues: one of the
+    control's two conditions cannot be produced. Every 808 row measured, so the
+    only thing standing between the rho gap and a floor explanation is missing,
+    and the run is REFUSED."""
+    def cannot_add_noise(y, sr, target, band="M", *, trim_s=lt.TRIM_S, seed=11):
+        raise lt.Refused(f"cannot raise the {band} floor to {target:.2f} dB: noise can only be added")
+    monkeypatch.setattr(lt, "match_floor", cannot_add_noise)
+    refs = corpora("clean5025")
+    out = tmp_path / "r.json"
+    rc = main_fast(refs, out=out)
+    assert rc == lt.REFUSED, capsys.readouterr().out
+    res = json.loads(out.read_text())
+    assert _refused(res) == {("3.5s", "CY5025")}
+    runs = res["noise_floor_control"]["runs"]
+    assert set(runs) == {"matched", "ten_db_noisier"}
+    assert all("refused" in r for r in runs.values()), runs
+    assert len(res["unexpected_refusals"]) == 2, res["unexpected_refusals"]
+    lines = _refused_lines(capsys.readouterr().out)
+    assert len(lines) == 1 and lines[0].count("noise-floor control") == 2, lines
+
+
+def test_main_refuses_when_the_candidate_refuses(corpora, main_fast, tmp_path, monkeypatch, capsys):
+    """The third place: the `--candidate` render refuses in every window (its
+    calibration is per run), exactly as `ce.calibrate` raising would leave it."""
+    def refuses(*, trim_s=lt.TRIM_S):
+        raise refusal.Refused("the candidate's calibration refused (stand-in for ce.calibrate)")
+    monkeypatch.setattr(lt, "candidate", refuses)
+    refs = corpora("clean5025")
+    out = tmp_path / "r.json"
+    rc = main_fast(refs, "--candidate", out=out)
+    assert rc == lt.REFUSED, capsys.readouterr().out
+    res = json.loads(out.read_text())
+    assert _refused(res) == {("3.5s", "CY5025")}
+    assert all("refused" in w["candidate"] for w in res["windows"].values())
+    assert len(res["unexpected_refusals"]) == 3, res["unexpected_refusals"]
+    lines = _refused_lines(capsys.readouterr().out)
+    assert len(lines) == 1 and lines[0].count("candidate in the") == 3, lines
+
+
+def test_the_real_corpus_recorded_result_has_no_unexpected_refusals():
+    """The classifier against the REAL corpus's rows, as the real run recorded
+    them: the 20 in-band refusals are exactly the by-design ones (the five DECAY
+    00 settings at 2.0 s, fifteen settings at 3.5 s), the noise-floor control
+    ran both conditions, and nothing is unexpected -- so the gate is satisfiable
+    on the corpus it will actually meet. The file predates the `record_s` key,
+    which also checks that a result written before #1765 still reads as clean."""
+    if not RESULT.is_file():
+        pytest.skip(f"{RESULT} is not present")
+    res = json.loads(RESULT.read_text())
+    got = _refused(res)
+    assert {w: sum(1 for ww, _ in got if ww == w) for w in BY_DESIGN_REFUSALS_PER_WINDOW} \
+        == BY_DESIGN_REFUSALS_PER_WINDOW
+    assert all("common analysis window" in res["windows"][w]["fischer"][s]["refused"] for w, s in got)
+    assert "refused" not in res["noise_floor_control"]
+    assert not any("refused" in r for r in res["noise_floor_control"]["runs"].values())
+    assert lt.unexpected_refusals(res) == []
 
 
 # --------------------------------------------------------------------------
