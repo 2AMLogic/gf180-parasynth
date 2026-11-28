@@ -320,12 +320,18 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", default="build/scorecard/m5a-filter-rate-v1.json")
     args = parser.parse_args(argv)
+    out = pathlib.Path(args.out)
+    if not out.is_absolute():
+        out = ROOT / out
+    if not out.resolve().is_relative_to(ROOT):
+        print("measure_m5a_filter_oversample: REFUSED -- output must stay inside the repository")
+        return REFUSED
+    out = out.resolve()
     try:
         report = run(ROOT / "build/scorecard/m5a-filter-rate-audio")
     except refusal.Refused as exc:
         print(f"REFUSED: {exc}")
         return REFUSED
-    out = ROOT / args.out
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps({"report": str(out.relative_to(ROOT)),

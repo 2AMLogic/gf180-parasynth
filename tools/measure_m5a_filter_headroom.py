@@ -237,14 +237,18 @@ def main(argv=None) -> int:
     parser.add_argument("--recompare-report", type=pathlib.Path,
                         help="recompute acceptance decisions from a complete saved measurement without rerendering")
     args = parser.parse_args(argv)
+    out = (args.recompare_report if args.recompare_report is not None
+           else ROOT / args.out)
+    if not out.resolve().is_relative_to(ROOT):
+        print("measure_m5a_filter_headroom: REFUSED -- output must stay inside the repository")
+        return REFUSED
+    out = out.resolve()
     try:
         if args.recompare_report is not None:
-            out = args.recompare_report
             report = _recompare_report(out)
         else:
             report = run(ROOT / "build/scorecard/m5a-filter-headroom-audio",
                          args.reuse_offline_report, args.reuse_causal_report)
-            out = ROOT / args.out
     except refusal.Refused as exc:
         print(f"REFUSED: {exc}")
         return REFUSED

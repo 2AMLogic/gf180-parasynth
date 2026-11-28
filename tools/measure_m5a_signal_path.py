@@ -174,8 +174,14 @@ def main(argv=None) -> int:
                     help="controlled oscillator challenger: use the naive saw before the same 2x decimator")
     ap.add_argument("--out", default="build/scorecard/m5a-signal-path.json")
     args = ap.parse_args(argv)
+    out = pathlib.Path(args.out)
+    if not out.is_absolute():
+        out = ROOT / out
+    if not out.resolve().is_relative_to(ROOT):
+        print("measure_m5a_signal_path: REFUSED -- output must stay inside the repository")
+        return 2
+    out = out.resolve()
     report = measure(args.cutoff, args.drive, blep=not args.disable_polyblep)
-    out = ROOT / args.out
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps({"report": str(out.relative_to(ROOT)),
