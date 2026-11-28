@@ -489,15 +489,52 @@ def test_r2_stale_control_tracer_agrees_with_a_direct_call(tmp_path, monkeypatch
 # ---------------------------------------------------------------------------
 # the committed evidence is internally consistent
 # ---------------------------------------------------------------------------
+def _record() -> dict:
+    return json.loads((ROOT / "docs/verification/refusal-candidate-trace.json").read_text())
+
+
+def _disposition(t: dict) -> str:
+    refusing = [rec["verdict"] for rec in t["runs"].get("refusing") or []]
+    if rct.ESCAPED in refusing:
+        return "escaped"
+    if rct.HANDLED in refusing:
+        return "handled"
+    if refusing:
+        return "shadowed"
+    return "no refusing input"
+
+
 def test_the_committed_record_names_what_it_traced():
-    record = json.loads((ROOT / "docs/verification/refusal-candidate-trace.json").read_text())
+    """The record's headline is counted off its own rows: 37 distinct rows,
+    each in the census it carries, every working run reaching its site."""
+    record = _record()
     rows = {(c["site"], c["callee"]) for c in record["scanner"]["candidates"]}
-    seen = set()
+    seen, kinds = set(), {}
     for t in record["traces"]:
         assert (t["site"], t["callee"]) in rows, t["id"]
         assert t["id"] not in seen
         seen.add(t["id"])
+        working = t["runs"]["working"]
+        assert working and all(rec["verdict"] == rct.RETURNED and rec["site_executed"] for rec in working), t["id"]
         for role, recs in t["runs"].items():
             for rec in recs or []:
                 assert rec["verdict"] in (rct.ESCAPED, rct.HANDLED, rct.RETURNED, rct.NOT_REACHED, rct.UNRESOLVED)
+        kinds[_disposition(t)] = kinds.get(_disposition(t), 0) + 1
     assert len(seen) == 37
+    assert kinds == {"no refusing input": 18, "escaped": 12, "shadowed": 4, "handled": 3}
+    for t in record["traces"]:                      # an escaped row says how
+        if _disposition(t) == "escaped":
+            escaped = [rec for rec in t["runs"]["refusing"] if rec["verdict"] == rct.ESCAPED]
+            assert all(rec["traceback"] and rec["exit_status"] == 1 and rec["uncaught"]["followed"] for rec in escaped)
+            assert all(rec["follows"][-1]["left_entry"] for rec in escaped)
+
+
+def test_three_working_runs_exit_nonzero_by_design_and_reach_their_site():
+    record = _record()
+    for id_, status in (("tools/probes/audio_distance_floor.py:705", 2),
+                        ("fpga/release/r2_release.py:372", 1),
+                        ("tools/verify_m5a_filter2x_i2s.py:50", 2)):
+        [t] = [t for t in record["traces"] if t["id"] == id_]
+        rec = t["runs"]["working"][0]
+        assert rec["verdict"] == rct.RETURNED and rec["site_executed"] == [t["site"]], id_
+        assert rec["exit_status"] == status and not rec["traceback"], (id_, rec["exit_status"])

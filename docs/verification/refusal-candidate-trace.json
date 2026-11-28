@@ -1105,11 +1105,11 @@
    "relabelled(cli-total)": 4
   }
  },
- "revision": "8e2eb94ef10df2abca010652325cfa4e893bc60b",
+ "revision": "c9584c655b9a729b6b4254355c638bc3fd8b25b0",
  "sessions": {
   "adf": "8e2eb94ef10df2abca010652325cfa4e893bc60b\n",
   "hh5": "8e2eb94ef10df2abca010652325cfa4e893bc60b\n",
-  "toms": "8e2eb94ef10df2abca010652325cfa4e893bc60b\n",
+  "toms": "c9584c655b9a729b6b4254355c638bc3fd8b25b0\n",
   "headroom": "8e2eb94ef10df2abca010652325cfa4e893bc60b\n",
   "heavy": "8e2eb94ef10df2abca010652325cfa4e893bc60b\n",
   "fpga": "8e2eb94ef10df2abca010652325cfa4e893bc60b\n"
@@ -9175,7 +9175,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 67.4,
+      "seconds": 67.0,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -9240,7 +9240,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 7.8,
+      "seconds": 10.2,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -9290,24 +9290,122 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 0.1,
-      "exit_status": 2,
+      "seconds": 94.6,
+      "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
-       "REFUSED: uncommitted changes in model, tools, docs/scorecard/tom-distortion-593/prereg.json:",
-       "M tools/refusal_candidate_traces.py"
+       "{}"
       ],
       "stderr_tail": [],
       "harness_frame_in_traceback": false,
       "wrap_missing": [],
-      "system_exit": 2,
+      "system_exit": 0,
       "uncaught": null,
       "all_raised": [],
-      "calls": [],
+      "calls": [
+       {
+        "callee": "run_case.render_drum_solo",
+        "caller": {
+         "file": "tools/probes/tom_distortion.py",
+         "line": 1579,
+         "first": 1579,
+         "last": 1579,
+         "fn": "baseline"
+        },
+        "args": [
+         "LT"
+        ],
+        "kwargs": {},
+        "outcome": "returned",
+        "returned": "tuple(2)"
+       },
+       {
+        "callee": "run_case.render_drum_solo",
+        "caller": {
+         "file": "tools/probes/tom_distortion.py",
+         "line": 1579,
+         "first": 1579,
+         "last": 1579,
+         "fn": "baseline"
+        },
+        "args": [
+         "MT"
+        ],
+        "kwargs": {},
+        "outcome": "returned",
+        "returned": "tuple(2)"
+       },
+       {
+        "callee": "run_case.render_drum_solo",
+        "caller": {
+         "file": "tools/probes/tom_distortion.py",
+         "line": 1579,
+         "first": 1579,
+         "last": 1579,
+         "fn": "baseline"
+        },
+        "args": [
+         "HT"
+        ],
+        "kwargs": {},
+        "outcome": "returned",
+        "returned": "tuple(2)"
+       },
+       {
+        "callee": "run_case.render_drum_solo",
+        "caller": {
+         "file": "tools/probes/tom_distortion.py",
+         "line": 1579,
+         "first": 1579,
+         "last": 1579,
+         "fn": "baseline"
+        },
+        "args": [
+         "LC"
+        ],
+        "kwargs": {},
+        "outcome": "returned",
+        "returned": "tuple(2)"
+       },
+       {
+        "callee": "run_case.render_drum_solo",
+        "caller": {
+         "file": "tools/probes/tom_distortion.py",
+         "line": 1579,
+         "first": 1579,
+         "last": 1579,
+         "fn": "baseline"
+        },
+        "args": [
+         "MC"
+        ],
+        "kwargs": {},
+        "outcome": "returned",
+        "returned": "tuple(2)"
+       },
+       {
+        "callee": "run_case.render_drum_solo",
+        "caller": {
+         "file": "tools/probes/tom_distortion.py",
+         "line": 1579,
+         "first": 1579,
+         "last": 1579,
+         "fn": "baseline"
+        },
+        "args": [
+         "HC"
+        ],
+        "kwargs": {},
+        "outcome": "returned",
+        "returned": "tuple(2)"
+       }
+      ],
       "follows": [],
-      "site_executed": [],
-      "calls_total": 0,
-      "verdict": "NOT-REACHED",
+      "site_executed": [
+       "tools/probes/tom_distortion.py:1579"
+      ],
+      "calls_total": 6,
+      "verdict": "RETURNED",
       "share": null
      }
     ],
@@ -9321,7 +9419,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 7.5,
+      "seconds": 8.6,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -9373,24 +9471,80 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 0.9,
-      "exit_status": 2,
+      "seconds": 78.1,
+      "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
-       "REFUSED: dirty-tree: uncommitted changes in model, tools, fpga, docs/scorecard/tom-pitch-drop-592/prereg.json:",
-       "M tools/refusal_candidate_traces.py"
+       "LT25 [development] REFUSED 808-route-disagreement ",
+       "LT50 [development] MEASURED  808 E +0.0272 tau 54.7 ms | ours E +0.0764 tau 14.7 ms",
+       "LT75 [development] MEASURED  808 E +0.0472 tau 50.5 ms | ours E +0.0860 tau 15.3 ms",
+       "MT50 [development] MEASURED  808 E +0.0238 tau 33.8 ms | ours E +0.0696 tau 15.7 ms",
+       "HT25 [development] REFUSED no-tuning-reference ",
+       "HT50 [development] REFUSED no-tuning-reference ",
+       "HT75 [development] REFUSED no-tuning-reference"
       ],
       "stderr_tail": [],
       "harness_frame_in_traceback": false,
       "wrap_missing": [],
-      "system_exit": 2,
+      "system_exit": 0,
       "uncaught": null,
       "all_raised": [],
-      "calls": [],
+      "calls": [
+       {
+        "callee": "run_case.render_drum_solo",
+        "caller": {
+         "file": "tools/probes/tom_pitch_drop_fischer.py",
+         "line": 771,
+         "first": 771,
+         "last": 771,
+         "fn": "assert_unity_is_shipped"
+        },
+        "args": [
+         "LT"
+        ],
+        "kwargs": {},
+        "outcome": "returned",
+        "returned": "tuple(2)"
+       },
+       {
+        "callee": "run_case.render_drum_solo",
+        "caller": {
+         "file": "tools/probes/tom_pitch_drop_fischer.py",
+         "line": 771,
+         "first": 771,
+         "last": 771,
+         "fn": "assert_unity_is_shipped"
+        },
+        "args": [
+         "MT"
+        ],
+        "kwargs": {},
+        "outcome": "returned",
+        "returned": "tuple(2)"
+       },
+       {
+        "callee": "run_case.render_drum_solo",
+        "caller": {
+         "file": "tools/probes/tom_pitch_drop_fischer.py",
+         "line": 771,
+         "first": 771,
+         "last": 771,
+         "fn": "assert_unity_is_shipped"
+        },
+        "args": [
+         "HT"
+        ],
+        "kwargs": {},
+        "outcome": "returned",
+        "returned": "tuple(2)"
+       }
+      ],
       "follows": [],
-      "site_executed": [],
-      "calls_total": 0,
-      "verdict": "NOT-REACHED",
+      "site_executed": [
+       "tools/probes/tom_pitch_drop_fischer.py:771"
+      ],
+      "calls_total": 3,
+      "verdict": "RETURNED",
       "share": null
      }
     ],
@@ -9404,7 +9558,7 @@
       "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1576",
       "expect": null,
       "note": null,
-      "seconds": 7.6,
+      "seconds": 8.0,
       "exit_status": 0,
       "traceback": false,
       "stdout_tail": [
@@ -9545,6 +9699,7 @@
  "production_revision": "ebba993d32eef6484b9f956b452ec263db87ff2f",
  "touched_only": [
   "docs/verification/refusal-candidate-trace.json",
+  "docs/verification/refusal-candidate-trace.md",
   "tools/refusal_candidate_trace.py",
   "tools/refusal_candidate_traces.py",
   "tools/test_refusal_candidate_trace.py"

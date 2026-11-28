@@ -46,11 +46,14 @@ The record carries the scanner's revision, roots, classification counts and
 all 90 candidate rows under `scanner`, so a reader can compare the traced rows
 with the census they came from without re-deriving either.
 
-**The tree, and what differs from `ebba993d`.** Every group ran on a clean
-tree; `sessions` in the record names the commit of each. Between `ebba993d`
-and those commits this PR's three files under `tools/` are the whole
-difference (`touched_only`): no production file changed, so a row's behaviour
-is `ebba993d`'s.
+**The tree, and what differs from `ebba993d`.** Every row in the committed
+record was taken on a clean tree; `sessions` names the commit of each group.
+Between `ebba993d` and those commits this PR's own files under `tools/` and
+`docs/verification/` are the whole difference: no production file changed, so
+a row's behaviour is `ebba993d`'s. The `toms` group is at a later commit than
+the rest because its first run refused this PR's then-uncommitted edit to
+`tools/` -- three probes assert a clean tree before they measure, which is
+their precondition working -- and it was re-run after the commit.
 
 ## The twelve escapes
 
@@ -184,7 +187,7 @@ before the RTL child is launched, and the child was cut off by the tool's own
 `--timeout 45` (its NO-VERDICT, exit 2) because the full RTL phrase is a
 build-box run.
 
-<!-- claim: test=tools/test_refusal_candidate_trace.py::test_a_working_input_reports_the_call_returned -->
+<!-- claim: test=tools/test_refusal_candidate_trace.py::test_three_working_runs_exit_nonzero_by_design_and_reach_their_site -->
 
 ## Calibration: the R2 host stale-control, both ways
 
@@ -276,9 +279,9 @@ revised as each was found; the revision is the point of keeping them.
   clause, and reads as the frame leaving. A one-line `except X: return` that
   returns `None` is the one shape that cannot be told from a non-match.
 - `midi_session.py --port sim` refuses on a host whose one-minute load exceeds
-  its CPU count. The session's first attempt fell on such a host and is
-  `UNRESOLVED` in an earlier record; the committed one was taken at a lower
-  load. A re-run on a loaded host will say so rather than guess.
+  its CPU count. An earlier session of this trace fell on such a host and its
+  session-CLI rows read `UNRESOLVED`; the committed one was taken below it. A
+  re-run on a loaded host will say so rather than guess.
 - The corpus fixtures need the Fischer corpus (`GF180_TR808_REFS`), the
   simulated session needs pyserial, and one working run needs the restored
   frozen reference audio; a missing prerequisite is an `UNRESOLVED` row, never
