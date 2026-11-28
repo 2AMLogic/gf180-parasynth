@@ -19,6 +19,14 @@ assertions a later edit could delete without noticing. #1595 changes what
 `build_selected.simulation_evidence()` checks, which is the neighbourhood of
 the edit that would put the traceback back.
 
+#1676 widened that handler to the two classes the OS and the git child raise
+when the stored evidence is not there to be read, the same three
+`build_selected.main()` records from the same call, and renders the reason
+through `build_selected.child_failure` so a commit git cannot show is recorded
+with the line that names it. `ENVIRONMENT_REFUSALS_ESCAPE_THE_CALL` is the
+pre-#1676 handler again; `CHILD_STDERR_DROPPED_FROM_THE_REFUSAL` is the
+reason with that line removed.
+
 So each entry below re-breaks `publish()` a different way, in memory, and this
 tool asserts the suite turns RED **and names the test that must be among the
 failures**. The mutation is a text substitution applied to the source of
@@ -44,6 +52,7 @@ from control_dag_lib import ROOT, main as lib_main, run_control, run_raw  # noqa
 
 SUITE = "test_publish_selected.py"
 REFUSED = "test_refused_stored_simulation_is_a_no_verdict_publication_not_a_traceback"
+UNREADABLE = "test_an_unreadable_record_or_commit_at_the_call_is_a_no_verdict_publication_not_a_traceback"
 NOT_MASKED = "test_a_genuine_bug_is_not_masked_as_a_refusal"
 
 RUNNER = """
@@ -65,7 +74,8 @@ assert patched != source, "the injection site is gone: this control no longer in
 exec(patched, vars(ps))
 """
 
-AT_THE_CALL = "except RuntimeError as exc:"
+AT_THE_CALL = "except (RuntimeError, OSError, subprocess.CalledProcessError) as exc:"
+REASON_RECORDED = "sim_refusal = None, build_selected.child_failure(exc)"
 BUILD_HANDLER = "except (ValueError, FileNotFoundError, KeyError) as exc:"
 
 #: name -> (the text replaced inside `publish`, its replacement), the test that
@@ -84,7 +94,7 @@ CONTROLS = {
         "the catch kept and the consequence dropped: the refusal is captured "
         "and the build checks then qualify the bitstream over it"),
     "REFUSAL_REASON_REPLACED": (
-        ("sim_refusal = None, str(exc)", 'sim_refusal = None, "stored simulation refused"'),
+        (REASON_RECORDED, 'sim_refusal = None, "stored simulation refused"'),
         f"{REFUSED}[BUILT]",
         "NO-VERDICT with a reason that no longer says which file differs from "
         "which recorded simulation, so nothing on the summary names the repair"),
@@ -112,6 +122,19 @@ CONTROLS = {
         "'also catch everything' applied at the call: a malformed record's "
         "TypeError is reported as a refusal, with its message, instead of "
         "surfacing as the bug it is"),
+    "ENVIRONMENT_REFUSALS_ESCAPE_THE_CALL": (
+        (AT_THE_CALL, "except RuntimeError as exc:"),
+        f"{UNREADABLE}[missing-record-BUILT]",
+        "the exact broken behaviour of #1676 and the handler before it: the two "
+        "classes the OS and the git child raise for evidence that is not there "
+        "to be read are no longer caught at the call, and a missing M5A record "
+        "leaves `publish()` as itself with the build's reports lost"),
+    "CHILD_STDERR_DROPPED_FROM_THE_REFUSAL": (
+        (REASON_RECORDED, "sim_refusal = None, str(exc)"),
+        f"{UNREADABLE}[unreadable-commit-BUILT]",
+        "the refusal kept and its reason hollowed: a commit git cannot show is "
+        "recorded as 'returned non-zero exit status 128' without the line that "
+        "names the object, which is where git says why"),
 }
 
 

@@ -106,10 +106,16 @@ def publish(artifact: Path, output: Path, workflow_url: str, *, historical=False
                 if hashlib.sha256(simulated).hexdigest() != digest:
                     raise ValueError(f"historical core differs from simulation: {name}")
     else:
+        # The three classes a precondition not met arrives in from this call,
+        # the same three build_selected.main() records from it: the callee's own
+        # stated refusals, a record or source the OS could not read, a recorded
+        # commit git says this clone does not hold. child_failure keeps what the
+        # child said on stderr, which str() leaves out. Nothing wider: a
+        # TypeError there is a defect and must surface (the test file says why).
         try:
             simulation = build_selected.simulation_evidence()
-        except RuntimeError as exc:
-            simulation, sim_refusal = None, str(exc)
+        except (RuntimeError, OSError, subprocess.CalledProcessError) as exc:
+            simulation, sim_refusal = None, build_selected.child_failure(exc)
     if sim_refusal is None and simulation != report["simulation_evidence"]:
         raise ValueError("core simulation binding differs")
     original_hashes = {p.name: sha256(p) for p in build.iterdir() if p.is_file()}

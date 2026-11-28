@@ -115,6 +115,20 @@ def raising(exc):
     return raiser
 
 
+#: How a refused stored simulation arrives from `simulation_evidence()`: stated
+#: by the function itself, or by the OS for a record that is not on disk, or by
+#: the git child for a recorded commit this clone does not hold (stderr attached,
+#: because the call captured it). Each with the reason the publication carries.
+_RECORD, _GIT_SHOW = "docs/scorecard/results/M5A.json", ["git", "show", "1" * 40 + ":rtl-sketch/synth_top.v"]
+UNMET = [
+    pytest.param(RuntimeError(REFUSAL), REFUSAL, id="runtime-error"),
+    pytest.param(FileNotFoundError(2, "No such file or directory", _RECORD),
+                 f"[Errno 2] No such file or directory: {_RECORD!r}", id="missing-record"),
+    pytest.param(subprocess.CalledProcessError(128, _GIT_SHOW, stderr=b"fatal: invalid object name\n"),
+                 f"Command '{_GIT_SHOW}' returned non-zero exit status 128.\nfatal: invalid object name",
+                 id="unreadable-commit")]
+
+
 @pytest.mark.parametrize("report_state", ["BUILT", "REFUSED", "FAIL"])
 def test_refused_stored_simulation_is_a_no_verdict_publication_not_a_traceback(tmp_path, monkeypatch, report_state):
     artifact, _ = built_artifact(tmp_path, state=report_state)
@@ -129,17 +143,55 @@ def test_refused_stored_simulation_is_a_no_verdict_publication_not_a_traceback(t
     assert json.loads((out / "publication.json").read_text()) == summary
 
 
-def test_cli_exits_2_without_a_traceback_when_the_stored_simulation_is_refused(tmp_path, monkeypatch, capsys):
+@pytest.mark.parametrize("unmet, reason", UNMET)
+def test_cli_exits_2_without_a_traceback_when_the_stored_simulation_is_refused(tmp_path, monkeypatch, capsys, unmet, reason):
     artifact, _ = built_artifact(tmp_path)
-    monkeypatch.setattr(build_selected, "simulation_evidence", raising(RuntimeError(REFUSAL)))
+    monkeypatch.setattr(build_selected, "simulation_evidence", raising(unmet))
     out = tmp_path / "publication"
     monkeypatch.setattr(sys, "argv", ["publish_selected.py", str(artifact), "--workflow-url", WORKFLOW, "--out", str(out)])
     with pytest.raises(SystemExit) as stopped:
         runpy.run_path(publish_selected.__file__, run_name="__main__")
     assert stopped.value.code == 2
-    assert json.loads(capsys.readouterr().out) == json.loads((out / "publication.json").read_text())
+    printed = capsys.readouterr()
+    assert printed.err == ""
+    published = json.loads((out / "publication.json").read_text())
+    assert json.loads(printed.out) == published
+    assert published["reason"] == reason
 
 
+@pytest.mark.parametrize("report_state", ["BUILT", "REFUSED", "FAIL"])
+@pytest.mark.parametrize("unmet, reason", UNMET[1:])
+def test_an_unreadable_record_or_commit_at_the_call_is_a_no_verdict_publication_not_a_traceback(tmp_path, monkeypatch, report_state, unmet, reason):
+    """`simulation_evidence()` reads the M5A record, the transcript, this
+    checkout's sources and what git answers for the recorded simulation commit.
+    One of those not being there to be read is a precondition that was not met,
+    so REFUSED with the build's reports kept -- as `build_selected.main()`
+    records the same two classes from the same call, and as this function
+    records the `RuntimeError`s the callee states itself. Both left `publish()`
+    as themselves: the reports were lost beside a traceback at exit 1, or, for
+    the child, beside the CLI block's REFUSED line with nothing published."""
+    artifact, _ = built_artifact(tmp_path, state=report_state)
+    monkeypatch.setattr(build_selected, "simulation_evidence", raising(unmet))
+    out = tmp_path / "publication"
+    summary = publish_selected.publish(artifact, out, WORKFLOW)
+    assert summary["state"] == "NO-VERDICT"
+    assert summary["reason"] == reason
+    assert summary["bitstream_qualified"] is False
+    assert summary["simulation_evidence"] is None
+    assert (out / "report.json").is_file()
+    assert json.loads((out / "publication.json").read_text()) == summary
+
+
+# The other side of that handler's decision, and why the TypeError below is not
+# a refusal: `simulation_evidence()` takes no argument. When what it reads is
+# not there, the OS says so (OSError) or the child says so (CalledProcessError)
+# and nothing was measured -- a precondition, REFUSED. A TypeError is neither's
+# way of saying that: it is what the code raises on a record it cannot
+# interpret (a list or `null` where it indexes a mapping), which it should have
+# stated as a RuntimeError. Catching it would file that defect as a NO-VERDICT
+# publication whose reason is "list indices must be integers", so it surfaces
+# -- and `except Exception` at the call is BARE_EXCEPT_AT_THE_CALL in
+# tools/control_publish_selected_refusal.py, which must stay red on this case.
 @pytest.mark.parametrize("site, bug", [
     pytest.param("timing_summary", RuntimeError("genuine bug"), id="runtime-error-after-the-call"),
     pytest.param("simulation_evidence", TypeError("genuine bug"), id="other-exception-at-the-call")])
