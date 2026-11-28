@@ -207,6 +207,10 @@ def _cli(refs: pathlib.Path, home: pathlib.Path) -> tuple[subprocess.CompletedPr
     env[rc.REFS_ENV] = env[rc.REFS_ALIAS_ENV] = str(refs)
     env["HOME"] = str(home)
     out = home / "final-strike.json"
+    # Asserted at the point of use: with a FILE as `home`, `out.exists()` is
+    # False whatever the child did, so every "no record written" check below
+    # would be unfalsifiable.
+    assert home.is_dir() and out.parent.is_dir(), ("`home` must be a directory", home)
     p = subprocess.run(
         [sys.executable, str(TOOL), "--refs", str(refs), "--out", str(out), "--jobs", "1"],
         capture_output=True, text=True, timeout=300, env=env, cwd=str(ROOT))
@@ -280,10 +284,16 @@ def test_cli_silent_reference_exits_refused_2_past_the_corpus_check(tmp_path):
     on the shipped kit together with an `rc.Refused` handler stays green,
     while the re-baseline alone (exit 1, a `preparation_contract.Refused`
     traceback) turns this red."""
-    p, out = _cli(*_corpus(tmp_path, "silent"))
+    refdir, _ = _corpus(tmp_path, "silent")
+    p, out = _cli(refdir, tmp_path)
     assert p.returncode == exit_contract.REFUSED, (p.returncode, p.stderr[-400:])
     assert "REFUSED" in p.stdout, p.stdout[-400:]
     assert not any(r in p.stdout for r in CORPUS_REASONS), ("stopped by the corpus check", p.stdout[-400:])
+    # Either legitimate stop past the corpus check -- the renderer precondition
+    # or the loader's silent-CP refusal -- and no other: an unrelated REFUSED
+    # must turn this red.
+    assert ("does not reproduce render_drum_solo('CP') bit for bit" in p.stdout
+            or "is silent" in p.stdout), p.stdout[-400:]
     assert "Traceback" not in p.stderr and "Traceback" not in p.stdout, p.stderr[-400:]
     assert "condition" not in p.stdout, "a refused run must not start its table"
     assert not out.exists(), "a refused run must not write a record"
@@ -293,11 +303,13 @@ def test_cli_absent_corpus_root_keeps_its_refused_2(tmp_path):
     p, out = _cli(tmp_path / "no-such-refs", tmp_path)
     assert p.returncode == exit_contract.REFUSED, (p.returncode, p.stderr[-400:])
     assert "REFUSED" in p.stdout and "Traceback" not in p.stderr, (p.stdout[-400:], p.stderr[-400:])
+    assert "reference manifest missing" in p.stdout, p.stdout[-400:]
     assert not out.exists()
 
 
 def test_cli_absent_listed_file_is_stopped_by_the_manifest(tmp_path):
-    p, out = _cli(*_corpus(tmp_path, "absent"))
+    refdir, _ = _corpus(tmp_path, "absent")
+    p, out = _cli(refdir, tmp_path)
     assert p.returncode == exit_contract.REFUSED, (p.returncode, p.stderr[-400:])
     assert "REFUSED" in p.stdout and "1 of 1 reference files differ from" in p.stdout, p.stdout[-400:]
     assert "Traceback" not in p.stderr and not out.exists()
