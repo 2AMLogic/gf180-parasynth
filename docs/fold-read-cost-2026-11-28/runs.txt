@@ -1,0 +1,39 @@
+job id, conclusion, started, completed (GitHub Actions API, read 2026-11-28)
+
+first run, REFUSED by the instrument's own bare gate:
+  run 46168372419 workflow fold-read-profile-once event push
+  branch throwaway/fold-read-profile-2112 head d725c95528a2487e1b16b9b1708d90c33c67ee1c
+  created 2026-11-28T17:02:54Z
+  the instrument, its controls, and the share: job 141050935331 failure
+    2026-11-28T17:02:56Z -> 2026-11-28T17:42:36Z, runner label ubuntu-24.04
+    the instrument's own controls, on this runner: success, 17:03:16 -> 17:03:49
+    where the fold's reads go, with the slowed-read control: failure (exit 2), 17:03:49 -> 17:42:33
+  its report is in first-run-refused/: the numbers are on disk and none of them is evidence
+
+before, the kernel evaluated per position (model/discrimination_features.py as on main):
+  run 46172801612 workflow fold-read-profile-once event push
+  branch throwaway/fold-read-profile-2112-before head df2be4207685efaf0ecf767c9d63c3234ff35c9f
+  created 2026-11-28T17:52:35Z
+  df2be420 is 781e7664 (tools/fold_read_profile.py with the sweep cache) plus this workflow
+  the instrument, its controls, and the share: job 141064759426 success
+    2026-11-28T17:52:37Z -> 2026-11-28T18:43:52Z, runner label ubuntu-24.04
+    the instrument's own controls, on this runner: success, 17:52:57 -> 17:53:35
+    where the fold's reads go, with the slowed-read control: success (verdict CONTROL), 17:53:35 -> 18:43:49
+
+after, the kernel read off a table:
+  run 46174507777 workflow fold-read-profile-once event push
+  branch throwaway/fold-read-profile-2112-after head 7f5a3e95dcdaf5aab52ac671466cf93c13e3d6cc
+  created 2026-11-28T18:11:41Z
+  7f5a3e95 is 1501a7d4 (the kernel table, and the instrument's docstring) plus this workflow
+  the instrument, its controls, and the share: job 141070056855 success
+    2026-11-28T18:11:44Z -> 2026-11-28T18:55:23Z, runner label ubuntu-24.04
+    the instrument's own controls, on this runner: success, 18:12:02 -> 18:12:33
+    where the fold's reads go, with the slowed-read control: success (verdict CONTROL), 18:12:33 -> 18:55:19
+
+The before and after runs overlapped (17:52 to 18:43 against 18:11 to 18:55) on two
+runners. Both landed on an AMD EPYC 7763 with 4 vCPUs; the first run, refused, was on an
+Intel Xeon Platinum 8573C with 4 vCPUs and is compared with nothing.
+
+tools/fold_read_profile.py is byte-identical between the before and after heads except
+for its module docstring (781e7664 -> 1501a7d4 touches that docstring and the kernel).
+model/discrimination_features.py differs between them by the kernel and its three tests.

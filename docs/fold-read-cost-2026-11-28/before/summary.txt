@@ -1,0 +1,48 @@
+fold_read_profile: CONTROL
+  3.12.16, numpy 2.5.5, scipy 1.18.1, pytest 9.2.0, AMD EPYC 7763 64-Core Processor x 4, load 0.81/0.27/0.10 at start, source node/D-drums-bitexact-4050-gdf2be420, 3 repeat(s)
+  candidate             kind    ci   wall s  read_at s    share   min .. max     calls  kernel pos  index pos  material
+  ----------------------------------------------------------------------------------------------------------------------
+  self-tests            pytest  yes     23.43       7.866  33.54%   33.48% ..  33.69%      940     5439551           0  -
+                        bare twin, no wrapper, median of 3: 23.41 s
+      _fold_at<-mpd_features@16                        840 calls     4353542 positions     6.367 s
+      _fold_at<-jitter_features@16                      91 calls      985693 positions     1.403 s
+      _fold_at<-test_a_fixed_stride_fold_is_not_a_drift_measure@16       6 calls       68612 positions     0.068 s
+      _fold_at<-test_the_fold_reduces_to_indexing_on_a_whole_period@16       3 calls       31704 positions     0.031 s
+  test_discrimination   pytest  yes     46.81       0.412   0.88%    0.88% ..   0.93%       62      255084           0  -
+                        bare twin, no wrapper, median of 3: 47.01 s
+      _fold_at<-mpd_features@16                         60 calls      233916 positions     0.389 s
+      _fold_at<-jitter_features@16                       2 calls       21168 positions     0.031 s
+  test_fold_rate_sweep  pytest  yes      8.50       2.504  29.46%   29.39% ..  29.47%      271     1727261           0  -
+                        bare twin, no wrapper, median of 3: 8.50 s
+      _fold_at<-mpd_features@16                        228 calls     1247686 positions     1.848 s
+      _fold_at<-jitter_features@16                      25 calls      273739 positions     0.381 s
+      _fold_at<-<genexpr>@16                            18 calls      205836 positions     0.275 s
+  test_dphase_floor_census pytest  yes      5.27       2.260  42.90%   42.80% ..  42.98%      273     1533420           0  -
+                        bare twin, no wrapper, median of 3: 5.27 s
+      _fold_at<-mpd_features@16                        252 calls     1311156 positions     1.956 s
+      _fold_at<-jitter_features@16                      21 calls      222264 positions     0.304 s
+  test_promoted_bands   pytest  yes      2.59       0.012   0.48%    0.47% ..   0.48%        1        8140           0  -
+                        bare twin, no wrapper, median of 3: 2.50 s
+      _fold_at<-jitter_features@16                       1 calls        8140 positions     0.012 s
+  fold_rate_sweep       script  no     228.40      73.919  32.43%   32.36% ..  32.47%    16072    81037500    13506250  MATERIAL
+                        bare twin, no wrapper, median of 3: 227.42 s
+      _fold_at<-mpd_features@32                       2112 calls    11479952 positions    28.681 s
+      _fold_at<-mpd_features@16                       2112 calls    11479952 positions    16.872 s
+      _fold_at<-mpd_features@8                        2112 calls    11479952 positions     9.025 s
+      _fold_at<-jitter_features@32                     178 calls     1957686 positions     5.478 s
+      _fold_at<-mpd_features@4                        2112 calls    11479952 positions     4.547 s
+      _fold_at<-jitter_features@16                     178 calls     1957686 positions     2.748 s
+      _fold_at<-mpd_features@2                        2112 calls    11479952 positions     2.292 s
+      _fold_at<-jitter_features@8                      178 calls     1957686 positions     1.394 s
+  rate_tol_sweep        script  no      91.91      37.678  40.98%   40.84% ..  41.01%     4397    25796513           0  MATERIAL
+                        bare twin, no wrapper, median of 3: 92.29 s
+      _fold_at<-mpd_features@16                       4056 calls    22046726 positions    32.382 s
+      _fold_at<-jitter_features@16                     341 calls     3749787 positions     5.299 s
+  dphase_floor_sweep    script  no      13.52       1.601  11.83%   11.69% ..  11.84%      102     1101198           0  -
+                        bare twin, no wrapper, median of 3: 13.50 s
+      _fold_at<-jitter_features@16                     102 calls     1101198 positions     1.593 s
+  headline fold_rate_sweep: read the most kernel positions (81037500); `_read_at` is  32.43% of its wall, 73.92 s of 228.40 s
+  by the rule fixed before the measurement (>= 10% of the run AND >= 10 s in one run): fold_rate_sweep, rate_tol_sweep are MATERIAL
+  one extra_features call on a 0.24 s clip: `_read_at`  55.12% of 191.0 ms, 72836 kernel positions, 13 calls
+  excluded from the ranking: tools/dphase_floor_census.py (needs the Fischer corpus, GF180_TR808_REFS, and computes its rows in a process pool, so a wrapper in the parent would time none of its folds and would read exactly like a free kernel; its per-row cost is the extra_features component instead); tools/fold_read_profile.py (this instrument: its own calls are the toy workload); tools/test_fold_read_profile.py (this instrument's controls, on workloads of about a second)
+  control: the headline's `_read_at` made to run 5 times over is  68.71% of its run, 314.74 s of 458.11 s

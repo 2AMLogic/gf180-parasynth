@@ -435,6 +435,59 @@ def _fold(x: np.ndarray, p: int) -> np.ndarray:
     return x[:n * p].reshape(n, p) if n >= 2 else np.empty((0, p))
 
 
+FOLD_KERNEL_ROWS = 8192
+KERNEL_ERROR_BOUND = 1e-12
+_KERNEL_CHUNK = 1 << 15
+_KERNELS: dict[tuple[int, int], tuple] = {}
+
+
+def _fold_kernel(taps: int, rows: int | None = None) -> tuple:
+    """The Hann-windowed sinc `_read_at` reads with, as a cubic table over the
+    fractional part of a position (#2112).
+
+    The kernel depends on the fractional part alone, and that lies in [0, 1],
+    so it is evaluated once per tap width, at the `rows` nodes of [0, 1] and
+    one node beyond each end, and read off between them by the cubic through
+    the four neighbouring rows. Returns the four coefficient arrays of that
+    cubic, one row per cell: `(n + 1, 2 * taps)` each.
+
+    WHAT IS EXACT AND WHAT IS BOUNDED. A whole position reads at fractional
+    part 0, a node, where the cubic returns the table's own row -- the
+    formula's weights, to the bit -- so a fold at a whole period is still
+    plain indexing. Between nodes the table is not the formula: its error is
+    bounded over the whole of [0, 1] by KERNEL_ERROR_BOUND, per tap and in
+    sum, in `test_the_kernel_table_is_the_formula_over_the_whole_fractional_part`,
+    with a 64-row table as the control that must miss the bound.
+
+    `rows` overrides FOLD_KERNEL_ROWS for that control only. The table is
+    built on first use and kept per (taps, rows); the kernel's dial -- its
+    half-width, the thing the sweep record is about -- stays FOLD_SINC_TAPS."""
+    n = FOLD_KERNEL_ROWS if rows is None else int(rows)
+    key = (int(taps), n)
+    tab = _KERNELS.get(key)
+    if tab is None:
+        k = np.arange(-taps + 1, taps + 1, dtype=float)
+        t = np.arange(-1, n + 3, dtype=float)[:, None] / n - k[None, :]
+        T = np.where(np.abs(t) < taps,
+                     np.sinc(t) * (0.5 + 0.5 * np.cos(np.pi * t / taps)), 0.0)
+        ym, y0, y1, y2 = T[:-3], T[1:-2], T[2:-1], T[3:]
+        tab = (y0, -ym / 3 - y0 / 2 + y1 - y2 / 6, ym / 2 - y0 + y1 / 2,
+               (-ym + 3 * y0 - 3 * y1 + y2) / 6)
+        _KERNELS[key] = tab
+    return tab
+
+
+def _kernel_weights(frac: np.ndarray, taps: int, table: tuple | None = None) -> np.ndarray:
+    """`(positions, 2 * taps)`: the kernel at each fractional part in `frac`,
+    every one of which lies in [0, 1] -- `floor` puts it there, and a part
+    just under 1 may round up to the last node, which the table holds."""
+    c0, c1, c2, c3 = _fold_kernel(taps) if table is None else table
+    u = frac * (c0.shape[0] - 1)
+    j = u.astype(int)
+    a = (u - j)[:, None]
+    return c0[j] + a * (c1[j] + a * (c2[j] + a * c3[j]))
+
+
 def _read_at(x: np.ndarray, pos: np.ndarray, taps: int) -> np.ndarray:
     """`x` read at FRACTIONAL sample positions, by Hann-windowed sinc.
 
@@ -444,32 +497,45 @@ def _read_at(x: np.ndarray, pos: np.ndarray, taps: int) -> np.ndarray:
     looks like a rate-dependent feature and is not one.
 
     Two properties are load-bearing:
-      * at an INTEGER position the kernel is 1 at that sample and exactly 0
-        at every other (`sinc` of a non-zero integer is 0), so this reduces
-        to plain indexing and a fold whose period happens to be whole
-        reproduces `_fold` to the bit. `test_the_fold_reduces_to_indexing_on_a_whole_period`
-        is that assertion.
+      * at an INTEGER position the kernel is 1 at that sample and `sinc` of a
+        non-zero integer at every other, so this reduces to plain indexing
+        and a fold whose period happens to be whole reproduces `_fold` to
+        float precision. `test_the_fold_reduces_to_indexing_on_a_whole_period`
+        is that assertion, and `test_at_an_integer_position_the_table_is_the_formula_to_the_bit`
+        is the same property at the kernel, to the bit.
       * the kernel is normalised to unit sum, so the read has no DC droop
         that varies with the offset. Normalising is a no-op at an integer
         position, so it does not cost the property above.
+
+    THE KERNEL IS READ OFF A TABLE, not evaluated per position (#2112). Until
+    it was, this function evaluated the Hann-windowed sinc for every tap of
+    every position. `tools/fold_read_profile.py` measured what that cost in
+    every run that folds and what the table gave back; the record is
+    docs/fold-read-cost-2026-11-28.md. See `_fold_kernel` for what the table
+    keeps exact and for the bound on what it does not; the sum over the taps
+    is taken in one piece now, so the last bits of a read at a fractional
+    position may differ from the per-tap accumulation it replaces.
 
     Outside the clip `x` is zero, which is the same convention `_fold` has by
     dropping the remainder.
     """
     x = np.asarray(x, float)
+    pos = np.asarray(pos, float)
     if taps <= 0:
         return x[np.clip(np.rint(pos).astype(int), 0, len(x) - 1)]
     xp = np.concatenate([np.zeros(taps), x, np.zeros(taps)])
-    i0 = np.floor(pos).astype(int)
-    out = np.zeros(pos.shape, float)
-    wsum = np.zeros(pos.shape, float)
-    for k in range(-taps + 1, taps + 1):
-        d = pos - (i0 + k)
-        w = np.where(np.abs(d) < taps,
-                     np.sinc(d) * (0.5 + 0.5 * np.cos(np.pi * d / taps)), 0.0)
-        out += w * xp[np.clip(i0 + k + taps, 0, len(xp) - 1)]
-        wsum += w
-    return out / np.where(np.abs(wsum) < _EPS, 1.0, wsum)
+    flat = pos.ravel()
+    i0 = np.floor(flat).astype(int)
+    kk = np.arange(-taps + 1, taps + 1)
+    out = np.empty(flat.shape, float)
+    wsum = np.empty(flat.shape, float)
+    for s in range(0, flat.size, _KERNEL_CHUNK):
+        e = s + _KERNEL_CHUNK
+        w = _kernel_weights(flat[s:e] - i0[s:e], taps)
+        vals = xp[np.clip(i0[s:e, None] + kk[None, :] + taps, 0, len(xp) - 1)]
+        out[s:e] = (w * vals).sum(axis=1)
+        wsum[s:e] = w.sum(axis=1)
+    return (out / np.where(np.abs(wsum) < _EPS, 1.0, wsum)).reshape(pos.shape)
 
 
 def _fold_at(x: np.ndarray, period: float, taps: int | None = None) -> np.ndarray:
@@ -1861,6 +1927,77 @@ def test_the_fold_reduces_to_indexing_on_a_whole_period():
         e = dict(zip(names, vb))
         nm = "jit.cycledshape.seg0"
         assert abs(d[nm] - e[nm]) < RATE_TOL_ABS["ratio"], (taps, d[nm], e[nm])
+
+
+def test_the_kernel_is_tabulated_not_evaluated_per_position():
+    """THE CONTROL FOR THE REPAIR #2112 MEASURED ITS WAY TO, AND IT IS ABOUT
+    THE REPAIR AND NOT THE SPEED. Until the repair, `_read_at` evaluated the
+    Hann-windowed sinc for every tap of every position. The kernel depends on
+    the fractional part of a position alone, which lies in [0, 1], so it is
+    read off a table built once per tap width. A read that has its table must
+    call neither `sinc` nor `cos` at all; a repair that still evaluated the
+    kernel per position would pass every accuracy assertion here and buy
+    nothing. What the evaluation cost, per run, is measured by
+    `tools/fold_read_profile.py` and recorded in docs/fold-read-cost-2026-11-28.md."""
+    x = _rate_stimulus(440.0, 0.0, 0, sr=48000)
+    pos = np.arange(50.0, len(x) - 50.0, 7.31)
+    calls = []
+
+    def counted(name, real):
+        def fn(d):
+            calls.append(name)
+            return real(d)
+        return fn
+
+    sinc, cos = np.sinc, np.cos
+    for taps in (1, 2, 4, 8, 16, 32):
+        _read_at(x, pos, taps)                           # the table, built first
+        calls.clear()
+        np.sinc, np.cos = counted("sinc", sinc), counted("cos", cos)
+        try:
+            _read_at(x, pos, taps)
+        finally:
+            np.sinc, np.cos = sinc, cos
+        assert calls == [], (taps, len(calls), calls[:4])
+
+
+def test_at_an_integer_position_the_table_is_the_formula_to_the_bit():
+    """THE EXACTNESS `test_the_fold_reduces_to_indexing_on_a_whole_period`
+    RESTS ON, STATED AT THE KERNEL. A whole period reads at fractional part 0,
+    which is a node of the table, and at a node the cubic returns the table's
+    own row: the formula's weights, to the bit, at every width on the grid.
+    The row has 1 at the position's own tap and `sinc` of a non-zero integer
+    at every other, which is what makes the fold plain indexing there."""
+    for taps in (1, 2, 4, 8, 16, 32):
+        d = 0.0 - np.arange(-taps + 1, taps + 1, dtype=float)
+        formula = np.where(np.abs(d) < taps,
+                           np.sinc(d) * (0.5 + 0.5 * np.cos(np.pi * d / taps)), 0.0)
+        assert formula[taps - 1] == 1.0, taps
+        assert np.array_equal(_kernel_weights(np.array([0.25, 0.0, 0.5]), taps)[1], formula), taps
+
+
+def test_the_kernel_table_is_the_formula_over_the_whole_fractional_part():
+    """THE EXACTNESS CAVEAT, BOUNDED. Between nodes the table is the cubic
+    through four neighbouring rows and NOT the formula, so the bound is part
+    of the repair: over a dense scan of [0, 1], the error of one tap and the
+    error of their sum -- the most one output can be off by, at full scale --
+    each stay under KERNEL_ERROR_BOUND at every width on the grid. 1e-12 is
+    a thousand times under the 1e-9 the whole-period test demands and
+    120,000 times under the 1.2e-7 least significant bit of a 24-bit sample.
+
+    The control is a deliberately coarse table, 64 rows to the unit: it must
+    miss the bound at every width, or the bound is not what holds the shipped
+    table honest."""
+    frac = np.linspace(0.0, 1.0, 20_001)
+    for taps in (1, 2, 4, 8, 16, 32):
+        t = frac[:, None] - np.arange(-taps + 1, taps + 1, dtype=float)[None, :]
+        formula = np.where(np.abs(t) < taps,
+                           np.sinc(t) * (0.5 + 0.5 * np.cos(np.pi * t / taps)), 0.0)
+        err = np.abs(_kernel_weights(frac, taps) - formula)
+        assert err.max() <= KERNEL_ERROR_BOUND, (taps, err.max())
+        assert err.sum(axis=1).max() <= KERNEL_ERROR_BOUND, (taps, err.sum(axis=1).max())
+        coarse = np.abs(_kernel_weights(frac, taps, _fold_kernel(taps, 64)) - formula)
+        assert coarse.max() > KERNEL_ERROR_BOUND, (taps, coarse.max())
 
 
 def test_the_dphase_floor_refuses_the_input_that_defeats_it():
