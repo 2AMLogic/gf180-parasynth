@@ -24,6 +24,8 @@ no checkpoint or network is needed.
 import importlib.util
 import json
 import pathlib
+import re
+import shutil
 import subprocess
 import sys
 
@@ -261,6 +263,192 @@ def test_real_committed_evidence_still_dismisses_13_of_13():
     assert analysis["required_source"].startswith("drc.rpt")
     assert len(analysis["required_instances"]) == 13
     assert len(analysis["cells"]) == 13
+
+
+# ------------- standalone: the manifest must bind everything derive() reads
+# Issue #1589. verify_manifest() checks that every file a manifest LISTS
+# hash-matches; nothing said which members had to be listed. A manifest that
+# omits the dump never binds it, and the standalone CLI cleared all 13 cells
+# from a dump its own manifest had not hashed (the publisher was guarded
+# separately, by publish_arty.DSP_MANIFEST_PINNED; the CLI was not). These
+# run the CLI exactly as the lane does, on a tmp copy of the real
+# r1-player-preview evidence.
+
+R1 = HERE.parent / "fpga/reports/arty/r1-player-preview-2025.1"
+COMMITTED_SETS = ("integrated-baseline-2025.1", "r1-player-preview-2025.1",
+                  "r2-2025.1", "vivado-2025.1")
+THE_THREE = ("dsp_cells_dump.txt", "drc_dpreg_names.txt", "drc_rpt.sha256")
+
+
+def _cli(evidence, drc):
+    """The standalone analyser, invoked exactly as the lane runs it."""
+    return subprocess.run(
+        [sys.executable, str(HERE / "dsp_dpreg_analyse.py"),
+         "--evidence", str(evidence), "--drc", str(drc)],
+        capture_output=True, text=True, timeout=300)
+
+
+def _r1_copy(tmp_path):
+    """A tmp copy of the real r1-player-preview evidence and its drc.rpt."""
+    art = tmp_path / "r1"
+    shutil.copytree(R1 / "dsp-dpreg-evidence", art / "dsp-dpreg-evidence")
+    shutil.copy(R1 / "drc.rpt", art / "drc.rpt")
+    return art, art / "dsp-dpreg-evidence"
+
+
+def _write_manifest(ev, lines):
+    (ev / "MANIFEST.sha256").write_text(
+        "".join(line + "\n" for line in lines))
+
+
+def _manifest_without(ev, *drop):
+    """The real manifest minus the line naming each of *drop*. Nothing is
+    rehashed: every line that remains still matches its file."""
+    lines = (ev / "MANIFEST.sha256").read_text().splitlines()
+    keep = [line for line in lines
+            if line.split(None, 1)[1].strip() not in drop]
+    assert len(keep) == len(lines) - len(drop)   # one line left, per name
+    _write_manifest(ev, keep)
+
+
+def test_issue_1589_three_inputs(tmp_path):
+    art, ev = _r1_copy(tmp_path)
+    drc, dump = art / "drc.rpt", ev / "dsp_cells_dump.txt"
+    analysis = ev / "dsp-opmode-analysis.json"
+    original = dump.read_text()
+    manifest = (ev / "MANIFEST.sha256").read_text()
+
+    # (1) a REAL finding: the first DRC-flagged cell's OPMODE[5] on its own
+    # net and driver, with the dump's hash replaced in the full manifest
+    first = mod.parse_drc_targets(drc.read_text())[0]
+    start = original.index(f"==== CELL {first} ====\n")
+    end = original.index("==== END CELL", start)
+    block, n = re.subn(
+        r"^PIN OPMODE\[5\] dir=IN .*$",
+        "PIN OPMODE[5] dir=IN net=independent "
+        "driver=independent/O (LUT5)",
+        original[start:end], count=1, flags=re.M)
+    assert n == 1
+    dump.write_text(original[:start] + block + original[end:])
+    manifest, n = re.subn(r"^[0-9a-f]{64}  dsp_cells_dump\.txt$",
+                          f"{mod.sha256(dump)}  dsp_cells_dump.txt",
+                          manifest, count=1, flags=re.M)
+    assert n == 1
+    _write_manifest(ev, manifest.splitlines())
+    r = _cli(ev, drc)
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert "VERDICT: UNSUPPORTED P-FEEDBACK REACHABLE -- STOP" in r.stdout
+    assert [c["name"] for c in json.loads(analysis.read_text())["cells"]
+            if c["p_feedback_reachable"]] == [first]
+
+    # (2) the original dump bytes under that manifest: a hash mismatch
+    dump.write_text(original)
+    r = _cli(ev, drc)
+    assert r.returncode == 3, r.stdout + r.stderr
+    assert "NO VERDICT: hash mismatch for dsp_cells_dump.txt" in r.stdout
+
+    # (3) that same dump under a manifest naming only routed_dcp.sha256:
+    # unhashed by anything -- and cleared 13/13 before #1589
+    _write_manifest(ev, [line for line in manifest.splitlines()
+                         if line.endswith("  routed_dcp.sha256")])
+    assert len((ev / "MANIFEST.sha256").read_text().splitlines()) == 1
+    analysis.unlink()
+    r = _cli(ev, drc)
+    assert r.returncode == 3, r.stdout + r.stderr
+    assert ("NO VERDICT: evidence manifest does not pin "
+            "['dsp_cells_dump.txt', 'drc_dpreg_names.txt', "
+            "'drc_rpt.sha256']") in r.stdout
+    assert not analysis.exists()   # nothing left that reads like a verdict
+
+
+@pytest.mark.parametrize("member", THE_THREE)
+def test_manifest_omitting_a_required_member_is_refused(tmp_path, member):
+    art, ev = _r1_copy(tmp_path)
+    _manifest_without(ev, member)
+    # the input that defeats a hash check: every line it still names matches
+    # its file, so nothing but a required-member check can refuse it
+    mod.verify_manifest(ev)
+    analysis = ev / "dsp-opmode-analysis.json"
+    analysis.unlink()
+    r = _cli(ev, art / "drc.rpt")
+    assert r.returncode == 3, r.stdout + r.stderr
+    assert (f"NO VERDICT: evidence manifest does not pin ['{member}']"
+            in r.stdout)
+    assert not analysis.exists()
+
+
+def test_a_path_qualified_name_does_not_pin_the_member(tmp_path):
+    """Written for rule 8, at write time: a line that hashes the very same
+    file under another spelling satisfies the hash check, and is exactly the
+    shape of input that used to pass unchecked."""
+    art, ev = _r1_copy(tmp_path)
+    entries = [line.split(None, 1) for line
+               in (ev / "MANIFEST.sha256").read_text().splitlines()]
+    _write_manifest(ev, [
+        f"{h} ./dsp_cells_dump.txt" if name.strip() == "dsp_cells_dump.txt"
+        else f"{h} {name}" for h, name in entries])
+    mod.verify_manifest(ev)      # the hash check alone is satisfied
+    with pytest.raises(mod.Refused,
+                       match=r"does not pin \['dsp_cells_dump.txt'\]"):
+        mod.derive(ev, art / "drc.rpt")
+
+
+def test_binary_mode_and_crlf_manifest_lines_bind_their_members(tmp_path):
+    lines = []
+    for n in THE_THREE:
+        (tmp_path / n).write_text(n + "\n")
+        lines.append(f"{mod.sha256(tmp_path / n)} *{n}")
+    (tmp_path / "MANIFEST.sha256").write_bytes(
+        ("\r\n".join(lines) + "\r\n").encode())
+    pinned = mod.verify_manifest(tmp_path)
+    assert pinned == set(THE_THREE)
+    mod.verify_required_members(pinned)     # must not raise
+
+
+@pytest.mark.parametrize("name", COMMITTED_SETS)
+def test_every_committed_evidence_set_still_derives(name):
+    """The valid historical sets stay analysable: each committed manifest
+    names the three required members. vivado-2025.1 carries no
+    routed_dcp.sha256, which the analyser therefore must not demand."""
+    ev = HERE.parent / "fpga/reports/arty" / name / "dsp-dpreg-evidence"
+    required, recs, _ = mod.derive(ev, ev.parent / "drc.rpt")
+    assert len(required) == 13
+    assert not any(r["p_feedback_reachable"] for r in recs)
+
+
+def test_required_members_are_exactly_what_derive_reads(tmp_path,
+                                                        monkeypatch):
+    """REQUIRED_MEMBERS may not drift from derive(): every file it opens
+    under the evidence directory, other than while checking the manifest,
+    is one it demands the manifest pins -- no more, no fewer."""
+    _, ev = _r1_copy(tmp_path)
+    ev = ev.resolve()
+    opened, checking = set(), []
+    read_text, read_bytes = (pathlib.Path.read_text,
+                             pathlib.Path.read_bytes)
+    verify = mod.verify_manifest
+
+    def record(fn):
+        def read(self, *a, **k):
+            p = pathlib.Path(self).resolve()
+            if p.is_relative_to(ev) and not checking:
+                opened.add(p.name)
+            return fn(self, *a, **k)
+        return read
+
+    def checked(evidence):
+        checking.append(1)
+        try:
+            return verify(evidence)
+        finally:
+            checking.pop()
+
+    monkeypatch.setattr(pathlib.Path, "read_text", record(read_text))
+    monkeypatch.setattr(pathlib.Path, "read_bytes", record(read_bytes))
+    monkeypatch.setattr(mod, "verify_manifest", checked)
+    mod.derive(ev, ev.parent / "drc.rpt")
+    assert opened == set(THE_THREE)
+    assert mod.REQUIRED_MEMBERS == THE_THREE
 
 
 # ------------------------- extractor: the routed.dcp digest is recorded
