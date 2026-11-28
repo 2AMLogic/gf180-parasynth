@@ -570,7 +570,7 @@ def render(found: dict, header: str) -> str:
     return "\n".join(lines)
 
 
-def matrix(xdc_text, wrapper_text, model) -> tuple[str, bool]:
+def matrix(xdc_text, wrapper_text, model) -> tuple[str, bool, bool]:
     """docs/verification-rules.md rule 4: a multi-property suite reports what
     it is BLIND to, not only what failed. One row per injected defect, MOVED
     for the properties that saw it and BLIND for the ones that did not."""
@@ -580,6 +580,7 @@ def matrix(xdc_text, wrapper_text, model) -> tuple[str, bool]:
     width = max(len(n) for n in INJECTIONS)
     lines.append(" " * (width + 2) + "  ".join(p[:9].ljust(9) for p in PROPERTIES))
     ok = not any(clean.values())
+    refused = False
     if not ok:
         lines.append("REFUSED: the clean run does not pass, so no row below "
                      "means anything")
@@ -588,7 +589,7 @@ def matrix(xdc_text, wrapper_text, model) -> tuple[str, bool]:
             found = check(mutate(xdc_text), wrapper_text, model)
         except Refused as exc:
             lines.append(f"{name.ljust(width)}  REFUSED: {exc}")
-            ok = False
+            refused = True
             continue
         cells = []
         moved = 0
@@ -602,9 +603,15 @@ def matrix(xdc_text, wrapper_text, model) -> tuple[str, bool]:
                          "control, it is a no-op")
             ok = False
     lines.append("")
-    lines.append("every injected defect moved at least one property"
-                 if ok else "AN INJECTION DID NOT BEHAVE AS NAMED")
-    return "\n".join(lines), ok
+    if not ok:
+        lines.append("AN INJECTION DID NOT BEHAVE AS NAMED")
+    elif refused:
+        lines.append("COULD NOT DECIDE: every evaluated injection moved at "
+                     "least one property, but those marked REFUSED were "
+                     "never evaluated")
+    else:
+        lines.append("every injected defect moved at least one property")
+    return "\n".join(lines), ok, refused
 
 
 def row(found, clean) -> str:
@@ -697,9 +704,9 @@ def main(argv=None) -> int:
         wrapper_text = wrapper.read_text()
         model = rtl_model(build.sources())
         if args.matrix:
-            text, ok = matrix(xdc_text, wrapper_text, model)
+            text, ok, refused = matrix(xdc_text, wrapper_text, model)
             print(text)
-            return 0 if ok else 1
+            return 1 if not ok else (2 if refused else 0)
         clean = check(xdc_text, wrapper_text, model)
         found = clean
         if args.inject:

@@ -101,6 +101,85 @@ def test_an_injection_that_cannot_be_applied_refuses_rather_than_passing(world):
         vxb._sub_once("nothing here", "absent text", "x", "MADE_UP")
 
 
+def _refuses(name):
+    return lambda t: vxb._sub_once(t, "ABSENT TEXT", "x", name)
+
+
+PLANTED_REFUSAL = ("planted: its target text is absent, so _sub_once refuses",
+                   _refuses("PLANTED_REFUSAL"))
+PLANTED_NOOP = ("planted: the identity, so it is evaluated and moves nothing",
+                lambda t: t)
+
+
+def _plant(monkeypatch, **planted):
+    for name in planted:
+        assert len(name) <= max(len(n) for n in vxb.INJECTIONS), \
+            f"{name} is longer than every real injection, so it would " \
+            "change the column width and the real rows could not be " \
+            "byte-identical"
+    monkeypatch.setattr(vxb, "INJECTIONS", {**vxb.INJECTIONS, **planted})
+
+
+def test_an_injection_whose_check_refuses_is_refused_not_failed(world, monkeypatch, capsys):
+    """A refusal is not a verdict. When `check` declines to answer for one
+    injection, whether that defect behaved as named is UNKNOWN, so the row
+    stays REFUSED and the matrix answers 2. It must not be booked beside the
+    injections that were measured as 'did not behave' (FAIL, 1)."""
+    xdc_text, wrapper_text, model = world
+    clean_lines = vxb.matrix(xdc_text, wrapper_text, model)[0].splitlines()
+    _plant(monkeypatch, PLANTED_REFUSAL=PLANTED_REFUSAL)
+    assert vxb.main(["--matrix"]) == 2
+    out_lines = capsys.readouterr().out.splitlines()
+    row = next(l for l in out_lines if l.startswith("PLANTED_REFUSAL"))
+    assert "REFUSED: injection PLANTED_REFUSAL cannot be applied" in row
+    assert "'ABSENT TEXT' is not in the constraint file" in row
+    assert out_lines[-1].startswith("COULD NOT DECIDE"), out_lines[-1]
+    assert "DID NOT BEHAVE" not in "\n".join(out_lines)
+    assert [l for l in out_lines[:-1] if not l.startswith("PLANTED_REFUSAL")] \
+        == clean_lines[:-1], "the real rows must be byte-identical"
+    _, ok, refused = vxb.matrix(xdc_text, wrapper_text, model)
+    assert ok is True and refused is True
+
+
+def test_a_measured_no_op_outranks_a_refusal(world, monkeypatch, capsys):
+    """Injected-bug control for the repair, so that it cannot turn every
+    failure into a refusal: an injection that IS evaluated and moves nothing
+    is a measured FAIL, and beside a refusal it still decides the exit
+    (1, never 2)."""
+    _plant(monkeypatch, PLANTED_REFUSAL=PLANTED_REFUSAL, PLANTED_NOOP=PLANTED_NOOP)
+    assert vxb.main(["--matrix"]) == 1
+    out = capsys.readouterr().out
+    assert ("DEFECT: PLANTED_NOOP moved NO property -- it is not a control, "
+            "it is a no-op") in out
+    assert "REFUSED: injection PLANTED_REFUSAL cannot be applied" in out
+    assert out.rstrip().endswith("AN INJECTION DID NOT BEHAVE AS NAMED")
+
+
+def test_a_matrix_in_which_every_injection_refuses_is_refused(world, monkeypatch, capsys):
+    """The edge of the same repair: with nothing evaluated, nothing was
+    measured to fail, so the answer is the refusal (2), never a clean 0."""
+    monkeypatch.setattr(vxb, "INJECTIONS",
+                        {n: (why, _refuses(n)) for n, (why, _) in vxb.INJECTIONS.items()})
+    assert vxb.main(["--matrix"]) == 2
+    out = capsys.readouterr().out
+    assert out.count("REFUSED: injection") == len(vxb.INJECTIONS)
+    assert out.rstrip().splitlines()[-1].startswith("COULD NOT DECIDE")
+    assert "DID NOT BEHAVE" not in out
+    assert "every injected defect moved" not in out
+    _, ok, refused = vxb.matrix(*world)
+    assert ok is True and refused is True
+
+
+def test_the_clean_matrix_still_decides_zero(capsys):
+    """No-op control for the repair: with nothing refused and nothing a
+    no-op, the gate's answer is exactly what it was."""
+    assert vxb.main(["--matrix"]) == 0
+    out = capsys.readouterr().out
+    assert out.rstrip().endswith("every injected defect moved at least one property")
+    assert "REFUSED" not in out and "DEFECT" not in out
+    assert "COULD NOT DECIDE" not in out
+
+
 def test_the_generate_dot_is_not_a_regex_metacharacter():
     """The parser distinction the whole #315 property rests on: in a -regexp
     query `\\.` is a generate join and a bare `.` is any-character; in a
