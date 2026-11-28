@@ -261,8 +261,166 @@ def test_each_injected_defect_turns_at_least_one_named_property_red(defect):
     exercised by `test_the_corpus_gated_controls_fire` below."""
     clean = tk.properties()
     got = tk.properties(defect=defect)
-    red = [n for n in tk.PROPERTIES if clean[n]["ok"] is True and got[n]["ok"] is not True]
-    assert red, (defect, {n: (clean[n]["value"], got[n]["value"]) for n in tk.PROPERTIES})
+    red, refused_under = tk._red(clean, got)
+    assert red, (defect, {n: (clean[n]["value"], got[n]["value"]) for n in tk.PROPERTIES},
+                refused_under)
+
+
+# ---------------------------------------------------------------------------
+# (b) ... and a property that REFUSES under a defect is not a red one (#1812)
+# ---------------------------------------------------------------------------
+def test_the_red_predicate_reads_a_measured_false_and_nothing_else_as_red():
+    """Every cell of the clean x defect `ok` table, so the split is a known
+    answer rather than a reading of the predicate. Only pass -> False is red;
+    pass -> None is a refusal under the defect, listed apart; a property that
+    did not pass clean cannot be turned red by anything."""
+    passed = {n: {"ok": True} for n in tk.PROPERTIES}
+    n = tk.PROPERTIES[0]
+    for got_ok, is_red, is_refused in ((False, True, False), (None, False, True),
+                                       (True, False, False)):
+        red, refused_under = tk._red(passed, {**passed, n: {"ok": got_ok}})
+        assert (n in red, n in refused_under) == (is_red, is_refused), got_ok
+    for clean_ok in (None, False):
+        clean = {**passed, n: {"ok": clean_ok}}
+        for got_ok in (True, False, None):
+            red, refused_under = tk._red(clean, {**passed, n: {"ok": got_ok}})
+            assert n not in red and n not in refused_under, (clean_ok, got_ok)
+
+
+def _stand_in_properties(monkeypatch, *, passing, under):
+    """Replace `properties()` with a stand-in that answers from `ok` alone.
+
+    On the clean run exactly the names in `passing` are measured True and every
+    other property REFUSES, so nothing outside `passing` can be credited with
+    anything. Under a defect every passing property is measured red, except for
+    the defects in `under` -- {defect: {property: ok}} -- and the
+    blind-by-construction control, which leaves them untouched.
+    """
+    def stand_in(*, refs=None, meas=None, defect=None):
+        out = {n: {"value": None, "bound": 0, "ok": None,
+                   "refused": "not measured by the stand-in"} for n in tk.PROPERTIES}
+        for name in passing:
+            out[name] = {"value": 1, "bound": 0, "ok": True}
+        if defect in under:
+            for name, ok in under[defect].items():
+                out[name] = {"value": None, "bound": 0, "ok": ok}
+                if ok is None:
+                    out[name]["refused"] = "planted: refused under the defect"
+        elif defect is not None and defect not in tk.BLIND_BY_CONSTRUCTION:
+            for name in passing:
+                out[name] = {"value": 0, "bound": 0, "ok": False}
+        return out
+    monkeypatch.setattr(tk, "properties", stand_in)
+
+
+@pytest.mark.parametrize("n_passing, refuses", [(1, True), (2, True), (1, False)],
+                         ids=["sole-clean-passing-refuses", "every-clean-passing-refuses",
+                              "nothing-moves"])
+def test_a_defect_that_only_makes_properties_REFUSE_is_NO_VERDICT_not_a_catch(
+        monkeypatch, n_passing, refuses):
+    """The injected-bug control for #1812, and it starts red.
+
+    `EDT_BAND_SWAP` does nothing here but make the property (or the two
+    properties) that passed clean REFUSE -- or, in the third case, nothing at
+    all. At `origin/main` 03148399 the predicate was `got ok is not True`, so a
+    refusal sat in `red`: both refusing runs returned `ok=True` and printed the
+    refused property as one the defect turned red. A refusal is evidence in
+    neither direction (`tools/exit_contract.py`: nothing was measured), so that
+    row must say NO VERDICT and the gate must fail -- and fail for THAT reason:
+    every other defect is still caught, by a measured red. A defect that moves
+    nothing keeps its own, older line, and the two must not be confused.
+    """
+    passing = list(tk.PROPERTIES[:n_passing])
+    under = {name: None for name in passing} if refuses else {}
+    _stand_in_properties(monkeypatch, passing=passing, under={"EDT_BAND_SWAP": under})
+    ok, lines = tk.check()
+    [row] = [ln for ln in lines if ln.startswith("EDT_BAND_SWAP")]
+    assert ok is False, "\n".join(lines)
+    assert ("NO VERDICT" in row) is refuses, row
+    assert ("REFUSED under defect" in row) is refuses, row
+    assert ("NOTHING -- this control cannot fail" in row) is (not refuses), row
+    if refuses:
+        assert all(n in row for n in passing), row
+        assert not any(n in row.split("REFUSED under defect")[0] for n in passing), row
+    for d in tk.DEFECTS:
+        if d != "EDT_BAND_SWAP":
+            [other] = [ln for ln in lines if ln.startswith(d)]
+            assert all(n in [t.rstrip(",") for t in other.split("[")[0].split()[1:]]
+                       for n in passing), other
+
+
+def test_a_defect_that_turns_one_property_red_and_makes_another_REFUSE_is_still_caught(
+        monkeypatch):
+    """The mixed row: the measured red is the catch, so the gate stands, and
+    the refusal is printed apart from it -- neither credit nor a failure."""
+    measured, refused = tk.PROPERTIES[:2]
+    _stand_in_properties(monkeypatch, passing=[measured, refused],
+                         under={"EDT_BAND_SWAP": {measured: False, refused: None}})
+    ok, lines = tk.check()
+    [row] = [ln for ln in lines if ln.startswith("EDT_BAND_SWAP")]
+    assert row.split("[")[0].split()[1:] == [measured], row
+    assert f"[REFUSED under defect, not credited: {refused}]" in row, row
+    assert "NO VERDICT" not in row, row
+    assert ok is True, "\n".join(lines)
+
+
+SYNTH_SR = 48000
+
+
+def _synthetic_corpus(tmp_path: pathlib.Path) -> pathlib.Path:
+    """Twenty-five WAVs named like the Fischer corpus, none of them a cymbal:
+    0.3 s of silence, then a tone in each analysis band under a decaying
+    envelope, identical at every setting. There is no TONE law in them -- only
+    the window GEOMETRY is under test. A flat H - L is inside the family's
+    reach (`test_the_family_CAN_reach_a_flat_curve_and_a_straight_ramp`), so the
+    windowed law passes clean, and that is the property SHORT_RECORD makes
+    refuse. The committed artifact is not reproduced, so `artifact-binds` fails
+    clean here and nothing below reads it."""
+    refs = tmp_path / "refs"
+    (refs / "cy8").mkdir(parents=True)
+    t = np.arange(int(1.6 * SYNTH_SR)) / SYNTH_SR
+    x = np.where(t >= 0.3, np.exp(-np.maximum(t - 0.3, 0.0) / 0.2), 0.0) * (
+        np.sin(2 * np.pi * 3450 * t) + np.sin(2 * np.pi * 8000 * t))
+    pcm = (x / np.abs(x).max() * 20000).astype("<i2")
+    for d in tk.CODES:
+        for tone in tk.CODES:
+            wavfile.write(str(refs / "cy8" / f"CY{tone}{d}.WAV"), SYNTH_SR, pcm)
+    return refs
+
+
+def test_short_record_makes_the_tail_law_REFUSE_through_the_real_code_path(tmp_path):
+    """The door the planted control walks is real, and a current defect walks
+    it. #1812 was filed on a read: a refusal under a defect is reachable only
+    through `_alpha_law`'s `except Refused`, because the corpus defects are the
+    only ones that change what is measured. Run instead: SHORT_RECORD cuts the
+    record to the lead + 0.25 s, the 0.1-0.3 s window no longer fits, every
+    setting in it refuses, and `alpha-law-tail`, which passed clean, comes back
+    `ok None`. The strike window still fits, so `alpha-law-strike` is still
+    measured. This is the corpus-free form of the row `make
+    reference-integration` decides on the Fischer WAVs; it is not that row.
+
+    Pinned, not repaired (#1830): `artifact-binds` answers a refused window
+    with `ok False` and a `refused` reason, and `_red` credits that, because it
+    reads `ok`. On the Fischer corpus that property passes clean, so it -- with
+    `floor-margin`, which fails on `n_refused` -- is what keeps SHORT_RECORD
+    caught now that the refusal above does not count.
+    """
+    refs = _synthetic_corpus(tmp_path)
+    meas = tk.measure_windows(refs)
+    clean = tk.properties(meas=meas)
+    assert clean["alpha-law-tail"]["ok"] is True, clean["alpha-law-tail"]
+    got = tk.properties(refs=refs, meas=None, defect="SHORT_RECORD")
+    tail = got["alpha-law-tail"]
+    assert tail["ok"] is None and "refused" in tail["refused"], tail
+    assert got["alpha-law-strike"]["ok"] is True, got["alpha-law-strike"]
+    binds = got["artifact-binds"]
+    assert binds["ok"] is False and "refused" in binds["refused"], binds
+    _, lines = tk.check(refs=refs, meas=meas)
+    [row] = [ln for ln in lines if ln.startswith("SHORT_RECORD")]
+    assert "[REFUSED under defect, not credited: alpha-law-tail]" in row, row
+    assert "alpha-law-tail" not in row.split("[REFUSED under defect")[0], row
+    red, refused_under = tk._red(clean, got)
+    assert refused_under == ["alpha-law-tail"] and "alpha-law-tail" not in red, (red, refused_under)
 
 
 _MEAS: dict = {}
@@ -616,9 +774,8 @@ def test_the_corpus_gated_controls_fire(measured):
     clean = tk.properties(meas=measured)
     for defect in tk.CORPUS_DEFECTS:
         got = tk.properties(defect=defect)
-        red = [n for n in tk.PROPERTIES
-               if clean[n]["ok"] is True and got[n]["ok"] is not True]
-        assert red, defect
+        red, refused_under = tk._red(clean, got)
+        assert red, (defect, refused_under)
 
 
 def test_the_required_corpus_gate_is_satisfiable_where_the_wavs_are():
