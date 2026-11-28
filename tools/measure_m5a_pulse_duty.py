@@ -152,13 +152,19 @@ def main(argv=None):
     parser.add_argument("--shapes", nargs="+", choices=SHAPES, default=list(SHAPES))
     parser.add_argument("--out", default="docs/scorecard/mono-m5a-miniv3/pulse-duty-v1.json")
     args = parser.parse_args(argv)
-    path = pathlib.Path(args.out)
-    if not path.is_absolute():
-        path = ROOT / path
-    if not path.resolve().is_relative_to(ROOT):
+    requested = pathlib.Path(args.out)
+    if not requested.is_absolute():
+        requested = ROOT / requested
+    # write_json replaces the directory entry it is given, so validate that
+    # entry (resolved parent + leaf name) as well as where the leaf points.
+    # A leaf symlink is therefore replaced, never followed.
+    if requested.name in ("", ".", ".."):
+        print("measure_m5a_pulse_duty: REFUSED -- output must name a file")
+        return 2
+    path = requested.parent.resolve() / requested.name
+    if not (path.is_relative_to(ROOT) and path.resolve().is_relative_to(ROOT)):
         print("measure_m5a_pulse_duty: REFUSED -- output must stay inside the repository")
         return 2
-    path = path.resolve()
     report = measure(args.shapes)
     write_json(path, report)
     print(json.dumps({"report": str(path.relative_to(ROOT)),

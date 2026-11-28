@@ -177,10 +177,10 @@ def main(argv=None) -> int:
     out = pathlib.Path(args.out)
     if not out.is_absolute():
         out = ROOT / out
-    if not out.resolve().is_relative_to(ROOT):
+    out = out.resolve()
+    if not out.is_relative_to(ROOT):
         print("measure_m5a_signal_path: REFUSED -- output must stay inside the repository")
         return 2
-    out = out.resolve()
     report = measure(args.cutoff, args.drive, blep=not args.disable_polyblep)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, indent=2) + "\n")

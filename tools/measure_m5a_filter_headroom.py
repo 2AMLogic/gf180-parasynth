@@ -239,10 +239,10 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     out = (args.recompare_report if args.recompare_report is not None
            else ROOT / args.out)
-    if not out.resolve().is_relative_to(ROOT):
+    out = out.resolve()
+    if not out.is_relative_to(ROOT):
         print("measure_m5a_filter_headroom: REFUSED -- output must stay inside the repository")
         return REFUSED
-    out = out.resolve()
     try:
         if args.recompare_report is not None:
             report = _recompare_report(out)
@@ -266,7 +266,7 @@ def main(argv=None) -> int:
         }
         for pulse, comparisons in report["comparisons"].items()
     }
-    print(json.dumps({"report": str(out.resolve().relative_to(ROOT.resolve())),
+    print(json.dumps({"report": str(out.relative_to(ROOT)),
                       "source_commit": report["source_commit"],
                       "source_dirty": report["source_dirty"],
                       "comparisons": comparison_summary,

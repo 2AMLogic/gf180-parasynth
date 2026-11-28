@@ -323,10 +323,10 @@ def main(argv=None) -> int:
     out = pathlib.Path(args.out)
     if not out.is_absolute():
         out = ROOT / out
-    if not out.resolve().is_relative_to(ROOT):
+    out = out.resolve()
+    if not out.is_relative_to(ROOT):
         print("measure_m5a_filter_oversample: REFUSED -- output must stay inside the repository")
         return REFUSED
-    out = out.resolve()
     try:
         report = run(ROOT / "build/scorecard/m5a-filter-rate-audio")
     except refusal.Refused as exc:

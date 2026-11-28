@@ -80,3 +80,31 @@ def test_in_repo_out_named_through_a_symlink_from_outside_is_written_in_repo(tmp
     assert probe.main(["--out", str(alias / "docs" / "report.json")]) == 0
     assert (repo / "docs" / "report.json").is_file()
     assert json.loads(capsys.readouterr().out)["report"] == "docs/report.json"
+
+
+def test_out_symlink_to_in_repo_file_replaces_the_link_not_its_target(tmp_path, monkeypatch, capsys):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    monkeypatch.setattr(probe, "ROOT", repo.resolve())
+    _stub_measurement(monkeypatch)
+    baseline = repo / "baseline.json"
+    baseline.write_text("ORIGINAL")
+    (repo / "latest.json").symlink_to(baseline)
+    assert probe.main(["--out", "latest.json"]) == 0
+    latest = repo / "latest.json"
+    assert not latest.is_symlink()
+    assert json.loads(latest.read_text()) == _STUB_REPORT
+    assert baseline.read_text() == "ORIGINAL"
+    assert json.loads(capsys.readouterr().out)["report"] == "latest.json"
+
+
+def test_out_symlink_leaf_pointing_outside_is_refused(tmp_path, monkeypatch, capsys):
+    outside = _output_tree(tmp_path, monkeypatch)
+    repo = tmp_path / "repo"
+    (outside / "target.json").write_text("ORIGINAL")
+    (repo / "leaf.json").symlink_to(outside / "target.json")
+    calls = _stub_measurement(monkeypatch)
+    assert probe.main(["--out", "leaf.json"]) == 2
+    assert "REFUSED" in capsys.readouterr().out
+    assert calls == []
+    assert (outside / "target.json").read_text() == "ORIGINAL"
