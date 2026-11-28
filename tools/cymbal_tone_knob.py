@@ -890,14 +890,38 @@ def properties(*, refs=None, meas=None, defect=None) -> dict:
     return out
 
 
+def _red(clean: dict, got: dict) -> tuple[list[str], list[str]]:
+    """What a defect did to the properties that PASSED on the clean run, split
+    by what `ok` says under it: MEASURED red, or REFUSED.
+
+    Only `ok is False` is red. `ok is None` is this module's refusal marker and,
+    by `tools/exit_contract.py`, a refusal means nothing was measured: a
+    property that passed clean and refuses under the defect is evidence in
+    neither direction, so it is returned apart and is never credit for the
+    defect being caught (#1812). The earlier `is not True` put it in `red`, and
+    a defect caught only by refusals passed the gate.
+
+    The gate and its tests both read this. The predicate had three copies --
+    here and twice in `test_cymbal_tone_knob.py` -- and a copy is how the gate
+    and the test that pins it come to disagree.
+    """
+    passed = [n for n in PROPERTIES if clean[n]["ok"] is True]
+    return ([n for n in passed if got[n]["ok"] is False],
+            [n for n in passed if got[n]["ok"] is None])
+
+
 def check(*, refs=None, meas=None, require_corpus=False) -> tuple[bool, list[str]]:
     """The gate: every property, then every injected defect's row of the
     properties x defects matrix, then the two blind controls verified blind.
 
-    A defect counts as caught when a property that PASSES on the clean run goes
-    red under it -- and a property the defect makes REFUSE counts, because
-    declining to answer is a detection, not a miss. A defect that moves nothing
-    fails the gate: a control that cannot fail is worse than no control.
+    A defect counts as caught only when a property that PASSES on the clean run
+    is MEASURED red under it (`ok is False`). A property the defect makes REFUSE
+    (`ok is None`) is no evidence either way -- `tools/exit_contract.py`: a
+    refusal means nothing was measured -- so it is listed apart, as REFUSED
+    under the defect, and is not credit (#1812). A defect caught only by
+    refusals is NO VERDICT; a defect that moves nothing has not been shown to be
+    catchable. Both fail the gate: a control that cannot fail is worse than no
+    control, and so is one whose only "failure" was declining to answer.
     """
     lines, ok = [], True
     clean = properties(refs=refs, meas=meas)
@@ -927,10 +951,18 @@ def check(*, refs=None, meas=None, require_corpus=False) -> tuple[bool, list[str
             lines.append(f"{d:26s} NO VERDICT ({exc})")
             ok = False
             continue
-        red = [n for n in PROPERTIES
-               if clean[n]["ok"] is True and got[n]["ok"] is not True]
+        red, refused_under = _red(clean, got)
         undecidable = [n for n in PROPERTIES if clean[n]["ok"] is None]
-        lines.append(f"{d:26s} {', '.join(red) if red else 'NOTHING -- this control cannot fail'}"
+        if red:
+            caught = ", ".join(red)
+        elif refused_under:
+            caught = ("NO VERDICT -- nothing measured red; REFUSED under defect: "
+                      + ", ".join(refused_under))
+        else:
+            caught = "NOTHING -- this control cannot fail"
+        lines.append(f"{d:26s} {caught}"
+                     + (f"   [REFUSED under defect, not credited: {', '.join(refused_under)}]"
+                        if red and refused_under else "")
                      + (f"   [not decidable here: {len(undecidable)}]" if undecidable else ""))
         if not red:
             ok = False
