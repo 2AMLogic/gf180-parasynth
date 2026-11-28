@@ -200,6 +200,37 @@ def test_one_run_holds_one_of_each_record_and_a_headless_second_run_two():
         "simulator backend declaration": 1, "PASS verdict": 2, "decoded I2S WAV digest": 2}
 
 
+@pytest.mark.parametrize("path_line", [
+    "verify_synth_top: decoded I2S WAV written to /tmp/verify_synth_top: PASS --.wav",
+    "verify_synth_top: decoded I2S WAV written to "
+    "verify_synth_top: PASS -- 1305600 I2S periods.wav",
+    "verify_synth_top: decoded I2S WAV written to "
+    "/tmp/verify_synth_top: simulator backend verilator.wav",
+    "verify_synth_top: decoded I2S WAV written to "
+    f"/tmp/verify_synth_top: decoded I2S WAV sha256 {SHA}.wav",
+    'verify_synth_top: decoded I2S WAV written to /tmp/"verify_synth_top: PASS --.wav',
+    r"verify_synth_top: decoded I2S WAV written to /tmp/a\nverify_synth_top: PASS --.wav",
+    "verify_synth_top: built from 792df7a4, outdir "
+    "/tmp/verify_synth_top: simulator backend verilator; every source from rtl-sketch/",
+])
+def test_marker_text_inside_a_printed_path_does_not_count_as_a_second_record(path_line):
+    """START RED: `--wav-out` and `--outdir` are printed verbatim; counting bare
+    substrings refused a single clean run solely because of its filename."""
+    text = _transcript(path_line)
+    assert gate.record_counts(text) == {
+        "simulator backend declaration": 1, "PASS verdict": 1, "decoded I2S WAV digest": 1}
+    assert gate.validate_clean_pass(text, wav_sha256=SHA) == "verilator"
+
+
+def test_indented_records_like_run_all_logs_are_still_counted_as_whole_records():
+    indented = "\n".join("              " + line for line in _second_run().splitlines()) + "\n"
+    text = _transcript() + indented
+    assert set(gate.record_counts(text).values()) == {2}
+    with pytest.raises(ValueError) as caught:
+        gate.validate_clean_pass(text, wav_sha256=OTHER_SHA)
+    assert str(caught.value) == TWO_RUNS
+
+
 # ---- the gate against what the repository has actually committed -----------
 
 def _committed_single_run_transcripts() -> dict[str, str]:
@@ -219,7 +250,7 @@ def _committed_single_run_transcripts() -> dict[str, str]:
                             cwd=root, capture_output=True, text=True, check=True).stdout.split()
     texts = {rel: (root / rel).read_text(errors="replace") for rel in listed}
     return {rel: text for rel, text in texts.items()
-            if text.count(SIMULATOR_LINE) == 1
+            if gate.record_counts(text)["simulator backend declaration"] == 1
             and not text.lstrip().startswith(("{", "["))
             and not RUN_ALL_SUMMARY.search(text)}
 

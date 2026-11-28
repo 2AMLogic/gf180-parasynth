@@ -28,9 +28,11 @@ WHAT IS REFUSED, in the order `validate_clean_pass` asks it:
   * more than one of a record the bench prints once per run: its backend
     declaration, its final PASS verdict, its decoded-WAV digest (#1562). Two
     clean runs cleared every check above, and the scorer then read the FIRST
-    run's controls against the second run's WAV. Each record is counted on
-    its own, so a second run that prints no backend line is refused on its two
-    verdicts and two digests, and two runs that agree are still two runs.
+    run's controls against the second run's WAV. Each record is counted as a
+    whole line (including inside a JSON job report's strings), so marker text
+    embedded in a printed path does not look like a second run, a second run
+    that prints no backend line is refused on its two verdicts and two
+    digests, and two runs that agree are still two runs.
   * a decoded-WAV digest that is not the offered WAV's, when one is offered.
   * no `simulator backend verilator` or `simulator backend iverilog` line: an
     apparatus nobody named.
@@ -48,6 +50,9 @@ its exit-0 path, and the digest of the very WAV they were offered.
 """
 from __future__ import annotations
 
+import json
+import re
+
 FORBIDDEN = ("REFUSED", "FAIL --", "NO-VERDICT")
 SIMULATORS = ("verilator", "iverilog")
 
@@ -61,6 +66,39 @@ ONE_RUN_RECORDS = (
     ("decoded I2S WAV digest", "verify_synth_top: decoded I2S WAV sha256"),
 )
 
+_RECORD_SUFFIX = {
+    "simulator backend declaration": r" \S+[ \t]*",
+    "PASS verdict": r" \S.*",
+    "decoded I2S WAV digest": r" [0-9a-f]+[ \t]*",
+}
+
+_RECORD_PATTERNS = tuple(
+    (name, re.compile(r"[ \t]*" + re.escape(prefix) + _RECORD_SUFFIX[name]))
+    for name, prefix in ONE_RUN_RECORDS
+)
+
+
+def _record_lines(text: str):
+    """Lines of `text`, or of every string inside a JSON job report."""
+    stripped = text.lstrip()
+    if stripped.startswith(("{", "[")):
+        try:
+            parsed = json.loads(stripped)
+        except json.JSONDecodeError:
+            pass
+        else:
+            stack = [parsed]
+            while stack:
+                item = stack.pop()
+                if isinstance(item, str):
+                    yield from item.splitlines()
+                elif isinstance(item, list):
+                    stack.extend(item)
+                elif isinstance(item, dict):
+                    stack.extend(item.values())
+            return
+    yield from text.splitlines()
+
 
 def refuse_mutation(text: str, *, refuse=ValueError, prefix: str = "") -> None:
     """Refuse `text` if it names an `INJECT_BUG_` define, whatever else it says.
@@ -73,8 +111,14 @@ def refuse_mutation(text: str, *, refuse=ValueError, prefix: str = "") -> None:
 
 
 def record_counts(text: str) -> dict[str, int]:
-    """How many of each once-per-run record `text` holds, by record name."""
-    return {name: text.count(record) for name, record in ONE_RUN_RECORDS}
+    """How many whole once-per-run records `text` holds, by record name."""
+    counts = {name: 0 for name, _ in ONE_RUN_RECORDS}
+    for line in _record_lines(text):
+        for name, pattern in _RECORD_PATTERNS:
+            if pattern.fullmatch(line):
+                counts[name] += 1
+                break
+    return counts
 
 
 def validate_clean_pass(text: str, *, wav_sha256: str | None = None,

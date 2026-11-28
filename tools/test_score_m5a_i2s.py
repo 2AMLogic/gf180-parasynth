@@ -184,8 +184,10 @@ def test_every_committed_m5a_run_that_binds_a_wav_still_passes_with_its_own_dige
         text = (root / rel).read_text()
         digest = re.search(r"decoded I2S WAV sha256 ([0-9a-f]{64})", text)
         controls_line = re.search(r"verify_synth_top: (M5[AB]) controls:", text)
-        single_run = (text.count("verify_synth_top: simulator backend") == 1
-                      and not text.lstrip().startswith(("{", "[")))
+        single_run = (
+            scorer.i2s_transcript.record_counts(text)["simulator backend declaration"] == 1
+            and not text.lstrip().startswith(("{", "["))
+        )
         if not (digest and controls_line and single_run) or "INJECT_BUG_" in text:
             continue
         bound.append(rel)
@@ -227,7 +229,7 @@ def _capture(*, sha, cutoff_hz, correction_db, simulator="verilator"):
               .replace(_HASH, sha)
               .replace("simulator backend verilator", f"simulator backend {simulator}"))
     assert f"verify_synth_top: decoded I2S WAV sha256 {sha}" in report
-    return report
+    return report + "\n"
 
 
 def _without_backend(report):
@@ -290,3 +292,23 @@ def test_two_committed_m5a_captures_score_alone_and_refuse_concatenated():
         with pytest.raises(ValueError) as caught:
             validate_integration_report(text, sha_b)
         assert str(caught.value) == reason
+
+
+@pytest.mark.parametrize("wav_path", [
+    "/tmp/verify_synth_top: PASS --.wav",
+    "/tmp/verify_synth_top: simulator backend verilator.wav",
+    "/tmp/verify_synth_top: decoded I2S WAV sha256 "
+    "d64c9a864f592e8387a8228f21c314aefc28c8e07bf8aca8a36d3110d3a4b494.wav",
+])
+def test_committed_m5a_capture_accepts_marker_text_in_the_printed_wav_path(wav_path):
+    """START RED: `--wav-out` is printed verbatim by verify_synth_top.py; a
+    single clean run must not be refused solely because its WAV path contains
+    one of the counted record prefixes."""
+    path = scorer.ROOT / "docs/scorecard/m5-artifacts-333/repro/rtl-M5A.txt"
+    text = path.read_text()
+    sha = re.search(r"decoded I2S WAV sha256 ([0-9a-f]{64})", text).group(1)
+    replaced = text.replace("build/repro/rtl-M5A/M5A-i2s.wav", wav_path)
+    assert replaced != text
+    controls = validate_integration_report(replaced, sha)
+    assert controls["simulator"] == "verilator"
+    assert controls["saw_volume_correction_db"] == pytest.approx(-0.45428, abs=1e-5)
