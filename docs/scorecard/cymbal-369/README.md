@@ -358,3 +358,34 @@ VCA's clipping harmonics — measured, not isolated), and #400's tail question.
 - Select on the 9 development settings; confirm on the 16 untouched ones, including CY2500; report all 25.
 - Preserve the hats: D15A, D16A and OH00–OH75. Step 10 holds OH and CH bit-identical at every TONE position.
 - Then carry it through RTL, I²S and the deadlines, and produce the loudness-matched A/B pack (`tools/ab_808.py`, `tools/ab_808_loud.py`, committed here).
+
+## 6. Which source tree produced each result record (#1940)
+
+Every result record here states the `commit` it was measured at and whether the tree was clean. Read together,
+`commit` with `sources_dirty: false` say *these numbers came from exactly that tree* — and that is a reproducibility
+claim only if the commit is on main. On 2026-11-28 it was not, for three of the four records that carry `controls_pass`:
+
+| record | `commit` | on `origin/main`? |
+|---|---|---|
+| `low-tail/low-tail.json` | `e3c565ce` | **no** — 422 from the GitHub commits endpoint; annotated |
+| `low-tail/m-origin.json` | `2d4abdb1` | **no** — same; annotated |
+| `vca-clip/vca-clip.json` | `ac9bf865` | **no** — same; annotated |
+| `tone-knob/tone-knob.json` | `1916d361` | **yes** — the positive control |
+
+Each unresolved record keeps its original SHA, flag and figures and carries a `source_provenance` key stating the
+lookup that failed, its date and the merge that landed the file. Nothing was regenerated and no number moved. The
+lookup was `git merge-base --is-ancestor <commit> origin/main` in a full-history clone, then the GitHub commits
+endpoint. All three landed through two-parent merges (PRs #418, #423) whose branch commits are on main, so a squash
+merge did not discard these commits; how they left the branch is not recorded anywhere in this repository.
+
+**The publication check.** `tools/check_cymbal_source_provenance.py` resolves the `commit` of every record in this
+directory that carries `controls_pass` against `origin/main`. It passes a commit that is on main, and fails one that
+is not unless it is one of the three annotated unknowns. From a shallow clone, or a checkout with no `origin/main`,
+it exits 2 and gives no verdict rather than guessing. The three unknowns are *accepted* and reported as
+`HISTORICAL-UNKNOWN … an unknown, not a verified source`; an annotation pasted onto a new record does not pass,
+because the exceptions are keyed by path and SHA inside the tool. It runs in `make verify-full`, and its controls are
+in `tools/test_check_cymbal_source_provenance.py`, which runs wherever `pytest tools/` does.
+
+**For a new record here:** measure on a clean tree at a commit that is already on main, publish the plain `commit`
+field, and run the check on the record before committing it. `--scan` lists every record under `docs/scorecard/`
+that states a source commit and whether that commit is on main, for the same question outside this directory.

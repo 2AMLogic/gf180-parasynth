@@ -118,6 +118,7 @@ import run_case as rc  # noqa: E402
 import cymbal_low_tail as lt  # noqa: E402
 import cymbal_tone_realisation as tr  # noqa: E402
 import refusal
+from exit_contract import REFUSED  # noqa: E402  -- 2: the declared refusal status
 
 BANDS = dict(lt.BANDS)
 REF = lt.REF_BAND
@@ -396,7 +397,7 @@ def main(argv=None) -> int:
     if not ok:
         print("\n".join(lines))
         print("REFUSED: the shared instrument's own controls do not pass")
-        return 1
+        return REFUSED            # was 1: a refusal, not a mismatch -- no result exists (#1789)
 
     e = band_energies()
     res = {"taus": taus or TAU_S, "energies": e, "bound": bound(e), "controls_pass": ok}
