@@ -1163,7 +1163,14 @@ def main(argv=None, *, _inject=None) -> int:
     except (OSError, serial.SerialException) as exc:
         print(f"midi_session: REFUSED -- cannot open {port}: {exc}", file=sys.stderr)
         return 2
-    session = MidiSession(ser, preset=a.preset, image=image, out=sys.stdout)
+    # Deferred, like qualified_domain above: drums_fx pulls in NumPy, which must
+    # not gate --help / --list-midi-ports (#1282)
+    import drums_fx as dx
+    try:
+        session = MidiSession(ser, preset=a.preset, image=image, out=sys.stdout)
+    except (uh.Refused, dx.KitRefused) as exc:
+        print(f"midi_session: REFUSED -- {exc}", file=sys.stderr)
+        return 2
     try:
         session.start()
     except uh.Refused as exc:

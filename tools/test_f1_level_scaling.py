@@ -25,6 +25,11 @@ sys.path.insert(0, str(ROOT / "model"))
 import f1_level_scaling as fls       # noqa: E402
 import f1_level_capture as cap       # noqa: E402
 import f1_selected_path as f1        # noqa: E402
+import exit_contract                 # noqa: E402
+import refusal                       # noqa: E402
+import refprofile as rp              # noqa: E402
+import run_case as rc                # noqa: E402
+import mono_m5a_score as m5          # noqa: E402
 
 CUT = 1000.0
 FREQS = [200.0, 1000.0, 3000.0]      # a short stimulus: the controls need words, not curves
@@ -606,3 +611,156 @@ def test_absent_frozen_cache_refuses_through_main_instead_of_raising(monkeypatch
         cap._frozen_gain_db.cache_clear()
     out = capsys.readouterr().out
     assert "REFUSED" in out and "not in the cache" in out
+
+# --- the CLI handler: a cross-module refusal must exit REFUSED (#1624) --------
+# `main`'s try reaches two families its handler did not list: `refprofile.
+# Refused` (through `surge_vs_frozen` -> `run_case.load_filter_reference`, for
+# an absent, short, mis-hashed or silent frozen clip) and `mono_m5a_score.
+# Refused` (through `f1.build_voice`). Both are siblings of the four classes
+# the handler enumerated, so each escaped as an exit-1 traceback where the
+# exit contract owes REFUSED (2) -- a refusal rendered as FAIL. The controls
+# drive the real `main` with the level-capture manifest and
+# `base_vpu_asserted()` satisfied for real, and point `refprofile.PROFILE_DIR`
+# at an empty directory: the committed profile.json still names the clip, so
+# only the audio is gone, a host's state before `tools/refprofile_restore.py`.
+#
+# MEASURED, the seven controls against five handler variants (2026-11-28),
+# as failed / passed:
+#   the old four-class tuple               4 / 3   absent cache, mono_m5a_score,
+#                                                   both --expect-refused params
+#   `except refusal.Refused`, alone        6 / 1   WORSE: `main` bound a LOCAL list
+#                                                  named `refusal` in its
+#                                                  --expect-refused branch, so the
+#                                                  clause raised UnboundLocalError
+#                                                  for every exception leaving the
+#                                                  try. The repair renames that
+#                                                  local; do not re-shadow it.
+#   `except Exception`                    1 / 6   the ValueError control, "DID NOT
+#                                                  RAISE": relabelled REFUSED
+#   the tuple with `rp.Refused` appended   1 / 6   the mono_m5a_score control: that
+#                                                  repair fixes one sibling, not
+#                                                  the family
+#   the shipped repair                     0 / 7
+FIRST_FROZEN_CLIP = cap.CONDITIONS[next(iter(fls.CASES.values()))][1]
+
+
+def _known_answer_is_reachable() -> None:
+    """REFUSE, rather than report, when the committed inputs the controls
+    read are not on this tree: without them `main` refuses for another reason
+    before it reaches the boundary under test."""
+    try:
+        cap.load_manifest()
+        clips = rp.load_profile()["clips"]
+    except refusal.Refused as e:
+        pytest.skip(f"REFUSED: {e}")
+    if FIRST_FROZEN_CLIP not in clips:
+        pytest.skip(f"REFUSED: {FIRST_FROZEN_CLIP!r} is not in the committed frozen profile")
+
+
+def _reach_surge_vs_frozen(monkeypatch) -> None:
+    """surge_side anchors each capture to the frozen cache (#1469) and refuses
+    first when it is absent. These controls target the later
+    `surge_vs_frozen` boundary, so skip the earlier, separately tested one."""
+    monkeypatch.setattr(fls, "surge_side", lambda manifest: {})
+
+
+def test_the_refusal_families_main_reaches_share_only_the_base():
+    """The relation a base-class handler rests on: `refprofile.Refused` and
+    `mono_m5a_score.Refused` are none of the four classes the handler used to
+    enumerate, and all six are `refusal.Refused`."""
+    listed = (fls.Refused, cap.Refused, f1.Refused, rc.Refused)
+    for klass in listed:
+        assert not issubclass(rp.Refused, klass) and not issubclass(klass, rp.Refused)
+        assert not issubclass(m5.Refused, klass) and not issubclass(klass, m5.Refused)
+    for klass in listed + (rp.Refused, m5.Refused):
+        assert issubclass(klass, refusal.Refused), klass
+
+
+def test_absent_frozen_cache_exits_refused_2_and_names_the_clip(tmp_path, monkeypatch, capsys):
+    _known_answer_is_reachable()
+    empty = tmp_path / "frozen-cache"
+    empty.mkdir()
+    monkeypatch.setattr(rp, "PROFILE_DIR", empty)
+    report = tmp_path / "report.json"
+    code = fls.main(["--json", str(report)])
+    out = capsys.readouterr()
+    assert code == exit_contract.REFUSED, (code, out.out[-400:])
+    refused = [ln for ln in out.out.splitlines() if ln.startswith("REFUSED")]
+    assert len(refused) == 1, out.out[-400:]
+    # surge_side now anchors every capture to the frozen cache (#1469), so the
+    # first absent clip named is the anchor's (open20k), not FIRST_FROZEN_CLIP.
+    assert "surge-type2/" in refused[0] and "is not in the cache" in refused[0], refused[0]
+    assert not report.exists(), "a refused run must not write a report"
+
+
+def test_a_run_case_refusal_at_the_same_boundary_still_exits_refused_2(tmp_path, monkeypatch,
+                                                                     capsys):
+    _known_answer_is_reachable()
+    _reach_surge_vs_frozen(monkeypatch)
+
+    def not_projectable(clip_id, inject=""):
+        raise rc.Refused(f"the frozen clip {clip_id} could not be projected: <control>")
+    monkeypatch.setattr(rc, "load_filter_reference", not_projectable)
+    report = tmp_path / "report.json"
+    code = fls.main(["--json", str(report)])
+    out = capsys.readouterr()
+    assert code == exit_contract.REFUSED, (code, out.out[-400:])
+    assert "REFUSED  the frozen clip" in out.out and "could not be projected" in out.out, \
+        out.out[-400:]
+    assert not report.exists(), "a refused run must not write a report"
+
+
+def test_a_mono_m5a_score_refusal_from_build_voice_exits_refused_2(tmp_path, monkeypatch, capsys):
+    """The input that defeats the repair the issue rejected -- appending
+    `rp.Refused` to the tuple. `main` also calls `f1.build_voice`, which reaches
+    `mono_m5a_score.engine_configuration`: a third sibling, at another line of
+    the same try."""
+    _known_answer_is_reachable()
+
+    def unsupported_engine(profile_name):
+        raise m5.Refused(f"unsupported Mono engine configuration {profile_name!r}")
+    monkeypatch.setattr(f1, "build_voice", unsupported_engine)
+    report = tmp_path / "report.json"
+    code = fls.main(["--json", str(report)])
+    out = capsys.readouterr()
+    assert code == exit_contract.REFUSED, (code, out.out[-400:])
+    assert "REFUSED  unsupported Mono engine configuration 'selected'" in out.out, out.out[-400:]
+    assert not report.exists(), "a refused run must not write a report"
+
+
+def test_an_unrelated_error_at_the_same_boundary_is_an_execution_error(tmp_path, monkeypatch,
+                                                                     capsys):
+    """The input that defeats the wrong repair (verification-rules rule 8):
+    `except Exception` relabels every traceback REFUSED, and this is the
+    control that goes red when it is swapped in. A refusal is asserted by the
+    exception propagating out of `main`, never by a caught `Exception`."""
+    _known_answer_is_reachable()
+    _reach_surge_vs_frozen(monkeypatch)
+
+    def unreadable(clip_id, inject=""):
+        raise ValueError("<control> the probe grid is not a number")
+    monkeypatch.setattr(rc, "load_filter_reference", unreadable)
+    report = tmp_path / "report.json"
+    with pytest.raises(ValueError, match="the probe grid is not a number") as err:
+        fls.main(["--json", str(report)])
+    assert "surge_vs_frozen" in [fr.name for fr in err.traceback], \
+        "the control must fire at the frozen-clip boundary"
+    out = capsys.readouterr()
+    assert "REFUSED" not in out.out, "an execution error must not be relabelled a refusal"
+    assert not report.exists(), "an execution error must not write a report"
+
+
+@pytest.mark.parametrize("reason, code, marker", [
+    ("is not in the cache", exit_contract.PASS, "CONTROL OK"),
+    ("a reason this run does not refuse for", exit_contract.FAIL, "CONTROL FAILED"),
+])
+def test_expect_refused_control_mode_sees_the_frozen_cache_refusal(tmp_path, monkeypatch, capsys,
+                                                                   reason, code, marker):
+    _known_answer_is_reachable()
+    empty = tmp_path / "frozen-cache"
+    empty.mkdir()
+    monkeypatch.setattr(rp, "PROFILE_DIR", empty)
+    got = fls.main(["--expect-refused", reason])
+    out = capsys.readouterr()
+    assert got == code, (got, out.out[-400:])
+    assert marker in out.out.splitlines()[-1], out.out[-400:]
