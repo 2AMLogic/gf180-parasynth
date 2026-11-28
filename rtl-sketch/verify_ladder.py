@@ -16,7 +16,8 @@ negative control fails must require exactly 1:
 
   0  every sample identical
   1  the simulation ran to completion and at least one sample differed
-  2  it did not run: tool missing, compile error, timeout, short output
+  2  it did not run, or the capture is not the declared output: tool missing,
+     compile error, timeout, short or surplus output (count mismatch either way)
 
   --inject NAME     compile with -DINJECT_BUG_LADDER_<NAME>
   --expect-fail     invert the verdict: exit 0 only if the comparison gave 1.
@@ -197,7 +198,7 @@ def simulate(rtl: str, tb: str, log2n: int, rom: str, defines: list[str],
 
 # ---- comparison -------------------------------------------------------------
 def compare(expected: list[int], rtl_out: str, name: str = "verify_ladder") -> int:
-    """0 identical, 1 mismatch, 2 short/absent output."""
+    """0 identical, 1 mismatch, 2 absent/short/surplus output."""
     try:
         toks = open(rtl_out).read().split()
     except OSError:
@@ -208,10 +209,18 @@ def compare(expected: list[int], rtl_out: str, name: str = "verify_ladder") -> i
         try: got.append(int(t))
         except ValueError: got.append(None)          # 'x' -- undefined
     n = len(expected)
-    if len(got) < n:
-        print(f"{name}: RTL produced {len(got)} samples, model {n} -- did not run to completion")
+    if len(got) != n:
+        # one RTL value per expected value: a count mismatch in EITHER direction
+        # is a malformed capture. Slicing the prefix off here let a surplus trace
+        # pass as identical (#1366), and the count is checked before any value so
+        # a wrong value plus surplus is still 2, not a caught defect's 1.
+        if len(got) < n:
+            print(f"{name}: RTL produced {len(got)} samples, model expected {n} -- "
+                  "fewer, did not run to completion")
+        else:
+            print(f"{name}: RTL produced {len(got)} samples, model expected {n} -- "
+                  "more, surplus output, not the declared capture")
         return 2
-    got = got[:n]
     first, mism, maxerr, xs, sq = None, 0, 0, 0, 0.0
     for i, (e, r) in enumerate(zip(expected, got)):
         if r is None:
