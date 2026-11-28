@@ -5,15 +5,18 @@
     python tools/fold_read_profile.py --out DIR --smoke     the instrument's own test
 
 `model/discrimination_features.py` reads every position of a fold through
-`_read_at`, a Hann-windowed sinc evaluated tap by tap for each position: the
-same shape as the per-sample kernel `tools/r0_capture.py` tabulated in #1944,
-with smaller constants. Whether that costs anything was never measured. This
-is the measurement. It times `_read_at` inside each run that calls the fold
-family -- every collected test file that calls it and every probe that does --
-and reports, per run, the seconds and the share of that run's wall time, with
-the positions split into kernel reads (`taps > 0`) and index-only reads
-(`taps <= 0`, which evaluate no kernel). The headline is the run that read
-the most kernel positions.
+`_read_at`. Until #2112 that was a Hann-windowed sinc evaluated tap by tap for
+every position -- the same shape as the per-sample kernel
+`tools/r0_capture.py` tabulated in #1944, with smaller constants -- and
+whether it cost anything had never been measured. This is the measurement,
+kept because the question comes back whenever the fold family gains a caller.
+It times `_read_at` inside each run that calls the family -- every collected
+test file that calls it and every probe that does -- and reports, per run,
+the seconds and the share of that run's wall time, with the positions split
+into kernel reads (`taps > 0`) and index-only reads (`taps <= 0`, which
+evaluate no kernel). The headline is the run that read the most kernel
+positions. The record of what it found, before and after the kernel was
+tabulated, is docs/fold-read-cost-2026-11-28.md.
 
 HOW IT TIMES. Each run is a fresh interpreter (a child of this file's
 `--child` mode) so no run inherits another's caches or module state. The
