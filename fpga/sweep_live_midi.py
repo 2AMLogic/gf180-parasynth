@@ -23,7 +23,9 @@ with the contract's two numbers overridden, and reports the verdict of every
 property -- a setting that admits the load by breaking something else shows it.
 
 Exit 0 once the table and sweep.json are written; 2 REFUSED, nothing written,
-when the oracle's frozen target refuses before any row measured anything.
+when a frozen kit or target refuses before any row measured anything -- the
+classes the oracle catches at its own boundary (drums_fx.KitRefused,
+refusal.Refused), which its wrapper catches too.
 """
 from __future__ import annotations
 
@@ -88,7 +90,7 @@ def one(lookahead_ms: float, reserve: int) -> dict:
 def main() -> int:
     try:
         rows = [one(ms, res) for ms in (12, 13, 14, 15, 16, 17, 18) for res in (2, 3, 4)]
-    except refusal.Refused as exc:        # the oracle's target refused: nothing was measured (#1717)
+    except (dx.KitRefused, refusal.Refused) as exc:
         print(f"sweep_live_midi: REFUSED -- {exc}")
         return 2
     print(f"{'L ms':>5} {'res':>3} {'verdict':>8} {'refused':>7} {'p95':>6} {'p99':>6} "

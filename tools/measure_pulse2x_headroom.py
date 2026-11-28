@@ -43,7 +43,8 @@ SR = 48_000
 
 
 class Refused(refusal.Refused, RuntimeError):
-    """A `probe_points` row that holds no measurement to read (#1628)."""
+    """A `probe_points` row that holds no measurement to read (#1628), or a
+    stated precondition in `decimator_run` / the mix output level (#1693)."""
 
 
 def q15(g: float) -> int:
@@ -117,7 +118,7 @@ def decimator_run(shape: str, note: float, gain_q15: int, n: int = 24_000) -> di
     diff = u - s
     e_sig = float(np.sum(s * s))
     if e_sig <= 0:
-        raise RuntimeError(f"{shape} MIDI {note}: silent decimator output")
+        raise Refused(f"{shape} MIDI {note} gain Q15 {gain_q15}: silent decimator output")
     e_clip = float(np.sum(diff * diff))
     return {"peak": int(np.max(np.abs(u))), "clipped": int(np.count_nonzero(diff)),
             "clip_db": round(10 * math.log10(e_clip / e_sig), 2) if e_clip else None,
@@ -242,6 +243,21 @@ def probe_points(gain: float, notes=(36, 60, 84, 96, 108, 114, 120, 127)) -> dic
     return res
 
 
+def output_dbfs(out, what: str) -> float:
+    """RMS of the sustained output in dBFS, or a refusal when it is under
+    mono_artifact_probe's activity floor. Digital silence is -inf here, never
+    a floored number: a 1e-12 floor printed it as -240.0 and the run exited 0
+    (#1693). The comparison is negated because every IEEE comparison with NaN
+    is False (#134), so `level < floor` would let a NaN level through."""
+    import mono_artifact_probe as mp
+    x = np.asarray(out[12000:], dtype=np.float64) / 32768
+    rms = float(np.sqrt(np.mean(x * x)))
+    level = 20 * math.log10(rms) if rms > 0 else -math.inf
+    if not level >= mp.SILENT_DBFS:
+        raise Refused(f"{what}: silent: {level:.1f} dBFS < activity floor {mp.SILENT_DBFS} dBFS")
+    return level
+
+
 def mix_check(gains, scope="rect", notes=(24, 36, 48, 60, 72, 84, 96, 108, 120, 127)) -> dict:
     """The default preset (saw, saw+7c, square-12) and a three-rectangle mix
     through the pulse2x voice: rail samples at the mixer and the output."""
@@ -264,12 +280,13 @@ def mix_check(gains, scope="rect", notes=(24, 36, 48, 60, 72, 84, 96, 108, 120, 
                 tr = v.trace
                 mixed = np.asarray(tr["mixed"])
                 osc_rail = sum(int(np.count_nonzero(np.abs(np.asarray(x)) >= 32767)) for x in tr["osc"])
+                level = output_dbfs(out, f"mix preset {name} MIDI {nt} gain "
+                                         f"{'base' if g is None else f'{g:.3f}'}")
                 res[f"{'base' if g is None else f'{g:.3f}'}/{name}/{nt}"] = {
                     "osc_rail": osc_rail,
                     "mixer_rail": int(np.count_nonzero(np.abs(mixed) >= 32767)),
                     "output_rail": int(np.count_nonzero((out >= 32767) | (out <= -32768))),
-                    "output_rms_dbfs": round(20 * math.log10(max(float(np.sqrt(np.mean(
-                        (out[12000:].astype(float) / 32768) ** 2))), 1e-12)), 3)}
+                    "output_rms_dbfs": round(level, 3)}
         tot = {k: sum(r[k] for kk, r in res.items() if kk.startswith(f"{'base' if g is None else f'{g:.3f}'}/"))
                for k in ("osc_rail", "mixer_rail", "output_rail")}
         print(f"mix gain {g}: {tot}", flush=True)
