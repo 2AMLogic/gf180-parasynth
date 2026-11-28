@@ -226,7 +226,10 @@ def _render_segment(wave: str, decay: float, events: dict,
 
 
 def envelope_timing(env, sr: int, on_s: float, off_s: float) -> dict:
-    """Measure 10–90% attack and post-gate 20 dB release from an RMS envelope."""
+    """Measure 10–90% attack and post-gate 20 dB release from an RMS envelope.
+
+    `tail_db` is None for an exactly-zero tail, which has no finite ratio to
+    the held level and counts as a complete release."""
     e = np.asarray(env, dtype=np.float64)
     on, off = int(round(on_s * sr)), int(round(off_s * sr))
     if on < 0 or off <= on or off >= len(e):
@@ -249,7 +252,7 @@ def envelope_timing(env, sr: int, on_s: float, off_s: float) -> dict:
     crossed = np.flatnonzero(release <= 0.10 * held)
     tail_n = min(len(e) - off, max(1, int(round(0.050 * sr))))
     tail = float(np.sqrt(np.mean(e[-tail_n:] ** 2)))
-    tail_db = 20.0 * math.log10(max(tail, 1e-15) / held)
+    tail_db = None if tail == 0.0 else 20.0 * math.log10(tail / held)
     if not len(crossed):
         return {"valid": False, "why": "20 dB release threshold not reached",
                 "held_rms": held, "tail_db": tail_db}
@@ -259,8 +262,25 @@ def envelope_timing(env, sr: int, on_s: float, off_s: float) -> dict:
         "release_t20_ms": int(crossed[0]) * 1000.0 / sr,
         "held_rms": held,
         "tail_db": tail_db,
-            "release_complete_40db": tail_db <= -40.0,
+            "release_complete_40db": tail == 0.0 or tail_db <= -40.0,
     }
+
+
+def _tail_text(tail_db, digits: int) -> str:
+    """`tail_db` for a report line; None is an exactly-zero tail, which has no dB."""
+    return "exact silence" if tail_db is None else f"{tail_db:.{digits}f} dB"
+
+
+def pre_next_note_clearance_db(env, next_on_s: float, held: float) -> float | None:
+    """Level of the 40 ms before the next note-on, relative to the held level.
+
+    None when that window is exactly zero: no finite ratio exists. The last
+    note of a phrase also carries None in this field, having no next note."""
+    n = max(1, int(0.040 * SR))
+    residual = float(np.median(env[int(next_on_s * SR) - n:int(next_on_s * SR)]))
+    if residual == 0.0:
+        return None
+    return 20.0 * math.log10(residual / held)
 
 
 def _event_analysis(audio: np.ndarray, wave: str, events: dict,
@@ -321,17 +341,15 @@ def _event_analysis(audio: np.ndarray, wave: str, events: dict,
             raise Refused(f"MIDI {event['note']} envelope measurement refused: {times['why']}")
         if not times["release_complete_40db"]:
             raise Refused(f"MIDI {event['note']} release is not complete to -40 dB: "
-                          f"tail {times['tail_db']:.2f} dB")
+                          f"tail {_tail_text(times['tail_db'], 2)}")
         event_index = events[wave].index(event)
         if event_index + 1 < len(events[wave]):
             next_on = events[wave][event_index + 1]["on_s"]
-            n = max(1, int(0.040 * SR))
-            residual = float(np.median(env[int((next_on * SR)) - n:int(next_on * SR)]))
-            residual_db = 20.0 * math.log10(max(residual, 1e-15) / times["held_rms"])
-            if residual_db > -40.0:
+            clearance_db = pre_next_note_clearance_db(env, next_on, times["held_rms"])
+            if clearance_db is not None and clearance_db > -40.0:
                 raise Refused(f"MIDI {event['note']} release has not cleared before the next note: "
-                              f"{residual_db:.2f} dB")
-            times["pre_next_note_clearance_db"] = residual_db
+                              f"{clearance_db:.2f} dB")
+            times["pre_next_note_clearance_db"] = clearance_db
         else:
             times["pre_next_note_clearance_db"] = None
         records.append({
@@ -623,7 +641,7 @@ def main(argv=None) -> int:
                   f"inharmonic {m['inharmonic_db']:.2f} dB, "
                   f"A10-90 {m['envelope']['attack_10_90_ms']:.1f} ms, "
                   f"R20 {m['envelope']['release_t20_ms']:.1f} ms, "
-                  f"tail {m['envelope']['tail_db']:.1f} dB")
+                  f"tail {_tail_text(m['envelope']['tail_db'], 1)}")
     wr = result["data"]["qualification"]["wrong_then_right"]
     ctrl = wr["cutoff_calibration"]
     print(f"wrong-then-right: {wr['wrong_then_right_rate']}; host-block control caught "

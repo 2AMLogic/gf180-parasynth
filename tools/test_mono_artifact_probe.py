@@ -7,6 +7,7 @@ exercise the voice only to show the controls turn the probe red.
 """
 from __future__ import annotations
 
+import json
 import math
 import pathlib
 import sys
@@ -125,8 +126,61 @@ def test_dropout_detector():
     x = bl_saw(F0)
     assert p.dropout_depth_db(x) > -1.0
     y = x.copy()
+    y[40 * p.DROPOUT_BLOCK:41 * p.DROPOUT_BLOCK] *= 1e-3
+    assert -80.0 < p.dropout_depth_db(y) < -40.0
     y[10_000:10_480] = 0
-    assert p.dropout_depth_db(y) < -40.0
+    assert p.dropout_depth_db(y) is None and p.is_dropout(None)
+
+
+def test_exact_zero_block_has_no_finite_dropout_depth():
+    """An exactly-zero 5 ms block has no finite ratio to the median block. It
+    was reported as 20*log10(1e-12 / median): the floor, not a reading."""
+    y = bl_saw(F0)
+    y[40 * p.DROPOUT_BLOCK:42 * p.DROPOUT_BLOCK] = 0
+    depth = p.dropout_depth_db(y)
+    assert depth is None
+    assert json.loads(json.dumps({"dropout_depth_db": depth}))["dropout_depth_db"] is None
+
+
+def test_dropout_depth_below_the_old_floor_is_its_own_number():
+    y = np.ones(8 * p.DROPOUT_BLOCK)
+    y[3 * p.DROPOUT_BLOCK:4 * p.DROPOUT_BLOCK] = 1e-13
+    assert p.dropout_depth_db(y) == pytest.approx(20 * math.log10(1e-13), abs=1e-6)
+
+
+_ABSENT = object()
+
+
+def _measured(depth):
+    return {} if depth is _ABSENT else {"dropout_depth_db": depth}
+
+
+def test_dropout_rule_ranks_an_exact_zero_block_below_every_number():
+    assert p.is_dropout(None) is True
+    assert p.is_dropout(-40.0) is True
+    assert p.is_dropout(p.DROPOUT_DB) is False
+    assert p.is_dropout(-0.1) is False
+    assert p.is_dropout("REFUSED") is None
+    assert p.is_dropout(float("nan")) is None
+    assert p.new_dropout(_measured(-0.1), _measured(None)) is True
+    assert p.new_dropout(_measured(-0.1), _measured(-40.0)) is True
+    assert p.new_dropout(_measured(-40.0), _measured(None)) is False
+    assert p.new_dropout(_measured(None), _measured(-40.0)) is False
+    assert p.new_dropout(_measured(None), _measured(None)) is False
+    assert p.new_dropout(_measured(-40.0), _measured(-0.1)) is False
+    assert p.new_dropout(_measured(_ABSENT), _measured(None)) is None
+    assert p.new_dropout(_measured(-0.1), _measured(_ABSENT)) is None
+    assert p.new_dropout(_measured("REFUSED"), _measured(None)) is None
+    assert p.new_dropout(_measured(-0.1), _measured("REFUSED")) is None
+    assert p.new_dropout(_measured(float("nan")), _measured(None)) is None
+
+
+def test_an_exact_zero_block_moved_the_dropout_depth_the_caught_way():
+    assert p._moved_way("dropout_depth_db", -0.1, None, -1)
+    assert not p._moved_way("dropout_depth_db", None, None, -1)
+    assert not p._moved_way("dropout_depth_db", None, -0.1, -1)
+    assert p._moved("dropout_depth_db", -0.1, None)
+    assert not p._moved("dropout_depth_db", None, None)
 
 
 # ---- the voice: start red, then controls ---------------------------------------
@@ -147,6 +201,10 @@ def test_pulse2x_engine_changes_pulse():
 def test_every_control_moves_its_property():
     res = p.controls("r1", 84, "saw")
     assert res["all_caught"], res["caught"]
+    row = res["matrix"]["DROPOUT_10MS"]["dropout_depth_db"]
+    assert isinstance(row["clean"], float) and row["dirty"] is None
+    assert row["state"] == "MOVED"
+    assert res["caught"]["DROPOUT_10MS"] is True
 
 
 def test_out_of_domain_stimuli_refuse():
