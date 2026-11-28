@@ -166,3 +166,25 @@ def test_disagreement_between_the_engines_is_visible_in_the_report():
     assert report["baseline"]["state"] == "pass"
     assert report["candidate"]["state"] == "fail"
     assert report["comparison"]["states_agree"] is False
+
+
+# --------------------------------------------------------------------------- #
+# finite numbers whose difference is not (#1636)
+# --------------------------------------------------------------------------- #
+def test_refuses_a_record_whose_board_distance_overflows_however_finite_the_record():
+    """Every number is finite, but the board has no distance for the largest
+    float over the rail tolerance of 0.01, so there is no verdict to compare.
+    The report used to carry `candidate.worst: Infinity`."""
+    candidate = _record(rail=1.7976931348623157e308)
+    with pytest.raises(Refused, match="no valid board verdict"):
+        compare.compare_records(_record(engine="fixed-model"), candidate)
+
+
+def test_refuses_a_delta_fraction_that_is_not_finite_however_finite_the_record():
+    """The board clamps a defect ceiling's negative error to a distance of 0
+    and passes the record. This comparator's own `abs(after) / limit` does not
+    clamp, and overflows."""
+    candidate = _record(rail=-1e307)
+    candidate["metrics"]["output artifacts"]["purpose"] = "defect ceiling"
+    with pytest.raises(Refused, match="property output artifacts difference is not finite"):
+        compare.compare_records(_record(engine="fixed-model"), candidate)

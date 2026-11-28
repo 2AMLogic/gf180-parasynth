@@ -63,7 +63,10 @@ PURPOSES = (MATCH, DEFECT_CEILING)
 
 def _finite(m: dict, key: str, *, required: bool) -> float | None:
     """The number under `key`, or ValueError("invalid number ...") when it is
-    missing (and required), not a number, or not finite."""
+    missing (and required), not a number, not finite, or an integer too large
+    to convert to float. `math.isfinite` raises OverflowError on that last one
+    rather than answering (#1636); it is quoted by field and not by value,
+    because an integer past the interpreter's digit limit cannot be repr'd."""
     if key not in m or m[key] is None:
         if required:
             raise ValueError(f"invalid number: no {key}")
@@ -71,7 +74,11 @@ def _finite(m: dict, key: str, *, required: bool) -> float | None:
     v = m[key]
     if isinstance(v, bool) or not isinstance(v, (int, float)):
         raise ValueError(f"invalid number: {key} is {v!r}")
-    if not math.isfinite(v):
+    try:
+        finite = math.isfinite(v)
+    except OverflowError as exc:
+        raise ValueError(f"invalid number: {key} is an integer beyond float range") from exc
+    if not finite:
         raise ValueError(f"invalid number: {key} is {v!r}")
     return float(v)
 
@@ -85,8 +92,10 @@ def metric_distance(m: dict) -> float:
     error, or an infinite tolerance, is certified as a perfect pass -- and a
     ceiling, being a clamp, is exactly where that hides. Raises ValueError
     ("invalid number ...") for a non-finite error, value or reference, for a
-    tolerance that is not finite and strictly positive, and for a purpose it
-    does not know. The caller turns that into NO VERDICT: never a pass,
+    tolerance that is not finite and strictly positive, for a purpose it
+    does not know, and for a distance that is not finite: a finite error
+    over a finite tolerance still overflows, and `inf` came back as a fail
+    (#1636). The caller turns that into NO VERDICT: never a pass,
     never a fail."""
     purpose = m.get("purpose", MATCH)
     if purpose not in PURPOSES:
@@ -98,8 +107,13 @@ def metric_distance(m: dict) -> float:
     if tol <= 0:
         raise ValueError(f"invalid number: tolerance {tol!r} is not strictly positive")
     if purpose == MATCH:
-        return abs(err) / tol
-    return max(0.0, err) / tol                       # DEFECT_CEILING
+        distance = abs(err) / tol
+    else:
+        distance = max(0.0, err) / tol               # DEFECT_CEILING
+    if not math.isfinite(distance):
+        raise ValueError(f"invalid number: error {err!r} over tolerance {tol!r} "
+                         "is not a finite distance")
+    return distance
 
 
 def load_cases() -> list[dict]:
@@ -146,11 +160,18 @@ def _engine_text(engine) -> str:
 
 
 def evaluate(case: dict, res: dict | None) -> dict:
-    """Decide one case. Never invents a distance it does not have."""
+    """Decide one case. Never invents a distance it does not have.
+
+    A record it cannot read -- not an object, or with a `provenance`,
+    `metrics` or metric that is not one -- is NO VERDICT naming the
+    malformed part, never a traceback (#1636)."""
     required = [m.strip() for m in (case.get("required_measurements") or "").split(";")
                 if m.strip()]
     if res is None:
         return {"state": NOT_RUN, "worst": None, "why": "", "engine": ""}
+    if not isinstance(res, dict):
+        return {"state": NO_VERDICT, "worst": None, "engine": "",
+                "why": f"record is not an object: {type(res).__name__}"}
     if "_broken" in res:
         return {"state": NO_VERDICT, "worst": None, "why": res["_broken"], "engine": ""}
 
@@ -166,12 +187,18 @@ def evaluate(case: dict, res: dict | None) -> dict:
     # What was this measured against? A result that cannot answer is not
     # evidence; it is a number. It counts against coverage, never towards it.
     prov = res.get("provenance") or {}
+    if not isinstance(prov, dict):
+        return {"state": NO_VERDICT, "worst": None, "engine": engine,
+                "why": f"provenance is not an object: {type(prov).__name__}"}
     missing_prov = [k for k in ("worktree", "command", "inputs") if not prov.get(k)]
     if missing_prov:
         return {"state": NO_VERDICT, "worst": None, "engine": engine,
                 "why": "no provenance: " + ", ".join(missing_prov)}
 
     metrics = res.get("metrics") or {}
+    if not isinstance(metrics, dict):
+        return {"state": NO_VERDICT, "worst": None, "engine": engine,
+                "why": f"metrics is not an object: {type(metrics).__name__}"}
 
     # A required component that is missing invalidates the case. It is not
     # dropped from the maximum, because that would reward not measuring it.
@@ -182,6 +209,9 @@ def evaluate(case: dict, res: dict | None) -> dict:
 
     worst, worst_name, invalid, props = None, "", [], {}
     for name, m in metrics.items():
+        if not isinstance(m, dict):
+            invalid.append(f"{name} (not an object: {type(m).__name__})")
+            continue
         if not m.get("valid", True):
             invalid.append(name)
             continue                       # NO distance, not zero distance

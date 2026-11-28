@@ -242,10 +242,10 @@ def main(argv=None) -> int:
     candidate = delta_report.repo_path(args.candidate, root=ROOT)
     try:
         report = compare_files(baseline, candidate)
+        out = delta_report.write_report(report, args.out, "compare_m5a_i2s_candidate", root=ROOT)
     except (OSError, ValueError, m5a.Refused, subprocess.CalledProcessError) as exc:
         print(f"compare_m5a_i2s_candidate: REFUSED -- {exc}")
         return 2
-    out = delta_report.write_report(report, args.out, "compare_m5a_i2s_candidate", root=ROOT)
     if out is None:
         return 2
     comparison = report["comparison"]
