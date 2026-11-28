@@ -711,7 +711,7 @@ def _entry(file, func, shape, count, owner, reason):
     return dict(file=file, func=func, shape=shape, count=count, owner=owner, reason=reason)
 
 
-# --- the issue's excluded sites: owned by other open issues
+# --- the issue's excluded sites: owned by other open issues (#1807's scope note)
 EXPECTED += [
     _entry("tools/cymbal_m_origin.py", "main", "print-exit", 1,
            "#1806 (same family as #1786; #1789 names the same line)",
@@ -724,6 +724,40 @@ EXPECTED += [
            "pinned also in tools/refusal_exit_census.py EXPECTED.sites_outside_set (#804)",
            "the --require-source exit 1 is that tool's documented contract (argparse help, "
            "docs/scorecard/cymbal-369/vca-drive/README.md)"),
+]
+
+# --- found by this scanner on origin/main @ 03148399, NOT TRACED: #1841 owns
+# every one.  Seventeen SystemExit-carrying-a-string sites no scan had listed
+# and six prints whose flag is read eight lines later (past the issue's
+# window).  The reading of each source in #1841 says where to look; a site is
+# reclassified only by driving the path, and its entry here is then removed.
+EXPECTED += [
+    _entry("model/measure_harness.py", "assert_precondition", "systemexit-str", 2, "#1841",
+           "the harness's own known-answer controls, `shape mismatch` and `off by`"),
+    _entry("tools/check_decimator_saturation.py", "main", "systemexit-str", 1, "#1841",
+           "iverilog and vvp are required"),
+    _entry("tools/check_phrase_schedule.py", "applied", "systemexit-str", 2, "#1841",
+           "one write log expected; an applied frame differs from its pin-side prediction"),
+    _entry("tools/check_phrase_schedule.py", "main", "systemexit-str", 1, "#1841",
+           "N/M gates against the schedule"),
+    _entry("tools/compile_dag.py", "run_evidence", "systemexit-str", 1, "#1841",
+           "a node declares an evidence key run_evidence() cannot execute"),
+    _entry("tools/compile_dag.py", "load_results", "systemexit-str", 2, "#1841",
+           "the results file is present but unreadable, or not an object"),
+    _entry("tools/measure_dag_churn.py", "replay", "systemexit-str", 2, "#1841",
+           "a shallow repository; no [dag] commits to replay"),
+    _entry("tools/probes/absorbing_aggregate_audit.py", "tracked_python", "systemexit-str", 1, "#1841",
+           "no .py files under the root"),
+    _entry("tools/probes/hihat/hh_probe.py", "derive_filters", "systemexit-str", 1, "#1841",
+           "the formula does not reproduce the two already-stated filters"),
+    _entry("tools/probes/trajectory_within_rate_drift.py", "load_old", "systemexit-str", 1, "#1841",
+           "the merge-base estimator cannot be read from git"),
+    _entry("tools/verify_voice_scoped.py", "parse_expect_first", "systemexit-str", 2, "#1841",
+           "--expect-first is not TAP@FRAME[:SAMPLES], or names an unknown tap"),
+    _entry("tools/verify_voice_scoped.py", "extremes_only", "systemexit-str", 1, "#1841",
+           "the extremes index is out of range"),
+    _entry("tools/probes/dc_t20_gate_qualification.py", "main", "print-exit", 6, "#1841",
+           "six of the gate's own controls each set `ok = False`; `return 0 if ok else 1` eight lines on"),
 ]
 
 
@@ -751,9 +785,12 @@ def check(res: dict) -> tuple[bool, list[str]]:
         if n:
             ok = False
             out.append(f"  RED  {f} ({func}) {shape}: {n} hit(s) not in EXPECTED")
+    owners = {(e["file"], e["func"], e["shape"]): e["owner"] for e in EXPECTED}
     for h in res["hits"]:
-        out.append(f"  hit  {h['file']}:{h['line']} ({h['func']}) {h['shape']} status {h['status']}: "
-                   f"{h['label'].splitlines()[0][:90]}")
+        k = (h["file"], h["func"], h["shape"])
+        out.append(f"  hit  {h['file']}:{h['line']} ({h['func']}) {h['shape']} status {h['status']}"
+                   f"{'' if k in owners else '  NOT PINNED'}: {h['label'].splitlines()[0][:70]}"
+                   + (f"  -- {owners[k]}" if k in owners else ""))
     if not res["hits"]:
         out.append("  no shape hits in the scanned tree")
     out.append(f"  {len(res['unread'])} UNREAD print('REFUSED ...') site(s) -- status conditional or "

@@ -42,6 +42,7 @@ answer:
 from __future__ import annotations
 
 import ast
+import importlib.util
 import pathlib
 import subprocess
 import sys
@@ -52,7 +53,8 @@ import pytest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
-import refusal_exit_shape_scan as scan_mod                     # noqa: E402
+import exit_contract                                             # noqa: E402
+import refusal_exit_shape_scan as scan_mod                       # noqa: E402
 
 # fixed, so the unit controls do not depend on the tree's contract
 CONTRACT = {"PASS": 0, "FAIL": 1, "REFUSED": 2, "REFUSED_ALTERNATE": 3, "RUN_WITH_RSS_REFUSED": 126}
@@ -696,6 +698,116 @@ class TestSiblingModuleResolution:
                 resolve("refaudio_s3", "FAIL"), resolve("refaudio_local", "FETCHED")) == (2, 2, 1, 0)
         assert resolve("refaudio_s3", "NOT_THERE") is None
         assert resolve("no_such_module", "REFUSED") is None
+
+
+# ------------------------------------------ the real sites behind the shapes
+def _load(name: str, relpath: str):
+    """Import a tool by path, as a script would, with tools/ and model/
+    importable while it loads (the sys.path roots these scripts add
+    themselves).  Registered under a private name and sys.path restored
+    afterwards: `make verify` runs every suite in ONE process, and a test
+    must not leave a module or a search path behind for the next one."""
+    added = []
+    for p in (ROOT / "tools", ROOT / "model", ROOT / "tools" / "probes"):
+        if str(p) not in sys.path:
+            sys.path.insert(0, str(p))
+            added.append(str(p))
+    try:
+        spec = importlib.util.spec_from_file_location(name, ROOT / relpath)
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[name] = mod          # a dataclass resolves annotations through it
+        spec.loader.exec_module(mod)
+        return mod
+    finally:
+        for p in added:
+            sys.path.remove(p)
+
+
+class TestTheRealSitesBehindThoseShapes:
+    """The six sites of the issue's window that are NOT this defect, each
+    driven for real on origin/main @ 03148399 (2026-11-28): the REFUSED path
+    exits 2, and the `return 1` the window saw belongs to another branch (or
+    is a predicate's bool).  The planted controls above are these sites'
+    shapes; these are the sites."""
+
+    def test_check_m1a_selection__a_missing_record_refuses_with_2(self, tmp_path, capsys):
+        m = _load("_shape_scan_check_m1a_selection", "tools/check_m1a_selection.py")
+        assert m.main(["--record", str(tmp_path / "no-such-record.json")]) == exit_contract.REFUSED
+        out = capsys.readouterr()
+        assert "REFUSED:" in out.out + out.err and "MISMATCH" not in out.out
+
+    def test_check_workflows__a_refused_path_scan_with_no_other_problem_exits_2(self, monkeypatch, capsys):
+        m = _load("_shape_scan_check_workflows", "tools/check_workflows.py")
+        seen = []
+        real = m.check_referenced_paths
+
+        def refused(sources, tracked):
+            seen.append(1)
+            raise RuntimeError("planted: the path scan could not run")
+        monkeypatch.setattr(m, "check_referenced_paths", refused)
+        assert m.main() == exit_contract.REFUSED          # the real tree has no other problem
+        assert seen and "REFUSED: planted: the path scan could not run" in capsys.readouterr().err
+        monkeypatch.setattr(m, "check_referenced_paths", real)
+        assert m.main() == 0                               # and with the scan restored it passes
+
+    def test_check_doc_claims__a_scope_audit_error_with_no_stale_claim_exits_2(self, monkeypatch, capsys):
+        m = _load("_shape_scan_check_doc_claims", "tools/check_doc_claims.py")
+        ok = m.Claim(doc=ROOT / "CLAUDE.md", line=1, raw="x", prose="a claim", status=m.OK)
+        monkeypatch.setattr(m, "check", lambda docs, py: [ok])         # the derivation takes minutes
+        monkeypatch.setattr(m, "out_of_scope_claims", lambda docs: ([], "planted scope error"))
+        monkeypatch.setattr(sys, "argv", ["check_doc_claims.py"])          # main() reads sys.argv
+        assert m.main() == exit_contract.REFUSED
+        err = capsys.readouterr().err
+        assert "REFUSED  cannot audit for markers outside the scanned set: planted scope error" in err
+        assert m.STALE not in err
+
+    def test_check_doc_claims__a_stale_claim_with_that_audit_error_exits_1_a_result(self, monkeypatch, capsys):
+        """The `return 1` the window saw: n[STALE], a measurement that
+        disagreed.  With both, the stale claims are a result and 1 is right."""
+        m = _load("_shape_scan_check_doc_claims_2", "tools/check_doc_claims.py")
+        stale = m.Claim(doc=ROOT / "CLAUDE.md", line=1, raw="x", prose="a claim", status=m.STALE)
+        monkeypatch.setattr(m, "check", lambda docs, py: [stale])
+        monkeypatch.setattr(m, "out_of_scope_claims", lambda docs: ([], "planted scope error"))
+        monkeypatch.setattr(sys, "argv", ["check_doc_claims.py"])
+        assert m.main() == exit_contract.FAIL
+
+    def test_preparation_contract__a_missing_corpus_exits_2(self, tmp_path, monkeypatch, capsys):
+        m = _load("_shape_scan_preparation_contract_current_state",
+                  "tools/probes/preparation_contract_current_state.py")
+        monkeypatch.setenv("GF180_TR808_REFS", str(tmp_path / "no-corpus-here"))
+        monkeypatch.delenv("TR808_REFS", raising=False)
+        assert m.main() == exit_contract.REFUSED
+        out = capsys.readouterr().out
+        assert f"REFUSED: reference corpus not at {tmp_path / 'no-corpus-here'}" in out
+
+    def test_marker_controls__a_not_green_baseline_makes_main_exit_2(self, monkeypatch, capsys):
+        m = _load("_shape_scan_ctl789", "tools/probes/check_doc_claims_789_marker_controls.py")
+        monkeypatch.setattr(m, "interpreter", lambda: sys.executable)
+        monkeypatch.setattr(m, "run", lambda py: (1, "STALE planted: a stale claim\n"))
+        assert m.baseline_refused(sys.executable) is True          # the predicate at :135
+        assert "REFUSED: baseline not green before injection" in capsys.readouterr().err
+        monkeypatch.setattr(m, "baseline_refused", lambda py: True)
+        assert m.main() == exit_contract.REFUSED                   # what its call site does with it
+
+    def test_marker_controls__already_satisfied_is_a_predicate_whose_call_sites_exit_2(self, tmp_path, monkeypatch, capsys):
+        m = _load("_shape_scan_ctl789b", "tools/probes/check_doc_claims_789_marker_controls.py")
+        monkeypatch.setattr(m, "ROOT", tmp_path)                  # it reports paths relative to ROOT
+        target = tmp_path / "drum_kit.v"
+        target.write_text("module drum_kit_NOT_IN_TREE\n")
+        assert m.already_satisfied([target], "^module drum_kit_NOT_IN_TREE", "the control") is True
+        assert "already contains a line matching" in capsys.readouterr().err
+        clean = tmp_path / "clean.v"
+        clean.write_text("module drum_kit\n")
+        assert m.already_satisfied([clean], "^module drum_kit_NOT_IN_TREE", "the control") is False
+        # both call sites turn True into the contract's refusal, read by AST
+        tree = ast.parse((ROOT / "tools/probes/check_doc_claims_789_marker_controls.py").read_text())
+        main = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "main")
+        exits = [n for n in ast.walk(main) if isinstance(n, ast.If) and isinstance(n.test, ast.Call)
+                 and isinstance(n.test.func, ast.Name) and n.test.func.id == "already_satisfied"]
+        assert len(exits) == 2
+        for n in exits:
+            status = [s.value.value for s in n.body if isinstance(s, ast.Return)]
+            assert status == [exit_contract.REFUSED]
 
 
 # ---------------------------------------------------------- the tree-level
