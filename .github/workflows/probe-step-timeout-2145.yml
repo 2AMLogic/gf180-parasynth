@@ -1,0 +1,19 @@
+name: probe-step-timeout-2145
+
+on:
+  push:
+    branches: [probe/step-timeout-2145]
+
+permissions: {}
+
+jobs:
+  step-timeout-probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: capped step, 1 minute cap over a 120 second sleep
+        timeout-minutes: 1
+        run: |
+          echo "probe-2145: capped step started at $(date -u +%FT%TZ)"
+          sleep 120
+          echo "probe-2145: capped step finished its sleep, the cap did not fire"
