@@ -670,7 +670,9 @@ def main(argv=None) -> int:
         # The plugin host and nothing else: any other module that fails to
         # import is a bug here, and a bug must crash rather than be reported
         # as a precondition that happened to be unmet.
-        if (exc.name or "").partition(".")[0] != "dawdreamer":
+        # Exact name, not the package prefix: `dawdreamer.<anything>` failing
+        # means the host imported and then broke inside itself, a bug.
+        if exc.name != "dawdreamer":
             raise
         reason = f"the plugin host is not importable ({exc})"
     except rq.RigRefusal as exc:
@@ -679,6 +681,8 @@ def main(argv=None) -> int:
         reason = str(exc)
     else:
         return 0
+    # One line on stderr is the contract: a multi-line reason is joined, not cut.
+    reason = " ".join(part.strip() for part in str(reason).splitlines() if part.strip())
     print(f"REFUSED: {reason}", file=sys.stderr)
     return EXIT_REFUSED
 

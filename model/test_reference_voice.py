@@ -975,7 +975,7 @@ def test_a_missing_plugin_host_is_refused_not_a_crash(tmp_path, capsys, monkeypa
 
 @pytest.mark.parametrize("missing, refused", [
     ("dawdreamer", True),            # the plugin host
-    ("dawdreamer._ext", True),       # a module inside the plugin host
+    ("dawdreamer._ext", False),      # the host imported, then broke inside itself: a bug
     ("numpy_typo", False),           # an unrelated broken import: a bug, not a precondition
 ], ids=["host", "host-submodule", "unrelated"])
 def test_only_the_plugin_hosts_own_import_failure_is_a_refusal(tmp_path, capsys, monkeypatch,
@@ -1003,6 +1003,16 @@ def test_a_rig_refusal_comes_out_as_refused_with_its_message(tmp_path, capsys, m
     rc, err = _run(["--stage", stage], tmp_path, capsys)
     assert rc == REFUSED, (rc, err)
     assert err == [f"REFUSED: {why}"], err
+    _nothing_written(tmp_path)
+
+
+def test_a_multiline_refusal_reason_stays_on_one_stderr_line(tmp_path, capsys, monkeypatch):
+    """The control: printing the reason raw yields two stderr lines."""
+    monkeypatch.setattr(rv.rr, "SurgeRig",
+                        _RigThatRaises(rq.RigRefusal("bundle load failed\nmissing library")))
+    rc, err = _run(["--stage", "osc"], tmp_path, capsys)
+    assert rc == REFUSED, (rc, err)
+    assert err == ["REFUSED: bundle load failed missing library"], err
     _nothing_written(tmp_path)
 
 
