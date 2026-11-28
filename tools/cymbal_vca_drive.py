@@ -73,8 +73,10 @@ PRECONDITIONS, ASSERTED AT THE POINT OF USE, REFUSED WHEN UNMET:
     asserted equal in the tests so the two modules cannot silently read
     different printings of the service notes. The scan is a ~6 MB third-party
     download and is deliberately NOT a test dependency; `--require-source`
-    makes it binding for a caller who wants it to be, and exits 1 rather than
-    reporting when it is absent.
+    makes it binding for a caller who wants it to be, and exits 2 -- the
+    declared REFUSED status, which `tools/run_all.py` reports as NO-VERDICT
+    (#1789; it was exit 1, read as a RESULT) -- rather than reporting when
+    the scan is absent or is not the pinned one.
   * `balance_targets()` re-reads `../balance/balance.json` and REFUSES if the
     two gap figures this module is judged against have drifted from the
     committed record. A conclusion quoted against a number that has since
@@ -161,6 +163,7 @@ if str(ROOT / "tools") not in sys.path:
 import cymbal_candidate as cc  # noqa: E402
 import exit_contract  # noqa: E402
 import refusal
+from exit_contract import REFUSED  # noqa: E402  -- 2: the declared refusal status
 
 SCORECARD = ROOT / "docs" / "scorecard" / "cymbal-369"
 BALANCE_ARTIFACT = SCORECARD / "balance" / "balance.json"
@@ -1509,7 +1512,7 @@ def main(argv=None) -> int:
                     help="assert the file is the pinned scan and re-render the crops")
     ap.add_argument("--require-source", type=pathlib.Path, default=None,
                     metavar="SN.PDF",
-                    help="make the scan check BINDING: refuse (exit 1) rather than "
+                    help="make the scan check BINDING: refuse (exit 2, REFUSED) rather than "
                          "report if it is absent or does not match")
     args = ap.parse_args(argv)
     if not (args.report or args.check or args.json or args.json_supply
@@ -1534,7 +1537,7 @@ def main(argv=None) -> int:
             verify_source(args.require_source)
         except SourceUnavailable as exc:
             print(f"REFUSED (--require-source): {exc}")
-            return 1
+            return REFUSED            # was 1: a refusal, not a result (#1789)
 
     try:
         targets = balance_targets()
@@ -1543,7 +1546,7 @@ def main(argv=None) -> int:
         return exit_contract.REFUSED
     except Refused as exc:
         print(f"REFUSED: {exc}")
-        return 1
+        return REFUSED                # was 1: a refusal, not a result (#1789)
 
     if args.report:
         cfg = config()

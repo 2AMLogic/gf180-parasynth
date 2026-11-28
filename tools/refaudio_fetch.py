@@ -79,14 +79,21 @@ def unzip_literal(member: str) -> str:
 
 
 def fetch_one(ssh: str, root: str, archive: str, member: str, want: int | None, cache: pathlib.Path) -> str | None:
-    """Returns None on success, or the reason it failed."""
+    """Returns None on success, or the reason it failed.
+
+    As in `refaudio_local.extract()`: an `OSError` met while landing the member
+    -- making its directory, writing its `.part`, moving it into place -- is this
+    member's reason, naming the exception, never the run's traceback (#1684).
+    The `.part` is removed only once it has been written."""
     dest = cache / archive[:-4] / member
-    dest.parent.mkdir(parents=True, exist_ok=True)
     part = dest.with_name(dest.name + ".part")
     remote = " ".join(shlex.quote(a) for a in
                       ["unzip", "-p", f"{root}/packs/{archive}", unzip_literal(member)])
+    written = False
     try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
         with part.open("wb") as out:
+            written = True
             proc = subprocess.run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", ssh, remote],
                                   stdout=out, stderr=subprocess.PIPE, timeout=600)
         got = part.stat().st_size
@@ -100,8 +107,11 @@ def fetch_one(ssh: str, root: str, archive: str, member: str, want: int | None, 
         return None
     except subprocess.TimeoutExpired:
         return "timed out after 600 s"
+    except OSError as why:
+        return f"not written ({type(why).__name__}): {why}"
     finally:
-        part.unlink(missing_ok=True)
+        if written:
+            part.unlink(missing_ok=True)
 
 
 def main(argv: list[str]) -> int:

@@ -1093,3 +1093,18 @@ def test_require_keys_refuses_a_null_and_reads_a_bare_string_as_one_key():
     with pytest.raises(_CallerRefused) as raised:
         mf.require_keys({}, "takes", "the capture record", refused=_CallerRefused)
     assert "'takes'" in str(raised.value) and "'t'" not in str(raised.value)
+
+
+def test_require_keys_pins_the_limit_that_a_values_type_is_not_checked():
+    # Pins what the docstring discloses (#1639): presence and non-null are all
+    # this function asserts. `{"takes": 5}` passes here and then dies in the
+    # reader -- `record["takes"].items()` is the AttributeError that exits 1
+    # in place of the REFUSED (2) a `null` or absent key gets. That is a stated
+    # limit, not an oversight. A type check is a deliberate change: it turns
+    # this red, and must update the docstring in the same commit.
+    record = {"state": "CAPTURED", "takes": 5}
+    assert mf.require_keys(record, "takes", "the capture record",
+                           refused=_CallerRefused) is None
+    with pytest.raises(AttributeError,
+                       match="'int' object has no attribute 'items'"):
+        record["takes"].items()
