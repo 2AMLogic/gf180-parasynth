@@ -53,27 +53,27 @@ MUTANTS = [
        "        prev2, prev, cur = prev, cur, mod.parents[cur]\n"
        "        if (isinstance(cur, ast.GeneratorExp)\n"
        "                and not (prev is cur.generators[0] and prev2 is prev.iter)):\n"
-       "            return out\n"
+       "            return out, True\n"
        "        if isinstance(cur, ast.Try) and prev in cur.body:\n"
-       "            out.extend(cur.handlers)\n    return out\n",
+       "            out.extend(cur.handlers)\n    return out, False\n",
        "    return [h for t in ast.walk(frame) if isinstance(t, ast.Try)"
-       " for h in t.handlers]\n")]),
+       " for h in t.handlers], False\n")]),
     ("EDGE-FROM-ANY-CLAUSE",
      "on the path, a call in a try's except, else or finally clause is guarded by it",
      [("        prev2, prev, cur = prev, cur, mod.parents[cur]\n"
        "        if (isinstance(cur, ast.GeneratorExp)\n"
        "                and not (prev is cur.generators[0] and prev2 is prev.iter)):\n"
-       "            return out\n"
+       "            return out, True\n"
        "        if isinstance(cur, ast.Try) and prev in cur.body:\n",
        "        prev2, prev, cur = prev, cur, mod.parents[cur]\n"
        "        if (isinstance(cur, ast.GeneratorExp)\n"
        "                and not (prev is cur.generators[0] and prev2 is prev.iter)):\n"
-       "            return out\n"
+       "            return out, True\n"
        "        if isinstance(cur, ast.Try):\n")]),
     ("ANY-TRY-IN-THE-SITES-DEF",
      "every try written in the site's own def guards the site, wherever it starts",
      [("            covered, shapes = set(), []\n"
-       "            for tr in enclosing_try_parents(mod.tree, node):\n",
+       "            for tr in (enclosing_try_parents(mod.tree, node) if runs_here else []):\n",
        "            covered, shapes = set(), []\n"
        "            for tr in (t for t in ast.walk(mod.caller_of(node))\n"
        "                       if isinstance(t, ast.Try)):\n")]),
@@ -109,10 +109,22 @@ MUTANTS = [
        "                if False and (gen or isinstance(callee, ast.AsyncFunctionDef)) and not (\n")]),
     ("GENEXP-BODY-GUARDED",
      "a try around a generator expression guards calls in its body",
-     [("                and not (prev is cur.generators[0] and prev2 is prev.iter)):\n            return out\n"
+     [("                and not (prev is cur.generators[0] and prev2 is prev.iter)):\n            return out, True\n"
        "        if isinstance(cur, ast.Try) and prev in cur.body:\n",
-       "                and False):\n            return out\n"
+       "                and False):\n            return out, True\n"
        "        if isinstance(cur, ast.Try) and prev in cur.body:\n")]),
+    ("FINAL-CALL-ALWAYS-RUNS",
+     "a cross-module call in a generator expression, or to an imported generator, runs where written",
+     [("    if _handlers_within(mod, mod.caller_of(call), call)[1]:\n        return False\n"
+       "    defs = [c.funcs.get(fname) for c in callees]\n"
+       "    if any(isinstance(d, FUNCTION_NODES) and _is_generator(d) for d in defs):\n"
+       "        return False\n",
+       "    defs = [c.funcs.get(fname) for c in callees]\n")]),
+    ("DEFINITION-TIME-IN-THE-DEF",
+     "a default, annotation or decorator call is attributed to the def that contains the syntax",
+     [("        while cur is not None and not (isinstance(cur, CALLER_NODES)\n"
+       "                                       and not self._at_definition(cur, prev)):\n",
+       "        while cur is not None and not isinstance(cur, CALLER_NODES):\n")]),
     ("AWAIT-NEVER-EAGER",
      "an awaited coroutine is deferred past its try like an unawaited one",
      [("                        not gen and isinstance(mod.parents.get(node), ast.Await)):\n",
@@ -147,8 +159,8 @@ MUTANTS = [
        "            if False:\n")]),
     ("LAMBDA-IS-NO-FRAME",
      "a call written in a lambda is read as its enclosing def's",
-     [("        while cur is not None and not isinstance(cur, CALLER_NODES):\n",
-       "        while cur is not None and not isinstance(cur, FUNCTION_NODES):\n")]),
+     [("        while cur is not None and not (isinstance(cur, CALLER_NODES)\n",
+       "        while cur is not None and not (isinstance(cur, FUNCTION_NODES)\n")]),
 ]
 
 
@@ -173,12 +185,15 @@ def read_run(returncode: int, out: str, tests: str = TESTS
     counted as that control "seeing" the mutant, and printed OK."""
     fail = re.findall(r"^FAILED " + re.escape(tests)
                       + r"::(\w+)(?:\[[^\n]*?\])?(?: - (\S+))?", out, re.M)
-    # pytest prints a bare `assert a == b` as its rewritten text and anything
-    # else raised as `<Class>: <message>`, so a crash is a line that names a
-    # non-assertion exception class; a missing message reads as a crash too
-    crash = re.compile(r"^(?!AssertionError\b)[\w.]*(Error|Exception|Exit|Interrupt)\b")
-    failed = {n for n, msg in fail if msg and not crash.match(msg)}
-    crashed = {n for n, msg in fail if not msg or crash.match(msg)}
+    # POSITIVE evidence of an assertion (#1688 review round 3): pytest prints a
+    # bare `assert a == b` as its rewritten text (`assert ...`) and an
+    # `assert x, "why"` as `AssertionError: why`. Everything else -- any other
+    # exception class, however it is named, or no message at all -- is a
+    # crash. A negative list of exception-name suffixes counted a custom
+    # `class Refused(Exception)` raised by a broken mutant as a catch.
+    is_assertion = re.compile(r"^(assert\b|AssertionError\b)")
+    failed = {n for n, msg in fail if msg and is_assertion.match(msg)}
+    crashed = {n for n, msg in fail if not (msg and is_assertion.match(msg))}
     errored = set(re.findall(r"^ERROR " + re.escape(tests) + r"::(\w+)", out, re.M))
     m = re.search(r"^(\d+) passed", out, re.M)
     passed = int(m.group(1)) if m else 0

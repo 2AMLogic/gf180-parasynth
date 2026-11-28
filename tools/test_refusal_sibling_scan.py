@@ -3533,8 +3533,7 @@ def test_with_the_await_rule_reverted_a_bare_call_borrows_the_trys_handler(tmp_p
     refusal Python raises after the try reads `covered(base)` -- the false
     covered the rule exists to withhold."""
     mut = _scanner_with(
-        "    return not any(isinstance(c.funcs.get(fname), ast.AsyncFunctionDef)"
-        " for c in callees)",
+        "    return not any(isinstance(d, ast.AsyncFunctionDef) for d in defs)",
         "    return True")
     files = _async_files(tmp_path, {"caller_async": ASYNC_STORED_THEN_AWAITED_AFTER})
     idx = mut.build_index(files)
@@ -3835,3 +3834,195 @@ def test_with_the_deferral_reverted_the_creators_handler_is_credited_again(tmp_p
     midx = mut.build_index(files)
     got = [s for s in mut.scan(files, midx) if "caller_d.py" in s["site"]]
     assert [s["classification"] for s in got] == ["covered(cli-base)"], got
+
+
+# --- #1688 review, round 3: deferral and definition time at the FINAL call ----
+# Round 2 deferred the edges to LOCAL defs; the cross-module call site itself
+# still inherited the factory's handler. Each fixture was run under Python
+# 3.12 and the scanner at 56a744b2 read `covered(cli-base)` for every one that
+# escapes. A def's defaults, annotations and decorators run in the frame that
+# holds the def statement, not in the def.
+
+_R3_MAIN = '''
+def make_pending():
+    try:
+        return factory()
+    except refusal.Refused:
+        sys.exit(2)
+
+def main():
+    return {drive}
+
+if __name__ == "__main__":
+    sys.exit(main())
+'''
+
+R3_GENEXP_DIRECT = '''
+import sys, refusal, callee
+def factory():
+    return (callee.load() for _ in (0,))
+''' + _R3_MAIN.format(drive="next(make_pending())")
+
+R3_GENEXP_FIRST_ITERABLE = '''
+import sys, refusal, callee
+def factory():
+    return (x for x in callee.load())
+''' + _R3_MAIN.format(drive="next(make_pending())")
+
+R3_IMPORTED_GENERATOR_ATTR = '''
+import sys, refusal, callee
+def factory():
+    return callee.gen()
+''' + _R3_MAIN.format(drive="next(make_pending())")
+
+R3_IMPORTED_GENERATOR_FROM = '''
+import sys, refusal
+from callee import gen
+def factory():
+    return gen()
+''' + _R3_MAIN.format(drive="next(make_pending())")
+
+R3_EAGER_LISTCOMP = '''
+import sys, refusal, callee
+def factory():
+    return [callee.load() for _ in (0,)]
+''' + _R3_MAIN.format(drive="make_pending()")
+
+R3_EAGER_CALL = '''
+import sys, refusal, callee
+def factory():
+    return callee.load()
+''' + _R3_MAIN.format(drive="make_pending()")
+
+R3_CALLEE = DEFERRED_CALLEE + '''
+def gen():
+    CALLS.append(1)
+    raise Refused("generator control")
+    yield
+'''
+
+
+def _r3_scan_and_run(monkeypatch, tmp_path, body, name="caller_r3"):
+    (tmp_path / "callee.py").write_text(R3_CALLEE)
+    (tmp_path / f"{name}.py").write_text(body)
+    files = [tmp_path / "callee.py", tmp_path / f"{name}.py"]
+    callee = _import(monkeypatch, tmp_path / "callee.py")
+    try:
+        mod = _import(monkeypatch, tmp_path / f"{name}.py")
+        mod.main()
+        verdict = "caught"
+    except SystemExit:
+        verdict = "caught"
+    except callee.Refused:
+        verdict = "escaped"
+    if not callee.CALLS:
+        verdict = "not-run"
+    return files, verdict
+
+
+def _r3_classes(files, scanner=rss, name="caller_r3"):
+    idx = scanner.build_index(files)
+    return [s["classification"] for s in scanner.scan(files, idx) if name in s["site"]]
+
+
+@pytest.mark.parametrize("body,python,classification", [
+    pytest.param(R3_GENEXP_DIRECT, "escaped", "candidate-escape", id="genexp-direct"),
+    pytest.param(R3_GENEXP_FIRST_ITERABLE, "caught", "covered(cli-base)",
+                 id="genexp-first-iterable-is-eager"),
+    pytest.param(R3_IMPORTED_GENERATOR_ATTR, "escaped", "candidate-escape",
+                 id="imported-generator-attr"),
+    pytest.param(R3_IMPORTED_GENERATOR_FROM, "escaped", "candidate-escape",
+                 id="imported-generator-from"),
+    pytest.param(R3_EAGER_LISTCOMP, "caught", "covered(cli-base)", id="eager-listcomp"),
+    pytest.param(R3_EAGER_CALL, "caught", "covered(cli-base)", id="eager-call"),
+])
+def test_a_deferred_final_call_is_not_credited_the_factorys_handler(
+        monkeypatch, tmp_path, body, python, classification):
+    files, verdict = _r3_scan_and_run(monkeypatch, tmp_path, body)
+    assert verdict == python
+    assert _r3_classes(files) == [classification]
+
+
+R3_DEFAULT = '''
+import sys, refusal, callee
+def make_pending():
+    try:
+        def factory(x=callee.load()):
+            return x
+        return factory
+    except refusal.Refused:
+        sys.exit(2)
+
+def main():
+    return make_pending()
+'''
+
+R3_DEF_TIME = '''
+import sys, refusal, callee
+{decl}
+def make_pending():
+    try:
+        return factory()
+    except refusal.Refused:
+        sys.exit(2)
+
+def main():
+    return make_pending()
+
+if __name__ == "__main__":
+    sys.exit(main())
+'''
+
+
+@pytest.mark.parametrize("decl", [
+    pytest.param("def factory(x=callee.load()):\n    return x", id="default"),
+    pytest.param("def factory(x: callee.load() = 0):\n    return x", id="annotation"),
+    pytest.param("def factory() -> callee.load():\n    return 0", id="return-annotation"),
+    pytest.param("@callee.load()\ndef factory():\n    return 0", id="decorator"),
+])
+def test_a_definition_time_call_runs_in_the_frame_that_holds_the_def(
+        monkeypatch, tmp_path, decl):
+    """Python raises at module initialisation, before `main` starts, so the
+    guarded `factory()` call below it guards nothing."""
+    (tmp_path / "callee.py").write_text(R3_CALLEE)
+    (tmp_path / "caller_r3.py").write_text(R3_DEF_TIME.format(decl=decl))
+    files = [tmp_path / "callee.py", tmp_path / "caller_r3.py"]
+    callee = _import(monkeypatch, tmp_path / "callee.py")
+    with pytest.raises(callee.Refused):
+        _import(monkeypatch, tmp_path / "caller_r3.py")
+    assert _r3_classes(files) == ["candidate-escape"]
+
+
+def test_a_definition_time_call_inside_a_guarded_try_is_still_covered(monkeypatch, tmp_path):
+    """Control: the def statement itself sits in the try, so Python catches the
+    default's refusal there. The frame moves out; the try still counts."""
+    files, verdict = _r3_scan_and_run(monkeypatch, tmp_path, R3_DEFAULT)
+    assert verdict == "caught"
+    assert _r3_classes(files) == ["covered(base)"]
+
+
+def test_with_the_final_call_deferral_reverted_the_factorys_handler_is_credited(
+        monkeypatch, tmp_path):
+    mut = _scanner_with(
+        "    if _handlers_within(mod, mod.caller_of(call), call)[1]:\n        return False\n"
+        "    defs = [c.funcs.get(fname) for c in callees]\n"
+        "    if any(isinstance(d, FUNCTION_NODES) and _is_generator(d) for d in defs):\n"
+        "        return False\n", "    defs = [c.funcs.get(fname) for c in callees]\n")
+    for body in (R3_GENEXP_DIRECT, R3_IMPORTED_GENERATOR_ATTR):
+        files, _ = _r3_scan_and_run(monkeypatch, tmp_path, body)
+        assert _r3_classes(files, mut) == ["covered(cli-base)"]
+
+
+def test_with_definition_time_attribution_reverted_the_guarded_caller_is_credited(
+        monkeypatch, tmp_path):
+    mut = _scanner_with(
+        "        cur, prev = self.parents.get(node), node\n"
+        "        while cur is not None and not (isinstance(cur, CALLER_NODES)\n"
+        "                                       and not self._at_definition(cur, prev)):\n",
+        "        cur, prev = self.parents.get(node), node\n"
+        "        while cur is not None and not isinstance(cur, CALLER_NODES):\n")
+    decl = "def factory(x=callee.load()):\n    return x"
+    (tmp_path / "callee.py").write_text(R3_CALLEE)
+    (tmp_path / "caller_r3.py").write_text(R3_DEF_TIME.format(decl=decl))
+    files = [tmp_path / "callee.py", tmp_path / "caller_r3.py"]
+    assert _r3_classes(files, mut) == ["covered(cli-base)"]

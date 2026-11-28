@@ -148,3 +148,39 @@ def test_a_parametrized_assertion_failure_is_still_an_assertion(tmp_path):
             "def test_a(x):\n    assert x == 'nope'\n")
     failed, crashed, errored, _, _ = _run(tmp_path, body)
     assert (failed, crashed, errored) == ({"test_a"}, set(), set())
+
+
+def test_a_custom_exception_is_a_crash_not_a_catch(tmp_path):
+    """#1688 review round 3: a mutant that raised its own `Refused(Exception)`
+    printed OK because only names ending in Error/Exception counted as crashes.
+    Only an assertion is a catch; any other class, whatever its name, is not."""
+    body = ("class Refused(Exception):\n    pass\n\n"
+            "def test_a():\n    raise Refused('scanner crashed')\n")
+    failed, crashed, errored, _, _ = _run(tmp_path, body)
+    assert (failed, crashed, errored) == (set(), {"test_a"}, set())
+
+
+def test_an_assertion_with_a_message_is_still_a_catch(tmp_path):
+    failed, crashed, _, _, _ = _run(tmp_path, "def test_a():\n    assert 1 == 2, 'why'\n")
+    assert (failed, crashed) == ({"test_a"}, set())
+
+
+def test_main_no_verdict_when_a_custom_exception_crashes_a_mutant(one_mutant, monkeypatch, capsys):
+    """Through the entry point: the crash is NO VERDICT, never `1 MOVED` + OK."""
+    ctl = _first_control()
+    out = ("FAILED " + mut.TESTS + f"::{ctl} - Refused: scanner crashed\n1 failed, 4 passed\n")
+    failed, crashed, errored, passed, tail = mut.read_run(1, out)
+    assert (failed, crashed) == (set(), {ctl})
+    _fake(monkeypatch, GREEN, (failed, crashed, errored, passed, tail))
+    assert mut.main([]) == 2
+    assert "NO VERDICT" in capsys.readouterr().out
+
+
+def test_every_shipped_mutant_anchor_applies_exactly_once():
+    """#1688 review round 3: four anchors had drifted and the documented full
+    run exited NO VERDICT. This is the cheap half of that check, so drift
+    fails here instead of in a ten-minute matrix."""
+    shipped = (mut.ROOT / mut.SCANNER).read_text()
+    bad = [(name, old.strip()[:60]) for name, _, subs in mut.MUTANTS
+           for old, _ in subs if shipped.count(old) != 1]
+    assert bad == []

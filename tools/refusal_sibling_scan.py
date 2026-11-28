@@ -605,10 +605,21 @@ class ModInfo:
         """The frame `node` is written in: its innermost enclosing def or
         lambda, else the module itself (its top level, the dispatch
         included)."""
-        cur = self.parents.get(node)
-        while cur is not None and not isinstance(cur, CALLER_NODES):
-            cur = self.parents.get(cur)
+        cur, prev = self.parents.get(node), node
+        while cur is not None and not (isinstance(cur, CALLER_NODES)
+                                       and not self._at_definition(cur, prev)):
+            cur, prev = self.parents.get(cur), cur
         return self.tree if cur is None else cur
+
+    @staticmethod
+    def _at_definition(fn: ast.AST, child: ast.AST) -> bool:
+        """`child` of def/lambda `fn` is evaluated when the def STATEMENT runs,
+        in the frame that contains it, not in `fn`'s own body: its defaults
+        and annotations (`fn.args`), its return annotation and its decorators
+        (#1688 review round 3). `def f(x=callee.load())` raises while the
+        enclosing frame -- the module, at top level -- executes the def."""
+        return (child is fn.args or child is getattr(fn, "returns", None)
+                or child in getattr(fn, "decorator_list", ()))
 
     def _resolve_name(self, name: str, at: ast.AST) -> list[ast.AST]:
         """The function defs a name is bound to, the way Python binds it: the
@@ -966,16 +977,28 @@ def refusal_runs_at_call(mod: ModInfo, call: ast.Call, callees: list[ModInfo],
                          fname: str) -> bool:
     """Whether a refusal raised through this call would surface where the
     Call node stands, so that the tries around it -- and the CLI boundary --
-    can catch it from there. False for one shape only (#1718): a bare call
-    to an `async def` CREATES a coroutine and runs none of the callee's code;
-    the refusal is raised wherever the coroutine is awaited, which no walk
-    up from the Call node can see. Only `await <call>` runs the callee where
-    the call is written. Among same-stem candidates one `async def` decides:
-    which module the import binds is not decidable, and the reading that
-    cannot report a false covered is the one taken."""
+    can catch it from there. False when the call only DEFERS the callee's code
+    (#1718, #1688 review round 3):
+
+      * a bare call to an `async def` CREATES a coroutine; only `await <call>`
+        runs the callee where the call is written;
+      * a bare call to a generator function creates a generator; its body
+        runs at the first `next`, perhaps after every try has exited;
+      * a call written in a generator expression's body (not its first
+        iterable) runs when something iterates the expression.
+
+    The same rules `path_guards` applies to an edge to a LOCAL def, applied at
+    the final, cross-module call site. Among same-stem candidates one
+    generator or `async def` decides: which module the import binds is not
+    decidable, and the reading that cannot report a false covered is taken."""
+    if _handlers_within(mod, mod.caller_of(call), call)[1]:
+        return False
+    defs = [c.funcs.get(fname) for c in callees]
+    if any(isinstance(d, FUNCTION_NODES) and _is_generator(d) for d in defs):
+        return False
     if isinstance(mod.parents.get(call), ast.Await):
         return True
-    return not any(isinstance(c.funcs.get(fname), ast.AsyncFunctionDef) for c in callees)
+    return not any(isinstance(d, ast.AsyncFunctionDef) for d in defs)
 
 
 def _rel_label(path: pathlib.Path) -> str:
