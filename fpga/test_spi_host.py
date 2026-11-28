@@ -320,13 +320,18 @@ def test_a_host_without_the_sequences_sends_strictly_fewer_writes():
 
 
 # ---- the knobs ---------------------------------------------------------------
-@pytest.mark.parametrize("name,n", sorted(sh.knob_cost().items()))
-def test_each_knob_costs_the_writes_the_budget_says_it_does(name, n):
+@pytest.mark.parametrize("name,value,destinations", [
+    # (SPI page, register) in wire order, per NUMERIC-CONTRACT §§5.2 and 15.1.
+    ("cutoff", 900.0, [(0, 0x18)]),
+    ("cutoff_hi", 2400.0, [(0, 0x19)]),
+    ("resonance", 0.9, [(0, 0x1C), (0, 0x1D), (0, 0x1E)]),
+    ("decay", 7.0, [(1, 0xD0), (1, 0xD1)]),  # 808 bass drum, mode 8, A1 then A2
+    ("volume", 0.5, [(0, 0x0D)]),
+])
+def test_each_knob_schedules_its_register_writes(name, value, destinations):
     host = sh.MusicHost()
-    before = len(host.w)
-    host.knob(100, name, {"cutoff": 900.0, "resonance": 0.9, "decay": 7.0,
-                          "volume": 0.5}[name])
-    assert len(host.w) - before == n
+    host.knob(100, name, value)
+    assert [(p.w.sec, p.w.addr) for p in host.schedule()] == destinations
 
 
 def test_the_cutoff_knob_actually_changes_the_register():
