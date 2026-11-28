@@ -561,7 +561,16 @@ def check_pins(check_pins_fn, *, n_pins: int | None = None, name="pins") -> Chec
         return Check(name, REFUSED, "no pin readback function was supplied", det)
     try:
         bad = list(check_pins_fn())
-    except Exception as e:                                          # pragma: no cover
+    except Exception as e:
+        # Deliberately total, and safe: the rig's own pin check
+        # (`_Plugin.check_pins`) raises nothing of its own -- its work is
+        # asking the host for parameter names and readbacks and comparing them
+        # -- so what lands here is the host refusing to answer, and the two rig
+        # families refuse in unrelated types (dawdreamer's processor queries;
+        # `_PedalboardParams.parameter`, which raises IndexError for an index
+        # the plugin does not have). The apparatus failing to answer a pin query
+        # is a REFUSED check, not a crash, and no estimator logic sits under
+        # this try to be masked (#1777).
         return Check(name, REFUSED, f"the pin check itself failed: "
                                     f"{type(e).__name__}: {e}", det)
     det["bad"] = _jsonable(bad)

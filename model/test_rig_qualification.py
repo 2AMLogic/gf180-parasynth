@@ -387,6 +387,28 @@ def test_a_pin_check_that_itself_raises_is_a_refusal_not_a_pass():
     assert rq.check_pins(boom, n_pins=3).outcome == rq.REFUSED
 
 
+# #1777: why the handler above stays `except Exception`. The rig's own pin
+# check (`_Plugin.check_pins`) raises nothing of its own; what lands in the
+# handler is the HOST refusing a parameter query, and the two rig families
+# refuse in unrelated types -- `_PedalboardParams.parameter` refuses an index
+# the plugin does not have by raising IndexError (model/reference_rigs.py).
+# A boundary narrow enough to let one of these through turns an apparatus
+# refusal into an exit-1 traceback, so the handler is total by decision and
+# this pins the type the other family uses: narrowed to `RuntimeError` alone,
+# the pedalboard row goes red (checked by mutation).
+@pytest.mark.parametrize("host_failure", [
+    RuntimeError("the host lost the parameter list"),
+    IndexError("no parameter at index 265 (the plugin has 48 parameters)")],
+    ids=["dawdreamer-query", "pedalboard-index"])
+def test_a_pin_check_the_host_cannot_answer_is_a_refusal_naming_the_type(host_failure):
+    def boom():
+        raise host_failure
+    got = rq.check_pins(boom, n_pins=3)
+    assert got.outcome == rq.REFUSED, got
+    assert got.why.startswith(f"the pin check itself failed: {type(host_failure).__name__}: "), got.why
+    assert got.detail == {"n_pins": 3}, got
+
+
 @pytest.mark.parametrize("count", [True, 0.5, -1])
 def test_pin_count_must_be_a_positive_integer(count):
     assert rq.check_pins(lambda: [], n_pins=count).outcome == rq.REFUSED
