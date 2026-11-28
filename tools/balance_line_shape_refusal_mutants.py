@@ -118,9 +118,6 @@ EXPECTED = {
     },
 }
 
-RANK = {hic.FIRED: 0, hic.NO_FIRE: 1, hic.REFUSED: 2}
-
-
 def report(results: dict[str, hic.Result]) -> int:
     for name, r in results.items():
         line = f"{r.outcome:9s} {name}: {r.reason}"
@@ -129,10 +126,16 @@ def report(results: dict[str, hic.Result]) -> int:
         print(line)
         if r.tail:
             print(r.tail.rstrip())
-    worst = max(RANK[r.outcome] for r in results.values())
-    if worst == 0:
-        print(f"all {len(results)} mutants red at the recorded assertion")
-    return worst
+    # A survivor is a finding about the controls and a refusal one about the
+    # apparatus, so a survivor outranks a refusal (1 before 2), as in
+    # bd_pitch_predeclaration_mutants and holdout_injected_controls. A rank
+    # table with max() inverts this: REFUSED's 2 beats NO_FIRE's 1.
+    if any(r.outcome == hic.NO_FIRE for r in results.values()):
+        return 1
+    if any(r.outcome == hic.REFUSED for r in results.values()):
+        return 2
+    print(f"all {len(results)} mutants red at the recorded assertion")
+    return 0
 
 
 def main() -> int:

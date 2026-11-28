@@ -343,3 +343,33 @@ def test_plain_assertion_error_inside_the_converted_region_still_escapes(
     # reference tone precedes the raise on the prepare site; pin only the
     # handler's rendering of THIS control, never the bare word.
     assert "REFUSED  control:" not in out
+
+
+# --- the mutant runner's aggregate exit status (#2013 review) ---------------
+
+def _mutant_report(outcomes, capsys):
+    """`report()`'s exit status for a stubbed outcome map. The unit under
+    test is the precedence, so the results are synthetic -- no suite run."""
+    import balance_line_shape_refusal_mutants as blm
+    import holdout_injected_controls as hic
+    results = {f"m{i}": hic.Result(o, [], "stub") for i, o in enumerate(outcomes)}
+    code = blm.report(results)
+    capsys.readouterr()
+    return code
+
+
+@pytest.mark.parametrize("outcomes, expected", [
+    (("FIRED", "FIRED"), 0),
+    (("FIRED", "REFUSED"), 2),
+    (("FIRED", "NO_FIRE"), 1),
+    # The inversion the review measured: a survivor is a hole in the
+    # controls and must outrank a refusal, which only says nothing was
+    # measured. `max()` over a rank table returned 2 here.
+    (("NO_FIRE", "REFUSED"), 1),
+    (("REFUSED", "NO_FIRE"), 1),
+], ids=["all-fired", "refused-only", "survivor-only", "survivor-then-refused",
+        "refused-then-survivor"])
+def test_mutant_report_exit_status_survivor_outranks_refusal(outcomes, expected, capsys):
+    import holdout_injected_controls as hic
+    names = {"FIRED": hic.FIRED, "NO_FIRE": hic.NO_FIRE, "REFUSED": hic.REFUSED}
+    assert _mutant_report(tuple(names[o] for o in outcomes), capsys) == expected
