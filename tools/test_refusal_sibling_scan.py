@@ -21,8 +21,11 @@ section pins the blind spots that issue listed: a family class borrowed inside
 a function (raise, handler, the `scan` pre-filter, and the shadow that keeps it
 out of the rest of the module), the two roots outside `SCAN_ROOTS`, source
 order inside a function scope, and the one site the new roots add to the
-census, accepted with the runtime evidence for its acceptance. The #1641
-section pins the CLI boundary reached through a `_cli()` wrapper the
+census, accepted with the runtime evidence for its acceptance. The #1656
+section pins CLI credit by PATH instead of by presence: the site #1577
+accepted is covered by it, and the sibling-helper, try-after-dispatch,
+value-reference and dispatch-table shapes are each pinned both ways.
+The #1641 section pins the CLI boundary reached through a `_cli()` wrapper the
 dispatch calls -- the placement hh_probe5's first repair used, which the
 census read as no guard -- and the inputs that must not be credited as one. The
 #1718 section plants an `async def` callee, which `funcs` did not register: each
@@ -50,6 +53,7 @@ import pytest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
+import refusal                                        # noqa: E402
 import refusal_sibling_scan as rss                     # noqa: E402
 
 
@@ -1546,13 +1550,15 @@ def test_function_scope_bindings_follow_source_order_not_walk_order(tmp_path, la
 # `rtl-sketch/verify_synth_top.py`'s `drum_solo_report` imports `run_case as rc`
 # inside the def, calls `rc.render_drum_solo` inside a nested helper `_render`,
 # and guards the two `_render()` calls with `except rc.Refused`. The call is
-# lexically outside that try (it sits in the helper's def), so the census
-# reports it `guard=none, candidate-escape`: a guard in the def that CALLS a
-# local helper is not credited. The site is ACCEPTED, not repaired -- a second
-# handler at the call would only restate the one that already catches it. The
-# controls below are the evidence for that acceptance, run on the shipped
-# function; the stipulated world is the drum model's trace and the callee,
-# nothing inside the def under test.
+# lexically outside that try (it sits in the helper's def), so at #1577 the
+# census reported it `guard=none, candidate-escape` and the site was ACCEPTED
+# rather than repaired -- a second handler at the call would only restate the
+# one that already catches it. Since #1656 the credit is by path: the call to
+# `_render()` is an edge that carries the try, and the row reads
+# `covered(cli-exact)` (REAL_TREE_ROWS pins it). The controls below are still
+# the evidence that the label is true, run on the shipped function; the
+# stipulated world is the drum model's trace and the callee, nothing inside
+# the def under test.
 
 def _run_case_stub(raise_cls=None):
     """A `run_case` module whose `render_drum_solo` always refuses: with
@@ -1763,6 +1769,1377 @@ def test_locally_imported_sibling_is_not_a_base_guard(tmp_path):
     got = _sites_for(files, idx, "caller_base_sib")
     assert len(got) == 1 and got[0]["classification"] == "candidate-escape", got
     assert got[0]["uncovered"] == ["mod_a"], got[0]
+
+
+# --- #1656 controls: CLI credit by PATH, not by presence -----------------------
+# `cli_boundary_guards()` credited a handler by PRESENCE: any try directly in
+# `main()` or under the `__main__` dispatch covered EVERY uncovered site in the
+# module. That is sound only for a frame every CLI path passes through, and
+# `main()` is not one: it fans out to sibling helpers, and a sibling's try
+# guards its own branch alone. On the real tree (origin/main at a3186508, 388
+# rows) 36 rows at 35 sites move, and the by-presence label was wrong in both
+# directions: 8 sites guarded on every path were listed as escapes, and 22
+# rows at 21 sites with no handler on their path read `covered` or
+# `relabelled`; the other 6 are paths this graph cannot see, kept as escapes
+# on purpose (the row-by-row table is in the PR). The credit is
+# now per path -- a site is `covered(cli-*)` only when every path from the
+# module's entry to the site's own def runs through the handler's try body --
+# and `via` names the handlers it rests on. Each control that names a defect
+# started red against the by-presence scanner; the others pin an input that
+# would defeat a looser rule (verification-rules rule 8).
+
+PATH_HEAD = '''
+import sys
+import refusal
+import mod_a
+import mod_b
+
+Refused = mod_a.Refused                 # an ALIAS of mod_a's class: shape exact
+'''
+
+PATH_ENTER_MAIN = "    sys.exit(main())\n"
+
+PATH_GUARD_TWO_FRAMES_UP = '''
+def image_identity(pub):
+    return mod_a.load(pub)              # the site: no try anywhere in this def
+
+def build():
+    return image_identity("pub")        # ...nor in this one
+
+def check(fresh=None):
+    try:
+        return build()
+    except Refused as exc:              # the alias: catches mod_a's exactly
+        return f"REFUSED {exc}"
+
+def main(argv=None):
+    return check()
+'''
+
+PATH_EVERY_CALLER_GUARDS = '''
+def gate(pack):
+    return [mod_a.load(pack), mod_b.measure(pack)]   # two origins, one def
+
+def cmd_gate(pack):
+    try:
+        return gate(pack)
+    except refusal.Refused as exc:
+        return 2
+
+def cmd_run(pack):
+    try:
+        gate(pack)
+    except refusal.Refused as exc:      # a DIFFERENT try from cmd_gate's
+        return 2
+    return 0
+
+def main(argv=None):
+    return cmd_gate("x") + cmd_run("y")
+'''
+
+PATH_BASE_AND_EXACT_CALLERS = '''
+def image_identity(pub):
+    return mod_a.load(pub)
+
+def build():
+    return image_identity("pub")
+
+def check():
+    try:
+        return build()
+    except Refused as exc:              # exact: mod_a's alone
+        return str(exc)
+
+def stale_control():
+    try:
+        return build()
+    except refusal.Refused as exc:      # base: every family
+        return str(exc)
+
+def main(argv=None):
+    return [check(), stale_control()]
+'''
+
+PATH_SIBLING_HELPER = '''
+def synth(click_db):
+    return mod_a.load(click_db)         # the site
+
+def candidate():
+    return synth(0.0)
+
+def onset():
+    return synth(-3.0)
+
+def main(argv=None):
+    out = []
+    try:
+        out.append(candidate())         # guarded HERE, under an `if` in a loop
+    except refusal.Refused as exc:
+        out.append(str(exc))
+    out.append(onset())                 # ...and not here: a sibling's bare call
+    return out
+'''
+
+PATH_GUARD_UNDER_A_BRANCH = '''
+def candidate(trim_s):
+    return mod_a.load(trim_s)
+
+def main(argv=None):
+    out = {}
+    for trim_s in (1.5, 2.0):
+        if trim_s:
+            try:
+                out[trim_s] = candidate(trim_s)
+            except refusal.Refused as exc:
+                out[trim_s] = {"refused": str(exc)}
+    return out
+'''
+
+PATH_TWO_CALLS_IN_MAIN = '''
+def helper(p):
+    return mod_a.load(p)
+
+def main(argv=None):
+    try:
+        helper("x")
+    except refusal.Refused as exc:
+        print(exc)
+    return helper("y")                  # the same callee on a path with no handler
+'''
+
+PATH_TRY_AFTER_OTHER_SUBCOMMANDS = '''
+def load_manifest(path):
+    return mod_a.load(path)             # reached from main with no try
+
+def analyse(bundle):
+    return {"image": mod_b.measure(bundle)}     # reached ONLY through the broad try
+
+def cross_image(out):
+    return load_manifest(out)
+
+def main(argv=None):
+    if argv == "cross-image-controls":
+        return cross_image("out")      # this branch returns first
+    try:
+        rec = analyse("bundle")         # the broad try, a direct child of main
+    except BaseException as exc:
+        rec = {"verdict": "ERROR"}
+    return rec
+'''
+
+PATH_TRY_BELOW_THE_SITE = '''
+def noise_floor(p):
+    x = mod_a.load(p)                   # written BEFORE the try...
+    try:
+        y = mod_b.measure(x)            # ...which was added for THIS call
+    except refusal.Refused as e:
+        return {"refused": str(e)}
+    return x + y
+
+def main(argv=None):
+    return noise_floor("p")
+'''
+
+PATH_WRAPPER = '''
+def go(p):
+    return mod_a.load(p)
+
+def _cli(argv=None):
+    try:
+        return go(argv)
+    except refusal.Refused as exc:
+        print(exc)
+        return 2
+'''
+
+PATH_WRAPPER_UNDER_MAIN = PATH_WRAPPER + '''
+def main(argv=None):
+    return _cli(argv)
+'''
+
+PATH_WRAPPER_TWO_FRAMES_IN = '''
+def go(p):
+    return mod_a.load(p)
+
+def _inner(argv):
+    try:
+        return go(argv)
+    except refusal.Refused as exc:
+        print(exc)
+        return 2
+
+def _cli(argv=None):
+    return _inner(argv)               # the dispatch reaches the try TWO frames in
+'''
+
+PATH_ENTER_WRAPPER = "    sys.exit(_cli())\n"
+
+PATH_ENTER_THROUGH_A_DEF_IN_THE_DISPATCH = '''
+    def inner():
+        return _cli()                 # written in a def of the dispatch's own
+    sys.exit(inner())
+'''
+
+PATH_VALUE_REFERENCE = '''
+def helper(p):
+    return mod_a.load(p)
+
+def apply(fn, p):
+    return fn(p)                        # a callback parameter: no edge to follow
+
+def main(argv=None):
+    try:
+        r = helper("x")                 # THIS path is guarded...
+    except refusal.Refused as exc:
+        r = str(exc)
+    return apply(helper, "y")           # ...and this one passes helper as a VALUE
+'''
+
+PATH_PARAM_SHADOWS_DEF = '''
+def helper(p):
+    return mod_a.load(p)              # never called: run_cb's `helper` is its PARAMETER
+
+def run_cb(helper):
+    try:
+        return helper("x")
+    except refusal.Refused:
+        return 2
+
+def main(argv=None):
+    return run_cb(lambda x: 0)
+'''
+
+PATH_PARAM_SHADOWS_TABLE = '''
+def cmd_measure():
+    return mod_a.load("x")            # never reached: run_cb's COMMANDS is its PARAMETER
+
+COMMANDS = {"a": cmd_measure}
+
+def run_cb(COMMANDS):
+    try:
+        return COMMANDS["a"]()
+    except refusal.Refused:
+        return 2
+
+def main(argv=None):
+    return run_cb({"a": lambda: 0})
+'''
+
+PATH_COMPREHENSION_TARGET_IS_NOT_A_LOCAL = '''
+def helper(p):
+    return mod_a.load(p)
+
+def apply(fn, p):
+    return fn(p)
+
+def main(argv=None):
+    _ = [helper for helper in ()]     # the target is the comprehension's own
+    try:
+        helper("x")
+    except refusal.Refused:
+        pass
+    return apply(helper, "y")         # a value read of the def: an unseen path
+'''
+
+PATH_COMPREHENSION_TARGET_ONLY = '''
+def helper(p):
+    return mod_a.load(p)
+
+def main(argv=None):
+    _ = [helper for helper in ()]     # the target is the comprehension's own
+    try:
+        return helper("x")            # still `def helper`: guarded by this try
+    except refusal.Refused:
+        return 2
+'''
+
+PATH_EXCEPT_AS_IS_A_LOCAL = '''
+def verdict(p):
+    return mod_a.load(p)
+
+def check():
+    try:
+        return 0
+    except ValueError as verdict:     # binds `verdict` in check() only
+        return str(verdict)
+
+def main(argv=None):
+    try:
+        return verdict("y")
+    except refusal.Refused:
+        return 2
+'''
+
+PATH_LOCAL_VARIABLE_NAMED_LIKE_A_FUNCTION = '''
+def site(p):
+    return mod_a.load(p)              # the site, below the def that shares a name
+
+def verdict(p):
+    return site(p)                    # no try here
+
+def main(argv=None):
+    try:
+        return verdict("y")           # the guard, around the CALL to verdict()
+    except refusal.Refused as exc:
+        return str(exc)
+
+def check(p):
+    ok, verdict = True, "x"           # a LOCAL that shares the def's name
+    return f"{ok} {verdict}"
+'''
+
+PATH_CALL_FROM_A_CLAUSE = '''
+def helper(p):
+    return mod_a.load(p)              # the site, in a def main calls from a clause
+
+def main(argv=None):
+    try:
+        touch(None)
+%(pre)s
+    %(clause)s
+        return helper("x")
+    return 0
+'''
+
+# where in the try the call to `helper()` is written: its except clause, its
+# else clause, or its finally clause -- never its body
+CLAUSE_SHAPES = {
+    "except": dict(pre="", clause="except (OSError, refusal.Refused):"),
+    "else": dict(pre="    except (OSError, refusal.Refused):\n        touch(None)", clause="else:"),
+    "finally": dict(pre="    except (OSError, refusal.Refused):\n        touch(None)",
+                    clause="finally:"),
+}
+
+PATH_METHOD_CALL = '''
+class Loader:
+    def load(self, p):
+        return mod_a.load(p)            # in a method
+
+def main(argv=None):
+    try:
+        return Loader().load("x")       # reached through an instance
+    except refusal.Refused as exc:
+        return 2
+'''
+
+PATH_LAMBDA_CALL = '''
+def helper(p):
+    return mod_a.load(p)
+
+def main(argv=None):
+    try:
+        return list(map(lambda q: helper(q), ["x"]))   # called from a lambda
+    except refusal.Refused as exc:
+        return 2
+'''
+
+PATH_MIXED_LAMBDA = '''
+def helper(p):
+    return mod_a.load(p)
+
+def a():
+    try:
+        return helper("x")
+    except refusal.Refused as exc:
+        return 2
+
+def b():
+    f = lambda: helper("y")             # a real path, no handler on it
+    return f()
+
+def main(argv=None):
+    a()
+    return b()
+'''
+
+PATH_MIXED_METHOD = '''
+def helper(p):
+    return mod_a.load(p)
+
+def a():
+    try:
+        return helper("x")
+    except refusal.Refused as exc:
+        return 2
+
+class Driver:
+    def go(self):
+        return helper("y")              # a real path, no handler on it
+
+def main(argv=None):
+    a()
+    return Driver().go()
+'''
+
+PATH_UNCALLED_FUNCTION = '''
+def helper(p):
+    return mod_a.load(p)                # nothing at module level calls it
+
+def main(argv=None):
+    try:
+        return mod_b.measure("x")
+    except refusal.Refused as exc:
+        return 2
+'''
+
+PATH_MODULE_LEVEL_SITE = '''
+def main(argv=None):
+    try:
+        return mod_b.measure("x")
+    except refusal.Refused as exc:
+        return 2
+
+CFG = mod_a.load("cfg")                 # import time: before the dispatch runs
+'''
+
+PATH_INTERSECTION = '''
+import dual
+
+def both(p):
+    return dual.fetch(p)                # raises mod_a's OR mod_b's
+
+def via_a(p):
+    try:
+        return both(p)
+    except mod_a.Refused:               # catches mod_a's alone
+        return None
+
+def via_b(p):
+    try:
+        return both(p)
+    except mod_b.Refused:               # catches mod_b's alone
+        return None
+
+def main(argv=None):
+    return [via_a("a"), via_b("b")]
+'''
+
+DUAL_RAISER = '''
+from mod_a import Refused as RA
+from mod_b import Refused as RB
+
+def fetch(p):
+    if p == "a":
+        raise RA("a's")
+    raise RB("b's")
+'''
+
+PATH_CYCLE = '''
+def helper(p):
+    return mod_a.load(p)                # every path here came through a()'s try
+
+def a(n):
+    early = mod_b.measure(n)            # OUTSIDE the try: a path-union credit takes it
+    try:
+        return b(n)
+    except refusal.Refused as exc:
+        return early
+
+def b(n):
+    if n:
+        return helper(n)
+    return a(n + 1)                     # the cycle
+
+def main(argv=None):
+    return a(1)
+'''
+
+PATH_TABLE_INLINE = '''
+def cmd_compare(p):
+    return mod_a.load(p)
+
+def cmd_validate(p):
+    return mod_b.measure(p)
+'''
+
+PATH_TABLE_ENTER_INLINE = '''
+    cmd = sys.argv[1] if len(sys.argv) > 1 else "validate"
+    try:
+        sys.exit({"validate": cmd_validate, "compare": cmd_compare}[cmd]())
+    except refusal.Refused as e:
+        print(f"REFUSED  {e}")
+        sys.exit(2)
+'''
+
+PATH_TABLE_BY_NAME = '''
+def cmd_measure(p):
+    return mod_a.load(p)
+
+COMMANDS = {"measure": cmd_measure}
+'''
+
+PATH_TABLE_ENTER_BY_NAME = '''
+    cmd = sys.argv[1] if len(sys.argv) > 1 else "measure"
+    if cmd not in COMMANDS:                     # membership: reads the keys
+        print(" | ".join(COMMANDS))             # a usage message: reads the keys
+        sys.exit(64)
+    try:
+        sys.exit(COMMANDS[cmd]())
+    except refusal.Refused as e:
+        sys.exit(2)
+'''
+
+PATH_TABLE_ESCAPED = '''
+def cmd_measure(p):
+    return mod_a.load(p)
+
+COMMANDS = {"measure": cmd_measure}
+'''
+
+PATH_TABLE_ENTER_ESCAPED = '''
+    table = COMMANDS                   # the table itself escapes into a variable
+    try:
+        sys.exit(COMMANDS[cmd]())      # ...though it is ALSO called under the try
+    except refusal.Refused as e:
+        sys.exit(2)
+'''
+
+PATH_TABLE_STORED = '''
+def cmd_measure(p):
+    return mod_a.load(p)
+
+COMMANDS = {"measure": cmd_measure}
+'''
+
+PATH_TABLE_ENTER_STORED = '''
+    handler = COMMANDS[sys.argv[1]]     # stored in a variable: where it goes is unseen
+    try:
+        sys.exit(handler())
+    except refusal.Refused as e:
+        sys.exit(2)
+'''
+
+
+def _path_scan(tmp_path, body: str, entry: str, extra: dict[str, str] | None = None):
+    """One CLI module `caller_path.py` -- PATH_HEAD, `body`, and the `__main__`
+    dispatch `entry` (already indented) -- beside the flat tree, plus any
+    `extra` sibling modules. Returns its sites keyed by (the def the site is
+    written in, callee) -> the sites by line, and the module's text. The key
+    is read off the AST here, not off a scanner field, so these controls fail
+    on a classification against any scanner, not on a missing attribute."""
+    files = _tree(tmp_path)
+    text = PATH_HEAD + body + '\n\nif __name__ == "__main__":\n' + entry
+    for name, module in (extra or {}).items():
+        f = tmp_path / f"{name}.py"
+        f.write_text(module)
+        files.append(f)
+    p = tmp_path / "caller_path.py"
+    p.write_text(text)
+    files.append(p)
+    idx = rss.build_index(files)
+    mod = idx[str(p)]
+    got: dict[tuple[str, str], list[dict]] = {}
+    for s in _sites_for(files, idx, "caller_path"):
+        call = next(n for n in ast.walk(mod.tree)
+                    if isinstance(n, ast.Call) and n.lineno == int(s["site"].rsplit(":", 1)[1]))
+        cur = mod.parents.get(call)
+        while cur is not None and not isinstance(cur, ast.FunctionDef):
+            cur = mod.parents.get(cur)
+        got.setdefault((cur.name if cur is not None else "<module>", s["callee"]), []).append(s)
+    for rows in got.values():
+        rows.sort(key=lambda s: int(s["site"].rsplit(":", 1)[1]))
+    return got, text
+
+
+def _one(got: dict, scope: str, callee: str) -> dict:
+    rows = got[(scope, callee)]
+    assert len(rows) == 1, (scope, callee, rows)
+    return rows[0]
+
+
+def _try_lines(text: str, scope: str, via: list[str]) -> None:
+    """Every `via` entry is a real `try:` line, inside the def it names."""
+    lines = text.splitlines()
+    for v in via:
+        where, line = v.rsplit(":", 1)
+        assert lines[int(line) - 1].strip() == "try:", (v, lines[int(line) - 1])
+        starts = [i for i, l in enumerate(lines, 1) if l.startswith(f"def {where}(")]
+        assert starts and min(starts) < int(line), (v, starts)
+
+
+def test_a_guard_in_every_caller_covers_a_site_two_frames_below(tmp_path):
+    """Defect 1, the r2_release.py:111 shape, red first: the site's def and
+    its caller have no try at all; the guard is in the caller's caller. By
+    presence the site was an escape -- a repaired one that gets re-traced."""
+    got, text = _path_scan(tmp_path, PATH_GUARD_TWO_FRAMES_UP, PATH_ENTER_MAIN)
+    s = _one(got, "image_identity", "mod_a.load")
+    assert s["classification"] == "covered(cli-exact)", s
+    assert s["guard"] == "none", s
+    assert s["uncovered"] == [], s
+    assert len(s["via"]) == 1 and s["via"][0].startswith("check:"), s
+    _try_lines(text, "check", s["via"])
+
+
+def test_what_is_caught_is_intersected_not_which_handler(tmp_path):
+    """Defect 1, the capability_pack.py:177 shape, red first: `gate()` has
+    two callers and each guards its call with a DIFFERENT try. No single
+    handler sits on every path, yet a base handler does -- so intersecting
+    handler identity credits nothing, and this row stayed an escape."""
+    got, text = _path_scan(tmp_path, PATH_EVERY_CALLER_GUARDS, PATH_ENTER_MAIN)
+    for callee in ("mod_a.load", "mod_b.measure"):
+        s = _one(got, "gate", callee)
+        assert s["classification"] == "covered(cli-base)", s
+        assert s["guard"] == "none", s
+        assert [v.split(":")[0] for v in s["via"]] == ["cmd_gate", "cmd_run"], s
+        _try_lines(text, "cmd_gate", s["via"][:1])
+        _try_lines(text, "cmd_run", s["via"][1:])
+
+
+def test_a_base_path_and_an_exact_path_meet_on_what_both_catch(tmp_path):
+    """The r2_release.py shape in full: `build()` is called under an EXACT
+    try, under a BASE try and under another exact one. What every path
+    catches is the exact origin, not nothing. A lattice that carries a base
+    handler as "no origins" meets the two into an empty guarantee and turns
+    this row back into an escape -- the first implementation of #1656 did
+    exactly that, and no all-base or all-exact control could see it; only
+    the real-tree pin below did."""
+    got, text = _path_scan(tmp_path, PATH_BASE_AND_EXACT_CALLERS, PATH_ENTER_MAIN)
+    s = _one(got, "image_identity", "mod_a.load")
+    assert s["classification"] == "covered(cli-exact)", s
+    assert s["uncovered"] == [], s
+    assert [v.split(":")[0] for v in s["via"]] == ["check", "stale_control"], s
+
+
+def test_a_try_nested_under_a_branch_in_main_guards_its_own_callee(tmp_path):
+    """Defect 1, the cymbal_low_tail.py:638 shape, red first: the base try is
+    not a direct child of `main()` -- it sits under an `if` inside a `for` --
+    so even a by-presence rule never saw it, and the site stayed an escape
+    while every path to it was guarded."""
+    got, text = _path_scan(tmp_path, PATH_GUARD_UNDER_A_BRANCH, PATH_ENTER_MAIN)
+    s = _one(got, "candidate", "mod_a.load")
+    assert s["classification"] == "covered(cli-base)", s
+    assert s["guard"] == "none", s
+    assert len(s["via"]) == 1 and s["via"][0].startswith("main:"), s
+    _try_lines(text, "main", s["via"])
+
+
+def test_a_sibling_helper_with_an_unguarded_twin_is_not_credited(tmp_path):
+    """The withdrawn half of #1641, as a rule-8 control: `main()` guards ONE
+    call to `synth()` and makes another with no handler. A scanner that
+    credits any try in a `main()` callee by presence -- or that requires
+    SOME caller to guard rather than EVERY one -- turns this escape into
+    `covered`. Ten real rows moved that way when the rule was tried."""
+    got, _ = _path_scan(tmp_path, PATH_SIBLING_HELPER, PATH_ENTER_MAIN)
+    s = _one(got, "synth", "mod_a.load")
+    assert s["classification"] == "candidate-escape", s
+    assert s["uncovered"] == ["mod_a"], s
+    assert "via" not in s, s
+
+
+def test_the_same_callee_guarded_and_bare_in_one_def_is_an_escape(tmp_path):
+    """Every call CHAIN, not every call site: one guarded call to `helper()`
+    in `main()` does not cover its second, bare call two lines down."""
+    got, _ = _path_scan(tmp_path, PATH_TWO_CALLS_IN_MAIN, PATH_ENTER_MAIN)
+    s = _one(got, "helper", "mod_a.load")
+    assert s["classification"] == "candidate-escape", s
+    assert s["uncovered"] == ["mod_a"], s
+
+
+def test_a_try_in_main_that_does_not_enclose_the_call_relabels_nothing(tmp_path):
+    """Defect 2, the r0_capture.py:1631 shape, red first: `main()` has an
+    `except BaseException` directly in it, but around ONE subcommand's call;
+    the site's def is called from a branch that returned before it. By
+    presence the broad try relabelled every such row `relabelled(cli-total)`
+    -- a refusal that really exits as a traceback, read as a relabelled
+    result."""
+    got, _ = _path_scan(tmp_path, PATH_TRY_AFTER_OTHER_SUBCOMMANDS, PATH_ENTER_MAIN)
+    s = _one(got, "load_manifest", "mod_a.load")
+    assert s["classification"] == "candidate-escape", s
+    assert s["uncovered"] == ["mod_a"], s
+    assert "via" not in s, s
+
+
+def test_the_broad_try_still_relabels_the_path_it_is_on(tmp_path):
+    """The other half of defect 2: the same broad try does credit the def it
+    encloses, so the rule is `on the path`, not `never a broad try`."""
+    got, _ = _path_scan(tmp_path, PATH_TRY_AFTER_OTHER_SUBCOMMANDS, PATH_ENTER_MAIN)
+    s = _one(got, "analyse", "mod_b.measure")
+    assert s["classification"] == "relabelled(cli-total)", s
+    assert len(s["via"]) == 1 and s["via"][0].startswith("main:"), s
+
+
+@pytest.mark.parametrize("clause", sorted(CLAUSE_SHAPES))
+def test_a_call_from_a_trys_clause_guards_nothing_on_the_path(tmp_path, clause):
+    """The #1188 rule at the PATH, where it had no control: a try covers its
+    BODY, so a call written in its except, else or finally clause runs after
+    the try has handed over, and its handlers catch nothing of that call. The
+    site sits one frame down, in a def `main()` calls from the clause, with a
+    base handler on that try -- so a path credit that drops the body test on
+    the way to the call reads it covered(cli-base)."""
+    body = PATH_CALL_FROM_A_CLAUSE % CLAUSE_SHAPES[clause]
+    got, _ = _path_scan(tmp_path, body, PATH_ENTER_MAIN)
+    s = _one(got, "helper", "mod_a.load")
+    assert s["classification"] == "candidate-escape", (clause, s)
+    assert s["uncovered"] == ["mod_a"], s
+
+
+def test_a_try_below_the_site_guards_only_what_follows_it(tmp_path):
+    """The cymbal_low_tail.py:794 shape: the try in the site's own def starts
+    two lines BELOW the site (it was added for another call). A handler is
+    attached by enclosing the call, never by sharing a def with it."""
+    got, _ = _path_scan(tmp_path, PATH_TRY_BELOW_THE_SITE, PATH_ENTER_MAIN)
+    before = _one(got, "noise_floor", "mod_a.load")
+    assert before["classification"] == "candidate-escape", before
+    assert before["guard"] == "none", before
+    inside = _one(got, "noise_floor", "mod_b.measure")
+    assert inside["classification"] == "covered(base)", inside
+
+
+def test_a_wrapper_the_dispatch_calls_is_the_first_edge(tmp_path):
+    """hh_probe5's first repair (#1611): the dispatch calls `_cli()`, whose
+    try guards `go()`. Under a path rule the wrapper is simply the first
+    edge and needs no rule of its own (#1641's shape)."""
+    got, text = _path_scan(tmp_path, PATH_WRAPPER, "    sys.exit(_cli())\n")
+    s = _one(got, "go", "mod_a.load")
+    assert s["classification"] == "covered(cli-base)", s
+    assert s["guard"] == "none", s
+    _try_lines(text, "_cli", s["via"])
+    assert len(s["via"]) == 1, s
+
+
+def test_a_guarded_path_through_main_is_followed_like_any_other(tmp_path):
+    """The fixture of #1641's `test_a_wrapper_main_calls_is_not_the_boundary`,
+    which asserted an escape: dispatch -> main() -> _cli() -> go(), with the
+    try in `_cli()`. That site IS guarded on every path, so under the path
+    rule it is covered, and #1641's pin -- written against the by-presence
+    rule, whose `main()` half was withdrawn for false-covering ten rows -- is
+    superseded by `test_a_sibling_helper_with_an_unguarded_twin_is_not_credited`,
+    the sibling shape that actually defeats presence. Pinned so the fixture
+    is not "repaired" back into a false escape."""
+    got, _ = _path_scan(tmp_path, PATH_WRAPPER_UNDER_MAIN, PATH_ENTER_MAIN)
+    s = _one(got, "go", "mod_a.load")
+    assert s["classification"] == "covered(cli-base)", s
+    assert len(s["via"]) == 1 and s["via"][0].startswith("_cli:"), s
+
+
+def test_a_guard_two_frames_in_from_the_dispatch_is_followed(tmp_path):
+    """dispatch -> _cli() -> _inner() [try] -> go(). A credit by presence
+    has to stop somewhere -- #1641 stopped one level in, since at level two
+    it could no longer tell a real guard from a sibling's -- so this shape
+    read as an escape while the refusal is caught. A credit by path has no
+    level to stop at: every path to `go` runs through `_inner`'s try."""
+    got, text = _path_scan(tmp_path, PATH_WRAPPER_TWO_FRAMES_IN, PATH_ENTER_WRAPPER)
+    s = _one(got, "go", "mod_a.load")
+    assert s["classification"] == "covered(cli-base)", s
+    assert len(s["via"]) == 1 and s["via"][0].startswith("_inner:"), s
+    _try_lines(text, "_inner", s["via"])
+
+
+def test_a_guard_reached_through_a_def_of_the_dispatch_is_followed(tmp_path):
+    """The dispatch defines `inner()` and calls it; `inner()` calls the
+    wrapper with the try. By presence a call written in a def of the
+    boundary's own is "one frame further in" and reaches nothing (#1641); by
+    path it is an edge like any other, and the refusal is caught."""
+    got, _ = _path_scan(tmp_path, PATH_WRAPPER, PATH_ENTER_THROUGH_A_DEF_IN_THE_DISPATCH)
+    s = _one(got, "go", "mod_a.load")
+    assert s["classification"] == "covered(cli-base)", s
+    assert len(s["via"]) == 1 and s["via"][0].startswith("_cli:"), s
+
+
+# #1688 review round 3: first-match handlers, defaults, deferred bodies.
+# Each shape below was reproduced against a7865f72 first (red there), then the
+# scanner changed. The positive twins pin that the fix did not simply stop
+# crediting (rule 8: what satisfies the check while violating its intent).
+
+def _load_sites(got: dict, callee: str = "mod_a.load") -> list[dict]:
+    return [r for rows in got.values() for r in rows if r["callee"] == callee]
+
+
+PATH_VIA_WRONG_HANDLER = '''
+def helper(p):
+    return mod_a.load(p)
+
+def _run(p):
+    try:
+        return helper(p)
+    except mod_b.Refused as exc:        # a DIFFERENT family: not this refusal
+        return 3
+
+def main(argv=None):
+    try:
+        return _run("x")
+    except refusal.Refused as exc:      # the handler that actually catches it
+        return 2
+'''
+
+
+def test_via_names_the_handler_that_catches_not_one_that_does_not(tmp_path):
+    """The M5 saw-drive shape: the nearest try on the path catches ANOTHER
+    family's `Refused` (mod_b's), the base handler two frames out catches
+    this one. `via` used to stop at the nearest try that caught anything and
+    named it; the label rests on the base handler."""
+    got, text = _path_scan(tmp_path, PATH_VIA_WRONG_HANDLER, PATH_ENTER_MAIN)
+    (s,) = _load_sites(got)
+    assert s["classification"] == "covered(cli-base)", s
+    assert [v.split(":")[0] for v in s["via"]] == ["main"], s
+    _try_lines(text, "main", s["via"])
+
+
+PATH_INNER_BROAD_SHADOWS_OUTER_BASE = '''
+def helper(p):
+    return mod_a.load(p)
+
+def mid(p):
+    try:
+        return helper(p)
+    except Exception as exc:            # catches the refusal FIRST
+        print("marker")
+        return 1
+
+def main(argv=None):
+    try:
+        return mid("x")
+    except refusal.Refused as exc:      # never sees it
+        return 2
+'''
+
+
+def test_an_inner_broad_handler_shadows_the_outer_base_one(tmp_path):
+    """Python runs the first handler that matches, walking out. `mid`'s
+    `except Exception` swallows the refusal and returns 1, so the CLI never
+    exits through the refusal path; reading `main`'s base handler as the
+    cover read it as `covered(cli-base)`."""
+    got, text = _path_scan(tmp_path, PATH_INNER_BROAD_SHADOWS_OUTER_BASE, PATH_ENTER_MAIN)
+    (s,) = _load_sites(got)
+    assert s["classification"] == "relabelled(cli-total)", s
+    assert [v.split(":")[0] for v in s["via"]] == ["mid"], s
+    _try_lines(text, "mid", s["via"])
+
+
+PATH_NESTED_TRIES_ONE_DEF = '''
+def helper(p):
+    return mod_a.load(p)
+
+def main(argv=None):
+    try:
+        try:
+            return helper("x")
+        except Exception:               # innermost: runs first
+            return 1
+    except refusal.Refused:
+        return 2
+'''
+
+
+def test_nested_tries_in_one_def_the_innermost_match_decides(tmp_path):
+    """Both handlers sit on ONE edge (main -> helper); the broad one is the
+    inner try. Found by the injected-defect matrix: the loosening "the best
+    handler on the edge wins" was seen by no control."""
+    got, text = _path_scan(tmp_path, PATH_NESTED_TRIES_ONE_DEF, PATH_ENTER_MAIN)
+    (s,) = _load_sites(got)
+    assert s["classification"] == "relabelled(cli-total)", s
+    assert len(s["via"]) == 1, s
+    assert text.splitlines()[int(s["via"][0].split(":")[1]) - 1 + 2].strip().startswith(
+        "except Exception"), s
+
+
+def test_an_inner_handler_for_another_family_does_not_shadow(tmp_path):
+    """Rule 8, the other direction: the inner handler is exact for mod_b, so
+    the base handler outside still decides (PATH_VIA_WRONG_HANDLER pins this
+    too; here the callee is mod_b's own refusal, which the inner one DOES
+    catch and so is `covered(cli-exact)`, not base)."""
+    got, _ = _path_scan(tmp_path, PATH_VIA_WRONG_HANDLER.replace("mod_a.load", "mod_b.measure"),
+                        PATH_ENTER_MAIN)
+    (s,) = _load_sites(got, "mod_b.measure")
+    assert s["classification"] == "covered(cli-exact)", s
+
+
+def _default_case(kw: str, tmp_path) -> dict:
+    body = f'''
+def helper(p):
+    return mod_a.load(p)
+
+{kw} use(helper=helper):
+    return helper("callback")           # `helper` here is the PARAMETER
+
+def main(argv=None):
+    try:
+        helper("guarded")
+    except refusal.Refused:
+        return 2
+    return use()                        # outside the try: the default runs helper
+'''
+    got, _ = _path_scan(tmp_path, body, PATH_ENTER_MAIN)
+    (s,) = _load_sites(got)
+    return s
+
+
+def test_a_def_default_reads_the_outer_name(tmp_path):
+    """`def use(helper=helper)` evaluates the default where `use` is defined,
+    so `helper` is read as a value (a callback path the graph cannot see) and
+    its guarded bare-name call in `main` cannot carry it. Ran for real: exits
+    1 with `mod_a.Refused: unusable: callback`."""
+    assert _default_case("def", tmp_path)["classification"] == "candidate-escape"
+
+
+def test_an_async_def_default_reads_the_outer_name(tmp_path):
+    assert _default_case("async def", tmp_path)["classification"] == "candidate-escape"
+
+
+def test_a_decorator_parameter_of_the_same_name_is_not_the_def(tmp_path):
+    """The decorator of a def runs in the enclosing scope too: the same class
+    as a default (found by searching the class, not the cited line)."""
+    body = '''
+def helper(p):
+    return mod_a.load(p)
+
+def use(helper):
+    @helper
+    def inner():
+        pass
+    return inner
+
+def main(argv=None):
+    try:
+        helper("guarded")
+    except refusal.Refused:
+        return 2
+    return 0
+'''
+    got, _ = _path_scan(tmp_path, body, PATH_ENTER_MAIN)
+    (s,) = _load_sites(got)
+    assert s["classification"] == "covered(cli-base)", s     # `helper` here is the param
+
+
+def test_a_default_that_names_a_local_is_still_read_through_the_local(tmp_path):
+    """Rule 8: the fix must not make EVERY default a value read. A default
+    naming a variable of the enclosing def reads that variable."""
+    body = '''
+def helper(p):
+    return mod_a.load(p)
+
+def main(argv=None):
+    helper = len
+    def use(f=helper):
+        return f("x")
+    try:
+        return use()
+    except refusal.Refused:
+        return 2
+
+def other():
+    try:
+        return helper("guarded")
+    except refusal.Refused:
+        return 2
+'''
+    got, _ = _path_scan(tmp_path, body + "\n", PATH_ENTER_MAIN + "    other()\n")
+    (s,) = _load_sites(got)
+    assert s["classification"] == "covered(cli-base)", s
+
+
+def _deferred(tmp_path, helper: str, main_body: str) -> dict:
+    body = f"import asyncio\n{helper}\ndef main(argv=None):\n{main_body}"
+    got, _ = _path_scan(tmp_path, body, PATH_ENTER_MAIN)
+    (s,) = _load_sites(got)
+    return s
+
+
+def test_a_try_around_creating_a_generator_guards_nothing(tmp_path):
+    """Ran for real: exits 1 with `mod_a.Refused: unusable: next`."""
+    s = _deferred(tmp_path, "def helper(p):\n    yield mod_a.load(p)\n", '''
+    try:
+        g = helper("next")
+    except refusal.Refused:
+        return 2
+    return next(g)                      # the body runs HERE, outside the try
+''')
+    assert s["classification"] == "candidate-escape", s
+
+
+def test_a_try_around_creating_a_generator_expression_guards_nothing(tmp_path):
+    s = _deferred(tmp_path, "def helper(p):\n    return mod_a.load(p)\n", '''
+    try:
+        g = (helper(p) for p in ["x"])
+    except refusal.Refused:
+        return 2
+    return next(g)
+''')
+    assert s["classification"] == "candidate-escape", s
+
+
+def test_a_try_around_creating_a_coroutine_guards_nothing(tmp_path):
+    s = _deferred(tmp_path, "async def helper(p):\n    return mod_a.load(p)\n", '''
+    try:
+        c = helper("x")
+    except refusal.Refused:
+        return 2
+    return asyncio.run(c)               # awaited outside the try
+''')
+    assert s["classification"] == "candidate-escape", s
+
+
+def test_a_coroutine_awaited_inside_the_try_is_guarded(tmp_path):
+    """Rule 8: not every async def is deferred past the try -- `await` in it
+    runs the body there."""
+    body = '''
+import asyncio
+
+async def helper(p):
+    return mod_a.load(p)
+
+async def amain():
+    try:
+        return await helper("x")
+    except refusal.Refused:
+        return 2
+
+def main(argv=None):
+    return asyncio.run(amain())
+'''
+    got, _ = _path_scan(tmp_path, body, PATH_ENTER_MAIN)
+    (s,) = _load_sites(got)
+    assert s["classification"] == "covered(cli-base)", s
+
+
+def test_the_first_iterable_of_a_generator_expression_runs_at_once(tmp_path):
+    """Rule 8: `(x for x in helper(p))` evaluates `helper(p)` where the
+    expression is written, so a try around it does guard that call."""
+    s = _deferred(tmp_path, "def helper(p):\n    return [mod_a.load(p)]\n", '''
+    try:
+        g = (x for x in helper("x"))
+    except refusal.Refused:
+        return 2
+    return list(g)
+''')
+    assert s["classification"] == "covered(cli-base)", s
+
+
+def test_a_list_comprehension_in_the_try_is_guarded(tmp_path):
+    s = _deferred(tmp_path, "def helper(p):\n    return mod_a.load(p)\n", '''
+    try:
+        return [helper(p) for p in ["x"]]
+    except refusal.Refused:
+        return 2
+''')
+    assert s["classification"] == "covered(cli-base)", s
+
+
+def test_a_function_passed_as_a_value_has_a_path_no_call_shows(tmp_path):
+    """Rule 8: `helper` is called by name under a try AND handed to `apply`
+    as an argument. The bare-name edge is guarded; the callback's path is not
+    visible, so crediting the first would false-cover the second. A scanner
+    without the value rule turns this escape into `covered(cli-base)`."""
+    got, _ = _path_scan(tmp_path, PATH_VALUE_REFERENCE, PATH_ENTER_MAIN)
+    s = _one(got, "helper", "mod_a.load")
+    assert s["classification"] == "candidate-escape", s
+    assert s["uncovered"] == ["mod_a"], s
+
+
+def test_a_local_variable_named_like_a_def_is_not_a_value_of_it(tmp_path):
+    """Rule 8, the other direction of the value rule: `check()` holds a LOCAL
+    `verdict` from a tuple-unpack while `def verdict` sits at module level
+    (cymbal_tone_knob L910 is this exactly), and the site sits BELOW
+    `verdict()`, guarded by `main()`'s try around its call. A name-wide rule
+    taints the def, and a site guarded on every path becomes a false escape
+    -- which the mutant run showed an earlier fixture of this test could not
+    see: with the try INSIDE the tainted def the edge below it stayed
+    guarded whatever taints the def. The label is the same under the
+    by-presence scanner, which credits main()'s try by presence; red against
+    a name-wide value rule."""
+    got, _ = _path_scan(tmp_path, PATH_LOCAL_VARIABLE_NAMED_LIKE_A_FUNCTION, PATH_ENTER_MAIN)
+    s = _one(got, "site", "mod_a.load")
+    assert s["classification"] == "covered(cli-base)", s
+
+
+def test_a_method_reached_through_an_instance_is_not_followed(tmp_path):
+    """A stated blind spot, pinned: `Loader().load("x")` is not a bare-name
+    call, so the method is never reached and never credited, though main's
+    try does enclose it at runtime. The conservative direction -- red against
+    the by-presence scanner, which called it covered(cli-base)."""
+    got, _ = _path_scan(tmp_path, PATH_METHOD_CALL, PATH_ENTER_MAIN)
+    s = _one(got, "load", "mod_a.load")
+    assert s["classification"] == "candidate-escape", s
+
+
+def test_a_call_from_a_lambda_is_not_followed(tmp_path):
+    """A stated blind spot, pinned: the lambda is no frame anything reaches."""
+    got, _ = _path_scan(tmp_path, PATH_LAMBDA_CALL, PATH_ENTER_MAIN)
+    s = _one(got, "helper", "mod_a.load")
+    assert s["classification"] == "candidate-escape", s
+
+
+def test_an_unresolvable_caller_beside_a_guarded_one_is_an_unguarded_path(tmp_path):
+    """#1688 review: a lambda or method caller has no edge into it, and
+    dropping it let the guarded sibling alone carry the intersection. Mixed
+    case, red against a scanner that drops the edge."""
+    for body in (PATH_MIXED_LAMBDA, PATH_MIXED_METHOD):
+        got, _ = _path_scan(tmp_path, body, PATH_ENTER_MAIN)
+        s = _one(got, "helper", "mod_a.load")
+        assert s["classification"] == "candidate-escape", (body, s)
+
+
+def test_a_parameter_named_like_a_def_stops_the_name_lookup(tmp_path):
+    """#1688 review: `run_cb(helper)` calls its PARAMETER, so the module-level
+    `def helper` is unreached. A lookup that ignores non-def locals fell
+    through to the def and read it covered(cli-base) via run_cb's try."""
+    got, _ = _path_scan(tmp_path, PATH_PARAM_SHADOWS_DEF, PATH_ENTER_MAIN)
+    s = _one(got, "helper", "mod_a.load")
+    assert s["classification"] == "candidate-escape", s
+
+
+def test_a_parameter_named_like_a_sealed_table_does_not_follow_the_table(tmp_path):
+    """Same defect on a dispatch table: `COMMANDS` inside run_cb is the
+    parameter, so `cmd_measure` is never reached through it."""
+    got, _ = _path_scan(tmp_path, PATH_PARAM_SHADOWS_TABLE, PATH_ENTER_MAIN)
+    s = _one(got, "cmd_measure", "mod_a.load")
+    assert s["classification"] == "candidate-escape", s
+
+
+def test_a_comprehension_target_is_not_a_local_of_the_enclosing_def(tmp_path):
+    """Python 3 scopes a comprehension: `[helper for helper in ()]` binds
+    nothing in main(), so `apply(helper, "y")` IS a value read of the def and
+    its unseen path withholds the credit its guarded call would give."""
+    got, _ = _path_scan(tmp_path, PATH_COMPREHENSION_TARGET_IS_NOT_A_LOCAL, PATH_ENTER_MAIN)
+    s = _one(got, "helper", "mod_a.load")
+    assert s["classification"] == "candidate-escape", s
+    # and with no value read, the guarded call still reaches the def: a
+    # target leaked into main()'s locals would resolve it to nothing
+    got, _ = _path_scan(tmp_path, PATH_COMPREHENSION_TARGET_ONLY, PATH_ENTER_MAIN)
+    s = _one(got, "helper", "mod_a.load")
+    assert s["classification"].startswith("covered(cli"), s
+
+
+def test_an_except_as_name_is_a_local_of_its_def_only(tmp_path):
+    """`except ValueError as verdict` in a sibling check() binds `verdict`
+    THERE; it is no read of `def verdict`, whose guarded call stays covered.
+    Red when `except ... as` is not collected as a binding."""
+    got, _ = _path_scan(tmp_path, PATH_EXCEPT_AS_IS_A_LOCAL, PATH_ENTER_MAIN)
+    s = _one(got, "verdict", "mod_a.load")
+    assert s["classification"].startswith("covered(cli"), s
+
+
+def test_a_function_the_entry_never_reaches_is_credited_nothing(tmp_path):
+    """Rule 8: `helper()` is defined and never called at module level -- dead
+    here, or another module's. `main()` has a base try, which by presence
+    covered this site too. Red against the by-presence scanner."""
+    got, _ = _path_scan(tmp_path, PATH_UNCALLED_FUNCTION, PATH_ENTER_MAIN)
+    s = _one(got, "helper", "mod_a.load")
+    assert s["classification"] == "candidate-escape", s
+    assert s["uncovered"] == ["mod_a"], s
+    own = _one(got, "main", "mod_b.measure")
+    assert own["classification"] == "covered(base)", own      # the try itself still counts
+
+
+def test_a_module_level_site_is_not_under_a_later_dispatch_try(tmp_path):
+    """`CFG = mod_a.load("cfg")` runs at import, before the dispatch and its
+    try exist. The by-presence rule read it covered(cli-base)."""
+    got, _ = _path_scan(tmp_path, PATH_MODULE_LEVEL_SITE, PATH_ENTER_MAIN)
+    s = _one(got, "<module>", "mod_a.load")
+    assert s["classification"] == "candidate-escape", s
+
+
+def test_guarantees_are_intersected_over_callers_not_unioned(tmp_path):
+    """Two callers, each exact for a DIFFERENT origin, of one site whose
+    callee raises both: on every path one origin escapes. A union over
+    callers reads `covered(cli-exact)`."""
+    got, _ = _path_scan(tmp_path, PATH_INTERSECTION, PATH_ENTER_MAIN, {"dual": DUAL_RAISER})
+    s = _one(got, "both", "dual.fetch")
+    assert s["origins"] == ["mod_a", "mod_b"], s
+    assert s["classification"] == "candidate-escape", s
+    assert s["uncovered"] == ["mod_a", "mod_b"], s
+
+
+def test_a_cycle_converges_on_every_path_not_some_path(tmp_path):
+    """`a -> b -> a`. Every path to `helper()` enters through a()'s try, so
+    its site is covered; `a()`'s own site sits BEFORE that try and is not. A
+    least-fixed-point (union, "some path") credit takes b's handler back
+    around the cycle and covers a's site too."""
+    got, _ = _path_scan(tmp_path, PATH_CYCLE, PATH_ENTER_MAIN)
+    s = _one(got, "helper", "mod_a.load")
+    assert s["classification"] == "covered(cli-base)", s
+    assert len(s["via"]) == 1 and s["via"][0].startswith("a:"), s
+    early = _one(got, "a", "mod_b.measure")
+    assert early["classification"] == "candidate-escape", early
+    assert early["uncovered"] == ["mod_b"], early
+
+
+def test_an_inline_dispatch_table_under_the_try_is_followed(tmp_path):
+    """The #1162/#1183 repairs (rs_guard_band, rs_mode_drive,
+    balance_line_shape) dispatch `{"compare": cmd_compare, ...}[cmd]()` under
+    the try that is the repair. Read as callbacks, the entries carry an unseen
+    path and lose the credit the try gives them; the census would list the
+    repaired modules as escapes again."""
+    got, _ = _path_scan(tmp_path, PATH_TABLE_INLINE, PATH_TABLE_ENTER_INLINE)
+    for scope, callee in (("cmd_compare", "mod_a.load"), ("cmd_validate", "mod_b.measure")):
+        s = _one(got, scope, callee)
+        assert s["classification"] == "covered(cli-base)", s
+        assert s["guard"] == "none", s
+        assert len(s["via"]) == 1 and s["via"][0].startswith("<module>:"), s
+
+
+def test_a_table_read_only_for_its_keys_is_still_sealed(tmp_path):
+    """measure_partial_balance's `COMMANDS`: subscripted and called under the
+    try, and read twice more for its KEYS -- a membership test and
+    `sep.join(COMMANDS)` in a usage message. Neither can reach an entry, so
+    the table stays sealed. A seal rule that allows only the call and the
+    membership test turns these rows into escapes."""
+    got, _ = _path_scan(tmp_path, PATH_TABLE_BY_NAME, PATH_TABLE_ENTER_BY_NAME)
+    s = _one(got, "cmd_measure", "mod_a.load")
+    assert s["classification"] == "covered(cli-base)", s
+    assert len(s["via"]) == 1 and s["via"][0].startswith("<module>:"), s
+
+
+def test_a_table_that_escapes_is_not_sealed_though_it_is_called(tmp_path):
+    """Rule 8 for the seal: the same table is subscripted and called under the
+    try AND copied into a variable, through which the graph cannot follow
+    it. The guarded call is real, but so is the unseen path, so the entry
+    keeps no credit. A seal that looks only for the guarded call -- or that
+    ignores reads other than the call -- turns this into covered(cli-base)."""
+    got, _ = _path_scan(tmp_path, PATH_TABLE_ESCAPED, PATH_TABLE_ENTER_ESCAPED)
+    s = _one(got, "cmd_measure", "mod_a.load")
+    assert s["classification"] == "candidate-escape", s
+    assert s["uncovered"] == ["mod_a"], s
+
+
+def test_a_table_entry_stored_in_a_variable_is_not_followed(tmp_path):
+    """A stated blind spot, pinned: `handler = COMMANDS[cmd]` parks the entry
+    in a variable and the call `handler()` is not a bare-name call to a def.
+    Guarded at runtime; the census lists it as an escape."""
+    got, _ = _path_scan(tmp_path, PATH_TABLE_STORED, PATH_TABLE_ENTER_STORED)
+    s = _one(got, "cmd_measure", "mod_a.load")
+    assert s["classification"] == "candidate-escape", s
+
+
+# The 14 rows of #1656's table on the real tree, keyed by file, the def the
+# site is written in and the callee -- never by line, so an unrelated edit to
+# one of these files does not red it (the module docstring's "NOT A GATE"). It
+# moves only when one of these defs changes its callers or its guards, which
+# is exactly when its label should be re-read. `callers` of these defs that
+# the graph cannot see are the stated blind spots above.
+REAL_TREE_ROWS = {
+    "fpga/release/r2_release.py": {
+        "image_identity": {"r1_release.image_identity": ["covered(cli-exact)"]},
+        "build": {"r1_release.external_io": ["covered(cli-exact)"]}},
+    "tools/capability_pack.py": {
+        "gate": {"refprofile.require_capability": ["covered(cli-exact)"]}},
+    "tools/cymbal_low_tail.py": {
+        "candidate": {"run_case.prepare": ["covered(cli-base)"]},
+        "synth": {"run_case.prepare": ["candidate-escape"]},
+        "shipped": {"run_case.render_drum_solo": ["candidate-escape"],
+                    "run_case.prepare": ["candidate-escape"]},
+        # the 15th row is not in the table: the try in noise_floor_control
+        # still covers ITS OWN prepare call, two lines below the two escapes
+        "noise_floor_control": {"run_case.render_drum_solo": ["candidate-escape"],
+                                "run_case.prepare": ["candidate-escape", "covered(base)"]}},
+    "tools/lead_drive_337.py": {
+        "vol_effective": {"mono_m5a_score.engine_configuration": ["candidate-escape"]}},
+    "tools/r0_capture.py": {
+        "resolve_image": {"r0_reference.load_manifest": ["candidate-escape"]},
+        "load_reference": {"r0_reference.read_wav_int16": ["candidate-escape"]},
+        "cross_image_controls": {"r0_reference.load_manifest": ["candidate-escape"] * 2}},
+    # not in #1656's table: the site #1577 ACCEPTED, which the path rule covers
+    "rtl-sketch/verify_synth_top.py": {
+        "_render": {"run_case.render_drum_solo": ["covered(cli-exact)"]}},
+}
+
+
+@pytest.fixture(scope="module")
+def _real_tree():
+    """The census of the tracked tree, keyed (file, the def a site is written
+    in, callee) -> its sites. The key is read off the AST here, not off a
+    scanner field, so a row is found the same way under any scanner."""
+    files = rss.tracked_files()
+    idx = rss.build_index(files)
+    scope = [f for f in files if any(str(f.relative_to(rss.ROOT)).startswith(r + "/")
+                                     for r in rss.SCAN_ROOTS)]
+    got: dict[tuple[str, str, str], list[dict]] = {}
+    for s in rss.scan(scope, idx):
+        path, line = s["site"].rsplit(":", 1)
+        mod = idx[str(rss.ROOT / path)]
+        call = next(n for n in ast.walk(mod.tree)
+                    if isinstance(n, ast.Call) and n.lineno == int(line))
+        cur = mod.parents.get(call)
+        while cur is not None and not isinstance(cur, ast.FunctionDef):
+            cur = mod.parents.get(cur)
+        got.setdefault((path, cur.name, s["callee"]), []).append(s)
+    return got
+
+
+def test_the_real_trees_named_rows_read_as_the_tables_say(_real_tree):
+    """What ships, not only the synthetic shapes: #1656's acceptance
+    criteria 2-4 on the tracked tree -- the four defect-1 rows are covered,
+    the four r0_capture rows have left `relabelled(cli-total)` for an escape,
+    and the six other escaping sites are not covered under any rule added."""
+    assert len(REAL_TREE_ROWS) == 6
+    pinned = 0
+    for path, defs in REAL_TREE_ROWS.items():
+        for def_name, callees in defs.items():
+            for callee, want in callees.items():
+                have = sorted(s["classification"] for s in _real_tree[(path, def_name, callee)])
+                assert have == sorted(want), (path, def_name, callee, have, want)
+                pinned += len(want)
+    assert pinned == 16, pinned
+
+
+# The label against what the shipped CLI DOES. For each site below the REAL
+# `main()` runs with the census site's callee stubbed to raise its own
+# module's `Refused`: an escape row must come out of `main()` as that
+# exception -- the traceback the CLI would print -- and a covered row must
+# not. The assertion is label <-> behaviour, not a fixed label, so it
+# survives a repair: when someone guards an escape row the census reads
+# covered and the run reads caught, and the test still passes. At #1656 the
+# first three were `covered(cli-base)`, `covered(cli-exact)` and
+# `relabelled(cli-total)` by presence while their refusal escapes, and the
+# fourth was an escape while it is caught. Nothing here is inferred from the
+# scanner; `RUNTIME_STUBS` is the stipulated world, and it stipulates only
+# the callees.
+def _np_ones(*a, **k):
+    import numpy
+    return numpy.ones(4800) * 0.1, 48000
+
+
+RUNTIME_STUBS = {
+    ("tools/make_cymbal_pack.py", "main", "run_case.render_drum_solo"): dict(
+        module="make_cymbal_pack", argv=lambda out: ["--out", str(out)],
+        alongside={"cymbal_bands._load": _np_ones,                 # the corpus: present, not silent
+                   "cymbal_candidate_eval.calibrate": (lambda: {"amps": {}}),
+                   "cymbal_candidate_eval.kit_with_levels": (lambda amps: {}),
+                   "cymbal_candidate.render": (lambda kit, sound: _np_ones())}),
+    ("tools/clap_d12a_probe.py", "known_answer", "run_case.prepare"): dict(
+        module="clap_d12a_probe",
+        argv=lambda out: ["--known-answer-only", "--out", str(out / "p.json")], alongside={}),
+    ("tools/r0_capture.py", "cross_image_controls", "r0_reference.load_manifest"): dict(
+        module="r0_capture", argv=lambda out: ["cross-image-controls", "--out", str(out)],
+        alongside={}),
+    ("tools/capability_pack.py", "gate", "refprofile.require_capability"): dict(
+        module="capability_pack", argv=lambda out: ["--gate"], alongside={}),
+}
+
+
+def _raising(stem: str):
+    """A stand-in for the callee that raises ITS module's `Refused`."""
+    cls = importlib.import_module(stem).Refused
+
+    def refuse(*a, **k):
+        raise cls(f"stubbed refusal from {stem}, for the census")
+    return refuse
+
+
+def _set(monkeypatch, target: str, value) -> None:
+    mod, _, attr = target.rpartition(".")
+    monkeypatch.setattr(importlib.import_module(mod), attr, value)
+
+
+@pytest.mark.parametrize("key", sorted(RUNTIME_STUBS), ids=lambda k: f"{k[0].split('/')[-1]}:{k[1]}")
+def test_the_label_and_the_shipped_cli_agree(tmp_path, monkeypatch, _real_tree, key):
+    rows = _real_tree[key]
+    assert rows, key
+    polarities = {s["classification"] == "candidate-escape" for s in rows}
+    assert len(polarities) == 1, [(s["site"], s["classification"]) for s in rows]
+    for s in rows:                          # each site raises one family: its own callee's
+        assert len(s["origins"]) == 1, s
+        _set(monkeypatch, key[2], _raising(s["origins"][0]))
+    for target, value in RUNTIME_STUBS[key]["alongside"].items():
+        _set(monkeypatch, target, value)
+    spec = RUNTIME_STUBS[key]
+    try:
+        importlib.import_module(spec["module"]).main(spec["argv"](tmp_path))
+    except refusal.Refused:
+        escaped = True
+    else:
+        escaped = False
+    assert escaped == polarities.pop(), [(s["site"], s["classification"]) for s in rows]
 
 
 # ---------------------------------------------------------------------------
@@ -2042,20 +3419,20 @@ def test_a_call_to_an_async_def_callee_is_a_site(tmp_path, monkeypatch):
 
 
 def test_a_try_in_an_async_main_is_the_cli_boundary(tmp_path):
-    """`in_boundary` matched `ast.FunctionDef` named `main`, so a module
-    whose `main` was an `async def` had no boundary in the census: a site
-    that module's `main()` catches was reported a candidate escape, the
-    repair shape of #1160/#1162 read as still open. The second assertion is
-    the control's other side: the same try in any other async def is still
-    no boundary, as for a def."""
+    """A module whose `main` is an `async def` had no boundary in the census
+    (#1718): a site that module's `main()` catches was reported a candidate
+    escape, the repair shape of #1160/#1162 read as still open. Since #1656
+    the credit is by path, so the control is the row: the site in `go`, under
+    `await go(p)` in main's try, is `covered(cli-base)`. The second assertion
+    is the control's other side: the same try in an async def the entry never
+    reaches credits nothing, as for a def."""
     files = _async_files(tmp_path, {"caller_async_main": ASYNC_MAIN_BOUNDARY,
                                     "caller_async_run": ASYNC_NON_MAIN_GUARD})
     idx = rss.build_index(files)
-    by_stem = rss.stem_map(idx)
-    main = idx[str(tmp_path / "caller_async_main.py")]
-    run = idx[str(tmp_path / "caller_async_run.py")]
-    assert rss.cli_boundary_guards(main, by_stem) == [(set(), "base")]
-    assert rss.cli_boundary_guards(run, by_stem) == []
+    got = _sites_for(files, idx, "caller_async_main")
+    assert [(s["classification"], s["guard"]) for s in got] == [("covered(cli-base)", "none")], got
+    got = _sites_for(files, idx, "caller_async_run")
+    assert [(s["classification"], s["guard"]) for s in got] == [("candidate-escape", "none")], got
 
 
 @pytest.mark.parametrize("src,fn,python,row", [
@@ -2136,19 +3513,20 @@ def test_with_the_registration_reverted_the_async_site_is_absent_again(tmp_path)
     assert got == ["callee.load_sync"], got
 
 
-def test_with_the_main_match_reverted_an_async_main_is_no_boundary(tmp_path):
-    """Mutant 2 of 3: `in_boundary` back to `ast.FunctionDef` alone. The
-    try in `async def main` is no boundary again, so the site it catches is
-    a candidate escape -- the control above red under this revert."""
-    mut = _scanner_with('if isinstance(cur, FUNCTION_NODES) and cur.name == "main":',
-                        'if isinstance(cur, ast.FunctionDef) and cur.name == "main":')
-    files = _async_files(tmp_path, {"caller_async": ASYNC_MAIN_BOUNDARY_NOT_BARE})
+def test_with_the_async_resolution_reverted_an_async_main_is_no_boundary(tmp_path):
+    """Mutant 2 of 3: name resolution back to `ast.FunctionDef` alone, so
+    `asyncio.run(main("x"))` reaches no def. `async def main` is unreached,
+    the try in it is on no path, and the site it catches is a candidate
+    escape again -- the control above red under this revert."""
+    mut = _scanner_with(
+        "        return [d for d in own if isinstance(d, FUNCTION_NODES)]",
+        "        return [d for d in own if isinstance(d, ast.FunctionDef)]")
+    files = _async_files(tmp_path, {"caller_async": ASYNC_MAIN_BOUNDARY})
     idx = mut.build_index(files)
-    caller = idx[str(tmp_path / "caller_async.py")]
     # the shipped scanner credits it: the revert below is what removes that
     ship = rss.build_index(files)
-    assert rss.cli_boundary_guards(ship[str(tmp_path / "caller_async.py")], rss.stem_map(ship)) != []
-    assert mut.cli_boundary_guards(caller, mut.stem_map(idx)) == []
+    shipped = [s for s in rss.scan(files, ship) if "caller_async.py" in s["site"]]
+    assert [s["classification"] for s in shipped] == ["covered(cli-base)"], shipped
     got = [s for s in mut.scan(files, idx) if "caller_async.py" in s["site"]]
     assert [(s["classification"], s["guard"]) for s in got] == [("candidate-escape", "none")], got
 
@@ -2160,8 +3538,7 @@ def test_with_the_await_rule_reverted_a_bare_call_borrows_the_trys_handler(tmp_p
     refusal Python raises after the try reads `covered(base)` -- the false
     covered the rule exists to withhold."""
     mut = _scanner_with(
-        "    return not any(isinstance(c.funcs.get(fname), ast.AsyncFunctionDef)"
-        " for c in callees)",
+        "    return not any(isinstance(d, ast.AsyncFunctionDef) for d in defs)",
         "    return True")
     files = _async_files(tmp_path, {"caller_async": ASYNC_STORED_THEN_AWAITED_AFTER})
     idx = mut.build_index(files)
@@ -2240,21 +3617,18 @@ def test_wrapper_called_by_a_bare_statement_is_cli_base(tmp_path):
     assert s["classification"] == "covered(cli-base)", s
 
 
-def test_a_wrapper_main_calls_is_not_the_boundary(tmp_path):
-    """A wrapper `main()` calls by bare name is NOT credited, though it is
-    the same `_cli()` shape. `main()` fans out to sibling helpers and a
-    sibling's try guards its own branch alone, so crediting it covers every
-    site in the module: tried during #1641, it turned ten escaping sites
-    into `covered` (cymbal_low_tail, lead_drive_337, r0_capture -- the
-    row-by-row table is #1656). The dispatch's callees are frames every CLI
-    path passes through; main's are not. A conservative false escape is the
-    harmless direction."""
+def test_a_wrapper_main_calls_is_covered_by_path_not_presence(tmp_path):
+    """SUPERSEDED by #1656: #1641 refused to credit a wrapper `main()` calls,
+    because the by-presence boundary then covered every site in the module
+    (ten escapes read `covered`). Credit is by PATH now: `main -> _cli -> go`
+    runs through the wrapper's try on every path, so this site IS guarded.
+    The sibling-helper negative that motivated the refusal stays pinned by
+    the #1656 section."""
     s = _wrapper_scan(tmp_path, WRAPPER_BASE_GUARD + '''
 def main(argv=None):
     return _cli(argv)
 ''', "    sys.exit(main())\n")
-    assert s["classification"] == "candidate-escape", s
-    assert s["uncovered"] == ["mod_a"], s
+    assert s["classification"] == "covered(cli-base)", s
 
 
 def test_uncalled_wrapper_leaves_the_site_an_escape(tmp_path):
@@ -2284,8 +3658,9 @@ def _cli(argv=None):
     assert s["uncovered"] == ["mod_a"], s
 
 
-def test_a_try_one_frame_further_in_is_not_the_boundary(tmp_path):
-    """One level only: `_cli` is reached, but ITS callee has the try."""
+def test_a_try_one_frame_further_in_is_covered_by_path(tmp_path):
+    """SUPERSEDED by #1656 ("one level only" is gone): `_cli` is reached and
+    ITS callee has the try, which every path to the site runs through."""
     s = _wrapper_scan(tmp_path, '''
 def _inner(argv):
     try:
@@ -2297,19 +3672,19 @@ def _inner(argv):
 def _cli(argv=None):
     return _inner(argv)
 ''', "    sys.exit(_cli())\n")
-    assert s["classification"] == "candidate-escape", s
+    assert s["classification"] == "covered(cli-base)", s
 
 
-def test_a_call_written_in_a_def_nested_in_the_dispatch_is_not_its_own(tmp_path):
-    """The dispatch defines `inner` and calls it; `inner` calls the wrapper.
-    A call written in a def of the boundary's own is that def's, one frame
-    further in."""
+def test_a_call_written_in_a_def_nested_in_the_dispatch_is_covered_by_path(tmp_path):
+    """SUPERSEDED by #1656: the dispatch defines `inner` and calls it, and
+    `inner` calls the guarded wrapper -- every path to the site runs through
+    the wrapper's try, so it is covered (see PATH_ENTER_THROUGH_A_DEF...)."""
     s = _wrapper_scan(tmp_path, WRAPPER_BASE_GUARD, '''
     def inner():
         return _cli()
     sys.exit(inner())
 ''')
-    assert s["classification"] == "candidate-escape", s
+    assert s["classification"] == "covered(cli-base)", s
 
 
 def test_wrapper_called_only_from_a_handler_is_not_entry(tmp_path):
@@ -2340,6 +3715,322 @@ def helper():
 ''')
     assert s["classification"] == "candidate-escape", s
     assert s["uncovered"] == ["mod_a"], s
+
+
+# --- #1688 review, round 2: a DEFERRED call inherits no handler ----------------
+# A call that only CREATES a generator, a coroutine or a generator expression
+# runs its body later, under whatever is around the code that drives it. The
+# path graph gave such an edge no handlers of its own and then let it inherit
+# its CREATOR's outcome, so a try around `factory()` was credited for a
+# refusal Python raises after that try exited. Each deferred fixture below was
+# run under Python 3.12 against the scanner at 18807d7a: the scanner said
+# `covered(cli-base)`, the interpreter exited 1 with an uncaught
+# `callee.Refused`. The eager control is the same tree with the call made on
+# the spot: Python catches it, and the scanner must keep crediting it.
+
+DEFERRED_CALLEE = '''
+import refusal
+
+class Refused(refusal.Refused, Exception):
+    pass
+
+CALLS = []
+
+def load():
+    CALLS.append(1)
+    raise Refused("factory control")
+'''
+
+_DEFERRED_MAIN = '''
+def main():
+    try:
+        pending = factory()
+    except refusal.Refused:
+        print("caught")
+        return 2
+    return {drive}
+
+if __name__ == "__main__":
+    sys.exit(main())
+'''
+
+DEFERRED_GENERATOR = '''
+import sys, refusal, callee
+def helper():
+    yield callee.load()
+
+def factory():
+    return helper()
+''' + _DEFERRED_MAIN.format(drive="next(pending)")
+
+DEFERRED_COROUTINE = '''
+import sys, asyncio, refusal, callee
+async def helper():
+    return callee.load()
+
+def factory():
+    return helper()
+''' + _DEFERRED_MAIN.format(drive="asyncio.run(pending)")
+
+DEFERRED_GENEXP = '''
+import sys, refusal, callee
+def helper():
+    return callee.load()
+
+def factory():
+    return (helper() for _ in (0,))
+''' + _DEFERRED_MAIN.format(drive="next(pending)")
+
+EAGER_CONTROL = '''
+import sys, refusal, callee
+def helper():
+    return callee.load()
+
+def factory():
+    return helper()
+''' + _DEFERRED_MAIN.format(drive="pending")
+
+
+def _deferred_tree(tmp_path, body: str):
+    (tmp_path / "callee.py").write_text(DEFERRED_CALLEE)
+    (tmp_path / "caller_d.py").write_text(body)
+    files = [tmp_path / "callee.py", tmp_path / "caller_d.py"]
+    return files, rss.build_index(files)
+
+
+def _deferred_python_verdict(monkeypatch, tmp_path) -> str:
+    """'escaped' / 'caught' from RUNNING the planted caller; 'not-run' when the
+    callee was never reached (a defect in the planting, not a verdict)."""
+    callee = _import(monkeypatch, tmp_path / "callee.py")
+    mod = _import(monkeypatch, tmp_path / "caller_d.py")
+    try:
+        mod.main()
+    except callee.Refused:
+        verdict = "escaped"
+    else:
+        verdict = "caught"
+    return verdict if callee.CALLS else "not-run"
+
+
+@pytest.mark.parametrize("body,python,classification", [
+    pytest.param(DEFERRED_GENERATOR, "escaped", "candidate-escape", id="generator"),
+    pytest.param(DEFERRED_COROUTINE, "escaped", "candidate-escape", id="coroutine"),
+    pytest.param(DEFERRED_GENEXP, "escaped", "candidate-escape", id="genexp"),
+    pytest.param(EAGER_CONTROL, "caught", "covered(cli-base)", id="eager-control"),
+])
+def test_a_deferred_call_is_not_credited_the_creators_handler(
+        tmp_path, monkeypatch, body, python, classification):
+    files, idx = _deferred_tree(tmp_path, body)
+    assert _deferred_python_verdict(monkeypatch, tmp_path) == python
+    got = [s for s in rss.scan(files, idx) if "caller_d.py" in s["site"]]
+    assert [s["classification"] for s in got] == [classification], got
+
+
+@pytest.mark.parametrize("body", [DEFERRED_GENERATOR, DEFERRED_COROUTINE, DEFERRED_GENEXP])
+def test_with_the_deferral_reverted_the_creators_handler_is_credited_again(tmp_path, body):
+    """Injected defect: a deferred edge inherits its caller's outcome again
+    (the empty-edge fallback). Each deferred fixture then reads
+    `covered(cli-base)` -- the false covered the three controls above refuse."""
+    mut = _scanner_with(
+        '                    if deferred:\n'
+        '                        new.add(("none", None))\n'
+        '                        continue\n', '')
+    files, idx = _deferred_tree(tmp_path, body)
+    midx = mut.build_index(files)
+    got = [s for s in mut.scan(files, midx) if "caller_d.py" in s["site"]]
+    assert [s["classification"] for s in got] == ["covered(cli-base)"], got
+
+
+# --- #1688 review, round 3: deferral and definition time at the FINAL call ----
+# Round 2 deferred the edges to LOCAL defs; the cross-module call site itself
+# still inherited the factory's handler. Each fixture was run under Python
+# 3.12 and the scanner at 56a744b2 read `covered(cli-base)` for every one that
+# escapes. A def's defaults, annotations and decorators run in the frame that
+# holds the def statement, not in the def.
+
+_R3_MAIN = '''
+def make_pending():
+    try:
+        return factory()
+    except refusal.Refused:
+        sys.exit(2)
+
+def main():
+    return {drive}
+
+if __name__ == "__main__":
+    sys.exit(main())
+'''
+
+R3_GENEXP_DIRECT = '''
+import sys, refusal, callee
+def factory():
+    return (callee.load() for _ in (0,))
+''' + _R3_MAIN.format(drive="next(make_pending())")
+
+R3_GENEXP_FIRST_ITERABLE = '''
+import sys, refusal, callee
+def factory():
+    return (x for x in callee.load())
+''' + _R3_MAIN.format(drive="next(make_pending())")
+
+R3_IMPORTED_GENERATOR_ATTR = '''
+import sys, refusal, callee
+def factory():
+    return callee.gen()
+''' + _R3_MAIN.format(drive="next(make_pending())")
+
+R3_IMPORTED_GENERATOR_FROM = '''
+import sys, refusal
+from callee import gen
+def factory():
+    return gen()
+''' + _R3_MAIN.format(drive="next(make_pending())")
+
+R3_EAGER_LISTCOMP = '''
+import sys, refusal, callee
+def factory():
+    return [callee.load() for _ in (0,)]
+''' + _R3_MAIN.format(drive="make_pending()")
+
+R3_EAGER_CALL = '''
+import sys, refusal, callee
+def factory():
+    return callee.load()
+''' + _R3_MAIN.format(drive="make_pending()")
+
+R3_CALLEE = DEFERRED_CALLEE + '''
+def gen():
+    CALLS.append(1)
+    raise Refused("generator control")
+    yield
+'''
+
+
+def _r3_scan_and_run(monkeypatch, tmp_path, body, name="caller_r3"):
+    (tmp_path / "callee.py").write_text(R3_CALLEE)
+    (tmp_path / f"{name}.py").write_text(body)
+    files = [tmp_path / "callee.py", tmp_path / f"{name}.py"]
+    callee = _import(monkeypatch, tmp_path / "callee.py")
+    try:
+        mod = _import(monkeypatch, tmp_path / f"{name}.py")
+        mod.main()
+        verdict = "caught"
+    except SystemExit:
+        verdict = "caught"
+    except callee.Refused:
+        verdict = "escaped"
+    if not callee.CALLS:
+        verdict = "not-run"
+    return files, verdict
+
+
+def _r3_classes(files, scanner=rss, name="caller_r3"):
+    idx = scanner.build_index(files)
+    return [s["classification"] for s in scanner.scan(files, idx) if name in s["site"]]
+
+
+@pytest.mark.parametrize("body,python,classification", [
+    pytest.param(R3_GENEXP_DIRECT, "escaped", "candidate-escape", id="genexp-direct"),
+    pytest.param(R3_GENEXP_FIRST_ITERABLE, "caught", "covered(cli-base)",
+                 id="genexp-first-iterable-is-eager"),
+    pytest.param(R3_IMPORTED_GENERATOR_ATTR, "escaped", "candidate-escape",
+                 id="imported-generator-attr"),
+    pytest.param(R3_IMPORTED_GENERATOR_FROM, "escaped", "candidate-escape",
+                 id="imported-generator-from"),
+    pytest.param(R3_EAGER_LISTCOMP, "caught", "covered(cli-base)", id="eager-listcomp"),
+    pytest.param(R3_EAGER_CALL, "caught", "covered(cli-base)", id="eager-call"),
+])
+def test_a_deferred_final_call_is_not_credited_the_factorys_handler(
+        monkeypatch, tmp_path, body, python, classification):
+    files, verdict = _r3_scan_and_run(monkeypatch, tmp_path, body)
+    assert verdict == python
+    assert _r3_classes(files) == [classification]
+
+
+R3_DEFAULT = '''
+import sys, refusal, callee
+def make_pending():
+    try:
+        def factory(x=callee.load()):
+            return x
+        return factory
+    except refusal.Refused:
+        sys.exit(2)
+
+def main():
+    return make_pending()
+'''
+
+R3_DEF_TIME = '''
+import sys, refusal, callee
+{decl}
+def make_pending():
+    try:
+        return factory()
+    except refusal.Refused:
+        sys.exit(2)
+
+def main():
+    return make_pending()
+
+if __name__ == "__main__":
+    sys.exit(main())
+'''
+
+
+@pytest.mark.parametrize("decl", [
+    pytest.param("def factory(x=callee.load()):\n    return x", id="default"),
+    pytest.param("def factory(x: callee.load() = 0):\n    return x", id="annotation"),
+    pytest.param("def factory() -> callee.load():\n    return 0", id="return-annotation"),
+    pytest.param("@callee.load()\ndef factory():\n    return 0", id="decorator"),
+])
+def test_a_definition_time_call_runs_in_the_frame_that_holds_the_def(
+        monkeypatch, tmp_path, decl):
+    """Python raises at module initialisation, before `main` starts, so the
+    guarded `factory()` call below it guards nothing."""
+    (tmp_path / "callee.py").write_text(R3_CALLEE)
+    (tmp_path / "caller_r3.py").write_text(R3_DEF_TIME.format(decl=decl))
+    files = [tmp_path / "callee.py", tmp_path / "caller_r3.py"]
+    callee = _import(monkeypatch, tmp_path / "callee.py")
+    with pytest.raises(callee.Refused):
+        _import(monkeypatch, tmp_path / "caller_r3.py")
+    assert _r3_classes(files) == ["candidate-escape"]
+
+
+def test_a_definition_time_call_inside_a_guarded_try_is_still_covered(monkeypatch, tmp_path):
+    """Control: the def statement itself sits in the try, so Python catches the
+    default's refusal there. The frame moves out; the try still counts."""
+    files, verdict = _r3_scan_and_run(monkeypatch, tmp_path, R3_DEFAULT)
+    assert verdict == "caught"
+    assert _r3_classes(files) == ["covered(base)"]
+
+
+def test_with_the_final_call_deferral_reverted_the_factorys_handler_is_credited(
+        monkeypatch, tmp_path):
+    mut = _scanner_with(
+        "    if _handlers_within(mod, mod.caller_of(call), call)[1]:\n        return False\n"
+        "    defs = [c.funcs.get(fname) for c in callees]\n"
+        "    if any(isinstance(d, FUNCTION_NODES) and _is_generator(d) for d in defs):\n"
+        "        return False\n", "    defs = [c.funcs.get(fname) for c in callees]\n")
+    for body in (R3_GENEXP_DIRECT, R3_IMPORTED_GENERATOR_ATTR):
+        files, _ = _r3_scan_and_run(monkeypatch, tmp_path, body)
+        assert _r3_classes(files, mut) == ["covered(cli-base)"]
+
+
+def test_with_definition_time_attribution_reverted_the_guarded_caller_is_credited(
+        monkeypatch, tmp_path):
+    mut = _scanner_with(
+        "        cur, prev = self.parents.get(node), node\n"
+        "        while cur is not None and not (isinstance(cur, CALLER_NODES)\n"
+        "                                       and not self._at_definition(cur, prev)):\n",
+        "        cur, prev = self.parents.get(node), node\n"
+        "        while cur is not None and not isinstance(cur, CALLER_NODES):\n")
+    decl = "def factory(x=callee.load()):\n    return x"
+    (tmp_path / "callee.py").write_text(R3_CALLEE)
+    (tmp_path / "caller_r3.py").write_text(R3_DEF_TIME.format(decl=decl))
+    files = [tmp_path / "callee.py", tmp_path / "caller_r3.py"]
+    assert _r3_classes(files, mut) == ["covered(cli-base)"]
 
 
 # ---------------------------------------------------------------------------
