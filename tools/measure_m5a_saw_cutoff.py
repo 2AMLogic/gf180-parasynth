@@ -19,6 +19,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
+import audio_measure as am
 import measure_m5a_filter_oversample as filter_gate
 import mono_m5a_score as m5a
 import score_m5a_i2s
@@ -100,7 +101,7 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     try:
         report = measure(args.cutoff, args.gain_correction_db)
-    except (OSError, ValueError, m5a.Refused) as exc:
+    except (OSError, ValueError, m5a.Refused, am.InsufficientEvidence) as exc:
         print(f"measure_m5a_saw_cutoff: REFUSED -- {exc}")
         return 2
     out = pathlib.Path(args.out)
