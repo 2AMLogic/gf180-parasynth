@@ -989,3 +989,60 @@ def test_load_json_refused_refuses_invalid_utf8_that_is_not_a_truncation(tmp_pat
                        match=r"record\.json.*not valid UTF-8.*invalid start byte"
                              r".*git checkout"):
         mf.load_json_refused(p, "analysis record")
+
+
+# =============================================================================
+# require_keys: a record that PARSES but cannot be READ is REFUSED, in the
+# caller's own Refused class (#1604)
+# =============================================================================
+class _CallerRefused(mf.refusal.Refused):
+    """Stands in for a reader module's own `Refused`: a sibling of
+    `mf.Refused`, not a subclass of it, so a test can tell which was raised."""
+
+
+def test_require_keys_accepts_a_record_that_carries_every_key():
+    assert mf.require_keys({"state": "CAPTURED", "takes": {}}, ("state", "takes"),
+                           "the capture record", refused=_CallerRefused) is None
+
+
+def test_require_keys_raises_the_callers_declared_refusal():
+    # `record["takes"]` on this record is the KeyError that exited 1 by
+    # traceback before #1604; the refusal names the record and the key.
+    with pytest.raises(_CallerRefused, match=r"the capture record.*'takes'") as raised:
+        mf.require_keys({"state": "CAPTURED"}, "takes", "the capture record", refused=_CallerRefused)
+    # the caller's main() catches its own class, not this module's
+    assert not isinstance(raised.value, mf.Refused)
+
+
+def test_require_keys_without_the_callers_class_is_a_type_error():
+    # A default of mf.Refused would raise a class the caller's main() does not
+    # catch: the traceback this helper exists to replace, reintroduced quietly.
+    with pytest.raises(TypeError):
+        mf.require_keys({"state": "CAPTURED"}, ("takes",), "the capture record")
+
+
+def test_require_keys_names_every_offending_key_not_only_the_first():
+    with pytest.raises(_CallerRefused) as raised:
+        mf.require_keys({"diagnostics": None, "audio": "x.wav"}, ("diagnostics", "audio", "metrics"),
+                        "the M1A board record", refused=_CallerRefused)
+    msg = str(raised.value)
+    assert "is missing required key(s) 'metrics'" in msg
+    assert "carries null for required key(s) 'diagnostics'" in msg
+    assert "'audio'" not in msg.partition(" -- ")[0]      # present and non-null: not named
+
+
+@pytest.mark.parametrize("record, kind", [
+    (None, "null"), ([], "a JSON list"), (5, "a JSON int"), ("x", "a JSON str"), (True, "a JSON bool")])
+def test_require_keys_refuses_a_record_that_is_not_a_json_object(record, kind):
+    # `"takes" not in record` cannot answer this: on a list it is merely true,
+    # which would read as a missing key; on a number it is a TypeError.
+    with pytest.raises(_CallerRefused, match=f"the capture record is {kind}, not a JSON object"):
+        mf.require_keys(record, "takes", "the capture record", refused=_CallerRefused)
+
+
+def test_require_keys_refuses_a_null_and_reads_a_bare_string_as_one_key():
+    with pytest.raises(_CallerRefused, match=r"carries null for required key\(s\) 'takes'"):
+        mf.require_keys({"takes": None}, "takes", "the capture record", refused=_CallerRefused)
+    with pytest.raises(_CallerRefused) as raised:
+        mf.require_keys({}, "takes", "the capture record", refused=_CallerRefused)
+    assert "'takes'" in str(raised.value) and "'t'" not in str(raised.value)
