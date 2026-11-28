@@ -1191,21 +1191,26 @@ RATE_PANEL = (
     ("523Hz bandlimited", 523.0, 0.0,    0,    "blsquare", 44100),
     ("523Hz@48k",         523.0, 0.0,    0,    "square",   48000),
 )
-# WHY 880 Hz BUILT AT 48 kHz IS STILL NOT IN THE PANEL, now that the reason it
-# was excluded has gone. It was kept out because `dominant_period` returned
-# 101 samples there -- two periods, an octave error -- so six jit columns moved
-# between the rates for a reason that had nothing to do with the fold. #774
-# repaired that, and the clip's `jit.cycledshape.seg0` gap at the shipped width
-# is now 0.0182 against this module's own 0.0200 tolerance, so it would PASS
-# here. It is still out, and the reason is the 9 % of headroom in that
-# sentence: what is left on that clip is a fold-geometry residual at the top of
-# the dial, and #775 is the open question of whether a 0.12 relative tolerance
-# on a column whose whole range is 0.02 means anything. Adding this entry is a
-# one-line change the day #775 settles that; adding it now would couple the
-# module's main rate test to the tightest margin on the grid. The octave claim
-# itself is asserted directly, by
+# WHY 880 Hz BUILT AT 48 kHz IS NOT IN THE PANEL. It was originally kept out
+# because `dominant_period` returned 101 samples there -- two periods, an
+# octave error -- so six jit columns moved between the rates for a reason that
+# had nothing to do with the fold. #774 repaired that octave error, and the
+# octave claim itself is asserted directly, by
 # `test_dominant_period_returns_the_same_octave_at_both_rates` below, over the
 # whole class rather than this one clip.
+#
+# What kept the entry out after the repair was margin, as measured at the time
+# this was written: the clip's `jit.cycledshape.seg0` gap at the shipped width
+# read 0.0182 against this module's 0.0200 tolerance -- 9 % of headroom on a
+# fold-geometry residual at the top of the dial -- and the exclusion leaned on
+# #775 being then an open question: whether a 0.12 relative tolerance on a
+# column whose whole range is 0.02 means anything. #775 settled that by
+# narrowing the relative tolerance for ratio columns from the 0.12 that
+# shipped until then to the 0.02 at RATE_TOL_REL_RATIO above, a swept record
+# with the reasoning at the `THE RELATIVE TERM IS 0.02` comment. Whether the
+# 880 Hz square belongs in the panel at 48 kHz is a membership question this
+# comment deliberately leaves open; the 880 Hz entry the panel already carries
+# is built at 44.1 kHz.
 
 RATE_PAIR = {44100: 48000, 48000: 44100}
 
