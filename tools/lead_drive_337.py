@@ -25,6 +25,7 @@ import numpy as np
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import mono_m5a_score as sc  # noqa: E402
+import audio_measure as am  # noqa: E402
 import refusal
 
 ROOT = sc.ROOT
@@ -227,8 +228,16 @@ def main():
 
 
 if __name__ == "__main__":
+    # The estimator's own refusal is listed BY CLASS beside `Refused` (#1751,
+    # #1763, #1897): `measure` reaches `harmonic_signature` unguarded on every
+    # stage vector of `_stage_diagnostics`, and `InsufficientEvidence`
+    # subclasses AssertionError, so the `Refused` clause could not see it -- a
+    # stage the estimator cannot measure left as an exit-1 traceback, a
+    # refusal rendered as FAIL. Not AssertionError, not Exception: an
+    # unrelated fault stays an execution error (test_lead_drive_337.py
+    # carries that control).
     try:
         main()
-    except Refused as exc:
+    except (Refused, am.InsufficientEvidence) as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
         sys.exit(2)

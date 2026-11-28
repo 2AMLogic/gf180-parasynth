@@ -1,6 +1,12 @@
 import math
+import subprocess
+import sys
+
 import pytest
+
 import lead_drive_337 as L
+import exit_contract
+import refusal
 
 BASE = dict(n_cells=20, max_abs=7.5, rms=4.5, mean_signed=-4.0, alias_max=2.0,
             level_mean=-18.0, pitch_abs=0.10)
@@ -140,4 +146,193 @@ def test_unchanged_audio_refused_even_when_metrics_differ():
     # same bytes, different metrics dict: the SHA is the evidence, not metrics
     with pytest.raises(L.Refused, match="did not change the audio"):
         pre(probe=fake("A", Gain=-30.0))
+
+
+# ------------------------------------------- #1897: the estimator's own refusal at the dispatch
+#
+# `audio_measure.InsufficientEvidence` subclasses AssertionError, not
+# `refusal.Refused`, so the dispatch's `except Refused` could not see an
+# estimator refusing inside `mono_m5a_score.measure`. Traced red-first on
+# main @ e2d1bae7 (2026-11-28) through the real `__main__` (`runpy`, so argv
+# is a direct invocation's), each fault put below the CLI and above the
+# estimator. The clean CLI ran first: exit 0 in 195 s, saw [0.5, CONFIRMED]
+# and pulse NOT RUN, its report equal to the committed one.
+#
+#   a silent RENDER          REFUSED, exit 2, by the pitch gate: `refine_f0`
+#                            refuses the first note's output slice
+#                            (mono_m5a_score.py:459) before any stage is read.
+#   a dead ladder STAGE TAP  ESCAPED. `voice.trace["ladder"]` zeroed after every
+#   (INJECTED; audio live)   render, the returned audio and the other taps left
+#                            alone. The stage log names what ran:
+#
+#                              STAGE oscillator peak 0.92
+#                              STAGE mixer      peak 0.92
+#                              STAGE ladder     peak 0.0
+#
+#     File "tools/lead_drive_337.py", line 175, in main
+#       base_m5a, base_m5b = render("M5A", BASE_DRIVE), render("M5B", BASE_DRIVE)
+#     File "tools/lead_drive_337.py", line 137, in render
+#       r = sc.measure(case_id=case, output_path=wav)
+#     File "tools/mono_m5a_score.py", line 491, in measure
+#       _stage_diagnostics(voice.trace, pcm, a, b, eo.value)),
+#     File "tools/mono_m5a_score.py", line 219, in _stage_diagnostics
+#       signature = am.harmonic_signature(x, SR, f0=f0, kmax=12)
+#     File "model/audio_measure.py", line 2379, in harmonic_signature
+#       raise InsufficientEvidence("harmonic_signature: silent")
+#   audio_measure.InsufficientEvidence: harmonic_signature: silent
+#   exit 1            (the two seam frames, `_measure_once` and
+#                      `_signature_logged`, are elided above)
+#
+# So the gap is real in shape and, on this tree, reached only by injection:
+# the supported experiment (drives 0.75, 0.50, 0.25) completes with every
+# stage of every event measured. That is a statement about those renders, not
+# a proof that no future render has a dead tap, which is why the dispatch now
+# names the class: such a stage is REFUSED, never rendered FAIL.
+SEAM_FAILED = "SEAM FAILED"
+STAGE_FAULT = "unrelated ladder-stage fault"
+SECOND_RENDER = SEAM_FAILED + (": the run reached a second render; "
+                               "the fault did not take on the first")
+REPORT = L.OUT / "report.json"
+
+#: child-interpreter source: the voice's ladder STAGE TAP, dead after every
+#: render, while the returned audio and the other taps are left alone
+LADDER_TAP_SILENT = (
+    "import numpy as np, voice_fx as vf\n"
+    "_render = vf.VoiceFx._render\n"
+    "def _render_dead_ladder_tap(self, *a, **kw):\n"
+    "    out = _render(self, *a, **kw)\n"
+    "    self.trace['ladder'][:] = 0\n"
+    "    return out\n"
+    "vf.VoiceFx._render = _render_dead_ladder_tap\n"
+    "_v = vf.VoiceFx()\n"
+    "_pcm = vf.render_mono_fx([(0.0, 69, 0.5, {})], 0.5, _v)\n"
+    f"assert np.any(_pcm), {SEAM_FAILED + ': the voice no longer renders'!r}\n"
+    f"assert not np.any(_v.trace['ladder']), {SEAM_FAILED + ': the ladder tap is not silent'!r}\n"
+    f"assert np.any(_v.trace['osc'][0]) and np.any(_v.trace['mixed']), "
+    f"{SEAM_FAILED + ': another stage tap went silent too'!r}\n")
+
+#: the same seam, an ordinary AssertionError after the render instead
+LADDER_TAP_FAULT = (
+    "import voice_fx as vf\n"
+    f"STAGE_FAULT = {STAGE_FAULT!r}\n"
+    "_render = vf.VoiceFx._render\n"
+    "def _render_fault(self, *a, **kw):\n"
+    "    _render(self, *a, **kw)\n"
+    "    raise AssertionError(STAGE_FAULT)\n"
+    "vf.VoiceFx._render = _render_fault\n"
+    "try:\n"
+    "    vf.render_mono_fx([(0.0, 69, 0.5, {})], 0.5)\n"
+    "except AssertionError:\n"
+    "    pass\n"
+    "else:\n"
+    f"    raise AssertionError({SEAM_FAILED + ': the seam did not raise'!r})\n")
+
+#: #1763's VOICE_SILENT: the whole voice renders digital silence
+VOICE_SILENT = (
+    "import numpy as np, voice_fx as vf\n"
+    "def _play(self, regs, writes, n):\n"
+    "    self.trace = dict(osc=[np.zeros(n, dtype=np.int64)],\n"
+    "                     mixed=np.zeros(n, dtype=np.int64),\n"
+    "                     ladder=np.zeros(n, dtype=np.int64))\n"
+    "    return np.zeros(n, dtype=np.int16)\n"
+    "vf.VoiceFx.play = _play\n"
+    "_pcm = vf.render_mono_fx([(0.0, 69, 0.5, {})], 0.5)\n"
+    f"assert not np.any(_pcm), {SEAM_FAILED + ': the voice still renders'!r}\n")
+
+#: the CLI takes no arguments and writes its report at the END of `main`,
+#: after every render. Each fault is aimed at the first render, so a run that
+#: asks for a second has missed it: stopped there, before any report can exist
+ONE_RENDER = (
+    "import mono_m5a_score as sc\n"
+    "_measure = sc.measure\n"
+    f"SECOND_RENDER = {SECOND_RENDER!r}\n"
+    "def _measure_once(**kw):\n"
+    "    if _measure.calls:\n"
+    "        raise RuntimeError(SECOND_RENDER)\n"
+    "    _measure.calls += 1\n"
+    "    return _measure(**kw)\n"
+    "_measure.calls = 0\n"
+    "sc.measure = _measure_once\n")
+
+#: names the stage whose window the estimator is handed, read from the
+#: scorer's own loop in `_stage_diagnostics`, so the record says which stage ran
+STAGE_LOG = (
+    "import sys, numpy as np, audio_measure as am\n"
+    "_signature = am.harmonic_signature\n"
+    "def _signature_logged(x, sr, **kw):\n"
+    "    f = sys._getframe(1)\n"
+    "    if f.f_code.co_name == '_stage_diagnostics':\n"
+    "        print('STAGE', f.f_locals.get('name', '?'), 'peak',\n"
+    "              float(np.abs(np.asarray(x)).max()), file=sys.stderr, flush=True)\n"
+    "    return _signature(x, sr, **kw)\n"
+    "am.harmonic_signature = _signature_logged\n")
+
+
+def _handoff(*preludes: str) -> list:
+    """`python tools/lead_drive_337.py` with `preludes` installed first.
+    `run_path` runs the CLI's real `__main__`, so its own `sys.exit` is what
+    the process exits with."""
+    paths = [str(L.ROOT / p) for p in ("model", "tools")]
+    src = (f"import sys, runpy\nsys.path[:0] = {paths!r}\n"
+           + "".join(preludes)
+           + f"runpy.run_path({str(L.__file__)!r}, run_name='__main__')\n")
+    return [sys.executable, "-c", src]
+
+
+def _run(preludes) -> subprocess.CompletedProcess:
+    p = subprocess.run(_handoff(*preludes), capture_output=True, text=True,
+                       timeout=300, cwd=str(L.ROOT))
+    assert SEAM_FAILED not in p.stderr, p.stderr[-600:]
+    return p
+
+
+def _report_bytes():
+    return REPORT.read_bytes() if REPORT.exists() else None
+
+
+def test_estimator_refusal_is_an_assertion_error_the_refused_handler_cannot_see():
+    # the class relations the fix rests on, and that the class the dispatch
+    # names is the class the scorer's estimator raises
+    klass = L.am.InsufficientEvidence
+    assert issubclass(klass, AssertionError)
+    assert not issubclass(klass, refusal.Refused)
+    assert klass is L.sc.am.InsufficientEvidence
+
+
+def test_dead_ladder_stage_tap_refuses_through_the_dispatch_not_a_traceback():
+    before = _report_bytes()
+    p = _run([LADDER_TAP_SILENT, ONE_RENDER, STAGE_LOG])
+    text = p.stdout + p.stderr
+    assert p.returncode == exit_contract.REFUSED, (p.returncode, text[-1500:])
+    assert "REFUSED: harmonic_signature: silent" in p.stderr, text[-600:]
+    assert "Traceback" not in text and "InsufficientEvidence" not in text, text[-600:]
+    # the pitch gate passed on the live output and the stages before the ladder
+    # were measured: the refusal is the ladder stage's, from inside the scorer
+    assert "STAGE oscillator peak" in p.stderr and "STAGE mixer peak" in p.stderr, text[-600:]
+    assert "STAGE ladder peak 0.0" in p.stderr, text[-600:]
+    assert "STAGE output" not in p.stderr, text[-600:]
+    # nothing may follow the refusal: no report, no drive verdict
+    assert p.stderr.splitlines()[-1].startswith("REFUSED:"), text[-600:]
+    assert p.stdout.strip() == "", "a refused run must not print a drive verdict"
+    assert _report_bytes() == before, "a refused run must not write a report"
+
+
+def test_plain_assertion_error_at_the_scoring_boundary_is_still_an_execution_error():
+    before = _report_bytes()
+    p = _run([LADDER_TAP_FAULT, ONE_RENDER])
+    assert p.returncode == exit_contract.FAIL, (p.returncode, p.stdout[-200:], p.stderr[-600:])
+    assert "Traceback" in p.stderr and f"AssertionError: {STAGE_FAULT}" in p.stderr, p.stderr[-600:]
+    assert "REFUSED" not in p.stdout, "an AssertionError must not be relabelled a refusal"
+    assert _report_bytes() == before
+
+
+def test_a_silent_render_is_stopped_by_the_pitch_gate_before_any_stage_is_read():
+    before = _report_bytes()
+    p = _run([VOICE_SILENT, ONE_RENDER, STAGE_LOG])
+    text = p.stdout + p.stderr
+    assert p.returncode == exit_contract.REFUSED, (p.returncode, text[-600:])
+    assert "REFUSED: saw MIDI 84 pitch refused: silent" in p.stderr, text[-600:]
+    assert "Traceback" not in text and "InsufficientEvidence" not in text, text[-600:]
+    assert "STAGE" not in p.stderr, "no stage window may reach the estimator"
+    assert _report_bytes() == before
 
