@@ -77,6 +77,12 @@ def maybe(x):
 
 def other():
     return "other"
+
+
+def checked(x):
+    if x:
+        raise AssertionError(f"callee checked: {x}")
+    return "checked"
 '''
 
 HEAD = '''\
@@ -251,6 +257,16 @@ def work(x):
 ''' + _tail('''\
     print("result:", work(int(argv[0])))
 '''))
+    files["unfollowed"] = _write(tmp_path, "unfollowed.py", HEAD + '''
+
+
+def work(x, times):
+    for i in range(times):
+        callee.other(), callee.checked(x if i == times - 1 else 0)
+''' + _tail('''\
+    work(int(argv[0]), int(argv[1]))
+    print("done")
+'''))
     return files
 
 
@@ -411,6 +427,71 @@ def test_a_shared_name_cannot_stand_for_two_runs(tmp_path):
     assert "two different runs" in b["runs"]["working"][0]["unresolved"]
 
 
+def _unfollowed(tmp_path: pathlib.Path, x: int, times: int):
+    """Trace `unfollowed.py`: `times` rounds of `callee.other(), callee.checked(...)`
+    on one line. `checked` returns in every round but the last, where it
+    raises a plain `AssertionError` when `x`; nothing in the tracer follows
+    that class."""
+    path = _fixture(tmp_path)["unfollowed"]
+    site = _site(path, "callee.other(), callee.checked(")
+    run = {"entry": str(path), "argv": [str(x), str(times)], "root": str(tmp_path), "cwd": str(tmp_path),
+           "timeout": 60}
+    rec = rct.run_child(run, tmp_path / f"unfollowed-{x}-{times}", ["callee.checked", "callee.other"], [site])
+    assert not rec.get("wrap_missing"), rec["wrap_missing"]
+    return rec, site
+
+
+def test_a_raised_class_the_tracer_does_not_follow_never_reads_returned(tmp_path):
+    """#1952. Only refusals are followed, so a call that raises anything else
+    has calls and no follows -- and `view()` read that RETURNED, "the call ran
+    and came back", for a process that died on it."""
+    rec, site = _unfollowed(tmp_path, 1, 1)
+    truth = subprocess.run([sys.executable, str(_fixture(tmp_path)["unfollowed"]), "1", "1"],
+                           capture_output=True, text=True, timeout=60, check=False)
+    assert (truth.returncode, truth.stderr.strip().splitlines()[-1]) == (1, "AssertionError: callee checked: 1")
+    assert rec["exit_status"] == 1 and rec["verdict"] == rct.UNRESOLVED
+    assert rec["stderr_tail"][-1] == truth.stderr.strip().splitlines()[-1]
+    assert rec["uncaught"]["class"] == "builtins.AssertionError" and not rec["uncaught"]["followed"]
+    assert rec["follows"] == []
+    assert [(c["callee"], c["outcome"]) for c in rec["calls"]] == [("callee.other", "returned"),
+                                                                  ("callee.checked", "raised")]
+    assert rct.view(rec, site, "callee.checked")["verdict"] == rct.UNRESOLVED
+
+
+def test_the_raised_call_counts_past_the_kept_calls_and_only_for_its_own_callee(tmp_path):
+    """A view keeps its first KEPT_CALLS calls; the verdict is not read off
+    those alone, and a callee that came back on the same line is not tarred
+    by the one that raised."""
+    rec, site = _unfollowed(tmp_path, 1, rct.KEPT_CALLS + 3)
+    assert rec["exit_status"] == 1 and rec["verdict"] == rct.UNRESOLVED
+    checked = rct.view(rec, site, "callee.checked")
+    assert checked["calls_total"] == rct.KEPT_CALLS + 3 and len(checked["calls"]) == rct.KEPT_CALLS
+    assert [c["outcome"] for c in checked["calls"]] == ["returned"] * rct.KEPT_CALLS
+    assert checked["verdict"] == rct.UNRESOLVED
+    other = rct.view(rec, site, "callee.other")
+    assert other["calls_total"] == rct.KEPT_CALLS + 3 and other["verdict"] == rct.RETURNED
+
+
+def test_what_came_back_and_what_was_followed_keep_their_verdicts(tmp_path):
+    back, site = _unfollowed(tmp_path, 0, 1)
+    assert back["exit_status"] == 0 and back["verdict"] == rct.RETURNED
+    assert rct.view(back, site, "callee.checked")["verdict"] == rct.RETURNED
+    assert rct.view(back, site, "callee.other")["verdict"] == rct.RETURNED
+    files = _fixture(tmp_path)
+    assert rct.view(_trace(tmp_path, "escape", "1"), _site(files["escape"]), "callee.maybe")["verdict"] == rct.ESCAPED
+    assert rct.view(_trace(tmp_path, "handled", "1"), _site(files["handled"]), "callee.maybe")["verdict"] == rct.HANDLED
+
+
+def test_an_unresolved_run_stays_unresolved_whatever_its_calls_say():
+    rec = {"unresolved": "timed out after 60 s", "verdict": rct.UNRESOLVED, "site_executed": ["escape.py:1"],
+           "calls": [{"callee": "callee.maybe", "raised": {"class": "AssertionError"},
+                      "caller": {"file": "escape.py", "line": 1, "first": 1, "last": 1}}],
+           "follows": []}
+    out = rct.view(rec, "escape.py:1", "callee.maybe")
+    assert out["verdict"] == rct.UNRESOLVED and out["unresolved"] == "timed out after 60 s"
+    assert (out["calls"], out["follows"], out["site_executed"]) == ([], [], [])
+
+
 # ---------------------------------------------------------------------------
 # injected controls: each tracer defect turns its fixture's verdict wrong
 # ---------------------------------------------------------------------------
@@ -418,6 +499,7 @@ def test_control_no_follow_cannot_read_as_returned(tmp_path):
     rec = _trace(tmp_path, "escape", "1", inject=["NO_FOLLOW"])
     assert rec["verdict"] == rct.UNRESOLVED and rec["uncaught"]["class"] == "callee.Refused"
     assert rec["follows"] == [] and rec["calls"][0]["outcome"] == "raised"
+    assert rct.view(rec, _site(_fixture(tmp_path)["escape"]), "callee.maybe")["verdict"] == rct.UNRESOLVED
 
 
 def test_control_finally_read_as_a_handler(tmp_path):
@@ -499,9 +581,26 @@ def _disposition(t: dict) -> str:
         return "escaped"
     if rct.HANDLED in refusing:
         return "handled"
+    if rct.UNRESOLVED in refusing:
+        return "unresolved"
     if refusing:
         return "shadowed"
     return "no refusing input"
+
+
+def test_an_unresolved_refusing_run_is_not_counted_as_shadowed():
+    """`shadowed` is "an earlier site refused first", a `NOT-REACHED` here. A
+    run the tracer could not follow is not that fact, and must not be filed
+    under it (#1952)."""
+    def trace(*verdicts):
+        return {"runs": {"refusing": [{"verdict": v} for v in verdicts]}}
+    assert _disposition(trace(rct.NOT_REACHED)) == "shadowed"
+    assert _disposition(trace(rct.NOT_REACHED, rct.NOT_REACHED)) == "shadowed"
+    assert _disposition(trace(rct.UNRESOLVED)) == "unresolved"
+    assert _disposition(trace(rct.UNRESOLVED, rct.NOT_REACHED)) == "unresolved"
+    assert _disposition(trace(rct.ESCAPED, rct.UNRESOLVED)) == "escaped"
+    assert _disposition(trace(rct.HANDLED, rct.UNRESOLVED)) == "handled"
+    assert _disposition({"runs": {"refusing": None}}) == "no refusing input"
 
 
 def test_the_committed_record_names_what_it_traced():
@@ -538,3 +637,22 @@ def test_three_working_runs_exit_nonzero_by_design_and_reach_their_site():
         rec = t["runs"]["working"][0]
         assert rec["verdict"] == rct.RETURNED and rec["site_executed"] == [t["site"]], id_
         assert rec["exit_status"] == status and not rec["traceback"], (id_, rec["exit_status"])
+
+
+def test_no_committed_returned_verdict_keeps_a_call_that_raised():
+    """#1952's shape read off every run in the record, not assumed from the
+    headline: no `RETURNED` keeps a call that raised. Stated limit: a view
+    keeps its first `KEPT_CALLS` calls, so a raise after those is invisible
+    here. Four working runs keep 12 of more (20, 20, 64, 25); for those the
+    record is read for what it can say -- no traceback, nothing uncaught."""
+    capped = []
+    for t in _record()["traces"]:
+        for role, recs in t["runs"].items():
+            for rec in recs or []:
+                if rec["verdict"] != rct.RETURNED:
+                    continue
+                assert not [c for c in rec["calls"] if c.get("raised")], (t["id"], role)
+                if rec.get("calls_total", 0) > len(rec["calls"]):
+                    capped.append((t["id"], rec["calls_total"]))
+                    assert not rec["traceback"] and rec["uncaught"] is None, t["id"]
+    assert sorted(n for _id, n in capped) == [20, 20, 25, 64]

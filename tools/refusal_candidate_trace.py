@@ -47,8 +47,8 @@ WHAT IT CANNOT TELL YOU, stated rather than carried:
 It is a tracer, not a gate: per run and per site it records `ESCAPED` (the
 refusal left the entry point), `HANDLED` (a clause took it), `RETURNED` (the
 call ran and came back), `NOT-REACHED` (this run never got to the site) or
-`UNRESOLVED` (a prerequisite was missing), and never decides whether an
-escape is a defect.
+`UNRESOLVED` (a prerequisite was missing, or the site raised a class the
+tracer does not follow), and never decides whether an escape is a defect.
 
     python tools/refusal_candidate_trace.py follow PLAN.json SCRIPT.py [args...]
     python tools/refusal_candidate_trace.py run --spec SPEC.py --out RECORD.json
@@ -620,7 +620,10 @@ def classify(rec: dict) -> str:
 def view(rec: dict, site: str, callee: str) -> dict:
     """One site's view of a run: only that callee's calls made at `site` and
     the refusals they let out (two calls share a line at
-    `fpga/verify_live_midi.py:107`), the process-level facts unchanged."""
+    `fpga/verify_live_midi.py:107`), the process-level facts unchanged. The
+    verdict is `classify()`'s, read off every call the site made and before
+    `cap_calls` keeps the first of them: a call that raised a class the
+    tracer does not follow is UNRESOLVED here as it is there (#1952)."""
     out = {k: v for k, v in rec.items() if k not in ("calls", "follows", "site_executed", "verdict")}
     if rec.get("unresolved"):
         return {**out, "verdict": UNRESOLVED, "calls": [], "follows": [], "site_executed": []}
@@ -628,13 +631,8 @@ def view(rec: dict, site: str, callee: str) -> dict:
     out["follows"] = [f for f in rec["follows"] if _mine({"callee": f.get("callee"), "caller": f["stack"][0]},
                                                        site, callee)]
     out["site_executed"] = [site] if out["calls"] else []
+    out["verdict"] = classify({**rec, "calls": out["calls"], "follows": out["follows"]})
     cap_calls(out)
-    if out["follows"]:
-        out["verdict"] = classify({**rec, "follows": out["follows"]})
-    elif out["calls"]:
-        out["verdict"] = RETURNED            # the call ran and came back
-    else:
-        out["verdict"] = NOT_REACHED         # this run never got to the site
     return out
 
 
