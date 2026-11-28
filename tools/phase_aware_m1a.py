@@ -393,7 +393,7 @@ def main():
 
         # ---- baseline preconditions: the current engine is the measured one
         base_patch = dx.phrase_patch(manifest, BASELINE)
-        rate, committed = dx.wavfile.read(bass.MANIFEST.parent / "m1a-model.wav")
+        rate, committed = ap.read_wav(bass.MANIFEST.parent / "m1a-model.wav")
         base_pcm = dx.render_phrase(base_patch, len(reference))
         if dx.pcm_sha(base_pcm) != dx.pcm_sha(committed):
             raise Refused("baseline render does not reproduce the committed m1a-model.wav")

@@ -352,8 +352,26 @@ def pcm_sha(pcm):
 
 
 # ------------------------------------------------------------------ main
+def read_wav(path):
+    """`wavfile.read`, or Refused naming `path`.
+
+    Deliberately total, on the parser call alone. scipy's reader signals a
+    malformed file with at least three exception classes -- `ValueError` for a
+    non-RIFF header, `struct.error` for one cut inside a chunk,
+    `UnboundLocalError` for a size field that lies (1.18.1) -- so a class
+    allow-list such as `(OSError, ValueError)` is a guard with known defeating
+    inputs (docs/verification-rules.md rule 8; the corpus is in
+    test_analyse_m1a_phase_cycle.py). Nothing of ours sits in the block, so
+    nothing of ours can be relabelled; the CLI handler stays `except
+    refusal.Refused`."""
+    try:
+        return wavfile.read(path)
+    except Exception as exc:  # noqa: BLE001 -- see the docstring
+        raise Refused(f"{path}: unreadable WAV ({exc})") from exc
+
+
 def _read(path):
-    rate, x = wavfile.read(path)
+    rate, x = read_wav(path)
     if rate != SR or x.dtype != np.float32:
         raise Refused(f"{path.name}: format differs ({rate}, {x.dtype})")
     return x.astype(np.float64)
@@ -370,9 +388,14 @@ def load_capture():
         audio = {}
         for cond in ("full", "osc1_open", "osc2_open"):
             row = take["conditions"][cond]
-            if bass.sha(CAPTURE / row["file"]) != row["sha256"]:
+            wav = CAPTURE / row["file"]
+            try:
+                digest = bass.sha(wav)
+            except OSError as exc:
+                raise Refused(f"{wav}: cannot be read ({exc})") from exc
+            if digest != row["sha256"]:
                 raise Refused(f"{row['file']} hash differs from capture.json")
-            audio[cond] = _read(CAPTURE / row["file"])
+            audio[cond] = _read(wav)
         takes[name] = (take, audio)
     return record, takes
 
@@ -418,7 +441,7 @@ def main():
         cents = float(np.mean([m["octave_offset_cents"] for m in ref.values()]))
 
         # the render function must reproduce the committed model audio first
-        rate, committed = wavfile.read(d.MODEL_WAV)
+        rate, committed = read_wav(d.MODEL_WAV)
         locked = model_patch(12.)
         check = render_events(locked, bass.reference.EVENTS, bass.reference.SECONDS)[:len(committed)]
         if pcm_sha(check) != pcm_sha(committed):

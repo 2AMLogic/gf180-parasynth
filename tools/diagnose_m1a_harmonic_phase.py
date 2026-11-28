@@ -452,6 +452,19 @@ def pcm_sha(pcm):
     return hashlib.sha256(np.asarray(pcm).astype("<i2").tobytes()).hexdigest()
 
 
+def read_wav(path):
+    """`wavfile.read`, or Refused naming `path`.
+
+    Deliberately total, on the parser call alone -- the reason and the corpus
+    are in `analyse_m1a_phase_cycle.read_wav` (not imported here: that module
+    imports this one). The committed audio is the reproduction precondition's
+    own input; nothing hashes it first, so the reader is the only guard."""
+    try:
+        return wavfile.read(path)
+    except Exception as exc:  # noqa: BLE001 -- see the docstring
+        raise Refused(f"{path}: unreadable WAV ({exc})") from exc
+
+
 def model_psi(patch, osc2_phase, t_s):
     """Relative phase of the model's audible (2x) oscillators at t_s, from the
     integer accumulators: each advances (inc//2)*2 per base sample."""
@@ -532,13 +545,13 @@ def _run() -> int:
         return pcm.astype(np.float64) / 32768
 
     # --- reproduction preconditions: refuse unless committed audio reproduces
-    rate, committed = wavfile.read(MODEL_WAV)
+    rate, committed = read_wav(MODEL_WAV)
     if rate != SR or committed.dtype != np.int16:
         raise Refused("committed model audio format differs")
     model = pcm_of("selected", selected)
     if renders["selected"]["pcm_sha256"] != pcm_sha(committed):
         raise Refused("selected-patch render does not reproduce the committed model audio")
-    rate, committed_detune = wavfile.read(DETUNE_DIR / "detune-diagnostic.wav")
+    rate, committed_detune = read_wav(DETUNE_DIR / "detune-diagnostic.wav")
     pcm_of("detuned", detuned)
     if renders["detuned"]["pcm_sha256"] != pcm_sha(committed_detune[:n_ref]):
         raise Refused("detune-diagnostic render does not reproduce its committed audio")

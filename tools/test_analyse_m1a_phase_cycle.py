@@ -4,11 +4,17 @@ The synthetic takes have a psi-dependent odd-partial gain known by
 construction, so the decision rule's every branch and the darkening estimate
 have an answer independent of both the Mini V3 and the model. Injected
 analysis defects must turn the control red."""
+import hashlib
+import io
 import json
+import os
+import shutil
+import struct
 import sys
 
 import numpy as np
 import pytest
+from scipy.io import wavfile
 
 import analyse_m1a_phase_cycle as a
 
@@ -117,3 +123,87 @@ def test_an_uncaptured_record_keeps_its_own_refusal(monkeypatch, tmp_path, capsy
     # whatever else it carries
     code, out = _analyse(monkeypatch, tmp_path, capsys, {"state": "ABANDONED", "takes": {}})
     assert code == 2 and "not CAPTURED" in out
+
+
+# ---- a WAV that cannot be read is REFUSED, naming it -- never an exit-1 traceback (#1862)
+#
+# `wavfile.read` signals a malformed file with more than one exception class:
+# ValueError for a non-RIFF header, struct.error for one cut inside a chunk,
+# UnboundLocalError for a size field that lies (scipy 1.18.1). The corpus carries
+# one input per class, so a guard that allow-listed (OSError, ValueError) --
+# the shape this repair started from -- goes red here.
+CONDITIONS = ("full", "osc1_open", "osc2_open")
+
+
+def _bad_wavs():
+    buf = io.BytesIO()
+    wavfile.write(buf, a.SR, np.zeros(4800, dtype=np.int16))
+    good = buf.getvalue()
+    fmt, data = good[20:36], good[44:]
+    chunk = lambda cid, payload: cid + struct.pack("<I", len(payload)) + payload
+    return {"non-RIFF": b"not a WAV", "empty": b"", "cut-inside-chunk": good[:20],
+            "RIFF-magic-only": b"RIFF",
+            "size-field-lies": b"RIFF" + struct.pack("<I", 4 + 8 + len(fmt)) + b"WAVE"
+                              + chunk(b"fmt ", fmt) + chunk(b"data", data)}
+
+
+BAD_WAVS = {"missing": None, **_bad_wavs()}
+
+
+def _scratch_capture(tmp_path, monkeypatch):
+    """The committed capture record under a scratch CAPTURE, its WAVs symlinked,
+    so a refusal artefact lands in tmp_path and never in the tree."""
+    shutil.copy(a.CAPTURE / "capture.json", tmp_path / "capture.json")
+    for take in json.loads((tmp_path / "capture.json").read_text())["takes"].values():
+        for row in take["conditions"].values():
+            os.symlink(a.CAPTURE / row["file"], tmp_path / row["file"])
+    monkeypatch.setattr(a, "CAPTURE", tmp_path)
+
+
+def _past_the_capture(monkeypatch):
+    """Answer the steps before the committed-model read; the reader is real."""
+    monkeypatch.setattr(a, "synthetic_control", lambda defect=None: {"stub": {"ok": True}})
+    monkeypatch.setattr(a, "measure", lambda *args, **kw: {
+        "windows": [], "drift_hz": -.26, "octave_offset_cents": -3.49})
+
+
+@pytest.mark.parametrize("name", sorted(BAD_WAVS))
+def test_unreadable_committed_model_wav_is_refused_naming_it(monkeypatch, tmp_path, capsys, name):
+    _scratch_capture(tmp_path, monkeypatch)
+    _past_the_capture(monkeypatch)
+    model = tmp_path / "m1a-model.wav"
+    if BAD_WAVS[name] is not None:
+        model.write_bytes(BAD_WAVS[name])
+    monkeypatch.setattr(a.d, "MODEL_WAV", model)
+    monkeypatch.setattr(sys, "argv", ["analyse_m1a_phase_cycle.py"])
+    code = a.main()
+    out = capsys.readouterr().out
+    assert code == 2 and "REFUSED:" in out and "m1a-model.wav" in out
+    refused = json.loads((tmp_path / "analysis-refused.json").read_text())
+    assert refused["state"] == "REFUSED" and "m1a-model.wav" in refused["reason"]
+    assert not (tmp_path / "report.json").exists()
+
+
+def _capture_record():
+    row = {"file": "takeA-full.wav", "sha256": "0" * 64}
+    return {"state": "CAPTURED", "takes": {"A": {"note_on_s": .1, "gate_s": 12.,
+            "conditions": {c: dict(row) for c in CONDITIONS}}}}
+
+
+def test_a_missing_capture_wav_is_refused_naming_it(monkeypatch, tmp_path, capsys):
+    code, out = _analyse(monkeypatch, tmp_path, capsys, _capture_record())
+    assert code == 2 and "REFUSED" in out and "takeA-full.wav" in out
+    assert json.loads((tmp_path / "analysis-refused.json").read_text())["state"] == "REFUSED"
+    assert not (tmp_path / "report.json").exists()
+
+
+@pytest.mark.parametrize("name", sorted(_bad_wavs()))
+def test_an_unreadable_capture_wav_matching_its_recorded_hash_is_refused(monkeypatch, tmp_path, capsys, name):
+    """The hash binds the file to the record; when the record names the bad
+    bytes themselves, only the reader is left to refuse."""
+    blob = _bad_wavs()[name]
+    (tmp_path / "takeA-full.wav").write_bytes(blob)
+    record = _capture_record()
+    record["takes"]["A"]["conditions"]["full"]["sha256"] = hashlib.sha256(blob).hexdigest()
+    code, out = _analyse(monkeypatch, tmp_path, capsys, record)
+    assert code == 2 and "takeA-full.wav" in out

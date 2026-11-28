@@ -1,7 +1,12 @@
 """Known answers for the drive experiment's pre-declared rules: the volume
 compensation, the regression detector and the choice rule. Each check is also
 shown to fire on an injected defect."""
+import io
+import struct
+
+import numpy as np
 import pytest
+from scipy.io import wavfile
 
 import measure_m1a_drive as m
 
@@ -48,3 +53,37 @@ def test_choice_rule():
     assert m.choose({.75: base, .5: _row([], 19.5, 8.)}, base) is None          # < 0.5 dB better
     assert m.choose({.75: base, .5: _row([], 18.0, 10.5)}, base) is None        # odd range not reduced
     assert m.choose({.75: base}, base) is None                                   # baseline never chosen
+
+
+# ---- the committed-model WAV the baseline precondition reads (#1862) ----
+def _bad_wavs():
+    """One file per way a header can fail its reader: ValueError, struct.error
+    (a header cut inside a chunk), UnboundLocalError (a size field that lies)."""
+    buf = io.BytesIO()
+    wavfile.write(buf, m.SR, np.zeros(4800, dtype=np.int16))
+    good = buf.getvalue()
+    fmt, data = good[20:36], good[44:]
+    chunk = lambda cid, payload: cid + struct.pack("<I", len(payload)) + payload
+    return {"non-RIFF": b"not a WAV", "empty": b"", "cut-inside-chunk": good[:20],
+            "RIFF-magic-only": b"RIFF",
+            "size-field-lies": b"RIFF" + struct.pack("<I", 4 + 8 + len(fmt)) + b"WAVE"
+                              + chunk(b"fmt ", fmt) + chunk(b"data", data)}
+
+
+BAD_WAVS = {"missing": None, **_bad_wavs()}
+
+
+@pytest.mark.parametrize("name", sorted(BAD_WAVS))
+def test_unreadable_committed_model_wav_is_refused_naming_it(monkeypatch, tmp_path, capsys, name):
+    """main() up to the committed-model read: the baseline render is answered,
+    the reader and the refusal boundary are real."""
+    before = (m.OUT / "report.json").read_bytes()
+    model = tmp_path / "m1a-model.wav"
+    if BAD_WAVS[name] is not None:
+        model.write_bytes(BAD_WAVS[name])
+    monkeypatch.setattr(m.bass, "MANIFEST", tmp_path / "manifest.json")
+    monkeypatch.setattr(m, "render_phrase", lambda patch, n: np.zeros(n, dtype=np.int16))
+    assert m.main() == 2
+    out = capsys.readouterr().out
+    assert "REFUSED:" in out and "m1a-model.wav" in out
+    assert (m.OUT / "report.json").read_bytes() == before

@@ -4,11 +4,14 @@ Each apparatus failure this repository has already met is synthesised here and
 must REFUSE: demo clicks, a dropout, digital silence, a sub-audio octave, an
 isolated oscillator whose level moves. A clean held saw must pass. These run
 without the plugin."""
+import io
 import json
 import math
+import struct
 
 import numpy as np
 import pytest
+from scipy.io import wavfile
 
 import capture_m1a_phase_cycle as c
 
@@ -157,3 +160,48 @@ def test_an_empty_frozen_manifest_is_refused_naming_every_key(monkeypatch, tmp_p
 def test_a_frozen_manifest_with_a_null_identity_is_refused(monkeypatch, tmp_path, capsys):
     code, out, _ = _capture(monkeypatch, tmp_path, capsys, {**_committed_manifest(), "identity": None})
     assert code == 2 and "'identity'" in out
+
+
+# ---- a frozen WAV that cannot be read is REFUSED, naming it (#1862) ----
+def _bad_wavs():
+    """One file per way a header can fail its reader: ValueError, struct.error
+    (a header cut inside a chunk), UnboundLocalError (a size field that lies)."""
+    buf = io.BytesIO()
+    wavfile.write(buf, SR, np.zeros(4800, dtype=np.int16))
+    good = buf.getvalue()
+    fmt, data = good[20:36], good[44:]
+    chunk = lambda cid, payload: cid + struct.pack("<I", len(payload)) + payload
+    return {"non-RIFF": b"not a WAV", "empty": b"", "cut-inside-chunk": good[:20],
+            "RIFF-magic-only": b"RIFF",
+            "size-field-lies": b"RIFF" + struct.pack("<I", 4 + 8 + len(fmt)) + b"WAVE"
+                              + chunk(b"fmt ", fmt) + chunk(b"data", data)}
+
+
+BAD_WAVS = {"missing": None, **_bad_wavs()}
+
+
+@pytest.mark.parametrize("name", sorted(BAD_WAVS))
+def test_an_unreadable_frozen_wav_is_refused_naming_it(monkeypatch, tmp_path, capsys, name):
+    """The CLI boundary's handler lists OSError and ValueError. Before #1862 a
+    missing file was refused naming it only because OSError's text carries the
+    path, a non-RIFF file was refused WITHOUT naming which of the five frozen
+    WAVs it was, and a header cut inside a chunk (struct.error) or a lying size
+    field (UnboundLocalError) escaped as exit 1. `reproduce_frozen` now refuses
+    itself, naming the file, for all of them."""
+    manifest = _committed_manifest()
+    frozen, out = tmp_path / "frozen", tmp_path / "out"
+    frozen.mkdir()
+    (frozen / "manifest.json").write_text(json.dumps(manifest))
+    first = manifest["renders"][0]["file"]
+    if BAD_WAVS[name] is not None:
+        (frozen / first).write_bytes(BAD_WAVS[name])
+    monkeypatch.setattr(c, "FROZEN", frozen)
+    monkeypatch.setattr(c, "OUT", out)
+    monkeypatch.setattr(c, "_git", lambda *args: "")
+    monkeypatch.setattr(c.ref, "_plugin_metadata", lambda: manifest["identity"])
+    monkeypatch.setattr(c.m1a, "render", lambda *args, **kwargs: (np.zeros(48000, dtype=np.float32), {}))
+    code = c.main()
+    text = capsys.readouterr().out
+    assert code == 2 and "REFUSED:" in text and first in text
+    refused = json.loads((out / "refused.json").read_text())
+    assert refused["state"] == "REFUSED" and first in refused["reason"]

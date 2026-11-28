@@ -221,3 +221,43 @@ def test_regen_m1a_units_preserves_exit_1_numeric_and_hash_gates(
     assert regen.main() == 1
     assert "reanalysed audio hash differs" in capsys.readouterr().err
     assert record_copy.read_bytes() == original_bytes
+
+
+# ---------------------------------------------------------------------------
+# #1862: a missing or non-RIFF committed-model WAV exits REFUSED (2), naming it
+# ---------------------------------------------------------------------------
+MODEL_WAV_REL = "docs/scorecard/mono-m1a-miniv3/m1a-model.wav"
+MODEL_WAV_READERS = ("measure_m1a_drive.py", "phase_aware_m1a.py", "analyse_m1a_phase_cycle.py")
+
+
+@pytest.mark.parametrize("blob", [None, b"not a WAV"], ids=["missing", "non-RIFF"])
+@pytest.mark.parametrize("script", MODEL_WAV_READERS)
+def test_missing_or_non_riff_model_wav_exits_refused_2(tmp_path, script, blob):
+    """Each CLI reads `m1a-model.wav` under `except refusal.Refused` with no
+    earlier guard on it (#1848 section B), so a missing or non-RIFF file escaped
+    as exit 1 -- the status `run_all` renders as a RESULT."""
+    box = _sandbox(tmp_path)
+    report_rel = dict(CLI_MODULES)[script]
+    report_path = box / report_rel
+    before = report_path.read_bytes()
+    model_wav = box / MODEL_WAV_REL
+    if blob is None:
+        model_wav.unlink()
+    else:
+        model_wav.write_bytes(blob)
+
+    p = _run_cli(box, script)
+    assert p.returncode == exit_contract.REFUSED, (
+        script, blob, p.returncode, p.stdout[-300:], p.stderr[-400:])
+    assert "REFUSED:" in p.stdout and "m1a-model.wav" in p.stdout, (script, p.stdout[-400:])
+    assert "Traceback" not in p.stderr and "Traceback" not in p.stdout, (
+        script, p.stderr[-400:])
+    assert report_path.read_bytes() == before, (
+        f"{script} modified {report_rel} on a refused run")
+
+    if script == "analyse_m1a_phase_cycle.py":
+        refused_json = (
+            box / "docs/scorecard/mono-m1a-miniv3/phase-cycle-capture/analysis-refused.json"
+        )
+        refused = json.loads(refused_json.read_text())
+        assert refused["state"] == "REFUSED" and "m1a-model.wav" in refused["reason"]

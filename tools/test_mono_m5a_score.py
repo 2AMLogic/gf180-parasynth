@@ -1,9 +1,12 @@
 import hashlib
+import io
 import json
 import pathlib
+import struct
 
 import numpy as np
 import pytest
+from scipy.io import wavfile
 
 import mono_m5a_score as score
 
@@ -74,6 +77,45 @@ def test_decoded_i2s_candidate_requires_full_mono_int16_phrase(tmp_path):
     assert loaded.shape == (100,)
     assert loaded[12] == pytest.approx(12 / 32768)
     assert digest == hashlib.sha256(valid.read_bytes()).hexdigest()
+
+
+# ---- a candidate the reader cannot parse is REFUSED, naming it (#1862) ----
+def _bad_wavs():
+    """One file per way a header can fail its reader: ValueError, struct.error
+    (a header cut inside a chunk), UnboundLocalError (a size field that lies)."""
+    buf = io.BytesIO()
+    wavfile.write(buf, score.SR, np.zeros(4800, dtype=np.int16))
+    good = buf.getvalue()
+    fmt, data = good[20:36], good[44:]
+    chunk = lambda cid, payload: cid + struct.pack("<I", len(payload)) + payload
+    return {"non-RIFF": b"not a WAV", "empty": b"", "cut-inside-chunk": good[:20],
+            "RIFF-magic-only": b"RIFF",
+            "size-field-lies": b"RIFF" + struct.pack("<I", 4 + 8 + len(fmt)) + b"WAVE"
+                              + chunk(b"fmt ", fmt) + chunk(b"data", data)}
+
+
+@pytest.mark.parametrize("name", sorted(_bad_wavs()))
+def test_decoded_i2s_candidate_that_is_not_a_wav_refuses_naming_it(tmp_path, name):
+    path = tmp_path / "candidate.wav"
+    path.write_bytes(_bad_wavs()[name])
+    with pytest.raises(score.Refused, match=r"candidate\.wav"):
+        score._load_i2s_candidate(path, 100)
+
+
+def test_missing_decoded_i2s_candidate_refuses_naming_it(tmp_path):
+    with pytest.raises(score.Refused, match=r"no-such-candidate\.wav"):
+        score._load_i2s_candidate(tmp_path / "no-such-candidate.wav", 100)
+
+
+def test_decoded_i2s_candidate_with_its_data_cut_short_refuses_as_short(tmp_path):
+    """A data chunk cut short still parses, as fewer samples, with only a
+    warning: the sample-count precondition is what refuses it."""
+    buf = io.BytesIO()
+    wavfile.write(buf, score.SR, np.zeros(4800, dtype=np.int16))
+    short = tmp_path / "short-data.wav"
+    short.write_bytes(buf.getvalue()[:44 + 2 * 100])
+    with pytest.raises(score.Refused, match="short"):
+        score._load_i2s_candidate(short, 101)
 
 
 def test_cleaner_alias_output_is_not_penalized():
