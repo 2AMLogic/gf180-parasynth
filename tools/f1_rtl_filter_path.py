@@ -121,6 +121,13 @@ INJECTS_NOT_EXERCISED = {
 }
 #: The stepped-tone shape the F1 cases use (`f1_filter_path.SelectedFilterPath.curve`).
 SETTLE_S, WINDOW_S = 0.06, 0.20
+#: What a bare `main()` run truncates the train to: the Makefile's smoke and
+#: control runs pass this same length. The first analysis window of the frozen
+#: F1 grid ends at frame 28,800 -- its first tone is 40 Hz, and `tone_train`
+#: floors a segment at 8 settle + 16 window periods of 1200 frames, not at
+#: SETTLE_S + WINDOW_S (12,480) -- so any shorter default refuses with nothing
+#: to project (#1617). The second tone's window does not start until 36,784.
+DEFAULT_SMOKE_FRAMES = 30000
 
 
 class Refused(refusal.Refused, RuntimeError):
@@ -401,8 +408,9 @@ def main(argv=None) -> int:
                                              "it with the fixed-point model")
     ap.add_argument("--cut-hz", type=float, default=250.0)
     ap.add_argument("--res", type=float, default=0.0)
-    ap.add_argument("--frames", type=int, default=20000,
-                    help="truncate the stepped-tone stimulus (0 = the whole F1 train)")
+    ap.add_argument("--frames", type=int, default=DEFAULT_SMOKE_FRAMES,
+                    help=f"truncate the stepped-tone stimulus (default: {DEFAULT_SMOKE_FRAMES}, "
+                         f"one tone's analysis window; 0 = the whole F1 train)")
     ap.add_argument("--inject", choices=INJECTS, default=None,
                     help="compile a defect into the RTL; the comparison must turn red")
     ap.add_argument("--expect-mismatch", action="store_true",
