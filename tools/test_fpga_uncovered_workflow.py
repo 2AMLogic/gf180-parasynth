@@ -1,13 +1,14 @@
 """The fpga-uncovered CI job's preconditions, asserted by its own suite (#853).
 
-The job runs the 16 fpga/ test files no other CI job collects -- fpga/release/
-by directory, nine more by name -- after installing spec/trial-environment.json,
-whose pins three of those files preflight (NO VERDICT on drift) and whose
-pyserial the pty harness refuses without. This file is the job's guard, run by
-the tools job's directory collection: the job still exists, the paths it names
-exist, no ignore/deselect slipped in, and the floor step's number equals a live
-collection of the same paths -- so the exclusion control cannot drift and an
-exclusion cannot be achieved by silent non-collection.
+The job runs the fpga/ test files no other CI job collects -- fpga/release/
+by directory, plus the other files named in FPGA_UNCOVERED_PATHS -- after
+installing spec/trial-environment.json, whose pins the release-bound trials
+preflight (NO VERDICT on drift) and whose pyserial the pty harness refuses
+without. This file is the job's guard, run by the tools job's directory
+collection: the job still exists, the paths it names exist, no ignore/deselect
+slipped in, and the floor step's number equals a live collection of the same
+paths -- so the exclusion control cannot drift and an exclusion cannot be
+achieved by silent non-collection.
 
 Controls: the two pure helpers are asserted to REJECT the defect they exist to
 catch, on hand-built job dicts, before they are trusted against the real file.
@@ -93,7 +94,7 @@ def test_control_floor_helper_rejects_a_missing_or_double_floor():
 
 # -- the real workflow --------------------------------------------------------
 
-def test_paths_env_names_exactly_the_measured_16():
+def test_paths_env_matches_release_dir_plus_named():
     assert paths(real_job()) == (RELEASE_DIR, *NAMED)
 
 
@@ -135,7 +136,7 @@ def test_job_installs_the_spec_not_hand_written_pins():
     runs = "\n".join(s["run"] for s in real_job()["steps"]
                      if isinstance(s.get("run"), str))
     assert "tools/trial_env.py bootstrap --no-toolchain" in runs, (
-        "three of the 16 files preflight spec/trial-environment.json and the "
+        "the release-bound trials preflight spec/trial-environment.json and "
         "pty harness refuses without pyserial -- the job must install from "
         "the spec, not from hand-written versions")
     assert "pip install numpy" not in runs, (
@@ -148,7 +149,7 @@ def test_no_ignores_or_deselects_in_the_job():
                      if isinstance(s.get("run"), str))
     for banned in BANNED:
         assert banned not in runs, (
-            f"{banned!r} found in a run step: all 16 files measured runnable, "
+            f"{banned!r} found in a run step: every file measured runnable, "
             "so an exclusion here would be unjustified and silent")
 
 
@@ -175,6 +176,6 @@ def test_floor_equals_a_live_collection_of_the_same_paths():
 
 
 def test_release_dir_is_collected_by_directory_not_by_name():
-    """A 17th uncovered file hiding in fpga/release/ must run, not vanish:
+    """A new uncovered file hiding in fpga/release/ must run, not vanish:
     the directory form collects it automatically; a file list would not."""
     assert paths(real_job())[0] == RELEASE_DIR
