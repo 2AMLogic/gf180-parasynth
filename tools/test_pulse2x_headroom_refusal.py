@@ -62,6 +62,61 @@ each control's own precondition check. Were the frozen record absent or
 altered in the tree, the silenced-pulse run would refuse EARLIER, with the
 hash-mismatch reason, and this file would turn red instead of passing for the
 wrong reason.
+
+THE SECOND DEFECT, #1628: `probe` on a row that did not measure. `probe_points`
+reads five numbers out of each `mono_artifact_probe.measure_point` row, and
+`measure_point` ANSWERS a render it cannot analyse with a verdict row instead
+of an exception -- other callers consume that row -- so the `main()` boundary
+above never saw it. On origin/main @ a3186508 (2026-11-28, after #1630 landed
+the boundary) `probe --gains 0.0 --out F` (q15(0) = 0: the candidate silences
+every rectangle) exited 1 with `KeyError: 'output'`, and the same reader,
+asked through the Python API for MIDI 12, raised `KeyError: 'unwanted_dbfs'`
+-- though that row's verdict is MEASURED, which is why a verdict check alone
+is not the guard (docs/verification-rules.md rule 8: the input that defeats it
+is committed below, and it is a real row from the real engine). `probe_points`
+now reads only through `_measured_numbers`, which returns the five numbers or
+raises the tool's own `Refused`.
+
+WHAT THESE CONTROLS ASSERT, each pinning the message:
+
+  silenced rectangles  the real CLI: exit 2, exactly
+               `REFUSED  square MIDI 36: candidate gain 0.000 silences the
+               output (-300.0 dBFS)`, no traceback, no --out file
+  first point   the refusal names the first point in iteration order that did
+               not measure (read off the loop: MIDI 60 when asked for 60, 84)
+  refused stage  MIDI 12 (f0 16.35 Hz = 12.3 bins of the 36000-sample
+               window; the floor is 16): MEASURED, every stage refused; the
+               probe refuses with the output stage's own text. Its
+               precondition -- that the real row HAS that shape -- is asserted
+               first, so the control cannot pass for another reason
+  normal gain   `probe --gains 0.80 --out F` still measures all 32 points and
+               writes F (exit 0, no REFUSED line, every value numeric, the
+               candidate applied at least once): the guard must stay quiet on
+               a run that measured. The real CLI, unpatched, because the
+               shipped default grid is what it must let through; 73 s
+               single-threaded on an 8-vCPU AWS worker (2026-11-28)
+  other branches, on rows written key by key to the contract `measure_point`
+               returns rather than to the guard's own constant (no render): a
+               non-MEASURED verdict that is not silence, a verdict missing, an
+               output stage short of a field, a row short of the rail count --
+               each refused with the missing thing named; and a measured row
+               passes through unchanged, including one whose `ladder_out`
+               stage refused (the guard requires what it reads, no more).
+               The three rendered controls above anchor that contract to the
+               real producer; these do not stand in for them.
+
+RED FIRST, on a3186508 with the tool unmodified: 10 of the 11 #1628 controls
+failed. The three defect controls failed with the defect -- the silenced run
+at exit 1 with `KeyError: 'output'` (`measure_pulse2x_headroom.py:194`), the
+first-point control with the same `KeyError`, the refused-stage control with
+`KeyError: 'unwanted_dbfs'` (`:196`) after its precondition on the real MIDI
+12 row passed. The class relation and the six guard controls failed with
+`AttributeError` (no `Refused`, no `_measured_numbers` yet). The normal-gain
+control passed on that tree, as it must on any tree.
+
+NOT CLAIMED: that the refused-stage path is reachable from the CLI. `probe`
+takes no `--notes` and its default grid (36..127) sits far above the floor;
+that path belongs to a Python caller.
 """
 from __future__ import annotations
 
