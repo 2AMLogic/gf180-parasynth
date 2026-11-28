@@ -124,6 +124,18 @@ def verdict(per_wave):
 
 
 def measure(src: Path = SRC):
+    """One row per frozen render: its residual and both attacks.
+
+    Each render's hash is checked against its row before anything is measured.
+    So is its length (#2080). The hash binds the bytes and says nothing about
+    how many, and a render cut short and re-hashed went on to have its held
+    level, attack and residual read from windows it no longer contained --
+    or was refused as having "no measurable held level", which blames the
+    instrument for the cut. The row states no length, so what is asserted is
+    the minimum: the render reaches the end of the last note's gate, past
+    which no window here reads. A render that ends exactly there holds every
+    sample a window reads and passes; one truncated anywhere after it is, by
+    everything this tool reads, the whole render."""
     rep = json.loads((src / "report.json").read_text())
     rows = []
     for row in rep["renders"]:
@@ -134,6 +146,12 @@ def measure(src: Path = SRC):
         x = pcm.astype(np.float64) / 32768.0 if pcm.dtype.kind == "i" else pcm.astype(np.float64)
         t = row["events"][-1]
         on, off = t["on_s"], t["on_s"] + t["gate_s"]
+        need = int(round(off * sr))
+        if len(x) < need:
+            raise Refused(
+                f"{row['wav']}: {len(x)} frames, needs {need} for the last note's gate "
+                f"(to {off:g} s) -- the residual, held and attack windows all end "
+                f"there or earlier, and each was being cut short without a word")
         r, floored = residual_db(x, sr, on, off)
         rows.append({"wave": row["wave"], "condition": row["condition"], "repeat": row["repeat"],
                      "r_db": r, "floor_limited": floored,

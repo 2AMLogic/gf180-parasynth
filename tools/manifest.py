@@ -23,7 +23,8 @@ linked to its inputs by content hash rather than by trust:
     `runs/<render_id>/` whose recorded `wav_sha256` differs from what it just
     produced.
   * `analyse()` reads a render manifest (refusing if the retained WAV's
-    content no longer matches the hash recorded at render time -- CLAUDE.md:
+    content no longer matches the hash recorded at render time, or its length
+    the `n_samples` recorded beside it -- CLAUDE.md:
     "assert your apparatus's preconditions ... and REFUSE rather than report
     when they fail"), and writes `jobs/<job_id>/analysis.json`: one record
     per named measurement, each carrying the full audit trail a bare number
@@ -481,6 +482,14 @@ def load_render(render_id: str, *, runs_dir: pathlib.Path = RUNS_DIR,
     reads through here, so a WAV silently edited (or truncated, or replaced)
     after render time is refused rather than quietly analysed as though it
     were still what `render()` produced.
+
+    The hash binds the bytes and says nothing about how many. A WAV cut short
+    and re-hashed -- a half-copied file whose record was "fixed" to match --
+    passed that check, so the length is asserted too (#2080): the WAV must
+    hold the `n_samples` the same `render()` call recorded, and a record that
+    declares no sample count REFUSES rather than skipping the check. Both
+    refusals name the WAV and both lengths. What neither can see is a record
+    rewritten to agree with the cut, or a WAV cut and padded back to length.
     """
     out_dir = runs_dir / render_id
     manifest_path = out_dir / "manifest.json"
@@ -497,6 +506,21 @@ def load_render(render_id: str, *, runs_dir: pathlib.Path = RUNS_DIR,
                        f"WAV changed after render() wrote it; refusing to analyse it "
                        f"as though it still were what render() produced")
     x, sr = _read_wav16(wav_path)
+    n = manifest.get("n_samples")
+    if type(n) is not int:
+        raise Refused(
+            f"{manifest_path} records n_samples={n!r}, not a sample count, for "
+            f"{wav_path} ({len(x)} samples on disk) -- the hash says these are the "
+            f"bytes render() produced and nothing says how many there should be, "
+            f"so this WAV cannot be checked against its record; regenerate the "
+            f"record with render() rather than add the key by hand")
+    if len(x) != n:
+        raise Refused(
+            f"{wav_path} holds {len(x)} samples; its render manifest records "
+            f"n_samples={n} (wav_sha256 matches: a hash binds the bytes, not how "
+            f"many) -- the retained WAV was cut or padded after render() wrote it "
+            f"and the record rewritten to follow; refusing to analyse it as though "
+            f"it still were what render() produced")
     return manifest, x, sr
 
 
