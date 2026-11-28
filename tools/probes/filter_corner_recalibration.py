@@ -53,6 +53,7 @@ sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
 
 import audio_measure as am                                          # noqa: E402
+import refusal                                                      # noqa: E402
 import run_case as rc                                               # noqa: E402
 import refprofile as rp                                             # noqa: E402
 import reference_compare as rcmp                                    # noqa: E402
@@ -127,7 +128,7 @@ def reference_side():
         try:
             rp.load_clip(clip, profile)
             print(f"   {cid}  {clip}  CACHED -- re-run tools/run_case.py {cid}")
-        except Exception as e:
+        except refusal.Refused as e:
             print(f"   {cid}  {clip}\n        REFUSED: {str(e).splitlines()[0]}")
     print("\n   So F1A/F1B/F1C's errors are NOT restated here. `run_case.py` writes")
     print("   them as no-verdicts with this reason, which is the right outcome:")
