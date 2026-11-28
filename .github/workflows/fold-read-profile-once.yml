@@ -1,0 +1,33 @@
+# One measurement for #2112, on a hosted ubuntu-24.04 runner. Lives on a
+# throwaway branch only: nothing here is meant for main.
+name: fold-read-profile-once
+on:
+  push:
+    branches: ['throwaway/**']
+jobs:
+  the-instrument:
+    name: the instrument, its controls, and the share
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: python -m pip install --upgrade pip numpy scipy pytest pyyaml
+      - name: the stack
+        run: |
+          python -c "import sys, os, numpy, scipy, pytest, platform; print(sys.version.split()[0], numpy.__version__, scipy.__version__, pytest.__version__, platform.platform()); print(open('/proc/cpuinfo').read().split('model name')[1].splitlines()[0], 'x', os.cpu_count())"
+          cat /proc/loadavg
+      - name: the instrument's own controls, on this runner
+        run: python -m pytest tools/test_fold_read_profile.py -q
+      - name: where the fold's reads go, with the slowed-read control
+        run: python tools/fold_read_profile.py --out build/fold-read-profile --control
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fold-read-profile
+          path: |
+            build/fold-read-profile/report.json
+            build/fold-read-profile/summary.txt
+            build/fold-read-profile/children/
