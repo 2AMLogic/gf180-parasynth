@@ -57,15 +57,15 @@ MEASURED = executed by this file; READ = traced in the source, not executed
       not on this module's `main()` path; its callers are #1763's. READ.
 
 One gate the enhancement did not list, found while tracing and out of scope
-here: `worker` `:175` demands the frozen grid EQUAL `reference_compare.FREQS`
-(`np.geomspace(40, 12000, 32)`). MEASURED on this host (numpy 2.5.5, Linux):
-the committed grid differs from it by one ULP at index 12 (363.8694868585699
-vs 363.86948685856987), so with the plugin and the cache in place this host
-would refuse THERE first, correctly. DERIVED from the manifest's existence:
-the comparison passed on the darwin / numpy 2.5.3 host that built the
-captures, which is where alone the `:198` site is reachable today. It
-changes nothing about the handler: `main()` owes REFUSED for an estimator
-refusal whenever one occurs.
+here (tracked as #1391): `worker` `:175` demands the frozen grid EQUAL
+`reference_compare.FREQS` (`np.geomspace(40, 12000, 32)`). MEASURED on this
+host (numpy 2.5.5, Linux): the committed grid differs from it by one ULP at
+index 12 (363.8694868585699 vs 363.86948685856987), so with the plugin and
+the cache in place this host would refuse THERE first, correctly. DERIVED
+from the manifest's existence: the comparison passed on the darwin / numpy
+2.5.3 host that built the captures, which is where alone the `:198` site is
+reachable today. It changes nothing about the handler: `main()` owes REFUSED
+for an estimator refusal whenever one occurs.
 
 WHAT THE CAPTURE OWES, and what these controls assert:
 
