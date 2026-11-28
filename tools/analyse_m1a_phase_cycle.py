@@ -38,6 +38,7 @@ import numpy as np
 from scipy.io import wavfile
 
 import diagnose_m1a_harmonic_phase as d
+import finite_number
 import manifest as mf
 import refusal
 import run_all
@@ -374,7 +375,43 @@ def load_capture():
                 raise Refused(f"{row['file']} hash differs from capture.json")
             audio[cond] = _read(CAPTURE / row["file"])
         takes[name] = (take, audio)
+        require_take_length(take, audio, name)
     return record, takes
+
+
+def _number(key, value, what):
+    if not finite_number.is_finite_number(value):
+        raise Refused(f"{what}: {key} is {value!r}, not a finite number, so the take's "
+                      f"length in samples cannot be read")
+    return value
+
+
+def require_take_length(take, audio, name):
+    """Refuse a take whose WAVs are not as long as its record describes (#1931).
+
+    The hash binds each WAV to `capture.json`; it cannot say whether the
+    record describes the audio that was captured. A `data` chunk cut short
+    still parses, as fewer samples, so with the hash rewritten every other
+    precondition held and `main()` answered from a truncated take. Every
+    committed take is exactly `round(seconds * SR) - latency_removed` samples,
+    so the comparison is exact: a tolerance would be a hole. Not seen: a take
+    cut and padded back to that length with its hash rewritten -- this counts
+    samples in the array, not signal."""
+    what = f"take {name!r} in the capture record"
+    mf.require_keys(take, "seconds", what, refused=Refused)
+    seconds = _number("seconds", take["seconds"], what)
+    for cond, x in audio.items():
+        row = take["conditions"][cond]
+        where = f"condition {cond!r} of take {name!r} in the capture record"
+        mf.require_keys(row, "apparatus", where, refused=Refused)
+        mf.require_keys(row["apparatus"], "latency_removed", f"the apparatus of {where}", refused=Refused)
+        latency = _number("latency_removed", row["apparatus"]["latency_removed"], where)
+        want = round(seconds * SR) - latency
+        if len(x) != want:
+            raise Refused(f"{row['file']}: {len(x)} samples, the record describes {want} "
+                          f"(round(seconds * SR) - latency_removed = round({seconds!r} * {SR}) - {latency!r}) "
+                          f"-- a take that is not as long as its record says is not a result: "
+                          f"re-capture it rather than rewrite its hash")
 
 
 def plot(ref_windows, model_windows, path):
