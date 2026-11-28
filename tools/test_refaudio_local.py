@@ -27,6 +27,8 @@ import io
 import json
 import os
 import pathlib
+import shutil
+import subprocess
 import sys
 import zipfile
 
@@ -169,3 +171,53 @@ def test_extract_returns_the_reason_and_raises_nothing(local_lib):
         why = rl.extract(zf, PACK, "a/b.wav", None, local_lib.cache)
     assert why is not None and "FileExistsError" in why
     assert local_lib.files() == {_path("a"): len(A)}
+
+
+# --- the CLIs as processes: the exit code and the stderr a caller meets --------
+
+CLI_RUNS = [
+    pytest.param("refaudio_local.py", [PACK, "a", "a/b.wav"], {}, id="local"),
+    pytest.param("refaudio_fetch.py", [PACK, "a", "a/b.wav"],
+                 {"REFAUDIO_SSH": "user@storage", "REFAUDIO_ROOT": "/lib"}, id="fetch"),
+    pytest.param("refaudio_s3.py", ["--prefix", PACK, "a"], {"REFAUDIO_S3": "s3://bucket/prefix"},
+                 id="s3-prefix"),
+]
+
+
+@pytest.mark.parametrize(("tool", "argv", "env"), CLI_RUNS)
+def test_the_cli_exits_1_with_the_fail_line_a_tally_and_no_traceback(
+        local_lib, tmp_path, monkeypatch, tool, argv, env):
+    """`sys.exit(main(sys.argv[1:]))` is what a caller meets. START RED (#1684):
+    against a3186508 each of the three routes ended in a traceback on stderr and
+    printed no tally. The tools are copied beside a catalog that vouches for the
+    zip, and `ssh` and `aws` are stubs first on PATH, so no network is touched."""
+    local_lib.serve(*FILE_AND_DIRECTORY)
+    cli = tmp_path / "cli"
+    (cli / "tools").mkdir(parents=True)
+    here = pathlib.Path(__file__).resolve().parent
+    for name in ("refusal.py", "refaudio_local.py", "refaudio_fetch.py", "refaudio_s3.py"):
+        shutil.copy(here / name, cli / "tools" / name)
+    (cli / "refaudio").mkdir()
+    shutil.copy(local_lib.refaudio / "catalog.json", cli / "refaudio" / "catalog.json")
+    (tmp_path / "ssh").write_text(f"#!{sys.executable}\nimport sys\nsys.stdout.buffer.write(b'R' * 8)\n",
+                                  encoding="utf-8")
+    (tmp_path / "aws").write_text(
+        f"#!{sys.executable}\nimport shutil, sys\nshutil.copy({str(local_lib.packs / PACK)!r}, sys.argv[-2])\n",
+        encoding="utf-8")
+    for stub in ("ssh", "aws"):
+        (tmp_path / stub).chmod(0o755)
+    for k in ("REFAUDIO_LOCAL", "REFAUDIO_SSH", "REFAUDIO_ROOT", "REFAUDIO_S3", "REFAUDIO_S3_PROFILE"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setenv("REFAUDIO_LOCAL", str(local_lib.packs))
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
+    p = subprocess.run([sys.executable, str(cli / "tools" / tool), *argv], cwd=cli,
+                       capture_output=True, text=True, timeout=120)
+    assert p.returncode == rl.FAIL, p.stderr
+    assert p.stderr == "", p.stderr
+    lines = p.stdout.splitlines()
+    assert "FileExistsError" in lines[lines.index("FAIL     a/b.wav") + 1]
+    assert lines[-1] == "1 fetched, 1 failed"
+    cache = cli / "refaudio" / "cache"
+    assert sorted(q.relative_to(cache).as_posix() for q in cache.rglob("*") if q.is_file()) == [_path("a")]
