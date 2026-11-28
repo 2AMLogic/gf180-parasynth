@@ -224,3 +224,60 @@ def test_control_a_curve_with_no_resonance_is_refused_at_assembly():
     flat_b = (hz, _synth("hp2", hz, gain_db=9.0, f0=10300.0, q=0.9))
     assert wf.resonance_db(*flat_a) < 3.0
     assert wf.resonance_db(*flat_b) < 3.0
+
+
+# ---------------------------------------------------------------------------
+# from_artifact: a record that cannot be read or shaped is REFUSED at the
+# callee, naming the file (#1939 row 4)
+# ---------------------------------------------------------------------------
+MALFORMED_RECORDS = {
+    "truncated": b'{"curves": ',
+    "non-utf8": b'{"curves": "\xff\xfe"}',
+    "no-curves": b"{}",
+    "json-list": b"[]",
+    "curves-list": b'{"curves": []}',
+    "curve-not-an-object": b'{"curves": {"Hbp1": 5}}',
+    "ragged-curve": b'{"curves": {"Hbp1": {"hz": [[1, 2], [3]], "db": [1, 2]}}}',
+}
+
+
+@pytest.mark.parametrize("name", sorted(MALFORMED_RECORDS))
+def test_from_artifact_refuses_a_malformed_record_naming_the_file(tmp_path, name):
+    """A JSONDecodeError, UnicodeDecodeError, KeyError, TypeError or
+    AttributeError left this reader as a bare traceback at `main()` and at
+    `werner_fig9.check()`, which handle `Refused` only (exit 1 on
+    origin/main @ e2d1bae7, every shape above), while
+    `cymbal_band_balance.filter_record()` converted the same classes at its
+    own call site. Stated here instead, where the file is known."""
+    p = tmp_path / f"{name}.json"
+    p.write_bytes(MALFORMED_RECORDS[name])
+    with pytest.raises(wf.Refused,
+                       match=r"could not be read as a werner_fig4 record \(\w+: .*\)"
+                             r".*git checkout") as raised:
+        wf.from_artifact(p)
+    assert str(p) in str(raised.value)
+
+
+def test_from_artifact_refuses_a_record_it_cannot_read_naming_the_file(tmp_path):
+    p = tmp_path / "unreadable.json"
+    p.write_text('{"curves": {}}')
+    p.chmod(0o000)
+    try:
+        p.read_text()
+    except OSError:
+        pass
+    else:
+        pytest.skip(f"{p.name} is still readable after chmod 000 (running as root?)")
+    with pytest.raises(wf.Refused,
+                       match=r"could not be read as a werner_fig4 record "
+                             r"\(PermissionError: .*unreadable\.json.*\)") as raised:
+        wf.from_artifact(p)
+    assert isinstance(raised.value.__cause__, OSError)
+
+
+def test_control_from_artifact_still_refuses_an_absent_record_with_its_own_message(tmp_path):
+    """The pre-check keeps its message: it names the command that writes the
+    record, which no parse failure can."""
+    p = tmp_path / "absent.json"
+    with pytest.raises(wf.Refused, match=r"absent\.json is absent; run --json"):
+        wf.from_artifact(p)

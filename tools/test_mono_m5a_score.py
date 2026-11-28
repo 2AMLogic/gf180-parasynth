@@ -48,6 +48,29 @@ def test_m5b_missing_reference_injection_refuses_with_the_mutation_name():
         score.measure(case_id="M5B", inject="REF_MISSING")
 
 
+def test_frozen_manifest_that_cannot_be_read_refuses_naming_it(tmp_path, monkeypatch):
+    """#1939 row 3: `read_bytes()` on the frozen manifest was outside every
+    try, so an absent one left `measure` as a bare FileNotFoundError -- a
+    traceback at lead_drive_337 (exit 1), an execution-error record with a
+    `traceback` field at run_case (origin/main @ e2d1bae7). The audio read
+    two lines below already refused; the manifest read now does the same."""
+    absent = tmp_path / "absent.json"
+    monkeypatch.setattr(score, "MANIFEST", absent)
+    with pytest.raises(score.Refused, match=r"frozen M5A manifest .*absent\.json"):
+        score.measure()
+
+
+def test_model_wav_destination_that_cannot_be_written_refuses_naming_it(tmp_path):
+    """#1939 row 3: the WAV write at the end of `measure` was outside every
+    try. A destination that cannot be created must be stated -- after the
+    whole render, since that is where the write is -- not left as the bare
+    FileExistsError it was on origin/main @ e2d1bae7."""
+    blocker = tmp_path / "blocker"
+    blocker.write_text("a regular file where a directory is needed")
+    with pytest.raises(score.Refused, match=r"blocker[/\\]x\.wav"):
+        score.measure(case_id="M5B", output_path=blocker / "x.wav")
+
+
 def test_pitch_deviation_uses_cents_not_semitone_percent():
     assert score._cents_error(2.0, 1.0) == pytest.approx(1200.0)
     assert score._cents_error(440.0 * 2 ** (1 / 12), 440.0) == pytest.approx(100.0)
