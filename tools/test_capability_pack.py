@@ -30,7 +30,9 @@ from __future__ import annotations
 
 import math
 import pathlib
+import subprocess
 import sys
+import textwrap
 
 import numpy as np
 import pytest
@@ -41,7 +43,9 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "audition"))
 
+import audio_measure as am                                           # noqa: E402
 import capability_pack as cp                                        # noqa: E402
+import exit_contract                                                # noqa: E402
 import refprofile as rp                                             # noqa: E402
 from dsp import SR, note_hz                                         # noqa: E402
 
@@ -318,3 +322,230 @@ def test_the_pack_crosses_its_two_axes_rather_than_sampling_a_diagonal():
     notes = {n for _, n in osc}
     assert len(waves) == 2 and len(notes) == 2
     assert set(osc) == {(w, n) for w in waves for n in notes}
+
+
+# ===========================================================================
+# an evidence refusal RAISED by the measurement: REFUSED, never a traceback
+# ===========================================================================
+#
+# #1884, this file's row of the #1782 census. `measure` reaches
+# `audio_measure`, which refuses two ways: by RETURNING a `not ok` estimate,
+# which `measure_oscillator` turns into its `"refused"` key, and by RAISING
+# `InsufficientEvidence`, which `cmd_run` did not catch -- its one handler
+# named `rp.Refused`, a class `InsufficientEvidence` is not. A raised refusal
+# therefore left as a traceback and exit 1: a refusal rendered as FAIL, the
+# inversion `tools/exit_contract.py` (#804) exists to prevent.
+#
+# TWO SITES RAISE, and both are driven through the real `main` -> `cmd_run` ->
+# `measure` path with only the apparatus replaced (`_patches`):
+#
+#   `am.peak`         a record holding NaN or Inf: `require_finite` raises
+#                     `NonFiniteAudio`, an `InsufficientEvidence`
+#   `am.waveform_id`  a record of TEN or ELEVEN whole periods: `cycle_average`
+#                     needs ten and passes, then `harmonic_signature` calls
+#                     `.require()` on a projection that needs twelve, which
+#                     raises a PLAIN `InsufficientEvidence`
+#
+# WRONG BEFORE RIGHT (1). #1884's curation traced the second site as
+# UNREACHABLE: its probes covered silence, a 1e-12 sine, DC, and 50- and
+# 200-sample records, every one of which stops at the guarded `cycle_average`
+# or at `refine_f0`. None sat in the window between `cycle_average`'s ten
+# periods and `windowed_tone_amplitude`'s twelve. A 10- or 11-period ramp at
+# the pack's own notes raises, measured on `origin/main` 560a1580. It is the
+# census's NAMED site, and it is the control that tells `except
+# am.InsufficientEvidence` apart from a handler written against the NaN
+# subclass alone.
+#
+# The control in the other direction: `InsufficientEvidence` IS an
+# `AssertionError`, so `except AssertionError` would catch it too -- and would
+# relabel a bug in the pack as a refusal. A plain `AssertionError` raised inside
+# `measure` must still leave as a traceback and exit 1.
+_AT = 100                     # one sample, well inside every record the rig renders
+
+#: mode -> (the step whose record is damaged, the damage)
+_NON_FINITE = {
+    "nan":        ("saw-48",       lambda x: _with(x, _AT, np.nan)),
+    "inf":        ("square-36",    lambda x: _with(x, _AT, np.inf)),
+    "all-nan":    ("saw-36",       lambda x: np.full(len(x), np.nan)),
+    "nan-open":   ("filter-open",  lambda x: _with(x, _AT, np.nan)),
+    "nan-closed": ("filter-closed", lambda x: _with(x, _AT, np.nan)),
+}
+
+
+def _with(x, i, value):
+    y = np.array(x, dtype=np.float64)
+    y[i] = value
+    return y
+
+
+def _short(note, periods):
+    """The first `periods` whole periods of a record and nothing after them: a
+    rig that returned early. The ramp at `note` has a whole number of samples
+    per period, so the cut is exact."""
+    return lambda x: x[: int(periods * round(SR / integer_period_hz(note)))]
+
+
+def _plain_assertion(y, note, sr=SR):
+    raise AssertionError("a bug in the pack, not a refusal")
+
+
+class _Rig:
+    """Mini V3's two methods over closed-form audio, with ONE record damaged.
+
+    `poison` names the step whose record `how` damages. Every other step still
+    measures, so the refusal has to come from the damaged record and not from a
+    rig that cannot render at all."""
+
+    def __init__(self, poison=None, how=None):
+        self.poison, self.how = poison, how
+        self.knob, self.filter_step = 1.0, False
+
+    def set_point(self, cut, res):
+        self.knob, self.filter_step = cut, True
+        return cut
+
+    def osc_tone(self, wave, note, seconds=0.5):
+        x = saw_at(note) if wave == "saw" else rect_at(note)
+        if self.filter_step:
+            self.filter_step = False
+            step = "filter-open" if self.knob > 0.5 else "filter-closed"
+            x = one_pole(x, 200.0 + 6000.0 * self.knob ** 2)
+        else:
+            step = f"{wave}-{note}"
+        return self.how(x) if step == self.poison else x
+
+
+def _patches(mode):
+    """The apparatus substitutions for `mode`, as attributes of `capability_pack`
+    to replace: the rig `build_rig` returns, or -- for the control -- one
+    measurement. Nothing else is touched; the dispatch, `cmd_run`, `measure`
+    and `audio_measure` are the shipped ones."""
+    if mode == "plain-assertion":
+        return {"build_rig": lambda pack: _Rig(),
+                "measure_oscillator": _plain_assertion}
+    if mode.startswith("short-"):
+        _, note, periods = mode.split("-")
+        return {"build_rig": lambda pack: _Rig(f"saw-{note}",
+                                               _short(int(note), int(periods)))}
+    return {"build_rig": lambda pack: _Rig(*_NON_FINITE[mode])}
+
+
+def _arm(monkeypatch, mode):
+    for name, value in _patches(mode).items():
+        monkeypatch.setattr(cp, name, value)
+
+
+def _rig_for(mode):
+    """The rig a fake `reference_rigs.MiniV3Rig()` hands the SHIPPED script: the
+    same damage as `_patches`, but supplied at the plugin boundary so nothing
+    in `capability_pack` itself is replaced."""
+    if mode == "plain-assertion":
+        # The AssertionError must surface INSIDE `measure()` (the handler under
+        # test), not in `render()`: osc_tone returns cleanly, and the record
+        # raises when `measure_oscillator` converts it with np.asarray.
+        class _BadRecord:
+            def __array__(self, dtype=None, copy=None):
+                raise AssertionError("a bug in the pack, not a refusal")
+
+        class _Buggy(_Rig):
+            def osc_tone(self, wave, note, seconds=0.5):
+                self.filter_step = False
+                return _BadRecord()
+        return _Buggy()
+    if mode.startswith("short-"):
+        _, note, periods = mode.split("-")
+        return _Rig(f"saw-{note}", _short(int(note), int(periods)))
+    return _Rig(*_NON_FINITE[mode])
+
+
+def _process(mode: str, tmp_path) -> subprocess.CompletedProcess:
+    """Execute `tools/capability_pack.py --run` itself, as `__main__`, in a real
+    interpreter, so the number a batch runner sees is the exit status of the
+    shipped entry point (`sys.exit(main())`) and not a return value. Only the
+    plugin host (`dawdreamer`, `reference_rigs`) is faked; the script's own
+    functions are the shipped ones."""
+    driver = tmp_path / "drive_pack.py"
+    driver.write_text(textwrap.dedent(f"""
+        import runpy, sys, types
+        sys.path.insert(0, {str(HERE)!r})
+        import test_capability_pack as t
+        sys.modules["dawdreamer"] = types.ModuleType("dawdreamer")
+        rr = types.ModuleType("reference_rigs")
+        rr.MiniV3Rig = lambda: t._rig_for({mode!r})
+        sys.modules["reference_rigs"] = rr
+        sys.argv = [{str(HERE / "capability_pack.py")!r}, "--run"]
+        runpy.run_path(sys.argv[0], run_name="__main__")
+    """), encoding="utf-8")
+    return subprocess.run([sys.executable, str(driver)], capture_output=True,
+                          text=True, timeout=300, cwd=str(ROOT))
+
+
+def test_the_classes_the_handler_rests_on():
+    """Pinned because the whole fix is a class boundary: `rp.Refused` does not
+    cover an evidence refusal, and `AssertionError` covers too much."""
+    assert issubclass(am.NonFiniteAudio, am.InsufficientEvidence)
+    assert not issubclass(am.InsufficientEvidence, rp.Refused)
+    assert issubclass(am.InsufficientEvidence, AssertionError)
+
+
+@pytest.mark.parametrize("mode", sorted(_NON_FINITE))
+def test_a_non_finite_record_from_the_rig_is_REFUSED_not_a_traceback(
+        mode, monkeypatch, capsys, tmp_path):
+    """A refusal that reaches the CLI as an exception must come out as the
+    pack's REFUSED with its reason, and must write no report: measurements on
+    disk beside a refusal are a result nobody can trust."""
+    _arm(monkeypatch, mode)
+    out = tmp_path / "report.json"
+    assert cp.main(["--run", "--out", str(out)]) == cp.REFUSED
+    stdout = capsys.readouterr().out
+    assert stdout.startswith("REFUSED"), stdout
+    assert "non-finite" in stdout and "this is not audio" in stdout, stdout
+    assert not out.exists(), "a refused run must not write a report"
+
+
+@pytest.mark.parametrize("note", [36, 48])
+@pytest.mark.parametrize("periods", [10, 11])
+def test_a_record_of_ten_or_eleven_periods_is_REFUSED_at_the_census_site(
+        note, periods, monkeypatch, capsys):
+    """The census's named site. Twelve periods of the same ramp read back as a
+    saw, so what refuses below is the LENGTH of the record, not a stub that
+    cannot render one."""
+    assert cp.measure_oscillator(_short(note, 12)(saw_at(note)), note)["waveform"] == "saw"
+    with pytest.raises(am.InsufficientEvidence) as e:
+        cp.measure_oscillator(_short(note, periods)(saw_at(note)), note)
+    assert type(e.value) is am.InsufficientEvidence, type(e.value)
+    assert "too few periods" in str(e.value)
+    _arm(monkeypatch, f"short-{note}-{periods}")
+    assert cp.main(["--run"]) == cp.REFUSED
+    stdout = capsys.readouterr().out
+    assert stdout.startswith("REFUSED") and "too few periods" in stdout, stdout
+
+
+def test_a_plain_AssertionError_inside_measure_is_still_an_execution_error(
+        monkeypatch, capsys):
+    """The control for the handler, and the reason it is not `except
+    AssertionError`: a bug in the pack is an execution error, never a refusal
+    (`tools/refusal.py`'s "inverse defect")."""
+    _arm(monkeypatch, "plain-assertion")
+    with pytest.raises(AssertionError) as e:
+        cp.main(["--run"])
+    assert type(e.value) is AssertionError, type(e.value)
+    assert "REFUSED" not in capsys.readouterr().out
+
+
+def test_the_process_exits_REFUSED_with_no_traceback_on_a_nan_record(tmp_path):
+    """The defect as a batch runner saw it: exit 1 with a traceback. Now exit 2,
+    the status `tools/exit_contract.py` declares as no-evidence."""
+    assert cp.REFUSED == exit_contract.REFUSED
+    p = _process("nan", tmp_path)
+    assert p.returncode == cp.REFUSED, (p.returncode, p.stderr[-400:])
+    assert p.stdout.startswith("REFUSED") and "non-finite" in p.stdout, p.stdout[-400:]
+    assert "Traceback" not in p.stderr and "Traceback" not in p.stdout, p.stderr[-400:]
+
+
+def test_the_process_still_exits_1_with_a_traceback_on_a_plain_AssertionError(tmp_path):
+    p = _process("plain-assertion", tmp_path)
+    assert p.returncode == 1, (p.returncode, p.stdout[-200:], p.stderr[-400:])
+    assert "Traceback" in p.stderr and "AssertionError: a bug in the pack" in p.stderr, \
+        p.stderr[-400:]
+    assert "REFUSED" not in p.stdout, "a bug must not be relabelled a refusal"
