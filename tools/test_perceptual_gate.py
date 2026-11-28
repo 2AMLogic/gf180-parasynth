@@ -273,3 +273,159 @@ def test_loudness_db_survives_a_clip_shorter_than_one_block():
     # the pack tools' old loud() raised ValueError here (e.max() of an empty
     # array); loudness_db zero-pads and answers.
     assert np.isfinite(g.loudness_db(np.ones(100)))
+
+
+# ===========================================================================
+# #1860: the corpus reader refuses what scipy and aifc raise, so an unreadable
+# file is REFUSED (exit 2) instead of a traceback that the batch runner
+# renders FAIL. Seven tools read their corpus through `load_wav`; every one of
+# them inherited the unguarded `wavfile.read`. Each control below was run RED
+# first (recorded in the PR): on main `load_wav` let FileNotFoundError,
+# IsADirectoryError and ValueError escape from the WAV branch, and Error /
+# EOFError from the AIFF branch.
+# ===========================================================================
+import struct                                                # noqa: E402
+import subprocess                                            # noqa: E402
+import warnings                                              # noqa: E402
+
+#: What an unpulled git-lfs checkout leaves in the tree: a small text file
+#: with the recording's name. It passes every `exists()` guard.
+LFS_POINTER = ("version https://git-lfs.github.com/spec/v1\n"
+               "oid sha256:" + "0" * 64 + "\nsize 12345\n")
+
+
+def _sine(n=SR // 4, peak=0.5):
+    return peak * np.sin(2 * np.pi * 1000.0 * np.arange(n) / SR)
+
+
+def _write_rf64(path, sr, sig):
+    """`wavfile.write` emits RIFF only. RF64 is the same file with 64-bit sizes
+    in a `ds64` chunk before `fmt `, and 0xFFFFFFFF where they used to be."""
+    q = np.round(sig * 32767).astype("<i2")
+    fmt = struct.pack("<HHIIHH", 1, 1, sr, sr * 2, 2, 16)
+    riff = 4 + (8 + 28) + (8 + len(fmt)) + (8 + len(q.tobytes()))
+    ds64 = struct.pack("<I", 28) + struct.pack("<QQQI", riff, len(q.tobytes()), len(q), 0)
+    path.write_bytes(b"RF64" + struct.pack("<I", 0xFFFFFFFF) + b"WAVE" + b"ds64" + ds64
+                     + b"fmt " + struct.pack("<I", 16) + fmt + b"data"
+                     + struct.pack("<I", 0xFFFFFFFF) + q.tobytes())
+
+
+def _write_aiff(path, sig, sr=SR):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        import aifc                  # what `_load_aiff` itself imports
+    with aifc.open(str(path), "wb") as f:
+        f.setnchannels(1)
+        f.setsampwidth(2)
+        f.setframerate(sr)
+        f.writeframes(np.round(sig * 32767).astype(">i2").tobytes())
+
+
+def _damage(path, kind):
+    """`absent` leaves nothing on disk; the rest are files an `exists()` guard
+    accepts and a reader cannot decode."""
+    if kind == "git-lfs-pointer":
+        path.write_text(LFS_POINTER)
+    elif kind == "empty":
+        path.write_bytes(b"")
+    elif kind == "directory":
+        path.mkdir()
+    elif kind == "truncated":
+        _write_aiff(path, _sine())
+        path.write_bytes(path.read_bytes()[:40])      # the header, no frames
+    return path
+
+
+@pytest.mark.parametrize("kind", ["absent", "git-lfs-pointer", "empty", "directory"])
+def test_load_wav_refuses_what_scipy_raises_naming_the_path(kind, tmp_path):
+    p = _damage(tmp_path / f"{kind}.WAV", kind)
+    with pytest.raises(g.Refused) as why:
+        g.load_wav(p)
+    assert str(p) in str(why.value), str(why.value)
+    assert type(why.value) is g.Refused, type(why.value)
+
+
+@pytest.mark.parametrize("kind", ["absent", "git-lfs-pointer", "empty", "directory", "truncated"])
+def test_load_wav_refuses_an_unreadable_aiff_naming_the_path(kind, tmp_path):
+    p = _damage(tmp_path / f"{kind}.aif", kind)
+    with pytest.raises(g.Refused) as why:
+        g.load_wav(p)
+    assert str(p) in str(why.value), str(why.value)
+    assert type(why.value) is g.Refused, type(why.value)
+
+
+def test_load_wav_does_not_relabel_an_implementation_error_as_a_refusal(monkeypatch, tmp_path):
+    """The guard's own adversary (rule 8): it names what a missing or malformed
+    file raises, and nothing wider. A bug in the reader is an EXECUTION ERROR
+    (tools/refusal.py) and must keep escaping as one."""
+    def bug(path):
+        raise TypeError("a defect in the reader, not a precondition")
+    monkeypatch.setattr(g.wavfile, "read", bug)
+    with pytest.raises(TypeError):
+        g.load_wav(tmp_path / "x.WAV")
+
+
+def test_load_wav_reads_an_rf64_file_as_the_known_answer(tmp_path):
+    """The other direction of the same rule: the refusal must not over-refuse.
+    RF64 is one of the three headers scipy accepts, and a 1 kHz sine at 0.5
+    full scale has its answer fixed independently of this repository."""
+    sig = _sine()
+    p = tmp_path / "rf64.wav"
+    _write_rf64(p, SR, sig)
+    twin = tmp_path / "riff.wav"
+    g.wavfile.write(str(twin), SR, np.round(sig * 32767).astype("<i2"))
+    x, sr = g.load_wav(p)
+    y, _ = g.load_wav(twin)
+    assert sr == SR and abs(np.abs(x).max() - 0.5) < 1e-3, np.abs(x).max()
+    assert np.array_equal(x, y)
+
+
+def test_load_wav_reads_a_good_aiff_as_the_known_answer(tmp_path):
+    p = tmp_path / "good.aif"
+    _write_aiff(p, _sine())
+    x, sr = g.load_wav(p)
+    assert sr == SR and abs(np.abs(x).max() - 0.5) < 1e-3, np.abs(x).max()
+
+
+def _refused_argv(cmd, tmp_path):
+    """Each subcommand's first read of the corpus, on a corpus that cannot be
+    read. `survey` and `bar_for` refuse an ABSENT file with their own guard, so
+    for those the file is present and is a git-lfs pointer."""
+    out = tmp_path / "out.json"
+    if cmd == "pair-lfs":
+        p = _damage(tmp_path / "target.WAV", "git-lfs-pointer")
+        return ["pair", "BD", str(p), str(tmp_path / "other.WAV")]
+    if cmd == "pair-absent":
+        return ["pair", "BD", str(tmp_path / "absent.WAV"), str(tmp_path / "other.WAV")]
+    if cmd == "survey":
+        p = tmp_path / g.target_rel("RS")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        _damage(p, "git-lfs-pointer")
+        return ["survey", "--refs", str(tmp_path), "--sounds", "RS", "--out", str(out)]
+    return [cmd, "--refs", str(tmp_path), "--out", str(out),
+            *(["--other", str(tmp_path)] if cmd == "crosscheck" else [])]
+
+
+@pytest.mark.parametrize("cmd", ["pair-lfs", "pair-absent", "survey", "prove", "rank", "crosscheck"])
+def test_main_exits_refused_when_a_reference_cannot_be_read(cmd, tmp_path, capsys):
+    """`main` catches `refusal.Refused`, the base class, so every subcommand's
+    read is covered by that one handler -- on main this was a traceback because
+    the reader raised scipy's own exceptions, which are not refusals."""
+    argv = _refused_argv(cmd, tmp_path)
+    assert g.main(argv) == g.EXIT_REFUSED, argv
+    err = capsys.readouterr().err
+    assert err.startswith("REFUSED:") and "Traceback" not in err, err
+    assert str(tmp_path) in err, err
+    assert not (tmp_path / "out.json").exists()
+
+
+def test_the_script_exits_2_without_a_traceback_on_a_git_lfs_pointer(tmp_path):
+    """The process, as `tools/run_all.py` sees it: exit status 2 and a REFUSED
+    line on stderr, which is what separates NO-VERDICT from FAIL."""
+    p = _damage(tmp_path / "bd8" / "BD5050.WAV", "git-lfs-pointer")
+    r = subprocess.run([sys.executable, str(pathlib.Path(g.__file__).resolve()),
+                        "pair", "BD", str(p), str(tmp_path / "other.WAV")],
+                       capture_output=True, text=True, timeout=120)
+    assert r.returncode == g.EXIT_REFUSED, r.stderr[-600:]
+    assert r.stderr.startswith("REFUSED:") and str(p) in r.stderr, r.stderr[-600:]
+    assert "Traceback" not in r.stderr + r.stdout, r.stderr[-600:]

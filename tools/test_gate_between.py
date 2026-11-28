@@ -252,3 +252,38 @@ def test_main_exits_refused_when_a_gate_is_unrun(tmp_path, monkeypatch, capsys):
     rc, _ = _run_between_main(tmp_path)
     assert gb.decide(q, False)["status"] == "REFUSED"
     assert rc == exit_contract.REFUSED
+
+
+# --- #1860: the gate's reader raises its own Refused; `main` must exit 2 -----
+LFS_POINTER = ("version https://git-lfs.github.com/spec/v1\n"
+               "oid sha256:" + "0" * 64 + "\nsize 12345\n")
+
+
+@pytest.mark.parametrize("trigger", ["git-lfs-pointer", "sibling-refusal"])
+def test_an_unreadable_render_in_ours_dir_exits_refused(tmp_path, monkeypatch, capsys, trigger):
+    """#1860. `main` read `--ours/<SOUND>.wav` through `pg.load_wav` outside
+    any `try`, and had no refusal handler at all, so the gate's `Refused` (a
+    sibling: this module defines no class of its own) escaped as a traceback
+    (exit 1). START RED on main for both triggers. The tables are empty: the
+    read happens before anything depends on them."""
+    import json
+
+    import exit_contract
+    f = tmp_path / "BD.wav"
+    if trigger == "git-lfs-pointer":
+        f.write_text(LFS_POINTER)
+    else:
+        f.write_text("stand-in: load_wav is stubbed")
+
+        def refuse(path):
+            raise pg.Refused(f"{path}: raised by perceptual_gate, a sibling module")
+        monkeypatch.setattr(pg, "load_wav", refuse)
+    tp = tmp_path / "tables.json"
+    tp.write_text(json.dumps({"tables": {}}))
+    out = tmp_path / "out.json"
+    rc = gb.main(["--refs", str(tmp_path), "--tables", str(tp), "--ours", str(tmp_path),
+                  "--out", str(out)])
+    assert rc == exit_contract.REFUSED
+    err = capsys.readouterr().err
+    assert err.startswith("REFUSED:") and str(f) in err, err[-400:]
+    assert not out.exists()

@@ -360,3 +360,27 @@ def test_injection_turns_its_known_answer_red(name):
     finally:
         tc.INJECT.discard(name)
     INJECTED[name]()               # and green again once removed
+
+
+# ---- #1860: an unreadable take reaches the gate's reader, and exits 2 --------
+LFS_POINTER = ("version https://git-lfs.github.com/spec/v1\n"
+               "oid sha256:" + "0" * 64 + "\nsize 12345\n")
+
+
+@pytest.mark.parametrize("kind", ["git-lfs-pointer", "empty"])
+def test_an_unreadable_take_exits_2_through_ratepath16(monkeypatch, tmp_path, capsys, kind):
+    """#1860. `ratepath16` reads each gate target through `load_checked(refs,
+    rel)` with NO hash table, so nothing refuses a corrupted take before the
+    reader: a git-lfs pointer or a 0-byte file is a file, so `is_file()` passes
+    and it reaches `pg.load_wav`. `main` already catches `pg.Refused`; what was
+    missing is the reader's own guard. START RED on main: scipy's ValueError
+    escaped `main` as a traceback (exit 1)."""
+    monkeypatch.setattr(tc, "git", _fake_git({"head": "A", "dirty": ""}))
+    p = tmp_path / pg.target_rel("BD")
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(LFS_POINTER if kind == "git-lfs-pointer" else "")
+    out = tmp_path / "ratepath16.json"
+    assert tc.main(["ratepath16", "--refs", str(tmp_path), "--out", str(out)]) == 2
+    text = capsys.readouterr().out
+    assert "REFUSED" in text and str(p) in text, text[-400:]
+    assert not out.exists()

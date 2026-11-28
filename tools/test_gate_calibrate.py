@@ -471,3 +471,57 @@ def test_main_exits_refused_when_a_gate_is_unrun(tmp_path, monkeypatch, capsys):
     ("QUALIFIED", 0), ("NOT QUALIFIED", 0), ("DIAGNOSTIC (not authority): QUALIFIED", 0)])
 def test_decision_exit_maps_refused_only(status, code):
     assert gc.decision_exit({"status": status}) == code
+
+
+# --- #1860: the gate's reader raises its own Refused; `main` must exit 2 -----
+LFS_POINTER = ("version https://git-lfs.github.com/spec/v1\n"
+               "oid sha256:" + "0" * 64 + "\nsize 12345\n")
+
+
+@pytest.mark.parametrize("bad", ["absent", "git-lfs-pointer"])
+def test_measure_exits_refused_when_the_target_cannot_be_read(tmp_path, capsys, bad):
+    """#1860. `measure` reads the Fischer target through `pg.load_wav` outside
+    any `try`, and `main` had no refusal handler, so an absent target
+    (FileNotFoundError) or an unpulled git-lfs pointer (ValueError) escaped as
+    a traceback (exit 1). START RED on main. The refusal comes at the first
+    read, before any of the ~1,000 takes is touched."""
+    import exit_contract
+    refs = tmp_path / "refs"
+    if bad == "git-lfs-pointer":
+        p = refs / pg.target_rel("BD")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(LFS_POINTER)
+    out = tmp_path / "tables.json"
+    rc = gc.main(["measure", "--refs", str(refs), "--sounds", "BD", "--out", str(out)])
+    assert rc == exit_contract.REFUSED
+    err = capsys.readouterr().err
+    assert err.startswith("REFUSED:") and str(refs) in err, err[-400:]
+    assert not out.exists()
+
+
+@pytest.mark.parametrize("trigger", ["git-lfs-pointer", "sibling-refusal"])
+def test_calibrate_exits_refused_when_a_render_cannot_be_read(tmp_path, monkeypatch, capsys, trigger):
+    """#1860. The `calibrate` subcommand reads `--ours/<SOUND>.wav` through
+    `pg.load_wav` outside any `try`. START RED on main for both triggers: the
+    reader was unguarded, and `main` had no handler for the gate's class."""
+    import exit_contract
+    ours = tmp_path / "ours"
+    ours.mkdir()
+    f = ours / "BD.wav"
+    if trigger == "git-lfs-pointer":
+        f.write_text(LFS_POINTER)
+    else:
+        f.write_text("stand-in: load_wav is stubbed")
+
+        def refuse(path):
+            raise pg.Refused(f"{path}: raised by perceptual_gate, a sibling module")
+        monkeypatch.setattr(pg, "load_wav", refuse)
+    tp = tmp_path / "tables.json"
+    tp.write_text(json.dumps({"tables": {}}))
+    out = tmp_path / "calibrate.json"
+    rc = gc.main(["calibrate", "--refs", str(tmp_path), "--tables", str(tp),
+                  "--ours", str(ours), "--out", str(out)])
+    assert rc == exit_contract.REFUSED
+    err = capsys.readouterr().err
+    assert err.startswith("REFUSED:") and str(f) in err, err[-400:]
+    assert not out.exists()

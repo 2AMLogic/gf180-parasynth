@@ -6,6 +6,7 @@ import shutil
 import sys
 
 import numpy as np
+import pytest
 from scipy.io import wavfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -62,3 +63,50 @@ def test_full_path_on_synthetic_stand_in_corpus(tmp_path):
     assert 40 < g_f < 75 and 0 < g_s < g_f           # closed-form ordering
     assert res["recording_glide_spread_cents"] == abs(g_f - g_s)
     assert (tmp_path / "out.json").exists()
+
+
+# --- #1860: the gate's reader raises a SIBLING Refused; it must exit 2 -------
+LFS_POINTER = ("version https://git-lfs.github.com/spec/v1\n"
+               "oid sha256:" + "0" * 64 + "\nsize 12345\n")
+
+
+def _hit(f0, path=None, sr=44100):
+    """The closed-form stand-in the full-path test above measures, as a signal."""
+    t = np.arange(int(0.8 * sr)) / sr
+    ph = 2 * np.pi * (50 * t + (f0 - 50) * 0.020 * (1 - np.exp(-t / 0.020)))
+    y = np.concatenate([np.zeros(300), np.sin(ph) * np.exp(-t / 0.15)]) * 0.5
+    if path is not None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        wavfile.write(path, sr, np.round(y * 32767).astype(np.int16))
+    return y, sr
+
+
+@pytest.mark.parametrize("trigger", ["git-lfs-pointer", "sibling-refusal"])
+def test_the_gates_refusal_on_the_fischer_take_exits_2(tmp_path, monkeypatch, capsys, trigger):
+    """#1860. `run` reads the Fischer take through `perceptual_gate.load_wav`,
+    which raises perceptual_gate's OWN `Refused` -- a sibling of this module's
+    class. `main` caught `(Refused, pt.Refused)` alone, so that refusal escaped
+    as a traceback (exit 1). START RED on main for both triggers: the reader
+    was unguarded (scipy's ValueError), and the handler was narrow. The render
+    is stubbed (~10 s, and not what is under test); the estimator qualification
+    the real run performs first is not."""
+    import drum_verify as dv
+    import perceptual_gate as g
+    fis = tmp_path / dv.REF_MAIN["BD"][0]
+    sec = tmp_path / "second.wav"
+    _hit(56.0, sec)
+    monkeypatch.setattr(g, "render_ours", lambda sound: _hit(58.0))
+    if trigger == "git-lfs-pointer":
+        fis.parent.mkdir(parents=True, exist_ok=True)
+        fis.write_text(LFS_POINTER)
+    else:
+        _hit(58.0, fis)
+
+        def refuse(path):
+            raise g.Refused(f"{path}: raised by perceptual_gate, a sibling module")
+        monkeypatch.setattr(g, "load_wav", refuse)
+    out = tmp_path / "out.json"
+    assert b.main(["--refs", str(tmp_path), "--second", str(sec), "--out", str(out)]) == 2
+    text = capsys.readouterr().out
+    assert text.startswith("REFUSED:") and str(fis) in text, text[-400:]
+    assert not out.exists()
