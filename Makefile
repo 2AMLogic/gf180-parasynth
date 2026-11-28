@@ -145,6 +145,17 @@ help:
 ## clean half; `controls` runs the retained R1 width (INJECT_BUG_LADDER_XG25)
 ## on the same image and requires R1's recorded signature, first divergence
 ## y19 at frame 62 and 387 samples (--expect-first), not merely a failure.
+##
+## check_m1a_drive_report.py (#847) is the honesty gate on the M1A drive
+## experiment record (docs/scorecard/mono-m1a-miniv3/drive-experiment/): the
+## README's quoted partial ratios and h8 errors must still equal report.json,
+## and report.json["choice"] must still be null -- nothing promoted out of an
+## experiment recorded as "nothing is promoted". Its report path is
+## repo-root-relative and resolves because make (and so run_all.py) runs each
+## step from this directory. check_m1a_selection.py is NOT listed here and
+## does not need to be: it is already wired by directory-wide pytest
+## collection -- tools/test_check_m1a_selection.py imports and asserts on it
+## inside `pytest tools/` -- and is NOT to be retired (#847).
 verify:
 	@$(RUN) --timeout 7200 --json build/verification/verify.json \
 	  "$(PY) -m pytest model/ spec/ tools/ fpga/ pnr/ rtl-sketch/test_verify_ctl_blindness.py rtl-sketch/test_verify_drums.py rtl-sketch/test_synth_count.py -q" \
@@ -168,6 +179,7 @@ verify:
 	  "$(PY) fpga/verify_sd_dac.py --outdir build/sd-dac" \
 	  "$(PY) rtl-sketch/verify_voice.py --set quick" \
 	  "$(PY) tools/check_decimator_saturation.py" \
+	  "$(PY) tools/check_m1a_drive_report.py" \
 	  "$(PY) tools/check_arty_evidence_binding.py" \
 	  "$(PY) tools/check_arty_evidence_binding.py --scope publication" \
 	  "$(PY) fpga/verify_xdc_binding.py" \
