@@ -99,3 +99,21 @@ def test_a_numeric_type_change_is_visible_even_when_the_value_compares_equal():
 ])
 def test_rows_container_differences_follow_the_comparator(old, new, expected):
     assert expected in dr.report(old, new)
+
+
+# ---- a record that cannot be read is REFUSED, not a traceback (#1757) ------
+@pytest.mark.parametrize("side", ["a", "b"])
+@pytest.mark.parametrize("record,kind", [([], "list"), (5, "int"), ("x", "str"), (None, "null"), ({}, "dict")],
+                         ids=["list", "int", "str", "null", "dict"])
+def test_cli_record_that_cannot_be_read_is_refused(tmp_path, capsys, record, kind, side):
+    """Either argument alone. Before the repair `[]`/`"x"` were exit 1 by
+    AttributeError at `.get`, `5`/`null` by TypeError at `set()`, and `{}` was
+    exit 0: a report on a record with no rows."""
+    good, bad = tmp_path / "good.json", tmp_path / "bad.json"
+    good.write_text(json.dumps(_rec()))
+    bad.write_text(json.dumps(record))
+    code = dr.main([str(bad), str(good)] if side == "a" else [str(good), str(bad)])
+    captured = capsys.readouterr()
+    # a refusal goes to stderr, as the usage error does, so stdout stays the report
+    assert code == 2 and "REFUSED" in captured.err and "bad.json" in captured.err, captured.err
+    assert "numeric leaves" not in captured.out

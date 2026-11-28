@@ -699,6 +699,22 @@ def test_cli_judge_on_a_record(tmp_path, capsys):
     assert json.loads((tmp_path / "j.json").read_text())["verdict"] == "NO CANDIDATE"
 
 
+@pytest.mark.parametrize("record,kind", [([], "list"), (5, "int"), ("x", "str"), (None, "null"), ({}, "dict")],
+                         ids=["list", "int", "str", "null", "dict"])
+def test_cli_judge_record_that_cannot_be_read_is_refused(tmp_path, capsys, record, kind):
+    """A record that PARSES but is not a JSON object, or has no `rows`, is REFUSED
+    with exit 2 and the path named (#1757). Before the repair `[]`/`5`/`"x"`/`null`
+    were exit 1 by AttributeError at `record.get`, and `{}` refused as "record
+    has no rows" without saying which record."""
+    p = tmp_path / "record.json"
+    p.write_text(json.dumps(record))
+    assert td.main(["judge", str(p), "--out", str(tmp_path / "j.json")]) == 2
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "record.json" in out, out
+    assert ("not a JSON object" if kind != "dict" else "missing required key(s) 'rows'") in out, out
+    assert not (tmp_path / "j.json").exists()
+
+
 # ---- CLI exit codes: a failure or a refusal is never exit 0 -----------------
 def test_cli_knownanswer_with_a_failing_harness_exits_1(tmp_path, monkeypatch):
     monkeypatch.setattr(td, "estimate", td.stub_levels)     # the start-red estimator

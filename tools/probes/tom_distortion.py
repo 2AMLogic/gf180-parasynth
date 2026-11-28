@@ -52,6 +52,7 @@ _REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
 if _REFUSAL_TOOLS not in sys.path:
     sys.path.append(_REFUSAL_TOOLS)
 import refusal  # noqa: E402
+import manifest as mf  # noqa: E402
 
 PREREG = ROOT / "docs" / "scorecard" / "tom-distortion-593" / "prereg.json"
 
@@ -1650,7 +1651,9 @@ def main(argv=None) -> int:
         elif a.cmd == "controls":
             res = controls_matrix()
         elif a.cmd == "judge":
-            res = judge(json.loads(a.record.read_text()), load_prereg())
+            rec = json.loads(a.record.read_text())
+            mf.require_keys(rec, "rows", f"the record at {a.record}", refused=Refused)
+            res = judge(rec, load_prereg())
         else:
             pr = load_prereg()
             if not a.refs.is_dir():

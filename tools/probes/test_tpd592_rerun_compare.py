@@ -3,6 +3,8 @@ import json
 import pathlib
 import sys
 
+import pytest
+
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import tpd592_rerun_compare as rc  # noqa: E402
 
@@ -54,3 +56,19 @@ def test_refuses_when_the_comparator_is_blind(tmp_path, monkeypatch):
 def test_nudge_changes_exactly_one_thing():
     assert len(rc.diff(REC, rc._nudge(REC))) == 1
     assert len(rc.diff({"provenance": {"x": 1.0}}, rc._nudge({"provenance": {"x": 1.0}}))) == 1
+
+
+# ---- a record that cannot be read is REFUSED, not a traceback (#1757) ------
+@pytest.mark.parametrize("side", ["old", "new"])
+@pytest.mark.parametrize("record,kind", [([], "list"), (5, "int"), ("x", "str"), (None, "null"), ({}, "dict")],
+                         ids=["list", "int", "str", "null", "dict"])
+def test_cli_record_that_cannot_be_read_is_refused(tmp_path, capsys, record, kind, side):
+    """Either argument alone. Before the repair a wrong-typed NEW was exit 1 by
+    TypeError at `_nudge`'s item assignment, a wrong-typed OLD was exit 1 as
+    "1 difference" (FAIL: the comparison ran and disagreed), and `{}` as NEW
+    was exit 0, IDENTICAL."""
+    good, bad = _write(tmp_path, "good.json", REC), _write(tmp_path, "bad.json", record)
+    code = rc.main([bad, good] if side == "old" else [good, bad])
+    out = capsys.readouterr().out
+    assert code == 2 and "REFUSED" in out and "bad.json" in out, out
+    assert "IDENTICAL" not in out

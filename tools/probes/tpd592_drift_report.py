@@ -16,17 +16,31 @@ a class, a verdict, a reason, a case identity, a key on one side only, a
 different number of rows -- is STRUCTURAL and listed. `provenance` is not
 compared, as in the comparator.
 
-Exit status is always 0: this is a report, and its reader decides what the
-differences mean. It does not judge whether a run still holds.
+Exit status is 0 for a report, and the report's reader decides what the
+differences mean: it does not judge whether a run still holds. A record that
+parses but cannot be read -- not a JSON object, or one without `rows` -- is
+REFUSED (exit 2) naming the file, rather than a traceback (exit 1, which
+tools/exit_contract.py reads as FAIL) or a report on nothing (#1757).
 """
 import json
+import pathlib
 import sys
 from collections import defaultdict
+
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
+import manifest as mf  # noqa: E402
 
 if __package__:
     from .tpd592_rerun_compare import diff, field_diff
 else:
     from tpd592_rerun_compare import diff, field_diff
+
+
+class Refused(refusal.Refused, RuntimeError):
+    """A stated missing precondition, distinct from pass and from fail."""
 
 
 def _num(v) -> bool:
@@ -86,8 +100,14 @@ def main(argv=None) -> int:
     if len(paths) != 2:
         print(__doc__.strip().splitlines()[0] + "\nusage: tpd592_drift_report.py A.json B.json", file=sys.stderr)
         return 2
-    a, b = (json.loads(open(p).read()) for p in paths)
-    print(report(a, b))
+    try:
+        recs = [json.loads(open(p).read()) for p in paths]
+        for path, rec in zip(paths, recs):
+            mf.require_keys(rec, "rows", f"the record at {path}", refused=Refused)
+    except Refused as e:
+        print(f"REFUSED: {e}", file=sys.stderr)
+        return 2
+    print(report(*recs))
     return 0
 
 

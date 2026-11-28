@@ -48,6 +48,7 @@ _REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
 if _REFUSAL_TOOLS not in sys.path:
     sys.path.append(_REFUSAL_TOOLS)
 import refusal  # noqa: E402
+import manifest as mf  # noqa: E402
 
 FAMILY = ("LT", "MT", "HT", "LC", "MC", "HC")
 PREREG = ROOT / "docs" / "scorecard" / "tom-conga-558" / "prereg.json"
@@ -721,9 +722,12 @@ def main(argv=None) -> int:
             res = ratepath16(a.refs)
         elif a.cmd == "judge":
             rec = json.loads(a.record.read_text())
+            mf.require_keys(rec, "rows", f"the record at {a.record}", refused=Refused)
             res = judge(rec, load_prereg())
             if a.twin:
-                res["post_hoc"] = post_hoc(rec, json.loads(a.twin.read_text()))
+                twin_rec = json.loads(a.twin.read_text())
+                mf.require_keys(twin_rec, "rows", f"the twin record at {a.twin}", refused=Refused)
+                res["post_hoc"] = post_hoc(rec, twin_rec)
             print(json.dumps(_json(res), indent=1))
         else:
             pr = load_prereg()
