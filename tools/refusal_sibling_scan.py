@@ -82,7 +82,21 @@ WHAT THIS SCAN RESOLVES that the #1160 one-off dotted-call grep could not:
     after it raises past the try, though the Call node sits in its body. So
     a call to an `async def` is credited by the tries around it and by the
     CLI boundary only when it is written `await <call>`; a bare call reads
-    `candidate-escape` with no guard and every origin uncovered.
+    `candidate-escape` with no guard and every origin uncovered;
+  * a handler that catches the refusal and hands it straight back covers
+    nothing (#1995): `except callee.Refused: raise` -- bare, `raise e`,
+    `raise e from None`, on a branch or not -- was read by the class it
+    NAMES alone, so the census credited the frame and a refusal the
+    interpreter lets out of it read `covered(exact)`. Such a handler now
+    contributes no origin and no shape at the call site, at the CLI boundary
+    and in a stem collision alike, and the site stays a candidate. What is
+    NOT a re-raise keeps crediting as before: `raise RuntimeError(...) from
+    e` (the refusal was caught; what leaves is the author's own exception),
+    and a re-raise inside a try of the handler's own whose handler catches
+    it again. `if unrecoverable: raise` is not decidable from the AST and
+    stays a candidate -- the price, a row to triage; a `with
+    contextlib.suppress(...)` around a re-raise is not modelled and reads
+    the same way;
   * a SUBCLASS of the module's family, raised under its own name, is a raise
     of that family (#1956): the raise was keyed on the NAME `Refused`, so a
     def whose raises were all of a local `class Unbindable(Refused)` read as
@@ -213,6 +227,8 @@ BASE_STEM = "refusal"                   # the module defining the common base cl
 # scope's name, not the enclosing function's (nor the module's)
 SCOPE_NODES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
 FUNCTION_NODES = (ast.FunctionDef, ast.AsyncFunctionDef)
+# the two ways to read the exception being handled back without naming it
+EXC_READBACK = ("exc_info", "exception")
 
 
 # ---------------------------------------------------------------------------
@@ -528,10 +544,35 @@ def enclosing_try_parents(tree: ast.AST, call: ast.AST) -> list[ast.Try]:
     return out
 
 
-def handler_origins(mod: ModInfo, by_stem: dict[str, list[ModInfo]],
-                    handler: ast.ExceptHandler) -> tuple[set[str], str]:
-    """(origins this handler catches, shape) -- shape in
-    {base, exact, local, broad, other}."""
+def _reraises_caught(mod: ModInfo, node: ast.Raise,
+                     handler: ast.ExceptHandler) -> bool:
+    """Whether `node` re-raises the exception `handler` caught: a bare
+    `raise`; an exception expression rooted at the handler's own bound name
+    -- `raise e`, `raise e from None`, `raise e.with_traceback(tb)`; or one
+    read back from the interpreter -- `raise sys.exc_info()[1]`. `raise
+    RuntimeError(...) from e` is none of these: the refusal was caught, and
+    what leaves the frame is the author's own exception (#1995)."""
+    exc = node.exc
+    if exc is None:
+        return True
+    while isinstance(exc, (ast.Attribute, ast.Call, ast.Subscript)):
+        if isinstance(exc, ast.Call):
+            f = exc.func
+            if (isinstance(f, ast.Attribute) and f.attr in EXC_READBACK
+                    and isinstance(f.value, ast.Name)
+                    and (mod.resolve_head(f.value.id, node) or f.value.id) == "sys"):
+                return True
+            exc = f
+        else:
+            exc = exc.value
+    return bool(handler.name) and isinstance(exc, ast.Name) and exc.id == handler.name
+
+
+def _handler_type(mod: ModInfo, by_stem: dict[str, list[ModInfo]],
+                  handler: ast.ExceptHandler) -> tuple[set[str], str]:
+    """(origins the handler's TYPE names, shape) -- shape in
+    {base, exact, local, broad, other}. The class it catches, whatever its
+    body does; `handler_origins` adds the body."""
     t = handler.type
     if t is None:
         return set(), "broad"
@@ -577,6 +618,56 @@ def handler_origins(mod: ModInfo, by_stem: dict[str, list[ModInfo]],
     shape = ("base" if "base" in shapes else "broad" if "broad" in shapes
              else "other" if shapes == {"other"} or "other" in shapes and not origins
              else "+".join(sorted(shapes - {"other"})))
+    return origins, shape
+
+
+def handler_reraises(mod: ModInfo, by_stem: dict[str, list[ModInfo]],
+                     handler: ast.ExceptHandler, own: set[str]) -> bool:
+    """Whether a refusal `handler` catches can leave the frame it guards:
+    its body re-raises the caught exception where no try of the handler's
+    own keeps it. Conditional or not -- `if unrecoverable: raise` is not
+    decidable from the AST, and a false candidate is the allowed price. A
+    re-raise written in a def nested in the body counts too: called there,
+    a bare `raise` hands back the exception being handled."""
+    for node in ast.walk(handler):
+        if not isinstance(node, ast.Raise) or not _reraises_caught(mod, node, handler):
+            continue
+        if not any(_keeps(mod, by_stem, tr, own)
+                   for tr in enclosing_try_parents(handler, node)):
+            return True
+    return False
+
+
+def _keeps(mod: ModInfo, by_stem: dict[str, list[ModInfo]],
+           tr: ast.Try, own: set[str]) -> bool:
+    """Whether the try statement `tr` keeps every refusal of `own` from
+    leaving it. The handler that runs is the first one that could catch the
+    re-raised refusal: a base or broad one, or an exact one naming an origin
+    of `own`. It keeps the refusal when it names all of `own` -- which
+    origin is in flight is not in the AST -- and does not itself re-raise.
+    Anything else is False: a false candidate, never a false covered."""
+    for h in tr.handlers:
+        origins, shape = _handler_type(mod, by_stem, h)
+        if shape == "other":
+            continue                  # not about refusals: never the one that runs
+        if shape not in ("base", "broad") and not (own and own & origins):
+            continue                  # names no origin of `own`: not the one that runs
+        return ((shape in ("base", "broad") or own <= origins)
+                and not handler_reraises(mod, by_stem, h, origins))
+    return False
+
+
+def handler_origins(mod: ModInfo, by_stem: dict[str, list[ModInfo]],
+                    handler: ast.ExceptHandler) -> tuple[set[str], str]:
+    """(origins this handler catches, shape) -- shape in
+    {base, exact, local, broad, other}. The type names the class; the body
+    decides whether the frame keeps it. A handler that re-raises the refusal
+    it caught covers nothing (#1995) and is (set(), "other") -- the shape
+    every caller already passes over, so the call site's tries, the CLI
+    boundary and the stem-collision branch withhold credit alike."""
+    origins, shape = _handler_type(mod, by_stem, handler)
+    if shape != "other" and handler_reraises(mod, by_stem, handler, origins):
+        return set(), "other"
     return origins, shape
 
 

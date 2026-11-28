@@ -34,6 +34,10 @@ refusal: each row is held to the interpreter's verdict on the planted files,
 the same-named class outside the family is the rule-8 control, and each of
 the fix's three parts is reverted in memory to show which control goes red
 without it. One blind spot the fix leaves is pinned as such: a dotted base.
+The #1995 section plants a handler that re-raises the refusal it caught, which
+was read by the class it names alone: one row per reader of a handler, each
+held to the interpreter's verdict the same way, and the rule reverted in
+memory to show the crediting variant red on each shape.
 """
 from __future__ import annotations
 
@@ -3033,3 +3037,508 @@ def test_with_every_local_class_counted_the_rule_8_control_goes_red(tmp_path):
     got = [s for s in mut.scan(files, idx) if "caller_sub_unguarded.py" in s["site"]]
     assert [(s["callee"], s["classification"]) for s in got] == [
         ("subclass_callee.load_capture", "candidate-escape")], got
+
+
+# --- #1995 controls: a re-raising handler is not a guard ------------------------
+# `handler_origins` read the class a handler NAMES and never its body, so
+# `except callee.Refused: raise` caught the refusal and handed it straight
+# back while the census credited the frame with containing it: `covered(exact)`
+# for a refusal the interpreter lets out of it. The rule now lives in
+# `handler_origins` alone, where all three readers of a handler meet -- the
+# call site's own tries, the CLI boundary and the stem-collision branch -- so
+# there is one planted row per reader. Every row is held to what Python does
+# with the planted code first and to the census second, and the rule is then
+# reverted in memory to show the crediting variant red on each shape. Found in
+# review of #1803 (#1600) but older than it: the pre-#1600 scanner at 528a228b
+# reads the same `covered(exact)` (the issue's own two-scanner probe).
+#
+# Rule 8, the input that would defeat it: a re-raise has to NAME the caught
+# refusal for the rule to see one -- bare, by the handler's bound name, or read
+# back from `sys.exc_info()` / `sys.exception()` -- and every spelling of that
+# is a row below. What defeats it is a guard that keeps the refusal without a
+# try: `with contextlib.suppress(callee.Refused): raise` reads as a re-raise, a
+# false candidate in the allowed direction, and is stated in the docstring.
+
+RERAISE_CALLEE = '''
+import refusal
+
+class Refused(refusal.Refused, Exception):
+    pass
+
+CALLS = []                       # written when `load` RUNS: a 'caught' is never a silent callee
+
+def load(path):
+    CALLS.append(path)
+    raise Refused(f"unusable: {path}")
+'''
+
+# a second family module, so a handler can name two origins at once
+RERAISE_SIBLING = '''
+import refusal
+
+class Refused(refusal.Refused, Exception):
+    pass
+'''
+
+# the issue's caller.py: the call in go's OWN try, whose handler re-raises
+RR_BARE = '''
+import callee
+
+def go(p):
+    try:
+        return callee.load(p)
+    except callee.Refused:
+        raise
+'''
+
+RR_BOUND_NAME = '''
+import callee
+
+def go(p):
+    try:
+        return callee.load(p)
+    except callee.Refused as e:
+        raise e
+'''
+
+RR_FROM_NONE = '''
+import callee
+
+def go(p):
+    try:
+        return callee.load(p)
+    except callee.Refused as e:
+        raise e from None
+'''
+
+RR_TRACEBACK = '''
+import callee
+
+def go(p):
+    try:
+        return callee.load(p)
+    except callee.Refused as e:
+        raise e.with_traceback(e.__traceback__)
+'''
+
+RR_EXC_INFO = '''
+import sys
+import callee
+
+def go(p):
+    try:
+        return callee.load(p)
+    except callee.Refused:
+        raise sys.exc_info()[1]
+'''
+
+RR_AFTER_WORK = '''
+import callee
+
+def go(p):
+    try:
+        return callee.load(p)
+    except callee.Refused as e:
+        print(f"REFUSED  {e}")
+        raise
+'''
+
+RR_NESTED_DEF = '''
+import callee
+
+def go(p):
+    try:
+        return callee.load(p)
+    except callee.Refused:
+        def bail():
+            raise                  # called while the refusal is still being handled
+        bail()
+'''
+
+RR_CONDITIONAL = '''
+import callee
+
+UNRECOVERABLE = True
+
+def go(p):
+    try:
+        return callee.load(p)
+    except callee.Refused as e:
+        if UNRECOVERABLE:
+            raise
+        return f"REFUSED  {e}"
+'''
+
+RR_RETURN_OR_RAISE = '''
+import callee
+
+STRICT = True
+
+def go(p):
+    try:
+        return callee.load(p)
+    except callee.Refused:
+        if not STRICT:
+            return None
+        raise
+'''
+
+RR_EXIT_OR_RAISE = '''
+import sys
+import callee
+
+STRICT = True
+
+def go(p):
+    try:
+        return callee.load(p)
+    except callee.Refused:
+        if not STRICT:
+            sys.exit(2)
+        raise
+'''
+
+RR_OTHER_EXCEPTION = '''
+import callee
+
+def go(p):
+    try:
+        return callee.load(p)
+    except callee.Refused as e:
+        raise RuntimeError(f"unusable input: {e}") from e
+'''
+
+RR_NESTED_TRY_CATCHES = '''
+import callee
+
+def go(p):
+    try:
+        return callee.load(p)
+    except callee.Refused as e:
+        try:
+            raise                     # handed back inside a try of the handler's own...
+        except callee.Refused:         # ...that catches it again
+            return f"REFUSED  {e}"
+'''
+
+RR_NESTED_TRY_SIBLING = '''
+import callee
+import refusal
+
+class Refused(refusal.Refused, Exception):   # the caller's OWN class: a sibling
+    pass
+
+def go(p):
+    try:
+        return callee.load(p)
+    except callee.Refused as e:
+        try:
+            raise
+        except Refused:              # a sibling catches nothing here
+            return f"REFUSED  {e}"
+'''
+
+RR_NESTED_TRY_FINALLY_ONLY = '''
+import callee
+
+def go(p):
+    try:
+        return callee.load(p)
+    except callee.Refused:
+        try:
+            raise
+        finally:
+            print("cleanup")
+'''
+
+RR_NESTED_TRY_RERAISES = '''
+import callee
+
+def go(p):
+    try:
+        return callee.load(p)
+    except callee.Refused:
+        try:
+            raise
+        except callee.Refused:
+            raise                    # caught again, and handed back again
+'''
+
+RR_NESTED_TRY_PARTIAL = '''
+import callee
+import other
+
+def go(p):
+    try:
+        return callee.load(p)
+    except (callee.Refused, other.Refused) as e:
+        try:
+            raise
+        except callee.Refused:      # names ONE of the two: which is in flight is not in the AST
+            return f"REFUSED  {e}"
+'''
+
+RR_BASE_RERAISE = '''
+import callee
+import refusal
+
+def go(p):
+    try:
+        return callee.load(p)
+    except refusal.Refused:
+        raise
+'''
+
+RR_BROAD_RERAISE = '''
+import callee
+
+def go(p):
+    try:
+        return callee.load(p)
+    except Exception:
+        raise
+'''
+
+# the input that must keep crediting: the body does not hand the refusal back
+RR_NEVER_RAISES = '''
+import callee
+
+def go(p):
+    try:
+        return callee.load(p)
+    except callee.Refused as e:
+        return f"REFUSED  {e}"
+'''
+
+RR_CLI_HEAD = '''
+import sys
+import callee
+
+def go(p):
+    return callee.load(p)           # unguarded HERE; the guard, if any, is below
+'''
+
+RR_CLI_EXACT_RERAISE = RR_CLI_HEAD + '''
+def main(p):
+    try:
+        return go(p)
+    except callee.Refused as e:
+        print(f"REFUSED  {e}", file=sys.stderr)
+        raise
+'''
+
+RR_CLI_BASE_RERAISE = RR_CLI_HEAD.replace("import callee\n", "import callee\nimport refusal\n") + '''
+def main(p):
+    try:
+        return go(p)
+    except refusal.Refused as e:
+        print(f"REFUSED  {e}", file=sys.stderr)
+        raise
+'''
+
+RR_CLI_EXACT_KEEPS = RR_CLI_HEAD + '''
+def main(p):
+    try:
+        return go(p)
+    except callee.Refused as e:
+        print(f"REFUSED  {e}", file=sys.stderr)
+        return 2
+'''
+
+CALLER_AMBIG_RERAISE = '''
+import refusal
+from play import run
+
+def go(p):
+    try:
+        return run(p)
+    except refusal.Refused:
+        raise
+'''
+
+RR_CONDITIONAL_LENIENT = RR_CONDITIONAL.replace("UNRECOVERABLE = True", "UNRECOVERABLE = False")
+RR_RETURN_LENIENT = RR_RETURN_OR_RAISE.replace("STRICT = True", "STRICT = False")
+RR_EXIT_LENIENT = RR_EXIT_OR_RAISE.replace("STRICT = True", "STRICT = False")
+
+ESCAPE = ("candidate-escape", "none", ["callee"])
+
+# (caller, the def to run, what Python does with it, the census row)
+RERAISE_ROWS = [
+    pytest.param(RR_BARE, "go", "escaped", ESCAPE, id="bare-raise-the-issue-shape"),
+    pytest.param(RR_BOUND_NAME, "go", "escaped", ESCAPE, id="raise-e"),
+    pytest.param(RR_FROM_NONE, "go", "escaped", ESCAPE, id="raise-e-from-none"),
+    pytest.param(RR_TRACEBACK, "go", "escaped", ESCAPE, id="raise-e-with-traceback"),
+    pytest.param(RR_EXC_INFO, "go", "escaped", ESCAPE, id="raise-sys-exc-info"),
+    pytest.param(RR_AFTER_WORK, "go", "escaped", ESCAPE, id="raise-after-some-work"),
+    pytest.param(RR_NESTED_DEF, "go", "escaped", ESCAPE, id="raise-in-a-def-nested-in-the-handler"),
+    pytest.param(RR_CONDITIONAL, "go", "escaped", ESCAPE, id="conditional-raise-taken"),
+    pytest.param(RR_CONDITIONAL_LENIENT, "go", "caught", ESCAPE, id="conditional-raise-not-taken"),
+    pytest.param(RR_RETURN_OR_RAISE, "go", "escaped", ESCAPE, id="return-or-raise-strict"),
+    pytest.param(RR_RETURN_LENIENT, "go", "caught", ESCAPE, id="return-or-raise-lenient"),
+    pytest.param(RR_EXIT_OR_RAISE, "go", "escaped", ESCAPE, id="exit-or-raise-strict"),
+    pytest.param(RR_EXIT_LENIENT, "go", "exited", ESCAPE, id="exit-or-raise-lenient"),
+    pytest.param(RR_BASE_RERAISE, "go", "escaped", ESCAPE, id="base-handler-that-reraises"),
+    pytest.param(RR_BROAD_RERAISE, "go", "escaped", ESCAPE, id="broad-handler-that-reraises"),
+    pytest.param(RR_NESTED_TRY_SIBLING, "go", "escaped", ESCAPE,
+                 id="nested-try-with-a-sibling-handler"),
+    pytest.param(RR_NESTED_TRY_FINALLY_ONLY, "go", "escaped", ESCAPE,
+                 id="nested-try-with-finally-only"),
+    pytest.param(RR_NESTED_TRY_RERAISES, "go", "escaped", ESCAPE, id="nested-try-that-reraises"),
+    pytest.param(RR_NESTED_TRY_PARTIAL, "go", "caught", ESCAPE,
+                 id="nested-try-naming-one-of-two-origins"),
+    pytest.param(RR_CLI_EXACT_RERAISE, "main", "escaped", ESCAPE, id="cli-boundary-exact-reraise"),
+    pytest.param(RR_CLI_BASE_RERAISE, "main", "escaped", ESCAPE, id="cli-boundary-base-reraise"),
+    pytest.param(RR_OTHER_EXCEPTION, "go", "relabeled",
+                 ("covered(exact)", "exact", []), id="another-exception-is-not-a-reraise"),
+    pytest.param(RR_NESTED_TRY_CATCHES, "go", "caught",
+                 ("covered(exact)", "exact", []), id="nested-try-catches-it-again"),
+    pytest.param(RR_NEVER_RAISES, "go", "caught",
+                 ("covered(exact)", "exact", []), id="handler-that-never-raises"),
+    pytest.param(RR_CLI_EXACT_KEEPS, "main", "caught",
+                 ("covered(cli-exact)", "none", []), id="cli-boundary-that-keeps"),
+]
+
+
+def _reraise_tree(tmp_path, extra: dict[str, str]) -> list[pathlib.Path]:
+    """`callee.py`, whose `load` refuses; `other.py`, a second family a
+    planted handler may name; and one caller per entry."""
+    files = []
+    for name, body in (("callee", RERAISE_CALLEE), ("other", RERAISE_SIBLING)):
+        p = tmp_path / f"{name}.py"
+        p.write_text(body)
+        files.append(p)
+    for name, body in extra.items():
+        q = tmp_path / f"{name}.py"
+        q.write_text(body)
+        files.append(q)
+    return files
+
+
+def _refusal_verdict(monkeypatch, tmp_path: pathlib.Path, caller: str,
+                     fn: str = "go") -> str:
+    """What the INTERPRETER does with a planted sync caller: 'caught' when
+    `fn` returns after the callee RAISED, 'escaped' when the callee's own
+    Refused leaves it, 'relabeled' when another exception leaves it instead,
+    'exited' when it exits -- and 'not-run' when the callee was never
+    reached, a defect in the planting rather than a verdict."""
+    callee = _import(monkeypatch, tmp_path / "callee.py")
+    if (tmp_path / "other.py").exists():
+        _import(monkeypatch, tmp_path / "other.py")   # a caller may name a second family
+    mod = _import(monkeypatch, tmp_path / f"{caller}.py")
+    try:
+        getattr(mod, fn)("x")
+    except callee.Refused:
+        return "escaped"
+    except SystemExit:
+        return "exited"
+    except Exception:                                  # noqa: BLE001
+        return "relabeled"
+    else:
+        return "caught" if callee.CALLS else "not-run"
+
+
+@pytest.mark.parametrize("src,fn,python,row", RERAISE_ROWS)
+def test_the_census_row_of_a_reraising_handler_follows_the_interpreter(
+        tmp_path, monkeypatch, src, fn, python, row):
+    """A handler that catches the refusal and hands it back is no guard,
+    held to what Python does. The first twenty-one rows are the re-raise in
+    its shapes -- bare, by name, `from None`, with a traceback, read back
+    from `sys.exc_info()`, after some work, in a def nested in the body, on
+    a branch taken or not, as a return-or-raise or an exit-or-raise, under a
+    base or a broad handler, inside a try of the handler's own that does not
+    keep it, and at the CLI boundary -- and the census withholds credit from
+    every one. Four of them are the rule's own stated cost, a false
+    candidate in the allowed direction: Python keeps the refusal when the
+    branch is not taken (three rows) and when the nested try names the one
+    origin in flight, and which branch runs and which origin is in flight
+    are not in the AST. The last four rows are the inputs that must keep
+    crediting: another exception is not a re-raise (the refusal was caught;
+    what leaves is the author's own), a nested try that catches it again
+    keeps it, a handler that never raises covers as it always did, and so
+    does a CLI boundary that keeps the refusal."""
+    files = _reraise_tree(tmp_path, {"caller_rr": src})
+    assert _refusal_verdict(monkeypatch, tmp_path, "caller_rr", fn) == python, src
+    idx = rss.build_index(files)
+    got = _sites_for(files, idx, "caller_rr")
+    assert len(got) == 1, got
+    assert (got[0]["classification"], got[0]["guard"], got[0]["uncovered"]) == row, got
+
+
+def test_handler_origins_reads_the_body_as_well_as_the_type(tmp_path):
+    """The mechanism, at the function the issue names. The TYPE of the
+    issue's handler is `exact` for callee, and that reading is right and
+    stays; what was missing is the body, which hands the refusal back.
+    `handler_origins` returns (set(), "other") for it -- the shape every
+    caller already passes over -- and what the type alone says is kept
+    apart in `_handler_type`, because the nested-try rule has to ask which
+    handler would run before it can ask whether that handler keeps the
+    refusal."""
+    files = _reraise_tree(tmp_path, {"caller_rr": RR_BARE, "caller_keep": RR_NEVER_RAISES})
+    idx = rss.build_index(files)
+    by_stem = rss.stem_map(idx)
+    for name, want in (("caller_rr", (set(), "other")), ("caller_keep", ({"callee"}, "exact"))):
+        mod = idx[str(tmp_path / f"{name}.py")]
+        h = [n for n in ast.walk(mod.tree) if isinstance(n, ast.ExceptHandler)]
+        assert len(h) == 1, (name, h)
+        assert rss._handler_type(mod, by_stem, h[0]) == ({"callee"}, "exact"), name
+        assert rss.handler_origins(mod, by_stem, h[0]) == want, name
+
+
+def test_a_reraising_handler_at_the_cli_boundary_is_no_boundary_guard(tmp_path):
+    """`cli_boundary_guards` reads the same handlers and gets the same
+    reading. The exact handler `main()` writes is still IN the list, the
+    way an unrelated handler is -- as (set(), "other") -- so it covers no
+    site by presence; the base one likewise. A boundary that keeps the
+    refusal is the control's other side, and reads as it did before."""
+    files = _reraise_tree(tmp_path, {"caller_exact": RR_CLI_EXACT_RERAISE,
+                                     "caller_base": RR_CLI_BASE_RERAISE,
+                                     "caller_keeps": RR_CLI_EXACT_KEEPS})
+    idx = rss.build_index(files)
+    by_stem = rss.stem_map(idx)
+    want = {"caller_exact": [(set(), "other")], "caller_base": [(set(), "other")],
+            "caller_keeps": [({"callee"}, "exact")]}
+    for name, row in want.items():
+        assert rss.cli_boundary_guards(idx[str(tmp_path / f"{name}.py")], by_stem) == row, name
+
+
+def test_a_reraising_base_guard_settles_no_stem_collision(tmp_path):
+    """The third reader of a handler. The collision branch credits a base
+    or broad guard around the call for every same-stem candidate alike; a
+    base handler that hands the refusal back settles nothing, so the site
+    is named, not guessed -- `ambiguous-callee`, as with no guard at all.
+    The interpreter's verdict is not re-run here: which module the import
+    binds is the undecidable fact the branch exists for."""
+    files = _collision_tree(tmp_path, PLAY_ALPHA, PLAIN, "caller_amb_rr", CALLER_AMBIG_RERAISE)
+    idx = rss.build_index(files)
+    got = _sites_for(files, idx, "caller_amb_rr")
+    assert len(got) == 1, got
+    assert (got[0]["classification"], got[0]["guard"]) == ("ambiguous-callee", "none"), got
+    assert len(got[0]["candidates"]) == 2, got
+
+
+# the one line that withholds credit; reverted, the scanner is the variant
+# that credits a re-raising handler
+RERAISE_RULE = '    if shape != "other" and handler_reraises(mod, by_stem, handler, origins):'
+
+
+def test_with_the_reraise_rule_reverted_every_withheld_row_is_covered_again(tmp_path):
+    """The crediting variant: `handler_origins` back to reading the class a
+    handler names and nothing of its body. Each row the rule withholds
+    reads `covered(...)` under it -- the false covered, red here and green
+    only through the rule -- and each row that must keep crediting reads
+    the same under both, so the revert gives back exactly the defect and
+    nothing else. The collision row flips the same way, to `covered(base)`."""
+    mut = _scanner_with(RERAISE_RULE, "    if False:")
+    for p in RERAISE_ROWS:
+        src, row = p.values[0], p.values[3]   # the interpreter's verdict is not re-run here
+        files = _reraise_tree(tmp_path, {"caller_rr": src})
+        got = [s for s in mut.scan(files, mut.build_index(files)) if "caller_rr.py" in s["site"]]
+        assert len(got) == 1, (p.id, got)
+        if row == ESCAPE:
+            assert got[0]["classification"].startswith("covered"), (p.id, got[0])
+        else:
+            got0 = (got[0]["classification"], got[0]["guard"], got[0]["uncovered"])
+            assert got0 == row, (p.id, got[0])
+    files = _collision_tree(tmp_path, PLAY_ALPHA, PLAIN, "caller_amb_rr", CALLER_AMBIG_RERAISE)
+    got = [s for s in mut.scan(files, mut.build_index(files)) if "caller_amb_rr.py" in s["site"]]
+    assert [(s["classification"], s["guard"]) for s in got] == [("covered(base)", "base")], got
