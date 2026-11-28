@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "model"), str(ROOT / "tools")]
 import voice_fx as vf
 import mono_m5a_score as score
+import audio_measure as am
 import refusal
 from exit_contract import REFUSED
 from measure_m5a_filter_oversample import _compare_incremental
@@ -182,7 +183,14 @@ def main(argv=None) -> int:
         if args.rect_gain_q15 is not None:
             set_rect_gain(args.rect_gain_q15)
         measure(args.case, args.out)
-    except refusal.Refused as exc:
+    # The estimator's own refusal is listed BY CLASS beside `Refused` (#1751,
+    # #1763, #1907): `score.measure` reaches `harmonic_signature` unguarded on
+    # every stage vector, and `InsufficientEvidence` subclasses AssertionError,
+    # so this clause could not see it -- a stage the estimator cannot measure
+    # left as an exit-1 traceback, a refusal rendered as FAIL. Not
+    # AssertionError, not Exception: an unrelated fault stays an execution
+    # error (test_measure_mono_pulse_2x.py carries that control).
+    except (refusal.Refused, am.InsufficientEvidence) as exc:
         print(f"REFUSED: {exc}")
         return REFUSED
     return 0
