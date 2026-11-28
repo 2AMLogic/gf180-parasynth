@@ -61,12 +61,18 @@ below 20 Hz and inverting is zero-phase and has no state, so it cannot
 contribute a settling tail of its own to a measurement of settling. A causal
 high-pass used as the analysis instrument here would answer with its own
 transient -- the exact confusion this file exists to remove.
+
+EXIT STATUS. 0 qualified; 1 NOT QUALIFIED, a measurement that came out against
+the gate (the lines below that say REFUSED are this outcome); 2 REFUSED, the
+apparatus -- `--json` named a destination that could not receive the record,
+so nothing was measured, or the record was lost after the case ran.
 """
 from __future__ import annotations
 
 import argparse
 import json
 import math
+import pathlib
 
 import numpy as np
 
@@ -239,6 +245,28 @@ def clip_invariance(t20_ms_target: float, clip_s: float = CLIP_S,
     return out
 
 
+def _prepare_destination(path: str) -> str | None:
+    """Make ``path`` able to receive the record before the case runs: a
+    refusal reason, or None.
+
+    A missing parent is made here.  A directory given as the file, or a parent
+    that cannot be made, is a refusal with nothing measured; found after the
+    case instead, it was a ``FileNotFoundError`` and exit 1 -- this probe's
+    NOT QUALIFIED (#2040)."""
+    target = pathlib.Path(path)
+    # is_dir() is inside the try: it re-raises EACCES (unsearchable ancestor) and
+    # ENAMETOOLONG, which would exit 1 with a traceback instead of REFUSING.
+    try:
+        is_dir = target.is_dir()
+        if not is_dir:
+            target.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        return f"--json {path}: its parent directory cannot be created ({exc.strerror or exc})"
+    if is_dir:
+        return f"--json {path} is a directory; name the file to write"
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--json")
@@ -247,6 +275,11 @@ def main(argv: list[str] | None = None) -> int:
                          "remove this qualification's own premise and watch "
                          "it REFUSE rather than report")
     a = ap.parse_args(argv)
+    if a.json is not None:
+        refused = _prepare_destination(a.json)
+        if refused:
+            print(f"REFUSED: {refused}")
+            return 2
     r = case(energy_frac=a.pedestal_frac)
     print(f"truth (by construction)        T20 = {r['true_t20_ms']:.1f} ms")
     print(f"sub-20 Hz pedestal             {100 * r['pedestal_energy_frac']:.1f} %"
@@ -315,9 +348,14 @@ def main(argv: list[str] | None = None) -> int:
     print()
     print("QUALIFIED: the decay gate must be read on the >= 20 Hz band"
           if ok else "NOT QUALIFIED")
-    if a.json:
-        with open(a.json, "w") as fh:
-            json.dump(r, fh, indent=2)
+    if a.json is not None:
+        try:
+            with open(a.json, "w") as fh:
+                json.dump(r, fh, indent=2)
+        except OSError as exc:
+            print(f"REFUSED: --json {a.json} was not written ({exc.strerror or exc}); "
+                  "the verdict above was measured, its record does not exist")
+            return 2
     return 0 if ok else 1
 
 

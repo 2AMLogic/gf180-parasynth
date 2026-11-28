@@ -566,6 +566,136 @@ def test_result_records_the_frozen_record_hash_not_just_its_path(tmp_path, capsy
     assert res["frozen_sha256"] == hashlib.sha256(f.read_bytes()).hexdigest(), res.get("frozen")
 
 
+# ---------------------------------------------------------------- the record's destination (#2100)
+# A slice of #2040's class: `--out` is required on both subcommands and was written
+# after the work, with no parent made. RED FIRST on main @ 8eb04e5b (2026-11-28),
+# through the real CLI: `freeze --out no/such/dir/f.json` exited 1 on
+# `FileNotFoundError` after the corpus was hashed, and `measure --out
+# no/such/dir/r.json` after the production render and the comparison. The
+# refusals take this probe's own path (`Refused` -> `main` -> REFUSED / NO VERDICT,
+# exit 2), so the tree-identity guard is faked clean rather than `_require_clean_tree`'d:
+# what is under test is the destination, not the commit.
+
+def _clean_tree(monkeypatch):
+    real_git = pt._git
+    monkeypatch.setattr(pt, "_git", lambda *a: "" if a[:2] == ("status", "--porcelain") else real_git(*a))
+
+
+def _nothing(*_a, **_k):
+    raise AssertionError("the work ran: a refusal must happen BEFORE it")
+
+
+def _unwritable(tmp_path, name, kind):
+    """A directory given as the file, or a parent that is a regular file."""
+    if kind == "a directory":
+        target = tmp_path / name
+        target.mkdir()
+        return target
+    (tmp_path / "not-a-dir").write_text("a file")
+    return tmp_path / "not-a-dir" / name
+
+
+def _freeze_out_cli(refs, out) -> list:
+    return ["freeze", "--refs", str(refs), "--out", str(out)]
+
+
+def _measure_out_cli(refs, frozen, out) -> list:
+    return ["measure", "--refs", str(refs), "--frozen", str(frozen), "--out", str(out)]
+
+
+def _measure_apparatus(tmp_path, monkeypatch, ref_long) -> pathlib.Path:
+    """A clean tree, a corpus holding CY5025, the low-tail controls passing and
+    the production render a planted record: everything `measure` checks before
+    it compares. Returns the frozen record."""
+    _clean_tree(monkeypatch)
+    sha = _fake_corpus(tmp_path, ref_long)
+    monkeypatch.setattr(pt.lt, "check", lambda: (True, []))
+    monkeypatch.setattr(pt.rc, "render_drum_solo", lambda *a, **k: (ref_long, SR))
+    return _frozen_for(tmp_path, sha)
+
+
+def test_a_frozen_record_under_a_missing_directory_is_written(tmp_path, capsys, monkeypatch, ref_long):
+    _clean_tree(monkeypatch)
+    _fake_corpus(tmp_path, ref_long)
+    out = tmp_path / "no" / "such" / "dir" / "frozen.json"
+    assert pt.main(_freeze_out_cli(tmp_path, out)) == 0
+    rec = json.loads(out.read_text())
+    assert rec["source_commit"] == pt._git("rev-parse", "HEAD")
+    assert set(rec["reference_sha256"]) == {"CY5025.WAV"}
+    assert f"FROZEN {out}" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("kind", ["a directory", "a parent that is a file"])
+def test_freeze_refuses_an_unwritable_out_before_the_tree_is_read(tmp_path, capsys, monkeypatch, kind):
+    target = _unwritable(tmp_path, "frozen.json", kind)
+    monkeypatch.setattr(pt, "require_tree_identity", _nothing)
+    assert pt.main(_freeze_out_cli(tmp_path, target)) == 2
+    out = capsys.readouterr().out
+    assert "REFUSED / NO VERDICT" in out and str(target) in out, out
+
+
+def test_freeze_refuses_a_record_it_cannot_write_and_does_not_announce_one(tmp_path, capsys, monkeypatch, ref_long):
+    """The pre-flight passed and the destination became unwritable before the
+    write. `FROZEN <path>` is the claim that a record exists: it must not print."""
+    _clean_tree(monkeypatch)
+    _fake_corpus(tmp_path, ref_long)
+    target = tmp_path / "frozen.json"
+    real_hashes = pt.source_hashes
+
+    def hashes_then_occupy():
+        hashes = real_hashes()
+        target.mkdir()
+        return hashes
+
+    monkeypatch.setattr(pt, "source_hashes", hashes_then_occupy)
+    assert pt.main(_freeze_out_cli(tmp_path, target)) == 2
+    out = capsys.readouterr().out
+    assert "REFUSED / NO VERDICT" in out and str(target) in out, out
+    assert "FROZEN" not in out, out
+
+
+def test_a_result_under_a_missing_directory_is_written(tmp_path, capsys, monkeypatch, ref_long):
+    frozen = _measure_apparatus(tmp_path, monkeypatch, ref_long)
+    out = tmp_path / "no" / "such" / "dir" / "result.json"
+    assert pt.main(_measure_out_cli(tmp_path, frozen, out)) == 0
+    res = json.loads(out.read_text())
+    assert res["frozen_sha256"] == hashlib.sha256(frozen.read_bytes()).hexdigest()
+    assert "CY5025 1.5s: energy" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("kind", ["a directory", "a parent that is a file"])
+def test_measure_refuses_an_unwritable_out_before_the_record_is_read(tmp_path, capsys, monkeypatch, kind):
+    """`--frozen` names a record that does not exist, which is `measure`'s own
+    refusal: the destination's must come first, or the two are indistinguishable."""
+    target = _unwritable(tmp_path, "result.json", kind)
+    monkeypatch.setattr(pt, "load_frozen", _nothing)
+    monkeypatch.setattr(pt.rc, "render_drum_solo", _no_render)
+    code = pt.main(_measure_out_cli(tmp_path, tmp_path / "no-such-frozen.json", target))
+    assert code == 2
+    out = capsys.readouterr().out
+    assert "REFUSED / NO VERDICT" in out and str(target) in out, out
+
+
+def test_measure_refuses_a_result_it_cannot_write_with_the_verdict_printed(tmp_path, capsys, monkeypatch, ref_long):
+    """The pre-flight passed and the destination became unwritable before the
+    write. The verdict was measured and is printed; the record a batch runner
+    reads does not exist, so the run is still REFUSED."""
+    frozen = _measure_apparatus(tmp_path, monkeypatch, ref_long)
+    target = tmp_path / "result.json"
+    real_compare = pt.compare_records
+
+    def compare_then_occupy(*a, **k):
+        res = real_compare(*a, **k)
+        target.mkdir(exist_ok=True)
+        return res
+
+    monkeypatch.setattr(pt, "compare_records", compare_then_occupy)
+    assert pt.main(_measure_out_cli(tmp_path, frozen, target)) == 2
+    out = capsys.readouterr().out
+    assert "CY5025 1.5s: energy" in out and "CY5025 2s: energy" in out, "the verdict must still be printed"
+    assert "REFUSED / NO VERDICT" in out and str(target) in out, out
+
+
 # ---------------------------------------------------------------- refusal boundary (CLI)
 # run_case.prepare refuses non-finite / cut-into-strike records with run_case.Refused and cymbal_mid
 # refuses a silent record with cymbal_bands.Refused -- classes distinct from this probe's Refused,

@@ -14,6 +14,7 @@ Red-first record: every test here was run against the pre-#803 probe and
 failed there (absent-vs-null read `identical=True`; absent sides reported
 `None`; no precondition refused non-int values) before the fix landed.
 """
+import json
 import pathlib
 import sys
 
@@ -108,3 +109,72 @@ def test_a_string_value_refuses_rather_than_answers(monkeypatch):
 def test_refusal_names_the_tree_and_the_value(monkeypatch):
     with pytest.raises(bii.Refused, match="baseline HEAD.*1\\.0"):
         _compare(monkeypatch, {"100": 1.0}, {"100": 1})
+
+
+# ---------------------------------------------------------------------------
+# the record's destination (#2100, a slice of #2040's class)
+#
+# RED FIRST on main @ 8eb04e5b (2026-11-28), through the real CLI:
+# `--json no/such/dir/a.json` exited 1 on `FileNotFoundError` after
+# `compare()` had run both --emit subprocesses and printed `0 register
+# address(es) moved`. A refusal here takes this probe's own path: `REFUSED:`
+# on stderr, exit 2.
+# ---------------------------------------------------------------------------
+
+def _canned_collection(monkeypatch):
+    """Both --emit subprocesses replaced: two trees whose kit_808 is identical,
+    so the comparison runs for real and finds nothing moved."""
+    payload = _payload({"kit_808": {"100": 5, "101": 7}})
+    monkeypatch.setattr(bii, "_emit_for", lambda path: payload)
+
+
+def _nothing(*_a, **_k):
+    raise AssertionError("the comparison ran: a refusal must happen BEFORE it")
+
+
+def _unwritable(tmp_path, kind):
+    """A directory given as the file, or a parent that is a regular file."""
+    if kind == "a directory":
+        target = tmp_path / "invariance.json"
+        target.mkdir()
+        return target
+    (tmp_path / "not-a-dir").write_text("a file")
+    return tmp_path / "not-a-dir" / "invariance.json"
+
+
+def test_a_record_under_a_missing_directory_is_written(tmp_path, capsys, monkeypatch):
+    _canned_collection(monkeypatch)
+    target = tmp_path / "no" / "such" / "dir" / "invariance.json"
+    assert bii.main(["--json", str(target)]) == 0
+    rec = json.loads(target.read_text())
+    assert rec["moved_addresses"] == {} and rec["cy_render_inputs_identical"] is True
+    assert "0 register address(es) moved" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("kind", ["a directory", "a parent that is a file"])
+def test_an_unwritable_destination_is_refused_before_the_comparison_runs(tmp_path, capsys, monkeypatch, kind):
+    target = _unwritable(tmp_path, kind)
+    monkeypatch.setattr(bii, "compare", _nothing)
+    assert bii.main(["--json", str(target)]) == 2
+    out, err = capsys.readouterr()
+    assert "REFUSED" in err and str(target) in err, err
+    assert out == "", "a refused run must not print a comparison"
+
+
+def test_a_write_failure_after_the_comparison_is_refused_with_the_verdict_printed(tmp_path, capsys, monkeypatch):
+    """The pre-flight passed and the destination became unwritable before the
+    write -- what a disk filling or a permission changing mid-run looks like."""
+    target = tmp_path / "invariance.json"
+    _canned_collection(monkeypatch)
+    real_compare = bii.compare
+
+    def compare_then_occupy(rev):
+        res = real_compare(rev)
+        target.mkdir()
+        return res
+
+    monkeypatch.setattr(bii, "compare", compare_then_occupy)
+    assert bii.main(["--json", str(target)]) == 2
+    out, err = capsys.readouterr()
+    assert "CY render inputs identical    : True" in out, "the verdict must still be printed"
+    assert "REFUSED" in err and str(target) in err, err

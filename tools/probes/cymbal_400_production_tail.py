@@ -26,6 +26,11 @@ PROPERTIES ARE REPORTED SEPARATELY (energy, decay) and `joint` is True only if
 both are DISCREPANT. Outcomes are MATCH / DISCREPANT / REFUSED; REFUSED is a
 first-class outcome and is never folded into either of the others.
 
+`--out` IS CHECKED BEFORE EITHER COMMAND RUNS. A missing parent is made; a
+directory given as the file, or a parent that cannot be made, is REFUSED
+(exit 2) with nothing done. A write that fails after the work is REFUSED too,
+with the verdict still printed: the record a batch runner reads does not exist.
+
 NO NEW NUMERIC DIAL. The discrepancy thresholds are run_case.TOLERANCE_POLICY's
 existing ones (energy ratio 3 dB; time 50 %), imported not re-chosen, so nothing
 is registered in tools/sensitivity.py by this probe. If a later stage-isolation
@@ -354,7 +359,26 @@ def load_frozen(path: pathlib.Path) -> dict:
                       f"measured; run `freeze` again to write one that can be") from e
 
 
+def _require_writable_out(path: pathlib.Path) -> None:
+    """REFUSE an `--out` that cannot receive the record, before either command runs.
+
+    A missing parent is made here. A directory given as the file, or a parent that cannot be made, is
+    a refusal with nothing done; found after the work instead, it was a `FileNotFoundError` and
+    exit 1 (#2040)."""
+    # is_dir() is inside the try: it re-raises EACCES (unsearchable ancestor) and
+    # ENAMETOOLONG, which would exit 1 with a traceback instead of REFUSING.
+    try:
+        is_dir = path.is_dir()
+        if not is_dir:
+            path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        raise Refused(f"--out {path}: its parent directory cannot be created ({e.strerror or e})") from e
+    if is_dir:
+        raise Refused(f"--out {path} is a directory; name the file to write")
+
+
 def cmd_freeze(a) -> int:
+    _require_writable_out(a.out)
     require_tree_identity()
     hashes = require_corpus(a.refs, None)
     try:
@@ -364,12 +388,17 @@ def cmd_freeze(a) -> int:
         corpus_commit = None            # not a git checkout: the file hashes are then the only pin
     rec = dict(FROZEN, corpus_git_commit=corpus_commit, source_commit=_git("rev-parse", "HEAD"), source_hashes=source_hashes(),
                reference_sha256=hashes)
-    a.out.write_text(json.dumps(rec, indent=1, sort_keys=True) + "\n")
+    try:
+        a.out.write_text(json.dumps(rec, indent=1, sort_keys=True) + "\n")
+    except OSError as e:
+        # `FROZEN <path>` below is the claim that a record exists; it must not print.
+        raise Refused(f"--out {a.out} was not written ({e.strerror or e}); no frozen record exists") from e
     print(f"FROZEN {a.out} at {rec['source_commit'][:10]}")
     return 0
 
 
 def cmd_measure(a) -> int:
+    _require_writable_out(a.out)
     try:
         frozen = load_frozen(pathlib.Path(a.frozen))
     except FileNotFoundError:
@@ -416,12 +445,23 @@ def cmd_measure(a) -> int:
     except Refused as e:
         print(f"REFUSED / NO VERDICT: {e}")
         return 2
-    a.out.write_text(json.dumps(res, indent=1, sort_keys=True, default=str) + "\n")
+    record_error = None
+    try:
+        a.out.write_text(json.dumps(res, indent=1, sort_keys=True, default=str) + "\n")
+    except OSError as e:
+        record_error = e
     for w, r in res["settings"]["CY5025"].items():
         print(f"CY5025 {w}: energy {r['energy']['verdict']}  decay {r['decay']['verdict']}  joint {r['joint']}")
         for k in ("energy", "decay"):
             if r[k]["verdict"] == "REFUSED":
                 print(f"  {k} REFUSED by {r[k]['reason']}")
+    if record_error is not None:
+        # The verdict was measured and is printed above; the record was not written, so the run is
+        # still no verdict for anything that reads the record rather than the exit status.
+        print(f"REFUSED / NO VERDICT: --out {a.out} was not written "
+              f"({record_error.strerror or record_error}); the verdict above was measured, "
+              "its record does not exist")
+        return 2
     return 0
 
 

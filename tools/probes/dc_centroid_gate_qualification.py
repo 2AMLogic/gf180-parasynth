@@ -5,11 +5,16 @@ The gate in ``dc_blocker.py`` measures the centroid over the entire FFT.  A
 10 Hz contaminant is outside the protected audible band, but it still changes
 that global number.  This probe uses a closed-form two-tone signal so the
 failure is independent of the drum model.
+
+Exit status: 0 qualified, 1 not qualified, 2 REFUSED -- ``--json`` names a
+destination that cannot receive the record, so nothing was measured, or the
+record was lost after the case ran.
 """
 from __future__ import annotations
 
 import argparse
 import math
+import pathlib
 
 import numpy as np
 
@@ -48,10 +53,37 @@ def case(contaminant_amplitude: float = 0.40) -> dict[str, float]:
     }
 
 
+def _prepare_destination(path: str) -> str | None:
+    """Make ``path`` able to receive the record before the case runs: a
+    refusal reason, or None.
+
+    A missing parent is made here.  A directory given as the file, or a parent
+    that cannot be made, is a refusal with nothing measured; found after the
+    case instead, it was a ``FileNotFoundError`` and exit 1 -- the status of
+    "measured and disagreed" (#2040)."""
+    target = pathlib.Path(path)
+    # is_dir() is inside the try: it re-raises EACCES (unsearchable ancestor) and
+    # ENAMETOOLONG, which would exit 1 with a traceback instead of REFUSING.
+    try:
+        is_dir = target.is_dir()
+        if not is_dir:
+            target.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        return f"--json {path}: its parent directory cannot be created ({exc.strerror or exc})"
+    if is_dir:
+        return f"--json {path} is a directory; name the file to write"
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--json", type=str)
     args = parser.parse_args(argv)
+    if args.json is not None:
+        refused = _prepare_destination(args.json)
+        if refused:
+            print(f"REFUSED: {refused}")
+            return 2
     result = case()
     print("global centroid:    "
           f"{result['global_before_hz']:.3f} -> {result['global_after_hz']:.3f} Hz "
@@ -63,10 +95,15 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     if not (abs(result["protected_shift_pct"]) < 0.01):
         return 1
-    if args.json:
+    if args.json is not None:
         import json
-        with open(args.json, "w") as output:
-            json.dump(result, output, indent=2)
+        try:
+            with open(args.json, "w") as output:
+                json.dump(result, output, indent=2)
+        except OSError as exc:
+            print(f"REFUSED: --json {args.json} was not written ({exc.strerror or exc}); "
+                  "the case above was measured, its record does not exist")
+            return 2
     return 0
 
 

@@ -36,6 +36,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
@@ -131,3 +132,63 @@ def test_the_refused_column_is_the_sweep_instruments_own_predicate():
         theirs = S.pair(f0, build_sr, D.FOLD_SINC_TAPS)
         assert {r["refused"] for r in mine} == {int(theirs["jit_refused"])}, (
             f0, build_sr)
+
+
+# ---------------------------------------------------------------------------
+# the report's destination (#2100, a slice of #2040's class)
+#
+# RED FIRST on main @ 8eb04e5b (2026-11-28), through the real CLI:
+# `--f0 440 --out no/such/dir/a.txt` exited 1 on `FileNotFoundError` after the
+# panel had been measured and printed. This probe always exited 0, so the
+# destination refusals below are the repository's REFUSED, 2.
+# ---------------------------------------------------------------------------
+
+def _nothing(*_a, **_k):
+    raise AssertionError("a row was measured: a refusal must happen BEFORE anything runs")
+
+
+def _unwritable(tmp_path, kind):
+    """A directory given as the file, or a parent that is a regular file."""
+    if kind == "a directory":
+        target = tmp_path / "panel.txt"
+        target.mkdir()
+        return target
+    (tmp_path / "not-a-dir").write_text("a file")
+    return tmp_path / "not-a-dir" / "panel.txt"
+
+
+def test_a_report_under_a_missing_directory_is_written(tmp_path, capsys):
+    target = tmp_path / "no" / "such" / "dir" / "panel.txt"
+    assert M.main(["--f0", "440", "--out", str(target)]) == 0
+    text = target.read_text()
+    out = capsys.readouterr().out
+    assert out.startswith("band=") and out.endswith(text), "--out is 'write the report here too'"
+    assert text.startswith("octave_mechanism") and "440" in text
+
+
+@pytest.mark.parametrize("kind", ["a directory", "a parent that is a file"])
+def test_an_unwritable_destination_is_refused_before_any_row_is_measured(tmp_path, capsys, monkeypatch, kind):
+    target = _unwritable(tmp_path, kind)
+    monkeypatch.setattr(M, "row", _nothing)
+    assert M.main(["--f0", "440", "--out", str(target)]) == 2
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and str(target) in out, out
+    assert "octave_mechanism" not in out, "a refused run must not print a panel"
+
+
+def test_a_write_failure_after_the_panel_is_refused_with_the_report_printed(tmp_path, capsys, monkeypatch):
+    """The pre-flight passed and the destination became unwritable before the
+    write -- what a disk filling or a permission changing mid-run looks like."""
+    target = tmp_path / "panel.txt"
+    real_row = M.row
+
+    def row_then_occupy(*a, **k):
+        rows = real_row(*a, **k)
+        target.mkdir()
+        return rows
+
+    monkeypatch.setattr(M, "row", row_then_occupy)
+    assert M.main(["--f0", "440", "--out", str(target)]) == 2
+    out = capsys.readouterr().out
+    assert "octave_mechanism" in out, "the report must still be printed"
+    assert "REFUSED" in out and str(target) in out, out

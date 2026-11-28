@@ -38,6 +38,10 @@ repair. The sweep record is docs/sensitivity/fold-interpolator.json.
     tools/probes/fold_rate_sweep.py -o docs/sensitivity/fold-interpolator-sweep.txt
     tools/probes/fold_rate_sweep.py --taps -1 --f0 440 660 --detail
 
+Exit 0; 2 REFUSED when `-o` names a destination that cannot receive the report
+-- refused before the sweep runs, and still 2 when the write fails after the
+report was printed.
+
 Its validation cases -- including a stimulus whose period is a whole number of
 samples at BOTH rates, where the answer is known from arithmetic and not from
 this module -- are in tools/probes/test_fold_rate_sweep.py.
@@ -330,6 +334,26 @@ def report(rows: list[dict], detail: bool = True) -> str:
     return "\n".join(out) + "\n"
 
 
+def _prepare_destination(path: Path) -> str | None:
+    """Make ``path`` able to receive the report before the sweep runs: a
+    refusal reason, or None.
+
+    A missing parent is made here.  A directory given as the file, or a parent
+    that cannot be made, is a refusal with nothing measured; found after the
+    sweep instead, it was a ``FileNotFoundError`` and exit 1 (#2040)."""
+    # is_dir() is inside the try: it re-raises EACCES (unsearchable ancestor) and
+    # ENAMETOOLONG, which would exit 1 with a traceback instead of REFUSING.
+    try:
+        is_dir = path.is_dir()
+        if not is_dir:
+            path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        return f"-o {path}: its parent directory cannot be created ({exc.strerror or exc})"
+    if is_dir:
+        return f"-o {path} is a directory; name the file to write"
+    return None
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("-o", "--out", type=Path, help="write the report here too")
@@ -341,6 +365,11 @@ def main(argv=None) -> int:
                     help="override JIT_OCTAVE_MARGIN_PERMILLE for the whole run; "
                          "0 selects the bare argmax that shipped before #774")
     a = ap.parse_args(argv)
+    if a.out:
+        refused = _prepare_destination(a.out)
+        if refused:
+            print(f"REFUSED: {refused}")
+            return 2
     if a.octave_margin is not None:
         # THE SECOND PROBE HOOK ON THIS INSTRUMENT, and it exists for the same
         # reason `--taps -1` does: to price a repair against the code that
@@ -358,7 +387,12 @@ def main(argv=None) -> int:
     text = report(rows, detail=a.detail or a.out is not None)
     sys.stdout.write(text)
     if a.out:
-        a.out.write_text(text)
+        try:
+            a.out.write_text(text)
+        except OSError as exc:
+            print(f"REFUSED: -o {a.out} was not written ({exc.strerror or exc}); "
+                  "the report above was measured, its record does not exist")
+            return 2
     return 0
 
 
