@@ -20,11 +20,12 @@ was applied to the shorter take as though it were the whole one. The numbers
 came back looking exactly like data.
 
 Every `..._refuses...` test below was written first and watched fail against
-the unguarded readers; what they returned instead is under RED FIRST. The
-`..._still_...` tests were green there as well, on purpose: the committed
-audio, a file that ends exactly where its last window ends, and the file cut
-AFTER that. The last is a guard's blind spot, pinned so that closing it
-cannot happen unnoticed (`docs/verification-rules.md`, rule 8): an M1A
+the unguarded readers; what they returned instead is under RED FIRST. Eleven
+controls were green there as well, on purpose: the hash still refusing a
+same-length edit, the committed audio still measuring as before, a file that
+ends exactly where its last window ends, and the file cut AFTER that. The
+last is a guard's blind spot, pinned so that closing it cannot happen
+unnoticed (`docs/verification-rules.md`, rule 8): an M1A
 manifest states no frame count for a clip and an attack-context record none
 for a render, so a file truncated anywhere past its last window is, by
 everything those tools can read, the file.
@@ -45,12 +46,13 @@ returned:
           LOADED 2400 samples; the record says n_samples='<absent>' (and so on)
 
   measure_osc_drift_reference, control-osc1_open.wav (359,956 frames)
-      at 75 %, one frame short of its last window, and at 3.125 s
+      at 75 % and one frame short of its last window: the three committed lines
          m1a/osc1_open/n0-midi36   REFUSED   TOO_FEW_PERIODS: 12 clean periods < 24
          m1a/osc1_open/n1-midi43   STABLE    rms  0.0108 c  p2p  0.0473 c ...
+         m1a/osc1_open/n2-midi36   REFUSED   TOO_FEW_PERIODS: 12 clean periods < 24
+      at 3.125 s, inside the second note's window: the same first two, and
          m1a/osc1_open/n2-midi36   REFUSED   TOO_FEW_PERIODS: 0.0 periods < 24
-      the first two lines are the committed ones; the third is the committed
-      refusal at 75 % and "0.0 periods" once the cut has taken the window
+      a window the clip no longer holds reads as a note with no pitch
   measure_osc_drift_reference, m5a-miniv3-raw.wav at 80 %, and intact with
   its record's `samples` deleted / null / a string / a float
          m5a/seg0-saw/n0-midi84    STABLE    rms  0.0047 c  p2p  0.0142 c ...
