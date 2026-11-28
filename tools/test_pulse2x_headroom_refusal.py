@@ -201,3 +201,104 @@ def test_execution_error_at_the_same_boundary_still_exits_1(tmp_path):
     assert "Traceback" in p.stderr and "ValueError: injected execution error" in p.stderr, p.stderr[-400:]
     assert "REFUSED" not in p.stdout, "a ValueError must not be relabelled a refusal"
     assert not out.exists()
+
+
+# ---------------------------------------------------------------------------
+# probe: a row that did not measure is REFUSED, never KeyError (#1628)
+# ---------------------------------------------------------------------------
+SILENCED_PROBE_REASON = "square MIDI 36: candidate gain 0.000 silences the output (-300.0 dBFS)"
+FIRST_POINT_REASON = "square MIDI 60: candidate gain 0.000 silences the output (-300.0 dBFS)"
+NORMAL_GAIN = "0.80"
+#: `split_spectrum` needs f0 >= 16 bins of the 36000-sample window (21.33 Hz).
+#: MIDI 12 is 16.35 Hz, so `measure_point` returns a MEASURED row whose every
+#: stage is refused: the row a verdict-only guard lets through.
+LOW_NOTE = 12
+LOW_NOTE_REFUSAL = "f0 16.35 Hz is 12.3 bins; need >= 16"
+STAGE_REFUSED_REASON = f"square MIDI {LOW_NOTE}: gain 0.850 output stage not measured: {LOW_NOTE_REFUSAL}"
+
+
+def _measured_row(**over) -> dict:
+    """A `measure_point` row that measured, written out key by key to the
+    contract the function returns (not built from the guard's own constant)."""
+    row = {"verdict": "MEASURED", "activity": {"output_level_dbfs": -12.07, "ok": True},
+           "clip": {"oscillator_rail_samples": 7, "output_rail_samples": 0},
+           "stages": {"ladder_out": {"refused": "a stage the probe does not read"},
+                      "output": {"unwanted_dbfs": -61.2, "unwanted_rel_db": -40.1,
+                                 "intended_dbfs": -21.1, "upper_wanted_rel_db": -0.02}}}
+    row.update(over)
+    return row
+
+
+def test_probe_raiser_is_the_tool_s_own_subclass_of_the_base():
+    import measure_pulse2x_headroom as mph
+
+    assert mph.Refused is not refusal.Refused
+    assert issubclass(mph.Refused, refusal.Refused)
+
+
+def test_silenced_rectangles_in_probe_exit_refused_2_without_report(tmp_path):
+    out = tmp_path / "probe.json"
+    p = _cli("probe", "--gains", SILENT_GAIN, "--out", str(out))
+    _assert_refused(p, SILENCED_PROBE_REASON, out)
+    assert "wrote" not in p.stdout, p.stdout[-200:]
+
+
+def test_probe_refusal_names_the_first_point_that_did_not_measure():
+    import measure_pulse2x_headroom as mph
+
+    with pytest.raises(refusal.Refused) as caught:
+        mph.probe_points(float(SILENT_GAIN), notes=(60, 84))
+    assert str(caught.value) == FIRST_POINT_REASON
+
+
+def test_refused_output_stage_is_refused_with_the_stage_s_own_text():
+    import measure_pulse2x_headroom as mph
+    import mono_artifact_probe as mp
+
+    row = mp.measure_point("pulse2x", LOW_NOTE, mp.held_patch(waves=("square",) * 3))
+    assert row["verdict"] == "MEASURED" and row["activity"]["ok"], (
+        "this control IS the row a verdict-only guard lets through; if MIDI 12 "
+        "stopped measuring, it would refuse for another reason")
+    assert row["stages"]["output"] == {"refused": LOW_NOTE_REFUSAL}
+    with pytest.raises(refusal.Refused) as caught:
+        mph.probe_points(float(NORMAL_GAIN), notes=(LOW_NOTE,))
+    assert str(caught.value) == STAGE_REFUSED_REASON
+
+
+def test_normal_gain_in_probe_still_measures_and_writes_the_report(tmp_path):
+    out = tmp_path / "probe.json"
+    p = _cli("probe", "--gains", NORMAL_GAIN, "--out", str(out))
+    assert p.returncode == exit_contract.PASS, (p.returncode, p.stdout[-300:], p.stderr[-400:])
+    assert not _refused_lines(p.stdout), p.stdout[-300:]
+    assert f"wrote {out}" in p.stdout, p.stdout[-200:]
+    res = json.loads(out.read_text())["results"]
+    assert len(res) == 32 and {tuple(sorted(v)) for v in res.values()} == {("0.800", "0.850")}, sorted(res)
+    assert all(isinstance(x, (int, float)) for v in res.values() for w in v.values() for x in w.values())
+    assert any(v["0.850"] != v["0.800"] for v in res.values()), "the candidate gain was never applied"
+
+
+def test_guard_passes_a_measured_row_through_unchanged():
+    import measure_pulse2x_headroom as mph
+
+    assert mph._measured_numbers(_measured_row(), "where") == {
+        "osc_rail": 7, "unwanted_dbfs": -61.2, "unwanted_rel_db": -40.1,
+        "intended_dbfs": -21.1, "upper_wanted_rel_db": -0.02}
+
+
+@pytest.mark.parametrize("over, expected", [
+    ({"verdict": "REFUSED", "reason": "resonance at or above the self-oscillation boundary is out of domain"},
+     "where did not measure (verdict REFUSED: resonance at or above the self-oscillation boundary is out of domain)"),
+    ({"verdict": None}, "where did not measure (verdict None)"),
+    ({"stages": {"output": {"refused": LOW_NOTE_REFUSAL}}},
+     "where output stage not measured: " + LOW_NOTE_REFUSAL),
+    ({"stages": {}},
+     "where output stage not measured: no unwanted_dbfs, unwanted_rel_db, intended_dbfs, upper_wanted_rel_db"),
+    ({"clip": {"output_rail_samples": 0}},
+     "where row not measured: no clip.oscillator_rail_samples"),
+])
+def test_guard_refuses_every_row_that_is_not_a_measurement(over, expected):
+    import measure_pulse2x_headroom as mph
+
+    with pytest.raises(mph.Refused) as caught:
+        mph._measured_numbers(_measured_row(**over), "where")
+    assert str(caught.value) == expected
