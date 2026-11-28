@@ -274,6 +274,10 @@ them was a measured number from the estimator.
     `test_tpd592_rerun_compare.py` 7 passed.
   - At `76ec1ef` (the preregistration-keyed claim fix) without the corpus: the three files together 200 passed, 5 skipped;
     with `GF180_TR808_FISCHER=/tmp/fischer-592`, `test_tom_pitch_drop_fischer.py` 166 passed, 0 skipped.
+  - At `bd9a0925` (the unreadable-record repair, #1758) without the corpus: `test_tom_pitch_drop_fischer.py`
+    190 passed, 1 skipped (191 collected). The 12 new tests ran red first against the unmodified module at
+    `e26d7f29` (10 failed, 2 passed), then against two injected mutants of the repair; `red-unreadable-record.txt`
+    holds all three runs.
   - The `knownanswer`, `controls`, `measure`, `fit`, `confirm` and `describe` commands as recorded. Each record carries its commit, a
     clean-tree check at the start and end, the prereg sha256, the argv, and the Python/numpy/scipy versions. `knownanswer`,
     `controls`, `measure` and `fit` were re-run at `8fedbf4` into `rerun-8fedbf4/` (section 3); `confirm` was re-run at `df1efe6`

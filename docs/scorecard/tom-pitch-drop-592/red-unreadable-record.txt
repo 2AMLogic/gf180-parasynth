@@ -1,0 +1,310 @@
+# Red run: the #1758 unreadable-record tests against tools/probes/tom_pitch_drop_fischer.py
+# at e26d7f29 (2026-11-28), unmodified: 10 failed, 2 passed. Failing: FileNotFoundError /
+# JSONDecodeError / UnicodeDecodeError / IsADirectoryError / PermissionError escape main() on
+# both `confirm --fit` and `fit <record>` (exit 1 by traceback, not the declared exit 2), and no
+# loader exists yet for the not-relabelled test to pin. The 2 passes are the valid-record pins,
+# which must hold before AND after the repair.
+
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.2.0, pluggy-1.7.0 -- /home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1758/.venv/bin/python
+rootdir: /home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1758
+configfile: pytest.ini
+collecting ... collected 191 items / 179 deselected / 12 selected
+
+tools/probes/test_tom_pitch_drop_fischer.py::test_confirm_refuses_a_fit_record_that_cannot_be_read[missing] FAILED [  8%]
+tools/probes/test_tom_pitch_drop_fischer.py::test_confirm_refuses_a_fit_record_that_cannot_be_read[truncated] FAILED [ 16%]
+tools/probes/test_tom_pitch_drop_fischer.py::test_confirm_refuses_a_fit_record_that_cannot_be_read[not-utf8] FAILED [ 25%]
+tools/probes/test_tom_pitch_drop_fischer.py::test_fit_refuses_a_record_that_cannot_be_read[missing] FAILED [ 33%]
+tools/probes/test_tom_pitch_drop_fischer.py::test_fit_refuses_a_record_that_cannot_be_read[truncated] FAILED [ 41%]
+tools/probes/test_tom_pitch_drop_fischer.py::test_fit_refuses_a_record_that_cannot_be_read[not-utf8] FAILED [ 50%]
+tools/probes/test_tom_pitch_drop_fischer.py::test_an_empty_file_and_a_directory_are_refused_the_same_way[empty-file] FAILED [ 58%]
+tools/probes/test_tom_pitch_drop_fischer.py::test_an_empty_file_and_a_directory_are_refused_the_same_way[directory] FAILED [ 66%]
+tools/probes/test_tom_pitch_drop_fischer.py::test_a_record_without_read_permission_is_refused FAILED [ 75%]
+tools/probes/test_tom_pitch_drop_fischer.py::test_an_unexpected_reader_error_is_not_relabelled_a_refusal FAILED [ 83%]
+tools/probes/test_tom_pitch_drop_fischer.py::test_a_readable_fit_record_still_confirms_exactly_as_before PASSED [ 91%]
+tools/probes/test_tom_pitch_drop_fischer.py::test_a_readable_measure_record_still_fits_exactly_as_before PASSED [100%]
+
+=================================== FAILURES ===================================
+________ test_confirm_refuses_a_fit_record_that_cannot_be_read[missing] ________
+tools/probes/test_tom_pitch_drop_fischer.py:685: in test_confirm_refuses_a_fit_record_that_cannot_be_read
+    code, out, written = _confirm(monkeypatch, tmp_path, capsys, fit_path)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tools/probes/test_tom_pitch_drop_fischer.py:658: in _confirm
+    code = tp.main(["confirm", "--refs", str(tmp_path), "--fit", str(fit_path), "--out", str(out)])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tools/probes/tom_pitch_drop_fischer.py:1420: in main
+    res = confirm_record(a.refs, load_prereg(), a.fit)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tools/probes/tom_pitch_drop_fischer.py:941: in confirm_record
+    fit_rec = json.loads(fit_path.read_text())
+                         ^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/pathlib.py:1029: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/pathlib.py:1015: in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/tmp/loom-nt/2247e932bb234d30/pytest-of-ubuntu/pytest-2/test_confirm_refuses_a_fit_rec0/nope.json'
+_______ test_confirm_refuses_a_fit_record_that_cannot_be_read[truncated] _______
+tools/probes/test_tom_pitch_drop_fischer.py:685: in test_confirm_refuses_a_fit_record_that_cannot_be_read
+    code, out, written = _confirm(monkeypatch, tmp_path, capsys, fit_path)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tools/probes/test_tom_pitch_drop_fischer.py:658: in _confirm
+    code = tp.main(["confirm", "--refs", str(tmp_path), "--fit", str(fit_path), "--out", str(out)])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tools/probes/tom_pitch_drop_fischer.py:1420: in main
+    res = confirm_record(a.refs, load_prereg(), a.fit)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tools/probes/tom_pitch_drop_fischer.py:941: in confirm_record
+    fit_rec = json.loads(fit_path.read_text())
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/json/__init__.py:346: in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/json/decoder.py:337: in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/json/decoder.py:353: in raw_decode
+    obj, end = self.scan_once(s, idx)
+               ^^^^^^^^^^^^^^^^^^^^^^
+E   json.decoder.JSONDecodeError: Unterminated string starting at: line 1 column 12 (char 11)
+_______ test_confirm_refuses_a_fit_record_that_cannot_be_read[not-utf8] ________
+tools/probes/test_tom_pitch_drop_fischer.py:685: in test_confirm_refuses_a_fit_record_that_cannot_be_read
+    code, out, written = _confirm(monkeypatch, tmp_path, capsys, fit_path)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tools/probes/test_tom_pitch_drop_fischer.py:658: in _confirm
+    code = tp.main(["confirm", "--refs", str(tmp_path), "--fit", str(fit_path), "--out", str(out)])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tools/probes/tom_pitch_drop_fischer.py:1420: in main
+    res = confirm_record(a.refs, load_prereg(), a.fit)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tools/probes/tom_pitch_drop_fischer.py:941: in confirm_record
+    fit_rec = json.loads(fit_path.read_text())
+                         ^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/pathlib.py:1030: in read_text
+    return f.read()
+           ^^^^^^^^
+<frozen codecs>:322: in decode
+    ???
+E   UnicodeDecodeError: 'utf-8' codec can't decode byte 0xff in position 0: invalid start byte
+____________ test_fit_refuses_a_record_that_cannot_be_read[missing] ____________
+tools/probes/test_tom_pitch_drop_fischer.py:696: in test_fit_refuses_a_record_that_cannot_be_read
+    code, out, written = _fit_file(monkeypatch, tmp_path, capsys, rec)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tools/probes/test_tom_pitch_drop_fischer.py:668: in _fit_file
+    code = tp.main(["fit", str(record), "--out", str(out)])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tools/probes/tom_pitch_drop_fischer.py:1412: in main
+    rec = json.loads(a.record.read_text())
+                     ^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/pathlib.py:1029: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/pathlib.py:1015: in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/tmp/loom-nt/2247e932bb234d30/pytest-of-ubuntu/pytest-2/test_fit_refuses_a_record_that0/nope.json'
+___________ test_fit_refuses_a_record_that_cannot_be_read[truncated] ___________
+tools/probes/test_tom_pitch_drop_fischer.py:696: in test_fit_refuses_a_record_that_cannot_be_read
+    code, out, written = _fit_file(monkeypatch, tmp_path, capsys, rec)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tools/probes/test_tom_pitch_drop_fischer.py:668: in _fit_file
+    code = tp.main(["fit", str(record), "--out", str(out)])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tools/probes/tom_pitch_drop_fischer.py:1412: in main
+    rec = json.loads(a.record.read_text())
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/json/__init__.py:346: in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/json/decoder.py:337: in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/json/decoder.py:353: in raw_decode
+    obj, end = self.scan_once(s, idx)
+               ^^^^^^^^^^^^^^^^^^^^^^
+E   json.decoder.JSONDecodeError: Unterminated string starting at: line 1 column 12 (char 11)
+___________ test_fit_refuses_a_record_that_cannot_be_read[not-utf8] ____________
+tools/probes/test_tom_pitch_drop_fischer.py:696: in test_fit_refuses_a_record_that_cannot_be_read
+    code, out, written = _fit_file(monkeypatch, tmp_path, capsys, rec)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tools/probes/test_tom_pitch_drop_fischer.py:668: in _fit_file
+    code = tp.main(["fit", str(record), "--out", str(out)])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tools/probes/tom_pitch_drop_fischer.py:1412: in main
+    rec = json.loads(a.record.read_text())
+                     ^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/pathlib.py:1030: in read_text
+    return f.read()
+           ^^^^^^^^
+<frozen codecs>:322: in decode
+    ???
+E   UnicodeDecodeError: 'utf-8' codec can't decode byte 0xff in position 0: invalid start byte
+___ test_an_empty_file_and_a_directory_are_refused_the_same_way[empty-file] ____
+tools/probes/test_tom_pitch_drop_fischer.py:711: in test_an_empty_file_and_a_directory_are_refused_the_same_way
+    code, out, _ = run(monkeypatch, tmp_path, capsys, fit_path)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tools/probes/test_tom_pitch_drop_fischer.py:658: in _confirm
+    code = tp.main(["confirm", "--refs", str(tmp_path), "--fit", str(fit_path), "--out", str(out)])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tools/probes/tom_pitch_drop_fischer.py:1420: in main
+    res = confirm_record(a.refs, load_prereg(), a.fit)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tools/probes/tom_pitch_drop_fischer.py:941: in confirm_record
+    fit_rec = json.loads(fit_path.read_text())
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/json/__init__.py:346: in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/json/decoder.py:337: in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/json/decoder.py:355: in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+E   json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+____ test_an_empty_file_and_a_directory_are_refused_the_same_way[directory] ____
+tools/probes/test_tom_pitch_drop_fischer.py:711: in test_an_empty_file_and_a_directory_are_refused_the_same_way
+    code, out, _ = run(monkeypatch, tmp_path, capsys, fit_path)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tools/probes/test_tom_pitch_drop_fischer.py:658: in _confirm
+    code = tp.main(["confirm", "--refs", str(tmp_path), "--fit", str(fit_path), "--out", str(out)])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tools/probes/tom_pitch_drop_fischer.py:1420: in main
+    res = confirm_record(a.refs, load_prereg(), a.fit)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tools/probes/tom_pitch_drop_fischer.py:941: in confirm_record
+    fit_rec = json.loads(fit_path.read_text())
+                         ^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/pathlib.py:1029: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/pathlib.py:1015: in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   IsADirectoryError: [Errno 21] Is a directory: '/tmp/loom-nt/2247e932bb234d30/pytest-of-ubuntu/pytest-2/test_an_empty_file_and_a_direc1'
+_______________ test_a_record_without_read_permission_is_refused _______________
+tools/probes/test_tom_pitch_drop_fischer.py:726: in test_a_record_without_read_permission_is_refused
+    code, out, _ = run(monkeypatch, tmp_path, capsys, locked)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tools/probes/test_tom_pitch_drop_fischer.py:658: in _confirm
+    code = tp.main(["confirm", "--refs", str(tmp_path), "--fit", str(fit_path), "--out", str(out)])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tools/probes/tom_pitch_drop_fischer.py:1420: in main
+    res = confirm_record(a.refs, load_prereg(), a.fit)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tools/probes/tom_pitch_drop_fischer.py:941: in confirm_record
+    fit_rec = json.loads(fit_path.read_text())
+                         ^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/pathlib.py:1029: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/pathlib.py:1015: in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   PermissionError: [Errno 13] Permission denied: '/tmp/loom-nt/2247e932bb234d30/pytest-of-ubuntu/pytest-2/test_a_record_without_read_per0/locked.json'
+_________ test_an_unexpected_reader_error_is_not_relabelled_a_refusal __________
+tools/probes/test_tom_pitch_drop_fischer.py:744: in test_an_unexpected_reader_error_is_not_relabelled_a_refusal
+    with pytest.raises(ValueError, match="boom"):
+E   Failed: DID NOT RAISE ValueError
+=========================== short test summary info ============================
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_confirm_refuses_a_fit_record_that_cannot_be_read[missing]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_confirm_refuses_a_fit_record_that_cannot_be_read[truncated]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_confirm_refuses_a_fit_record_that_cannot_be_read[not-utf8]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_fit_refuses_a_record_that_cannot_be_read[missing]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_fit_refuses_a_record_that_cannot_be_read[truncated]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_fit_refuses_a_record_that_cannot_be_read[not-utf8]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_an_empty_file_and_a_directory_are_refused_the_same_way[empty-file]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_an_empty_file_and_a_directory_are_refused_the_same_way[directory]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_a_record_without_read_permission_is_refused
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_an_unexpected_reader_error_is_not_relabelled_a_refusal
+================= 10 failed, 2 passed, 179 deselected in 1.86s =================
+
+
+# ---------------------------------------------------------------------------
+# Injected-bug control, at bd9a0925 (the repair) with load_record's body replaced by the bare
+# `json.loads(path.read_text())`: the same 10 fail for the same reasons, the same 2 pass.
+
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.2.0, pluggy-1.7.0 -- /home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1758/.venv/bin/python
+rootdir: /home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1758
+configfile: pytest.ini
+collecting ... collected 191 items / 179 deselected / 12 selected
+
+tools/probes/test_tom_pitch_drop_fischer.py::test_confirm_refuses_a_fit_record_that_cannot_be_read[missing] FAILED [  8%]
+tools/probes/test_tom_pitch_drop_fischer.py::test_confirm_refuses_a_fit_record_that_cannot_be_read[truncated] FAILED [ 16%]
+tools/probes/test_tom_pitch_drop_fischer.py::test_confirm_refuses_a_fit_record_that_cannot_be_read[not-utf8] FAILED [ 25%]
+tools/probes/test_tom_pitch_drop_fischer.py::test_fit_refuses_a_record_that_cannot_be_read[missing] FAILED [ 33%]
+tools/probes/test_tom_pitch_drop_fischer.py::test_fit_refuses_a_record_that_cannot_be_read[truncated] FAILED [ 41%]
+tools/probes/test_tom_pitch_drop_fischer.py::test_fit_refuses_a_record_that_cannot_be_read[not-utf8] FAILED [ 50%]
+tools/probes/test_tom_pitch_drop_fischer.py::test_an_empty_file_and_a_directory_are_refused_the_same_way[empty-file] FAILED [ 58%]
+tools/probes/test_tom_pitch_drop_fischer.py::test_an_empty_file_and_a_directory_are_refused_the_same_way[directory] FAILED [ 66%]
+tools/probes/test_tom_pitch_drop_fischer.py::test_a_record_without_read_permission_is_refused FAILED [ 75%]
+tools/probes/test_tom_pitch_drop_fischer.py::test_an_unexpected_reader_error_is_not_relabelled_a_refusal FAILED [ 83%]
+tools/probes/test_tom_pitch_drop_fischer.py::test_a_readable_fit_record_still_confirms_exactly_as_before PASSED [ 91%]
+tools/probes/test_tom_pitch_drop_fischer.py::test_a_readable_measure_record_still_fits_exactly_as_before PASSED [100%]
+
+=================================== FAILURES ===================================
+E   FileNotFoundError: [Errno 2] No such file or directory: '/tmp/loom-nt/2247e932bb234d30/pytest-of-ubuntu/pytest-5/test_confirm_refuses_a_fit_rec0/nope.json'
+/usr/lib/python3.12/pathlib.py:1015: FileNotFoundError: [Errno 2] No such file or directory: '/tmp/loom-nt/2247e932bb234d30/pytest-of-ubuntu/pytest-5/test_confirm_refuses_a_fit_rec0/nope.json'
+E   json.decoder.JSONDecodeError: Unterminated string starting at: line 1 column 12 (char 11)
+/usr/lib/python3.12/json/decoder.py:353: json.decoder.JSONDecodeError: Unterminated string starting at: line 1 column 12 (char 11)
+E   UnicodeDecodeError: 'utf-8' codec can't decode byte 0xff in position 0: invalid start byte
+<frozen codecs>:322: UnicodeDecodeError: 'utf-8' codec can't decode byte 0xff in position 0: invalid start byte
+E   FileNotFoundError: [Errno 2] No such file or directory: '/tmp/loom-nt/2247e932bb234d30/pytest-of-ubuntu/pytest-5/test_fit_refuses_a_record_that0/nope.json'
+/usr/lib/python3.12/pathlib.py:1015: FileNotFoundError: [Errno 2] No such file or directory: '/tmp/loom-nt/2247e932bb234d30/pytest-of-ubuntu/pytest-5/test_fit_refuses_a_record_that0/nope.json'
+E   json.decoder.JSONDecodeError: Unterminated string starting at: line 1 column 12 (char 11)
+/usr/lib/python3.12/json/decoder.py:353: json.decoder.JSONDecodeError: Unterminated string starting at: line 1 column 12 (char 11)
+E   UnicodeDecodeError: 'utf-8' codec can't decode byte 0xff in position 0: invalid start byte
+<frozen codecs>:322: UnicodeDecodeError: 'utf-8' codec can't decode byte 0xff in position 0: invalid start byte
+E   json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+/usr/lib/python3.12/json/decoder.py:355: json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+E   IsADirectoryError: [Errno 21] Is a directory: '/tmp/loom-nt/2247e932bb234d30/pytest-of-ubuntu/pytest-5/test_an_empty_file_and_a_direc1'
+/usr/lib/python3.12/pathlib.py:1015: IsADirectoryError: [Errno 21] Is a directory: '/tmp/loom-nt/2247e932bb234d30/pytest-of-ubuntu/pytest-5/test_an_empty_file_and_a_direc1'
+E   PermissionError: [Errno 13] Permission denied: '/tmp/loom-nt/2247e932bb234d30/pytest-of-ubuntu/pytest-5/test_a_record_without_read_per0/locked.json'
+/usr/lib/python3.12/pathlib.py:1015: PermissionError: [Errno 13] Permission denied: '/tmp/loom-nt/2247e932bb234d30/pytest-of-ubuntu/pytest-5/test_a_record_without_read_per0/locked.json'
+E   Failed: DID NOT RAISE ValueError
+/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1758/tools/probes/test_tom_pitch_drop_fischer.py:744: Failed: DID NOT RAISE ValueError
+=========================== short test summary info ============================
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_confirm_refuses_a_fit_record_that_cannot_be_read[missing]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_confirm_refuses_a_fit_record_that_cannot_be_read[truncated]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_confirm_refuses_a_fit_record_that_cannot_be_read[not-utf8]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_fit_refuses_a_record_that_cannot_be_read[missing]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_fit_refuses_a_record_that_cannot_be_read[truncated]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_fit_refuses_a_record_that_cannot_be_read[not-utf8]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_an_empty_file_and_a_directory_are_refused_the_same_way[empty-file]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_an_empty_file_and_a_directory_are_refused_the_same_way[directory]
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_a_record_without_read_permission_is_refused
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_an_unexpected_reader_error_is_not_relabelled_a_refusal
+================= 10 failed, 2 passed, 179 deselected in 1.96s =================
+
+
+# ---------------------------------------------------------------------------
+# The repair's own defeating input, at bd9a0925 with `except OSError` widened to `except
+# Exception`: 11 pass and ONLY test_an_unexpected_reader_error_is_not_relabelled_a_refusal
+# fails. A catch-all loader looks fully repaired to every other test in the file.
+
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.2.0, pluggy-1.7.0 -- /home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1758/.venv/bin/python
+rootdir: /home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1758
+configfile: pytest.ini
+collecting ... collected 191 items / 179 deselected / 12 selected
+
+tools/probes/test_tom_pitch_drop_fischer.py::test_confirm_refuses_a_fit_record_that_cannot_be_read[missing] PASSED [  8%]
+tools/probes/test_tom_pitch_drop_fischer.py::test_confirm_refuses_a_fit_record_that_cannot_be_read[truncated] PASSED [ 16%]
+tools/probes/test_tom_pitch_drop_fischer.py::test_confirm_refuses_a_fit_record_that_cannot_be_read[not-utf8] PASSED [ 25%]
+tools/probes/test_tom_pitch_drop_fischer.py::test_fit_refuses_a_record_that_cannot_be_read[missing] PASSED [ 33%]
+tools/probes/test_tom_pitch_drop_fischer.py::test_fit_refuses_a_record_that_cannot_be_read[truncated] PASSED [ 41%]
+tools/probes/test_tom_pitch_drop_fischer.py::test_fit_refuses_a_record_that_cannot_be_read[not-utf8] PASSED [ 50%]
+tools/probes/test_tom_pitch_drop_fischer.py::test_an_empty_file_and_a_directory_are_refused_the_same_way[empty-file] PASSED [ 58%]
+tools/probes/test_tom_pitch_drop_fischer.py::test_an_empty_file_and_a_directory_are_refused_the_same_way[directory] PASSED [ 66%]
+tools/probes/test_tom_pitch_drop_fischer.py::test_a_record_without_read_permission_is_refused PASSED [ 75%]
+tools/probes/test_tom_pitch_drop_fischer.py::test_an_unexpected_reader_error_is_not_relabelled_a_refusal FAILED [ 83%]
+tools/probes/test_tom_pitch_drop_fischer.py::test_a_readable_fit_record_still_confirms_exactly_as_before PASSED [ 91%]
+tools/probes/test_tom_pitch_drop_fischer.py::test_a_readable_measure_record_still_fits_exactly_as_before PASSED [100%]
+
+=================================== FAILURES ===================================
+E   Failed: DID NOT RAISE ValueError
+/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1758/tools/probes/test_tom_pitch_drop_fischer.py:744: Failed: DID NOT RAISE ValueError
+=========================== short test summary info ============================
+FAILED tools/probes/test_tom_pitch_drop_fischer.py::test_an_unexpected_reader_error_is_not_relabelled_a_refusal
+================= 1 failed, 11 passed, 179 deselected in 0.99s =================

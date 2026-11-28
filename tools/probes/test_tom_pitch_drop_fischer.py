@@ -627,6 +627,157 @@ def test_a_refused_fit_leaves_the_reserved_rows_unread(tmp_path):
     assert rec["judgement"]["decision"]["independent_confirmation"].startswith("REFUSED")
 
 
+# ---- a fit record that cannot be READ is REFUSED, not a traceback (#1758) --
+UNREADABLE = ("missing", "truncated", "not-utf8")
+
+
+def _unreadable(td: pathlib.Path) -> dict:
+    """#1758's three inputs, under `td`: a path that does not exist, JSON cut
+    mid-string, and bytes that are not UTF-8. Measured at e26d7f29: each left
+    `main()` by traceback (FileNotFoundError, JSONDecodeError,
+    UnicodeDecodeError: exit 1) on BOTH subcommands, where the declared
+    refusal is exit 2 and nothing was measured."""
+    cut = td / "cut.json"
+    cut.write_text('{"status": "FIT')
+    raw = td / "raw.json"
+    raw.write_bytes(b'\xff\xfe{"status": "FITTED"}')
+    return {"missing": td / "nope.json", "truncated": cut, "not-utf8": raw}
+
+
+def _confirm(monkeypatch, tmp_path, capsys, fit_path: pathlib.Path):
+    """Real `main(["confirm", ...])` on whatever `fit_path` is. The once-only
+    claim is keyed to PREREG, so PREREG goes to tmp_path FIRST: whatever this
+    reads, the real reserved evaluation stays unspent. `provenance()` is
+    answered as `_fit` answers it -- the record and the reader are real."""
+    prereg = tmp_path / "prereg.json"
+    prereg.write_text("{}\n")
+    monkeypatch.setattr(tp, "PREREG", prereg)
+    monkeypatch.setattr(tp, "provenance", lambda refs: {"commit": "stub"})
+    monkeypatch.setattr(tp, "close_provenance", lambda prov: prov)
+    out = tmp_path / "confirm.json"
+    code = tp.main(["confirm", "--refs", str(tmp_path), "--fit", str(fit_path), "--out", str(out)])
+    return code, capsys.readouterr().out, out
+
+
+def _fit_file(monkeypatch, tmp_path, capsys, record: pathlib.Path):
+    """`_fit` for a record that is a FILE -- missing, raw bytes, a directory --
+    rather than a dict `json.dumps` can write."""
+    monkeypatch.setattr(tp, "provenance", lambda refs: {"commit": "stub"})
+    monkeypatch.setattr(tp, "close_provenance", lambda prov: prov)
+    out = tmp_path / "fit.json"
+    code = tp.main(["fit", str(record), "--out", str(out)])
+    return code, capsys.readouterr().out, out
+
+
+def _assert_refused_naming(code: int, out: str, path: pathlib.Path):
+    """Exit 2 with a `REFUSED:` line of this repair's reason, naming the path.
+    `main()` RETURNING is the no-traceback evidence: a raise escapes these
+    helpers as the exception itself and never reaches this assertion."""
+    assert code == 2, out
+    assert "REFUSED: unreadable-record: " in out and str(path) in out, out
+
+
+@pytest.mark.parametrize("bad", UNREADABLE)
+def test_confirm_refuses_a_fit_record_that_cannot_be_read(monkeypatch, tmp_path, capsys, bad):
+    """Nothing is spent on the way to the refusal: no --out, and not the
+    once-only claim -- the load precedes the claim, and this pins that order."""
+    fit_path = _unreadable(tmp_path)[bad]
+    code, out, written = _confirm(monkeypatch, tmp_path, capsys, fit_path)
+    _assert_refused_naming(code, out, fit_path)
+    assert not written.exists()
+    assert not tp.confirm_claim_path().exists(), "an unreadable fit record must not spend the once-only claim"
+
+
+@pytest.mark.parametrize("bad", UNREADABLE)
+def test_fit_refuses_a_record_that_cannot_be_read(monkeypatch, tmp_path, capsys, bad):
+    """The issue read this branch from code and did not execute it: it
+    tracebacks exactly like `confirm` (see `_unreadable`)."""
+    rec = _unreadable(tmp_path)[bad]
+    code, out, written = _fit_file(monkeypatch, tmp_path, capsys, rec)
+    _assert_refused_naming(code, out, rec)
+    assert not written.exists()
+
+
+@pytest.mark.parametrize("kind", ["empty-file", "directory"])
+def test_an_empty_file_and_a_directory_are_refused_the_same_way(monkeypatch, tmp_path, capsys, kind):
+    """An empty file is the parse case (0 bytes is not JSON: the shared
+    `load_json_refused`). A directory is the read case and is NOT a
+    FileNotFoundError: the loader must catch the OSError family, not the one
+    errno the issue happened to meet."""
+    empty = tmp_path / "empty.json"
+    empty.write_bytes(b"")
+    fit_path = {"empty-file": empty, "directory": tmp_path}[kind]
+    for run in (_confirm, _fit_file):
+        code, out, _ = run(monkeypatch, tmp_path, capsys, fit_path)
+        _assert_refused_naming(code, out, fit_path)
+    assert not tp.confirm_claim_path().exists()
+
+
+@pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0,
+                    reason="root reads a 0o000 file: the permission case is vacuous")
+def test_a_record_without_read_permission_is_refused(monkeypatch, tmp_path, capsys):
+    """The file exists, is valid JSON and is UTF-8 -- only the READ is
+    refused, by the OS. The refusal must still name the path."""
+    locked = tmp_path / "locked.json"
+    locked.write_text('{"status": "FITTED"}')
+    locked.chmod(0o000)
+    try:
+        for run in (_confirm, _fit_file):
+            code, out, _ = run(monkeypatch, tmp_path, capsys, locked)
+            _assert_refused_naming(code, out, locked)
+    finally:
+        locked.chmod(0o644)
+    assert not tp.confirm_claim_path().exists()
+
+
+def test_an_unexpected_reader_error_is_not_relabelled_a_refusal(monkeypatch, tmp_path, capsys):
+    """DEFEATING INPUT for the repair itself: a loader that caught `Exception`
+    would pass every test above and turn an implementation error into a polite
+    exit-2 REFUSED. It catches `manifest.Refused` and `OSError` only; anything
+    else is an EXECUTION ERROR (tools/refusal.py) and must still escape."""
+    rec = tmp_path / "fine.json"
+    rec.write_text('{"status": "FITTED"}')
+
+    def boom(*a, **k):
+        raise ValueError("boom: an implementation error, not a precondition")
+    monkeypatch.setattr(tp.mf, "load_json_refused", boom)
+    with pytest.raises(ValueError, match="boom"):
+        _fit_file(monkeypatch, tmp_path, capsys, rec)
+
+
+def test_a_readable_fit_record_still_confirms_exactly_as_before(monkeypatch, tmp_path, capsys):
+    """The repair moves only the unreadable cases. A fit record that reads is
+    the same dict it was: it takes the FITTED branch to the (stubbed) reserved
+    measurement, spends the once-only claim, exits 0, and the report still
+    names the fit file and its sha256."""
+    reads = []
+    monkeypatch.setattr(tp, "measure_rows", lambda refs, pr, split: reads.append(split) or {})
+    fitted = tmp_path / "fitted.json"
+    fitted.write_text(json.dumps({"status": "FITTED"}))
+    code, out, written = _confirm(monkeypatch, tmp_path, capsys, fitted)
+    assert code == 0, out
+    assert reads == ["confirmation"]
+    assert tp.confirm_claim_path().exists(), "a FITTED record that reads must still spend the claim"
+    assert json.loads(written.read_text())["fit_record"] == {"path": str(fitted), "sha256": tp._sha(fitted)}
+
+
+def test_a_readable_measure_record_still_fits_exactly_as_before(monkeypatch, tmp_path, capsys):
+    """The `fit` half of the same pin: the loader hands `fit` the parsed dict
+    and the record is still named as the fit's source, by path and sha256.
+    `load_prereg()` binds PREREG as a default argument, so redirecting the
+    module global never reaches it; it is answered with PRE, whose
+    min_dev_rows two `_dev()` rows satisfy. (The frozen preregistration asks
+    for four, which is a legitimately REFUSED fit and not this test's point.)"""
+    monkeypatch.setattr(tp, "load_prereg", lambda: json.loads(json.dumps(PRE)))
+    rec = tmp_path / "measure.json"
+    rec.write_text(json.dumps({"rows": _dev()}))
+    code, out, written = _fit_file(monkeypatch, tmp_path, capsys, rec)
+    assert code == 0, out
+    got = json.loads(written.read_text())
+    assert got["status"] == "FITTED"
+    assert got["from_record"] == {"path": str(rec), "sha256": tp._sha(rec)}
+
+
 # ---- injected defects: each must move its declared property ----------------
 @pytest.mark.parametrize("mutant", tp.INJECTIONS)
 def test_injection_moves_its_declared_property(mutant, tmp_path):
