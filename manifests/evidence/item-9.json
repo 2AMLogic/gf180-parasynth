@@ -164,7 +164,7 @@
         "role": "testbench",
         "path": "tools/item9_cold_start.py",
         "passed": true,
-        "content_hash": "sha256:f06473528a5ae15073e093355487e7e6ee7f73de1c5ec604cbafa4efe1cc1dba"
+        "content_hash": "sha256:897f038b7555981b05aff1a45328bab75b3a13226bba6aee7989279960d03958"
       },
       {
         "check": "present",
