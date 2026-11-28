@@ -133,9 +133,8 @@ def check_implementation(directory: Path) -> dict:
     # the constraints this build COMPILED (its snapshot), never the live tree's
     xdc_text = "".join((directory / "inputs" / p.relative_to(ROOT)).read_text()
                        for p in (build.XDC, SD_XDC))
-    problems = xb.check_report((directory / xb.REPORT).read_text(), xdc_text)
-    problems += xb.check_route((directory / xb.REPORT).read_text(),
-                               (directory / xb.EXCEPTIONS).read_text(), xdc_text)
+    problems = xb.check_build((directory / xb.REPORT).read_text(),
+                              (directory / xb.EXCEPTIONS).read_text(), xdc_text)
     classes = output_disposition((directory / "timing.rpt").read_text())
     want = {"unconstrained": [], "false_path": PDM_PORTS,
             "forwarded_clock": FORWARDED_CLOCKS}
@@ -289,6 +288,12 @@ def main(argv=None):
         return 1
     try:
         report["implementation"] = check_implementation(directory)
+    except xb.Refused as exc:
+        # before ValueError, which xb.Refused subclasses: a constraint check that
+        # could not read the XDC is REFUSED, not a failed build (#1922)
+        report.update(state="REFUSED", reason=str(exc))
+        save()
+        return 2
     except ValueError as exc:
         report.update(state="FAIL", reason=str(exc))
         save()

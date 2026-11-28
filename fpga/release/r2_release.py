@@ -133,8 +133,13 @@ def constraint_binding(pub_dir: Path, pub: dict) -> dict:
         out[name] = sha(p)
     xdc = _blob(R2_FROZEN_AT, "fpga/boards/arty-a7-100.xdc").decode()
     report = (pub_dir / xb.REPORT).read_text()
-    probs = xb.check_report(report, xdc) + \
-        xb.check_route(report, (pub_dir / xb.EXCEPTIONS).read_text(), xdc)
+    try:
+        probs = xb.check_build(report, (pub_dir / xb.EXCEPTIONS).read_text(), xdc)
+    except xb.Refused as exc:
+        # xb.Refused is not this module's Refused: check() and main() would not
+        # catch it. The reason passes unchanged -- an XDC that could not be read
+        # never "did not bind" (#1922)
+        raise Refused(str(exc)) from exc
     if probs:
         raise Refused(f"the #315 constraints did not bind on this image: {probs}")
     return {"reports_sha256": out, "checked_by": "fpga/xdc_bindings.check_report + check_route",

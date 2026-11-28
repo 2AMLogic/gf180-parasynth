@@ -174,3 +174,137 @@ def test_control_r1s_exception_list_lacks_the_uart_false_path():
                                    for i, (f, t) in enumerate(rows, 2))
     ok = "".join(f"CHECK\t{c}\t1\tx\n" for c in xb.ROUTE_CHECKS) + "ROUTE_END\t0\n"
     assert any("not exactly the XDC" in p for p in xb.check_route(ok, rep, TEXT))
+
+
+# ---- a refused XDC is REFUSED, never a "did not bind" problem (#1922) ------------
+# object_queries refuses a query with no stated count; expected_exceptions
+# refuses an exception kind it does not model. Neither is a measurement, so
+# neither may come back in a problems list -- which every caller reads as "the
+# constraints did not bind": publish_arty's sentence, r2_release's reason, the
+# two builds' FAIL state.
+UNCOUNTED = "\nset_property ASYNC_REG TRUE [get_cells -hier -regexp {.*u_new/q_reg}]\n"
+UNMODELLED = "\nset_max_delay 5.0 -from [get_ports x] -to [get_ports y]\n"
+NO_OP = "\n# a planted comment: nothing in it for either parser to read\n"
+ROUTE_OK = "".join(f"CHECK\t{c}\t1\tfixture\n" for c in xb.ROUTE_CHECKS) + "ROUTE_END\t0\n"
+
+
+def _exceptions(xdc_text):
+    rows = xb.expected_exceptions(xdc_text)
+    return "--------\n" + "".join(f"{i}  {f}  *  {t}  false  false\n"
+                                 for i, (f, t) in enumerate(rows, 2))
+
+
+def _failed(name):
+    return "".join(f"CHECK\t{c}\t{0 if c == name else 1}\t{c}\n" for c in xb.ROUTE_CHECKS) \
+        + "ROUTE_END\t1\n"
+
+
+@pytest.mark.parametrize("plant,check,why", [
+    (UNCOUNTED, lambda xdc: xb.check_report(_report(TEXT), xdc), "no required match count"),
+    (UNMODELLED, lambda xdc: xb.check_route(ROUTE_OK, _exceptions(TEXT), xdc), "does not model"),
+])
+def test_a_refused_xdc_raises_instead_of_answering(plant, check, why):
+    """Red-first control: each checker returned [str(exc)] here -- a non-empty
+    problems list, the one thing every caller reads as "did not bind"."""
+    with pytest.raises(xb.Refused, match=why):
+        check(TEXT + plant)
+
+
+def test_each_plant_refuses_exactly_one_checker():
+    """UNCOUNTED is refused where check_report reads the XDC and nowhere else;
+    UNMODELLED where check_route does. A refusal in one check leaves the other
+    free to measure."""
+    assert xb.check_route(ROUTE_OK, _exceptions(TEXT), TEXT + UNCOUNTED) == []
+    assert xb.check_report(_report(TEXT), TEXT + UNMODELLED) == []
+
+
+def test_control_a_planted_no_op_xdc_still_binds():
+    xdc = TEXT + NO_OP
+    assert xb.check_report(_report(xdc), xdc) == []
+    assert xb.check_route(ROUTE_OK, _exceptions(xdc), xdc) == []
+    assert xb.check_build(_report(xdc) + ROUTE_OK, _exceptions(xdc), xdc) == []
+
+
+def test_a_measured_after_route_failure_outranks_a_refused_exceptions_list():
+    """Precedence: a real failure next to a refusal is FAIL. check_route has
+    already measured the after-route section when expected_exceptions refuses;
+    that measurement is the result, and the refusal is not appended to it."""
+    probs = xb.check_route(_failed("uart_false"), _exceptions(TEXT), TEXT + UNMODELLED)
+    assert any("after-route check uart_false failed" in p for p in probs), probs
+    assert not any("does not model" in p for p in probs), probs
+
+
+@pytest.mark.parametrize("plant,why", [
+    (UNCOUNTED, "no required match count"), (UNMODELLED, "does not model"),
+    (UNCOUNTED + UNMODELLED, "no required match count"),
+])
+def test_check_build_refuses_a_refused_xdc_for_its_own_reason(plant, why):
+    with pytest.raises(xb.Refused, match=why) as caught:
+        xb.check_build(_report(TEXT) + ROUTE_OK, _exceptions(TEXT), TEXT + plant)
+    assert "did not bind" not in str(caught.value)
+
+
+def test_check_build_a_real_did_not_bind_next_to_a_refusal_is_fail():
+    """Which wins when check_report binds wrongly but check_route refuses: the
+    measured problem. And when check_report refuses but check_route measured a
+    failure: still the measured problem. A refusal with nothing measured is
+    REFUSED (the test above)."""
+    uart = [n for n, _k, rx, _e, _a in xb.object_queries(TEXT) if "u_uart" in rx]
+    probs = xb.check_build(_report(TEXT, counts={n: 0 for n in uart}) + ROUTE_OK,
+                           _exceptions(TEXT), TEXT + UNMODELLED)
+    assert any("matched 0" in p for p in probs) and not any("does not model" in p for p in probs)
+    probs = xb.check_build(_report(TEXT) + _failed("uart_false"), _exceptions(TEXT), TEXT + UNCOUNTED)
+    assert any("uart_false failed" in p for p in probs) \
+        and not any("no required match count" in p for p in probs)
+
+
+def _plant_snapshot_xdc(art, plant):
+    """The XDC the build compiled is the snapshot under inputs/, which no digest
+    covers (publish_binding_cases' xdc_value_drift edits it the same way), so
+    the planted line is the ONLY defect in the artifact."""
+    xdc = art / "inputs/fpga/boards/arty-a7-100.xdc"
+    xdc.write_text(xdc.read_text() + plant)
+
+
+@pytest.mark.parametrize("plant,why", [(UNCOUNTED, "no required match count"),
+                                       (UNMODELLED, "does not model")])
+def test_publisher_refuses_a_refused_xdc_rather_than_saying_it_did_not_bind(tmp_path, plant, why):
+    """#1922: publish() raised ValueError('XDC constraints did not bind: <refusal>')
+    here -- a refusal restated as a measured disagreement."""
+    import publish_arty as publish
+    art = _publishable(tmp_path)
+    _plant_snapshot_xdc(art, plant)
+    with pytest.raises(xb.Refused, match=why) as caught:
+        publish.publish(art, tmp_path / "out")
+    assert "did not bind" not in str(caught.value)
+
+
+def test_control_publisher_still_fails_a_constraint_that_bound_nothing_beside_a_refusal(tmp_path):
+    """A measured "did not bind" outranks the refusal beside it: FAIL, with the
+    refusal kept out of the sentence."""
+    import publish_arty as publish
+    import publish_binding_cases as cases
+    art = _publishable(tmp_path)
+    uart = [n for n, _k, rx, _e, _a in xb.object_queries(TEXT) if "u_uart" in rx]
+    cases.write_constraint_report(art, counts={n: 0 for n in uart})
+    _rebind(art)
+    _plant_snapshot_xdc(art, UNMODELLED)
+    with pytest.raises(ValueError, match="XDC constraints did not bind") as caught:
+        publish.publish(art, tmp_path / "out")
+    assert not isinstance(caught.value, xb.Refused)
+    assert "does not model" not in str(caught.value)
+
+
+def test_publish_arty_cli_ends_refused_not_a_traceback(tmp_path):
+    """The CLI is what a release runs (fpga/ARTY.md): with no handler a
+    propagating Refused would be exit 1 and a traceback -- the shape of an
+    implementation error, not of a stated missing precondition."""
+    art = _publishable(tmp_path)
+    _plant_snapshot_xdc(art, UNMODELLED)
+    out = tmp_path / "publication"
+    r = subprocess.run([sys.executable, str(HERE / "publish_arty.py"), str(art), "--out", str(out)],
+                       capture_output=True, text=True, cwd=str(HERE.parent))
+    assert r.returncode == 2, (r.returncode, r.stdout, r.stderr)
+    assert "publish_arty: REFUSED --" in r.stdout and "does not model" in r.stdout, r.stdout
+    assert "did not bind" not in r.stdout and "Traceback" not in r.stderr, (r.stdout, r.stderr)
+    assert not (out / "publication.json").exists()

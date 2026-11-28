@@ -15,6 +15,7 @@ import build_arty as build
 import build_arty_sd as sd
 import publish_arty as publish
 import verify_sd_dac as vsd
+import xdc_bindings as xb
 
 ROOT = build.ROOT
 RTL = ROOT / "fpga/rtl"
@@ -339,3 +340,98 @@ def test_constant_port_evidence_control_catches_a_broken_gate_pattern(monkeypatc
     real_warning = "WARNING: [Synth 8-3917] design arty_a7_sd_top has port dac_sck driven by constant 0"
     with pytest.raises(AssertionError):
         assert sd.constant_port_evidence(real_warning, "dac_sck")
+
+
+# ---- #1922: a refused XDC is REFUSED at the gate, never a FAIL --------------------
+UNCOUNTED = "\nset_property ASYNC_REG TRUE [get_cells -hier -regexp {.*u_new/q_reg}]\n"
+UNMODELLED = "\nset_max_delay 5.0 -from [get_ports x] -to [get_ports y]\n"
+SD_FIXTURE = ROOT / "fpga/reports/arty/sd-demo-2025.1"
+SD_OUTPUTS = ("arty.bit", "utilization.rpt", "timing.rpt", "clocks.rpt", "drc.rpt", "routed.dcp",
+              xb.REPORT, xb.EXCEPTIONS, sd.IO_REPORT)
+
+
+def _built_sd(tmp_path, main_xdc):
+    """The committed no-DAC build as a build directory: its reports, plus the
+    input snapshots an honest build writes -- with `main_xdc` as the snapshot of
+    the shared XDC, which is the one check_implementation reads (never the live
+    tree's)."""
+    d = tmp_path / "sd"
+    shutil.copytree(SD_FIXTURE, d)
+    for p in (build.XDC, sd.SD_XDC):
+        dest = d / "inputs" / p.relative_to(ROOT)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(p, dest)
+    (d / "inputs" / build.XDC.relative_to(ROOT)).write_text(main_xdc)
+    # a publication does not ship the synthesis log; the one line the gate reads
+    # is Vivado 2025.1's own (test_constant_port_evidence_matches_vivados_own_warning)
+    (d / "vivado.log").write_text("WARNING: [Synth 8-3917] design arty_a7_sd_top has port "
+                                  "dac_sck driven by constant 0\n")
+    return d
+
+
+@pytest.mark.parametrize("plant,why", [(UNCOUNTED, "no required match count"),
+                                       (UNMODELLED, "does not model")])
+def test_check_implementation_refuses_a_refused_xdc_not_as_a_failed_check(tmp_path, plant, why):
+    """#1922: the gate raised ValueError(<refusal>) here, and main() books any
+    ValueError as FAIL -- so an XDC it could not read was a failed build."""
+    d = _built_sd(tmp_path, build.XDC.read_text() + plant)
+    with pytest.raises(xb.Refused, match=why):
+        sd.check_implementation(d)
+
+
+def test_control_check_implementation_still_fails_a_constraint_that_bound_nothing(tmp_path):
+    """The measured problem outranks the refusal beside it (FAIL), and the
+    refusal is kept out of the reason."""
+    import publish_binding_cases as cases
+    d = _built_sd(tmp_path, build.XDC.read_text() + UNMODELLED)
+    uart = [n for n, _k, rx, _e, _a in xb.object_queries(build.XDC.read_text()) if "u_uart" in rx]
+    cases.write_constraint_report(d, counts={n: 0 for n in uart})
+    with pytest.raises(ValueError, match="matched 0") as caught:
+        sd.check_implementation(d)
+    assert not isinstance(caught.value, xb.Refused) and "does not model" not in str(caught.value)
+
+
+def test_control_a_planted_no_op_xdc_still_passes_the_gate(tmp_path):
+    d = _built_sd(tmp_path, build.XDC.read_text() + "\n# a planted comment\n")
+    assert set(sd.check_implementation(d)) == {"timing", "resources", "drc",
+                                               "output_disposition", "placed_pins"}
+
+
+@pytest.fixture
+def fake_vivado(monkeypatch):
+    """A Vivado that accepts the script and writes one line into every output
+    the build expects, so main() reaches check_implementation -- the mapping
+    under test. Nothing here says the Tcl runs or the image closes timing."""
+    def popen(argv, **kwargs):
+        class Process:
+            pid = 4242
+
+            def wait(self, timeout=None):
+                directory = Path(argv[argv.index("-log") + 1]).parent
+                for name in SD_OUTPUTS:
+                    (directory / name).write_text("not read: check_implementation is replaced\n")
+                return 0
+        return Process()
+
+    monkeypatch.setattr(shutil, "which", lambda name: "/fake/vivado")
+    monkeypatch.setattr(subprocess, "check_output", lambda *a, **k: "Vivado v2025.1 (fake)\n")
+    monkeypatch.setattr(subprocess, "Popen", popen)
+
+
+def test_main_books_a_refused_constraint_check_as_refused_and_a_failed_one_as_fail(
+        sd_receipt, monkeypatch, fake_vivado):
+    """main() catches ValueError around check_implementation and books it FAIL.
+    xb.Refused IS a ValueError, so without its own handler first a refusal
+    became FAIL -- the #1922 fold, one frame up."""
+    path, args, record = sd_receipt
+    path.write_text(json.dumps(record))
+    args = [a for a in args if a != "--prepare-only"] + ["--vivado", "/fake/vivado"]
+    for raised, rc, state in ((xb.Refused("planted: the XDC cannot be read"), 2, "REFUSED"),
+                              (ValueError("after-route check uart_false failed: 0 paths"), 1, "FAIL")):
+        def check(directory, raised=raised):
+            raise raised
+        monkeypatch.setattr(sd, "check_implementation", check)
+        assert sd.main(args) == rc, raised
+        out = Path(args[args.index("--out") + 1])
+        rep = json.loads((out / "report.json").read_text())
+        assert rep["state"] == state and rep["reason"] == str(raised), rep

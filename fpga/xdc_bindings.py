@@ -25,7 +25,12 @@ exactly the objects it is for":
                           bitstream;
   * check_report(...)     the publisher's check: the shipped report names
                           every query of the compiled XDC, with the required
-                          count and ASYNC_REG set. Anything else is refused.
+                          count and ASYNC_REG set. Anything else is refused;
+  * check_route(...)      the after-route checks and the exception list, the
+                          same way;
+  * check_build(...)      both at once. A problem either one measured is a
+                          FAIL; an XDC neither could read is REFUSED (raised),
+                          and a measured FAIL outranks a refusal (#1922).
 
     .venv/bin/python fpga/xdc_bindings.py              # list the queries and counts
 """
@@ -109,12 +114,13 @@ def tcl_assertions(xdc_text: str, report_path: str) -> str:
 
 def check_report(report_text: str, xdc_text: str) -> list:
     """Problems with a build's constraint_matches.rpt against the XDC it
-    compiled (empty = every constraint bound exactly its objects)."""
-    try:
-        want = {(n, kind, query_id(rx)): (exp, ar, rx)
-                for n, kind, rx, exp, ar in object_queries(xdc_text)}
-    except Refused as exc:
-        return [str(exc)]
+    compiled (empty = every constraint bound exactly its objects).
+
+    Raises Refused when the XDC cannot be read (#1922): a query with no stated
+    count means this check never ran, and a non-empty list here is read by every
+    caller as "did not bind"."""
+    want = {(n, kind, query_id(rx)): (exp, ar, rx)
+            for n, kind, rx, exp, ar in object_queries(xdc_text)}
     got, end = {}, None
     for line in report_text.splitlines():
         f = line.split("\t")
@@ -243,7 +249,11 @@ def reported_exceptions(report_text: str) -> list:
 
 
 def check_route(report_text: str, exceptions_text: str, xdc_text: str) -> list:
-    """The publisher's check of the after-route section and the exception list."""
+    """The publisher's check of the after-route section and the exception list.
+
+    Raises Refused when the XDC's exceptions cannot be read (#1922) -- unless
+    the after-route section already measured a failure, which is returned as
+    the problem it is: a measured FAIL outranks a check that could not run."""
     probs = []
     checks = {}
     end = None
@@ -262,8 +272,10 @@ def check_route(report_text: str, exceptions_text: str, xdc_text: str) -> list:
             probs.append(f"after-route check {name} failed: {checks[name][1]}")
     try:
         want = sorted(expected_exceptions(xdc_text))
-    except Refused as exc:
-        return probs + [str(exc)]
+    except Refused:
+        if probs:
+            return probs
+        raise
     got = reported_exceptions(exceptions_text)
     got_ft = sorted((f, t) for f, t, _s, _h in got)
     if got_ft != want:
@@ -273,6 +285,26 @@ def check_route(report_text: str, exceptions_text: str, xdc_text: str) -> list:
         if (setup, hold) != ("false", "false"):
             probs.append(f"{EXCEPTIONS}: {f} -> {t} is {setup}/{hold}, not a false path")
     return probs
+
+
+def check_build(report_text: str, exceptions_text: str, xdc_text: str) -> list:
+    """Both checks of one build against the XDC it compiled, with the precedence
+    in one place (#1922): a problem either check MEASURED is returned -- FAIL --
+    even when the other check refused; Refused is raised only when nothing
+    measured disagreed and a check could not run. So the reason reaches the
+    caller unchanged, never joined into a "did not bind" sentence."""
+    probs, refused = [], None
+    for check in (lambda: check_report(report_text, xdc_text),
+                  lambda: check_route(report_text, exceptions_text, xdc_text)):
+        try:
+            probs += check()
+        except Refused as exc:
+            refused = refused or exc
+    if probs:
+        return probs
+    if refused is not None:
+        raise refused
+    return []
 
 
 def main(argv=None) -> int:
