@@ -30,9 +30,9 @@ WHAT EACH CALLER OWES, and what these controls assert:
                     calibration (asserted with a bomb in calibrate)
   make_cymbal_pack  refuses a silent corpus BEFORE calibration (pre-fix this
                     drive died in _trim's IndexError after calibrating)
-  cymbal_low_tail   a refusing record is RECORDED as data and the run exits 0
-                    -- this module's designed per-file degradation, same as
-                    its short-record refusals; the defect was the escape
+  cymbal_low_tail   records refusals in the JSON output without a traceback.
+                    An unexpected refusal, including a noise-floor control
+                    refusal, gives the caller exit 2.
   cymbal_tone_knob  the windowed measurement refuses into NO VERDICT and the
                     gate still answers on its corpus-free properties
   cymbal_tone_render  a cymbal_bands refusal maps to 3, this module's
@@ -173,7 +173,7 @@ def test_cymbal_low_tail_full_run_records_prepare_refusal_not_traceback(tmp_path
     refs = _refs_dir(tmp_path, _write_onset_cut, "CY5025.WAV")
     out = tmp_path / "o.json"
     rc_ = clt.main(["--refs", str(refs), "--out", str(out)])
-    assert rc_ == 0, "the designed per-file degradation; controls still pass"
+    assert rc_ == exit_contract.REFUSED, "a refusal in the required noise-floor control must reach the caller"
     res = json.loads(out.read_text())
     entry = res["windows"]["1.5s"]["fischer"]["CY5025"]
     assert "refused" in entry and "cut into the strike" in entry["refused"], entry
