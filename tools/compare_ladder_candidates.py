@@ -192,18 +192,24 @@ def stage_resonance(names, cuts, resonances, **kw) -> dict:
     resonance >= 1.0 across the full cutoff range*. Uncompensated, because
     DR 0006's compensation ROM is derived from the SHIPPED loop and applying it
     to a candidate would hide the very property being judged -- how much
-    compensation that candidate's own structure needs."""
+    compensation that candidate's own structure needs.
+
+    A ring the estimator refuses is counted in `refused` and enters no
+    `sings_*` figure (#1851). Both are over the evaluated points only, and
+    are None when any point refused or none was evaluated: False is a
+    measurement, and a refusal is not one."""
     out = {}
     for name in names:
-        rows, sings, cents = {}, [], []
+        rows, sings, cents, refused = {}, [], [], 0
         for cut in cuts:
             for res in resonances:
                 cand = _cand(name, **kw)
                 try:
                     f = _ring_facts(cand.ring(cut, res), cut)
                 except (Refused, am.InsufficientEvidence) as exc:
+                    # counted, never booked as "does not sing" (#1851)
                     rows[f"{cut:.0f}/{res}"] = dict(refused=str(exc))
-                    sings.append(False)
+                    refused += 1
                     continue
                 rows[f"{cut:.0f}/{res}"] = f
                 sings.append(f["sings"])
@@ -211,10 +217,12 @@ def stage_resonance(names, cuts, resonances, **kw) -> dict:
                     cents.append(f["cents"])
         out[name] = dict(
             points=rows,
-            sings_everywhere=bool(sings and all(sings)),
-            sings_fraction=round(sum(sings) / max(len(sings), 1), 3),
+            sings_everywhere=(bool(sings and all(sings))
+                              if sings and not refused else None),
+            sings_fraction=round(sum(sings) / len(sings), 3) if sings else None,
             tuning_spread_cents=round(max(cents) - min(cents), 1) if len(cents) > 1 else None,
-            worst_cents=round(max((abs(c) for c in cents), default=float("nan")), 1))
+            worst_cents=round(max((abs(c) for c in cents), default=float("nan")), 1),
+            refused=refused)
     return out
 
 
@@ -564,7 +572,13 @@ def compare(quick: bool = False, names=None) -> dict:
 def _verdict(rep: dict, names) -> dict:
     """Issue #46's own bar: **retain the current filter unless a candidate
     gives a useful, reproducible improvement within budget.** Derived from the
-    numbers, not written."""
+    numbers, not written.
+
+    The sings merit is evaluated only where both ladders had every ring point
+    evaluated. `sings_everywhere` is None when a point refused (#1851), and a
+    refusal on either side makes the merit UNMEASURED: `sings_where_we_do_not`
+    is then False, `sings_measured` says so, `sings_refused_points` says how
+    many points were refused on each side, and `text` says it in words."""
     base = "shipped"
     b = rep["candidates"][base]
     wins, blocked, notes = [], [], []
@@ -574,7 +588,9 @@ def _verdict(rep: dict, names) -> dict:
         c = rep["candidates"][n]
         better_tuning = c["matches"]["worst_cents"] < b["matches"]["worst_cents"] - 5.0
         better_peak = c["matches"]["worst_peak_db"] < b["matches"]["worst_peak_db"] - 0.5
-        sings = c["bigger"]["sings_everywhere"] and not b["bigger"]["sings_everywhere"]
+        c_sings, b_sings = c["bigger"]["sings_everywhere"], b["bigger"]["sings_everywhere"]
+        sings_measured = isinstance(c_sings, bool) and isinstance(b_sings, bool)
+        sings = bool(sings_measured and c_sings and not b_sings)
         fits = c["cost"]["fits"][DIV_CLOCKS[-1]]
         on_merit = bool(better_tuning or better_peak or sings)
         if on_merit and fits:
@@ -586,6 +602,10 @@ def _verdict(rep: dict, names) -> dict:
             blocked.append((n, c["cost"]["max_divider_latency_that_fits"]))
         notes.append(dict(candidate=n, better_tuning=bool(better_tuning),
                           better_peak=bool(better_peak), sings_where_we_do_not=bool(sings),
+                          sings_measured=bool(sings_measured),
+                          sings_refused_points=dict(
+                              candidate=rep["resonance"][n]["refused"],
+                              shipped=rep["resonance"][base]["refused"]),
                           wins_on_merit=on_merit,
                           fits_budget_worst_case_divider=bool(fits),
                           max_divider_latency_that_fits=c["cost"][
@@ -605,9 +625,25 @@ def _verdict(rep: dict, names) -> dict:
                  + "; ".join(f"{n} wins on sound and needs a divider of "
                              f"{'no latency that fits' if d is None else f'<= {d} clocks'}"
                              for n, d in blocked) + ".")
+    unmeasured = [r for r in notes if not r["sings_measured"]]
+    if unmeasured:
+        text += ("\n  NOT MEASURED, so neither a merit nor a demerit: the sings-"
+                 "where-the-shipped-ladder-does-not merit for "
+                 + ", ".join(r["candidate"] for r in unmeasured)
+                 + ". Ring points not evaluated -- "
+                 + "; ".join(f"{r['candidate']} {r['sings_refused_points']['candidate']}, "
+                             f"shipped {r['sings_refused_points']['shipped']}"
+                             for r in unmeasured) + ".")
     return dict(retain=not wins, winners=wins,
                 blocked_by_cost=[n for n, _ in blocked],
                 per_candidate=notes, text=text)
+
+
+def _say_sings(measured) -> str:
+    """`True` or `False` for a measurement; `REFUSED` when a ring point was
+    not evaluated, which must never print as `False` or as a bare `None`
+    (#1851)."""
+    return "REFUSED" if measured is None else str(measured)
 
 
 def _print(rep: dict) -> None:
@@ -616,16 +652,16 @@ def _print(rep: dict) -> None:
           f"{rep['apparatus']['worst_db']} dB of the closed form at "
           f"{rep['apparatus']['oversample']}x\n")
     print(f"  {'candidate':14s} {'rung':>4} {'tune':>9} {'peak':>8} {'pass':>8} "
-          f"{'bass':>8} {'sat':>8} {'sings':>6} {'tanh':>6} {'div':>5} {'clocks':>7}")
+          f"{'bass':>8} {'sat':>8} {'sings':>8} {'tanh':>6} {'div':>5} {'clocks':>7}")
     print(f"  {'':14s} {'':>4} {'cents':>9} {'dB':>8} {'dB':>8} {'dB':>8} "
-          f"{'dBFS':>8} {'':>6} {'/samp':>6} {'/samp':>5} {'@17':>7}")
+          f"{'dBFS':>8} {'':>8} {'/samp':>6} {'/samp':>5} {'@17':>7}")
     for n, c in rep["candidates"].items():
         m, g, k = c["matches"], c["bigger"], c["cost"]
         print(f"  {n:14s} {c['rung']:>4} {m['worst_cents']:>9.1f} "
               f"{m['worst_peak_db']:>8.2f} {m['worst_pass_db']:>8.2f} "
               f"{(g['bass_weight_db'] if g['bass_weight_db'] is not None else float('nan')):>8.2f} "
               f"{(g['saturation_dbfs'] if g['saturation_dbfs'] is not None else float('nan')):>8.2f} "
-              f"{str(g['sings_everywhere']):>6} {k['tanh']:>6.1f} {k['divide']:>5.1f} "
+              f"{_say_sings(g['sings_everywhere']):>8} {k['tanh']:>6.1f} {k['divide']:>5.1f} "
               f"{k['clocks'][DIV_CLOCKS[-1]]:>7.0f}")
     print(f"\n  budget {CLOCKS_PER_SAMPLE} clocks/sample (DR 0001)")
     print("\n  DIVIDER LATENCY THE BUDGET ALLOWS -- exact, not read off the "

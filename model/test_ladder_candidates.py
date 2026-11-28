@@ -279,16 +279,19 @@ def test_the_delay_free_explicit_ladder_cannot_oscillate_above_a_known_cutoff():
     below = cc.stage_resonance(["zdf-explicit"], (3200.0,), hard)["zdf-explicit"]
     assert below["sings_fraction"] > 0.0, below
 
-    # above the closed-form ceiling: no feedback closes the loop ...
+    # above the closed-form ceiling: no feedback closes the loop. The pitch
+    # estimator REFUSES every one of these rings as "not a sustained ring", so
+    # the stage measures nothing there and says so; before #1851 this same run
+    # read `sings_fraction == 0.0`, a refusal booked as "does not sing".
     above = cc.stage_resonance(["zdf-explicit"], (6400.0,), hard)["zdf-explicit"]
-    assert above["sings_fraction"] == 0.0, above
+    assert above["refused"] == len(hard) and above["sings_fraction"] is None, above
 
-    # ... and neither does it BELOW the ceiling at 4800 Hz. The closed form is
-    # necessary, not sufficient; this is the assertion the earlier version of
-    # this test had backwards.
+    # ... and at 4800 Hz, BELOW the ceiling, every ring is refused the same
+    # way. The closed form is necessary, not sufficient; this is the
+    # assertion the earlier version of this test had backwards.
     under = cc.stage_resonance(["zdf-explicit"], (4800.0,), hard)["zdf-explicit"]
     assert 4800.0 < limit
-    assert under["sings_fraction"] == 0.0, under
+    assert under["refused"] == len(hard) and under["sings_fraction"] is None, under
 
     # the contrast that makes the half-sample delay load-bearing rather than
     # merely different: the shipped filter sings at BOTH of those cutoffs.
