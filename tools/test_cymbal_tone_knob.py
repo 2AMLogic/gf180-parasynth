@@ -190,7 +190,7 @@ def test_cli_labels_the_alternative_even_when_both_sides_print_3db(
     _, offset_db = flat_alternative_case
     # The controls require the normal artifact and grid. Exercise the ordinary
     # summary with the planted measurement after that independent gate.
-    monkeypatch.setattr(tk, "check", lambda **kwargs: (True, []))
+    monkeypatch.setattr(tk, "_check_outcome", lambda **kwargs: (False, False, []))
     assert tk.main(["--refs", str(tmp_path)]) == 0
     [row] = [s for s in capsys.readouterr().out.splitlines()
              if s.lstrip().startswith("no-tone-network ")]

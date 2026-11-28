@@ -890,23 +890,22 @@ def properties(*, refs=None, meas=None, defect=None) -> dict:
     return out
 
 
-def check(*, refs=None, meas=None, require_corpus=False) -> tuple[bool, list[str]]:
-    """The gate: every property, then every injected defect's row of the
-    properties x defects matrix, then the two blind controls verified blind.
-
-    A defect counts as caught when a property that PASSES on the clean run goes
-    red under it -- and a property the defect makes REFUSE counts, because
-    declining to answer is a detection, not a miss. A defect that moves nothing
-    fails the gate: a control that cannot fail is worse than no control.
+def _check_outcome(*, refs=None, meas=None, require_corpus=False) -> tuple[bool, bool, list[str]]:
+    """The gate's two reasons for not passing, kept apart: `failed` is a
+    measurement that disagreed, `refused` a precondition that was not met so
+    nothing was measured for that row. To the gate they are one bool; to a
+    caller that sees only the exit status they are different outcomes
+    (`tools/exit_contract.py`: 1 is a RESULT, 2 is no evidence), so they are
+    not folded here.
     """
-    lines, ok = [], True
+    lines, failed, refused = [], False, False
     clean = properties(refs=refs, meas=meas)
     lines.append(f"{'property':26s} {'value':>10s} {'bound':>8s}  verdict")
     for name in PROPERTIES:
         p = clean[name]
         verdict = "REFUSED" if p["ok"] is None else ("pass" if p["ok"] else "FAIL")
         if p["ok"] is False:
-            ok = False
+            failed = True
         lines.append(f"{name:26s} {str(p['value']):>10s} {str(p['bound']):>8s}  {verdict}"
                      + (f"   ({p['refused']})" if p.get("refused") else ""))
     lines.append("")
@@ -919,13 +918,13 @@ def check(*, refs=None, meas=None, require_corpus=False) -> tuple[bool, list[str
                             "control, and a required control does not pass by "
                             "going undecided]" if require_corpus else ""))
             if require_corpus:
-                ok = False
+                refused = True
             continue
         try:
             got = properties(refs=refs, meas=(None if d in CORPUS_DEFECTS else meas), defect=d)
         except Refused as exc:
             lines.append(f"{d:26s} NO VERDICT ({exc})")
-            ok = False
+            refused = True
             continue
         red = [n for n in PROPERTIES
                if clean[n]["ok"] is True and got[n]["ok"] is not True]
@@ -933,7 +932,7 @@ def check(*, refs=None, meas=None, require_corpus=False) -> tuple[bool, list[str
         lines.append(f"{d:26s} {', '.join(red) if red else 'NOTHING -- this control cannot fail'}"
                      + (f"   [not decidable here: {len(undecidable)}]" if undecidable else ""))
         if not red:
-            ok = False
+            failed = True
         # rule 4's other half: the properties this defect is ASSERTED blind to
         # must actually be blind to it, or the assertion is decoration.
         for n in BLIND_PAIRS.get(d, ()):
@@ -944,7 +943,7 @@ def check(*, refs=None, meas=None, require_corpus=False) -> tuple[bool, list[str
             lines.append(f"{'':26s}   blind-to {n}: "
                          + ("verified blind" if same else "MOVED -- the blindness claim is wrong"))
             if not same:
-                ok = False
+                failed = True
     lines.append("")
     for b in BLIND_BY_CONSTRUCTION:
         got = properties(refs=refs, meas=meas, defect=b)
@@ -953,8 +952,26 @@ def check(*, refs=None, meas=None, require_corpus=False) -> tuple[bool, list[str
         lines.append(f"{b:26s} blind by construction -- "
                      + ("verified blind" if not moved else f"MOVED {moved}"))
         if moved:
-            ok = False
-    return ok, lines
+            failed = True
+    return failed, refused, lines
+
+
+def check(*, refs=None, meas=None, require_corpus=False) -> tuple[bool, list[str]]:
+    """The gate: every property, then every injected defect's row of the
+    properties x defects matrix, then the two blind controls verified blind.
+
+    A defect counts as caught when a property that PASSES on the clean run goes
+    red under it -- and a property the defect makes REFUSE counts, because
+    declining to answer is a detection, not a miss. A defect that moves nothing
+    fails the gate: a control that cannot fail is worse than no control.
+
+    Both reasons for not passing are folded into the one bool, for callers
+    that ask only whether the gate passed. The caller that turns the answer
+    into an exit status reads `_check_outcome`, because a refusal is not a
+    measured failure.
+    """
+    failed, refused, lines = _check_outcome(refs=refs, meas=meas, require_corpus=require_corpus)
+    return not failed and not refused, lines
 
 
 # ---------------------------------------------------------------------------
@@ -1058,15 +1075,19 @@ def _report(a) -> int:
 
     refs = a.refs
     meas, why = measured_or_refused(refs)
-    ok, lines = check(refs=refs, meas=meas, require_corpus=a.require_corpus)
+    failed, refused, lines = _check_outcome(refs=refs, meas=meas,
+                                            require_corpus=a.require_corpus)
     print("\n".join(lines))
     if why:
         print(f"\n(the windowed measurement REFUSED: {why})")
     if a.check:
-        return 0 if ok else 1
-    if not ok:
-        print("\nREFUSED: this instrument's own controls do not pass")
+        return 0 if not (failed or refused) else 1
+    if failed:
+        print("\nFAIL: this instrument's own controls do not pass")
         return 1
+    if refused:
+        print("\nREFUSED: this instrument's own controls do not pass")
+        return REFUSED
 
     v = verdict(refs=refs, meas=meas)
     print(f"\nmapping: {v['mapping']}\n")
