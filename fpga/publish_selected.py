@@ -16,6 +16,42 @@ import build_selected
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 import setup_ci_oss_cad as toolchain_pin
+import exit_contract
+import refusal
+
+
+class Refused(refusal.Refused, ValueError):
+    """A precondition of publication is not met (#1663): nothing was published
+    and no verdict exists, which a traceback at exit 1 misreports as a FAIL."""
+
+
+def _commit_absent(commit):
+    """Is `commit` a full object name this clone does not hold? `git cat-file
+    -e -- <name>` answers in three statuses, not two (measured, git 2.43): 0,
+    the object is here; 1, a well-formed name that is not -- a shallow or
+    single-branch checkout; 128, not a name git will parse at all -- a
+    malformed record, or an abbreviated name it cannot resolve. Only the 1 is
+    a precondition of the checkout. The others are defects, and a handler that
+    read them as a missing commit would send the operator after nothing."""
+    return subprocess.run(["git", "cat-file", "-e", "--", f"{commit}"], cwd=ROOT,
+                          stderr=subprocess.PIPE).returncode == 1
+
+
+def _git_show(commit, name):
+    """`git show <commit>:<name>` from this checkout. A commit the clone does
+    not hold is a precondition that was not met (#2025): REFUSED, naming the
+    commit, which is what the operator has to fetch. Any other failure is a
+    defect and leaves as the CalledProcessError git raised: the handler asks
+    git, it does not guess. The publisher runs by hand in whatever checkout
+    the operator has (fpga/SELECTED.md)."""
+    command = ["git", "show", f"{commit}:{name}"]
+    try:
+        return subprocess.check_output(command, cwd=ROOT, stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as exc:
+        if _commit_absent(commit):
+            raise Refused(f"recorded commit {commit} is not in this clone, so {name} "
+                          f"cannot be read at it: {build_selected.child_failure(exc)}") from exc
+        raise
 
 
 def timing_summary(report):
@@ -72,8 +108,7 @@ def publish(artifact: Path, output: Path, workflow_url: str, *, historical=False
     commit = report["source_commit"]
     changed_sources = []
     for name, digest in report["source_sha256"].items():
-        saved = subprocess.check_output(["git", "show", f"{commit}:{name}"], cwd=ROOT,
-                                        stderr=subprocess.PIPE)
+        saved = _git_show(commit, name)
         if hashlib.sha256(saved).hexdigest() != digest:
             raise ValueError(f"build source differs: {name}")
         if not (ROOT / name).is_file() or sha256(ROOT / name) != digest:
@@ -82,29 +117,40 @@ def publish(artifact: Path, output: Path, workflow_url: str, *, historical=False
                 raise ValueError(f"current source differs: {name}; use --historical for the recorded build")
     # LPF/ROM contents are also build inputs, though the original runner's
     # source map records Verilog only. Bind them to the CI source commit here.
+    # These two sites run before a summary exists: a commit the clone does not
+    # hold refuses here with nothing written, because the artifact's integrity
+    # is unverified until every recorded input has been read at its commit.
     inputs = dict(report["source_sha256"])
     for path in [ROOT / "fpga/boards/ulx3s.lpf", *sorted((ROOT / "rtl-sketch").glob("*.hex"))]:
         name = str(path.relative_to(ROOT))
-        saved = subprocess.check_output(["git", "show", f"{commit}:{name}"], cwd=ROOT,
-                                        stderr=subprocess.PIPE)
+        saved = _git_show(commit, name)
         if path.read_bytes() != saved and not historical:
             raise ValueError(f"build input differs: {name}")
         inputs[name] = hashlib.sha256(saved).hexdigest()
     sim_refusal = None
     if historical:
+        # Here the summary is reachable, so a commit the clone does not hold is
+        # recorded rather than raised: a NO-VERDICT publication that keeps the
+        # build's reports (#2025). Only _git_show's own refusal is caught, at
+        # its own call: the mismatch refusals beside it stay refusals of the
+        # artifact, and a CalledProcessError (the commit is held) surfaces.
         simulation = report["simulation_evidence"]
-        transcript = subprocess.check_output(
-            ["git", "show", f"{commit}:{simulation['transcript']}"],
-            cwd=ROOT, stderr=subprocess.PIPE)
-        if hashlib.sha256(transcript).hexdigest() != simulation["sha256"]:
-            raise ValueError("historical simulation transcript differs")
-        for name, digest in inputs.items():
-            if name.startswith("rtl-sketch/"):
-                simulated = subprocess.check_output(
-                    ["git", "show", f"{simulation['commit']}:{name}"],
-                    cwd=ROOT, stderr=subprocess.PIPE)
-                if hashlib.sha256(simulated).hexdigest() != digest:
-                    raise ValueError(f"historical core differs from simulation: {name}")
+        try:
+            transcript = _git_show(commit, simulation['transcript'])
+        except Refused as exc:
+            simulation, sim_refusal = None, str(exc)
+        if sim_refusal is None:
+            if hashlib.sha256(transcript).hexdigest() != simulation["sha256"]:
+                raise ValueError("historical simulation transcript differs")
+            for name, digest in inputs.items():
+                if name.startswith("rtl-sketch/"):
+                    try:
+                        simulated = _git_show(simulation['commit'], name)
+                    except Refused as exc:
+                        simulation, sim_refusal = None, str(exc)
+                        break
+                    if hashlib.sha256(simulated).hexdigest() != digest:
+                        raise ValueError(f"historical core differs from simulation: {name}")
     else:
         try:
             simulation = build_selected.simulation_evidence()
@@ -167,8 +213,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
     try:
         result = publish(args.artifact, args.out, args.workflow_url, historical=args.historical)
+    except Refused as exc:
+        print(f"REFUSED: {exc}", file=sys.stderr)
+        raise SystemExit(exit_contract.REFUSED)
     except subprocess.CalledProcessError as exc:
         print(f"REFUSED: {build_selected.child_failure(exc)}", file=sys.stderr)
-        raise SystemExit(2)
+        raise SystemExit(exit_contract.REFUSED)
     print(json.dumps(result, indent=2))
     raise SystemExit(0 if result["bitstream_qualified"] else 2)
