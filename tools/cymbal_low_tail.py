@@ -82,6 +82,23 @@ REFUSALS (a depth is refused, not answered)
   * the band holds no energy above its floor;
   * the record is shorter than the common analysis window (see next).
 
+THE EXIT STATUS OF A RUN IN WHICH SOMETHING REFUSED (#1765, the #1699 ruling)
+------------------------------------------------------------------------------
+A refusal that is recorded in band ({"refused": ...}) and printed is still a
+row with no number in it, so a process that goes on to exit 0 reads as PASS to
+anything that looks only at the exit status. `main` therefore returns
+`exit_contract.REFUSED` (2, which `tools/run_all.py` renders NO-VERDICT) when a
+row that was SUPPOSED to answer refused: a requested setting refusing in every
+window that ran for any reason but the documented short-record one, any
+refusal in the noise-floor control, or a refused `--candidate`. The measured
+rows are still printed and still written to `--out`, which carries the list
+under `unexpected_refusals`. The short-record refusals are not refusals of the
+run -- a Fischer record shorter than one window is what three windows exist
+for -- and a clean `--all-settings` corpus exits 0 with its twenty by-design
+refusals (five at 2.0 s, fifteen at 3.5 s) present. `unexpected_refusals()`
+states the whole rule, including the one case in which "refused in every
+window" is still by design.
+
 THE PRECONDITION THAT IS ASSERTED, NOT ASSUMED
 ----------------------------------------------
 A Schroeder curve is computed from the END of the record backwards, so its
@@ -237,6 +254,21 @@ class Refused(refusal.Refused, RuntimeError):
     pass
 
 
+class TooShort(Refused):
+    """`_trim`'s refusal: the record LOADED, and is shorter than the window
+    asked for -- the one refusal this module documents as by design (the
+    DECAY-length table in the module docstring). It carries the record's own
+    length because that is what `unexpected_refusals` excuses a refusal on: a
+    1.501 s DECAY 00 file refusing a 3.5 s window is the table, and a 1.0 s
+    file refusing all three is a damaged corpus, and both say "less than the
+    common analysis window"."""
+
+    def __init__(self, have_s: float, need_s: float):
+        super().__init__(f"record is {have_s:.3f} s after t=0, "
+                         f"less than the {need_s:.3f} s common analysis window")
+        self.have_s, self.need_s = have_s, need_s
+
+
 # --------------------------------------------------------------------------
 # the measurement
 # --------------------------------------------------------------------------
@@ -262,8 +294,7 @@ def _trim(y, sr, trim_s):
     o = rc.required_lead_samples(sr)
     need = o + int(round(trim_s * sr))
     if len(y) < need:
-        raise Refused(f"record is {(len(y) - o) / sr:.3f} s after t=0, "
-                      f"less than the {trim_s:.3f} s common analysis window")
+        raise TooShort((len(y) - o) / sr, trim_s)
     return np.asarray(y[:need], dtype=np.float64)
 
 
@@ -606,7 +637,10 @@ def fischer(refs: pathlib.Path, settings=None, *, trim_s=TRIM_S) -> dict:
     function of the DECAY code -- 1.501 s at DECAY 00, 2.001 at 25, 2.501 at 50,
     3.501 at 75 and 4.001 at 10 -- so NO single window covers all 25, and the
     two frozen windows this module reports (1.5 s, which every file supports,
-    and 2.0 s, which 20 of 25 support) are never mixed in one comparison."""
+    and 2.0 s, which 20 of 25 support) are never mixed in one comparison.
+
+    A short record's entry carries its length as `record_s` beside the reason
+    (`TooShort`): the mark `unexpected_refusals` excuses a refusal on."""
     out = {}
     for s in (settings or [f"CY{t}{d}" for t in cb.CODES for d in cb.CODES]):
         p = refs / "cy8" / f"{s}.WAV"
@@ -619,6 +653,8 @@ def fischer(refs: pathlib.Path, settings=None, *, trim_s=TRIM_S) -> dict:
             out[s] = measure(rc.prepare(x, sr, side=p.name), sr, trim_s=trim_s)
         except refusal.Refused as e:
             out[s] = {"refused": str(e)}
+            if isinstance(e, TooShort):
+                out[s]["record_s"] = round(e.have_s, 3)
     return out
 
 
@@ -941,6 +977,56 @@ def _row(label, m) -> str:
             + f"  | onset M-Ln {m['onset_excess_db']['M']}")
 
 
+def unexpected_refusals(res: dict) -> list[str]:
+    """The rows of a `main` result that were supposed to answer and hold no
+    number, named; empty on a clean run. `main` returns `exit_contract.REFUSED`
+    when it is not (#1765, the #1699 ruling). Meant for a result `main` has just
+    built: every place that records a refusal and lets the run continue is read
+    here, and there are three.
+
+    A requested Fischer setting is UNEXPECTED when it refused in every window
+    that ran AND its refusals are not all the documented short-record kind:
+    `_trim` refusing (`TooShort`) a record at least as long as the shortest
+    frozen window, 1.5 s, which every setting supports. DECAY 00 at 2.0 s and at
+    3.5 s is that, and answers at 1.5 s. An unreadable file, a record cut into
+    its strike, or one shorter than 1.5 s is not, and refuses wherever it is
+    asked. The record's LENGTH is read, not only the count of windows, because
+    `--windows 3.5` alone makes fifteen settings refuse in the only window that
+    ran and every one of them is by design: counting windows alone would make
+    that run REFUSED for good, and excusing the KIND alone would pass a 1.0 s
+    file that refuses with the same words. A record between 1.5 s and its DECAY
+    code's documented length is classed by design -- that table is prose and a
+    test, not something this function looks up.
+
+    Any refusal in the noise-floor control -- at its top level, or in either of
+    its two runs -- or in a `--candidate` result is unexpected: the control is
+    what decides whether the rho gap is a floor artefact, the candidate is half
+    of the comparison, and nothing documents either one refusing."""
+    out, windows = [], res.get("windows", {})
+    for s in sorted({s for w in windows.values() for s in w["fischer"]}):
+        refused = {wn: w["fischer"][s] for wn, w in windows.items() if "refused" in w["fischer"].get(s, {})}
+        if not refused:
+            continue
+        lengths = [m["record_s"] for m in refused.values() if "record_s" in m]
+        if len(lengths) == len(refused) and min(lengths) >= min(WINDOWS_S):
+            continue                        # shorter than these windows: by design
+        if len(refused) < len(windows):
+            continue                        # it answered in another window
+        out.append(f"808 {s} refused in every window ({', '.join(refused)}): "
+                   f"{next(iter(refused.values()))['refused']}")
+    n = res.get("noise_floor_control") or {}
+    if "refused" in n:
+        out.append(f"noise-floor control ({n['setting']}, {n['band']} band): {n['refused']}")
+    for tag, r in n.get("runs", {}).items():
+        if "refused" in r:
+            out.append(f"noise-floor control, {tag} run: {r['refused']}")
+    for wname, w in windows.items():
+        c = w.get("candidate")
+        if c is not None and "refused" in c:
+            out.append(f"candidate in the {wname} window: {c['refused']}")
+    return out
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--refs", default=str(rc.configured_refs()))
@@ -1040,9 +1126,18 @@ def main(argv=None) -> int:
                                    capture_output=True, text=True).stdout.strip()
     res["sources_dirty"] = subprocess.run(["git", "diff", "--quiet", "HEAD", "--", "model", "tools"],
                                           cwd=ROOT).returncode != 0
+    # Decided before `--out` is written, so the file carries its own verdict:
+    # the console line is gone by the time someone picks the JSON up.
+    res["unexpected_refusals"] = bad = unexpected_refusals(res)
     if a.out:
         a.out.parent.mkdir(parents=True, exist_ok=True)
         a.out.write_text(json.dumps(res, indent=1, default=float) + "\n")
+    if bad:
+        print(f"\nREFUSED: {len(bad)} row(s) that were supposed to answer hold no number: "
+              + " | ".join(bad)
+              + ". (A short-record refusal of a record the 1.5 s window covers is by design, "
+                "and is not counted.)")
+        return REFUSED       # was 0: a row with no number is a refusal, not a pass
     return 0
 
 
