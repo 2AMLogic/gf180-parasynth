@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Known-answer exit-status controls: a cymbal_bands refusal must reach a
 caller's exit contract as REFUSED, never as an uncaught exit-1 traceback
-(#1160).
+(#1160). #1850 adds the same defect one family over: a
+`cymbal_tone_realisation.Refused` must reach `cymbal_tone_nodal`'s exit
+contract as REFUSED, not as a traceback.
 
 THE DEFECT, AS MEASURED ON main @ 88c8574e (2026-11-24, red-first run of
 every control in this file): `tools/cymbal_bands.Refused` and each caller's
@@ -17,7 +19,10 @@ silent 16-bit WAV must be refused "silent" by `cymbal_bands.measure` and by
 `cymbal_mid.measure_mid` (which raises `cymbal_bands.Refused` itself); a WAV
 whose first sample is its own peak must be refused "cut into the strike" by
 `run_case.prepare` (ONSET_FRAC = 2 %, so index 0 is above threshold for any
-amplitude). Both answers were verified by hand before the fix landed.
+amplitude). Both answers were verified by hand before the fix landed. The
+third needs no signal: a werner_fig4 artifact that does not exist must be
+refused "is absent" by `cymbal_tone_realisation.level_corner_hz`, which is a
+file-exists test and depends on nothing this repository models.
 
 WHAT EACH CALLER OWES, and what these controls assert:
 
@@ -39,8 +44,12 @@ WHAT EACH CALLER OWES, and what these controls assert:
                     declared REFUSED_ALTERNATE family (in NO_EVIDENCE); the
                     issue's "exit 2" is satisfied by the family, not the
                     literal, and changing the family is out of scope
+  cymbal_tone_nodal  a cymbal_tone_realisation refusal (the werner_fig4
+                     artifact absent, or without its level corner) maps to 3,
+                     the same REFUSED_ALTERNATE family (#1850), from --check,
+                     --report and --json alike
 
-WRONG-THEN-RIGHT (3, caught by running rather than reading):
+WRONG-THEN-RIGHT (4, caught by running rather than reading):
   1. Drove tone_knob with the SILENT corpus first: it dies in a
      ZeroDivisionError (log10 of 0/0 band energies), not a refusal at all --
      filed as #1163, out of scope here; the control uses the onset-cut corpus.
@@ -52,10 +61,17 @@ WRONG-THEN-RIGHT (3, caught by running rather than reading):
      #1144's future `_load` refusal identically.
   3. Wrote `assert main(...) == 2` before noticing argparse errors also exit
      2; every exit assertion here also pins the "REFUSED:" message.
+  4. Recorded cymbal_tone_nodal as having no cross-module refusal path (below),
+     because the search was for `cb.` call sites. It has one, through
+     `cymbal_tone_realisation.level_corner_hz`, and on main @ 528a228b
+     (2026-11-28) it escaped all three of the module's modes as a traceback on
+     exit 1 -- found by running #1850's probe, not by reading.
 
 NOT EXERCISED, RECORDED PER THE ISSUE'S THIRD CRITERION:
   cymbal_tone_nodal imports cymbal_bands but dereferences nothing from it
-  (`grep -c 'cb\\.'` = 0), so it has no cross-module refusal path to guard.
+  (`grep -c 'cb\\.'` = 0), so cymbal_bands is no refusal path there. Its one
+  cross-module path runs through cymbal_tone_realisation instead, and the
+  cymbal_tone_nodal tests below exercise it (#1850).
   probes/cymbal_400_production_tail.py already catches `cb.Refused` by class
   (:224) and `refusal.Refused` (:417); it is the pattern this fix copies.
   cymbal_vca_clip reaches cymbal_bands transitively (`lt.cb._bp`, non-raising)
@@ -67,6 +83,7 @@ NOT EXERCISED, RECORDED PER THE ISSUE'S THIRD CRITERION:
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -210,6 +227,256 @@ def test_cymbal_tone_render_maps_a_cymbal_bands_refusal_to_no_evidence(tmp_path,
     assert rc_ == exit_contract.REFUSED_ALTERNATE
     assert rc_ in exit_contract.NO_EVIDENCE and rc_ != exit_contract.FAIL
     assert "REFUSED:" in capsys.readouterr().err
+
+
+_NODAL_ABSENCES = ("file-absent", "key-missing", "planted-raise")
+_NODAL_PLANTED = "werner_fig4.json is absent; run tools/werner_fig4.py --from-pdf --json"
+
+
+def _refuse_level_corner(how, monkeypatch, tmp_path) -> str:
+    """Make `cymbal_tone_realisation.level_corner_hz` refuse, one of three
+    ways, and return what its reason must say. Two drive the module's real
+    raise sites -- the artifact file absent (`:116`) and present without its
+    level corner (`:121`) -- against nothing but a path in `tmp_path`; the
+    third is #1850's own probe, the function replaced."""
+    import cymbal_tone_realisation as tr
+
+    if how == "file-absent":
+        p = tmp_path / "no-such-werner_fig4.json"
+        monkeypatch.setattr(tr.wf, "ARTIFACT", p)
+        return f"{p} is absent"
+    if how == "key-missing":
+        p = tmp_path / "werner_fig4.json"
+        p.write_text(json.dumps({"level_stage": {}}))
+        monkeypatch.setattr(tr.wf, "ARTIFACT", p)
+        return "carries no level_stage.one_pole_corner_hz"
+    assert how == "planted-raise", how
+
+    def absent(*a, **k):
+        raise tr.Refused(_NODAL_PLANTED)
+
+    monkeypatch.setattr(tr, "level_corner_hz", absent)
+    return _NODAL_PLANTED
+
+
+def _raising(exc):
+    def plant(*a, **k):
+        raise exc
+    return plant
+
+
+def test_cymbal_tone_nodal_and_realisation_refusals_are_siblings():
+    """The class relations the nodal controls rest on, as for cymbal_bands
+    above: neither module's `Refused` is the other's, and both are the base's."""
+    import cymbal_tone_nodal as tn
+    import cymbal_tone_realisation as tr
+
+    assert tr.Refused is not tn.Refused
+    assert not issubclass(tr.Refused, tn.Refused)
+    assert not issubclass(tn.Refused, tr.Refused)
+    for klass in (tn.Refused, tr.Refused):
+        assert issubclass(klass, refusal.Refused), klass
+
+
+@pytest.mark.parametrize("how", _NODAL_ABSENCES)
+@pytest.mark.parametrize("mode", ["--check", "--report"])
+def test_cymbal_tone_nodal_maps_a_realisation_refusal_to_refused_3(
+        how, mode, tmp_path, capsys, monkeypatch):
+    """Red-first on main @ 528a228b: in both modes the sibling class left
+    `main` uncaught -- `UNCAUGHT cymbal_tone_realisation.Refused`, exit 1 --
+    because `main` caught only this module's own `Refused` (#1850)."""
+    import cymbal_tone_nodal as tn
+
+    why = _refuse_level_corner(how, monkeypatch, tmp_path)
+    rc_ = tn.main([mode])
+    assert rc_ == exit_contract.REFUSED_ALTERNATE
+    assert rc_ in exit_contract.NO_EVIDENCE and rc_ != exit_contract.FAIL
+    err = capsys.readouterr().err
+    assert "REFUSED:" in err and why in err, err
+
+
+@pytest.mark.parametrize("how", _NODAL_ABSENCES)
+def test_cymbal_tone_nodal_writes_no_record_when_the_artifact_refuses(
+        how, tmp_path, capsys, monkeypatch):
+    """`--json` reads the same artifact through `record` -> `check` ->
+    `properties`. A run that measured nothing must leave no record behind."""
+    import cymbal_tone_nodal as tn
+
+    why = _refuse_level_corner(how, monkeypatch, tmp_path)
+    out = tmp_path / "rec" / "nodal.json"
+    rc_ = tn.main(["--json", str(out)])
+    assert rc_ == exit_contract.REFUSED_ALTERNATE
+    err = capsys.readouterr().err
+    assert "REFUSED:" in err and why in err, err
+    assert not out.exists()
+
+
+def test_cymbal_tone_nodal_process_exit_status_is_refused_3(tmp_path):
+    """Through the real interpreter, with the artifact really absent: the
+    exit status a batch runner sees, and no traceback on its stderr."""
+    absent = tmp_path / "no-such-werner_fig4.json"
+    code = ("import pathlib, sys\n"
+            "import cymbal_tone_realisation as tr\n"
+            "import cymbal_tone_nodal as tn\n"
+            "tr.wf.ARTIFACT = pathlib.Path(sys.argv[1])\n"
+            "raise SystemExit(tn.main(['--check']))\n")
+    env = dict(os.environ, PYTHONPATH=os.pathsep.join(
+        str(ROOT / d) for d in ("tools", "model")))
+    p = subprocess.run([sys.executable, "-c", code, str(absent)], check=False,
+                       capture_output=True, text=True, timeout=300, env=env)
+    assert p.returncode == exit_contract.REFUSED_ALTERNATE, p.stderr[-400:]
+    assert "REFUSED:" in p.stderr and f"{absent} is absent" in p.stderr, p.stderr[-400:]
+    assert "Traceback" not in p.stderr, p.stderr[-400:]
+
+
+def test_cymbal_tone_nodal_maps_its_own_refusal_to_refused_3(capsys, monkeypatch):
+    """The other half of `main`'s handler: this module's own class. Planted,
+    because on the real tree no own-class refusal reaches `main` uncaught:
+    `choose`'s two are caught inside properties/report/record, and
+    `realised_db`'s needs more poles than the enumeration produces."""
+    import cymbal_tone_nodal as tn
+
+    monkeypatch.setattr(tn, "properties",
+                        _raising(tn.Refused("planted: this module's own refusal")))
+    rc_ = tn.main(["--check"])
+    assert rc_ == exit_contract.REFUSED_ALTERNATE
+    assert "REFUSED: planted: this module's own refusal" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("mode", ["--check", "--report"])
+def test_cymbal_tone_nodal_clean_run_still_exits_0(mode, capsys):
+    """The fix must not move the clean answer: gate and report exit 0, with
+    no refusal on stderr."""
+    import cymbal_tone_nodal as tn
+
+    assert tn.main([mode]) == exit_contract.PASS
+    assert "REFUSED" not in capsys.readouterr().err
+
+
+def test_cymbal_tone_nodal_clean_json_run_still_exits_0(tmp_path, capsys):
+    import cymbal_tone_nodal as tn
+
+    out = tmp_path / "nodal.json"
+    assert tn.main(["--json", str(out)]) == exit_contract.PASS
+    assert json.loads(out.read_text())["check_ok"] is True
+    assert "REFUSED" not in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("boundary, mode",
+                         [("properties", "--check"), ("check", "--check"),
+                          ("report", "--report"), ("record", "--json")])
+def test_cymbal_tone_nodal_does_not_book_a_sibling_refusal_in_band(
+        boundary, mode, tmp_path, capsys, monkeypatch):
+    """Each of the module's four in-band handlers catches its OWN `Refused`
+    and turns it into something that is not a refusal outcome -- a failing
+    property, a REF row, a line of the report, a JSON field. That is right
+    for a realisation the bank cannot hold and wrong for a missing
+    precondition, so each stays narrow: a sibling refusal raised at that
+    exact guarded call must leave for `main` (3, REFUSED on stderr). Widened
+    on the tree of 528a228b, each turned this refusal into a failed gate on
+    exit 1 (`properties`, `check`; the reason discarded) or a clean exit 0
+    (`report` printed it, `record` wrote it).
+
+    The `record` plant is aimed by a count, because the guarded call is not
+    the first time its callee runs: `check` calls `chosen` once per
+    evaluation before `record` makes its own call, and `record` calls it
+    once more, unguarded, after that. So the count is taken first, the
+    counter reset, and the refusal raised at exactly one call. Written
+    without the reset it fired inside `check` instead; written to keep
+    refusing it fired again at the unguarded call -- and either way this
+    control stayed green with `record`'s handler widened."""
+    import cymbal_tone_nodal as tn
+    import cymbal_tone_realisation as tr
+
+    why = f"planted at the call {boundary} guards"
+    if boundary == "check":
+        real = tn.properties
+
+        def refusing(cfg=None):
+            if cfg is not None and cfg["tone_flat"]:
+                raise tr.Refused(why)
+            return real(cfg)
+
+        monkeypatch.setattr(tn, "properties", refusing)
+    elif boundary == "record":
+        real, seen = tn.chosen, []
+
+        def counting(cfg=None):
+            seen.append(1)
+            return real(cfg)
+
+        monkeypatch.setattr(tn, "chosen", counting)
+        tn.check()
+        inside_check = len(seen)
+        assert inside_check > 0
+        seen.clear()
+
+        def refusing(cfg=None):
+            seen.append(1)
+            if len(seen) == inside_check + 1:
+                raise tr.Refused(why)
+            return real(cfg)
+
+        monkeypatch.setattr(tn, "chosen", refusing)
+    else:
+        monkeypatch.setattr(tn, "chosen", _raising(tr.Refused(why)))
+    argv = [mode] + ([str(tmp_path / "o.json")] if mode == "--json" else [])
+    rc_ = tn.main(argv)
+    assert rc_ == exit_contract.REFUSED_ALTERNATE
+    err = capsys.readouterr().err
+    assert "REFUSED:" in err and why in err, err
+
+
+def test_cymbal_tone_nodal_does_not_book_a_sibling_refusal_as_a_rejected_candidate(
+        monkeypatch):
+    """`choose`'s per-candidate handler catches `(Refused, ValueError)` and
+    books the candidate as rejected. `enumerate_realisations` makes the same
+    `band_chain_db` calls unguarded before the loop runs; a sibling refusal
+    raised at the first call AFTER that many -- inside the try -- must leave
+    `choose`, not count as a realisation the bank cannot hold (#1851's
+    shape). Raised one call earlier it leaves whatever the handler catches,
+    which is how this test first passed: the counter was not reset after it
+    was measured."""
+    import cymbal_tone_nodal as tn
+    import cymbal_tone_realisation as tr
+
+    cfg = tn.config()
+    real, seen = tr.band_chain_db, []
+
+    def counting(*a, **k):
+        seen.append(1)
+        return real(*a, **k)
+
+    monkeypatch.setattr(tr, "band_chain_db", counting)
+    tn.enumerate_realisations("low", tn.alpha_of(tn.ANCHOR, cfg), cfg)
+    before_loop = len(seen)
+    assert before_loop > 0
+    seen.clear()
+
+    def refusing(*a, **k):
+        seen.append(1)
+        if len(seen) == before_loop + 1:
+            raise tr.Refused("planted inside choose's per-candidate try")
+        return real(*a, **k)
+
+    monkeypatch.setattr(tr, "band_chain_db", refusing)
+    with pytest.raises(tr.Refused, match="planted inside choose's per-candidate try"):
+        tn.choose("low", cfg)
+
+
+@pytest.mark.parametrize("modname, fname",
+                         [("cymbal_tone_realisation", "level_corner_hz"),
+                          ("cymbal_tone_nodal", "properties")])
+def test_cymbal_tone_nodal_does_not_relabel_an_implementation_error(modname, fname, monkeypatch):
+    """Rule 8 for the widened handler: `except Exception` in `main` would
+    pass every refusal control above. Planted at the artifact boundary and at
+    the handler's own boundary; neither may come back as REFUSED."""
+    import cymbal_tone_nodal as tn
+
+    monkeypatch.setattr(__import__(modname), fname, _raising(
+        ValueError("an implementation error, not a precondition")))
+    with pytest.raises(ValueError, match="an implementation error"):
+        tn.main(["--check"])
 
 
 # ---------------------------------------------------------------------------
