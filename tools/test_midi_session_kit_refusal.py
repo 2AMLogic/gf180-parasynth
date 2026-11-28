@@ -374,9 +374,9 @@ def test_harness_drifted_r1_kit_or_sound_table_refuses_2(what, tmp_path, monkeyp
 
 
 def test_harness_refused_run_removes_a_prior_record(tmp_path, monkeypatch):
-    """tools/r1_harvest.py reads this record: a PASS left by an earlier run must
-    not stand in for this run's refusal (the rule fpga/test_verifier_summary_exit.py
-    pins on the sibling verifiers)."""
+    """A PASS left by an earlier run must not stand in for this run's refusal:
+    tools/r1_harvest.py lists T-LIVE-MIDI among the trials it harvests, and this
+    is the rule fpga/test_verifier_summary_exit.py pins on the sibling verifiers."""
     kit = _drifted(tmp_path, "kit")
     out = tmp_path / "out"
     out.mkdir()
