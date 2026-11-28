@@ -14,11 +14,13 @@ import math
 import pathlib
 import shutil
 import sys
+import wave
 
 import numpy as np
 import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import refusal                                                   # noqa: E402
 import r0_capture as rc                                           # noqa: E402
 
 SR = 48000
@@ -249,6 +251,231 @@ def test_a_24bit_reference_with_a_matching_hash_refuses_not_errors(clean, tmp_pa
     rec = rc.analyse(clean, ref, allow_synthetic=True)
     assert rec["verdict"] == rc.REFUSED, rec["reasons"]
     assert "16-bit" in rec["reasons"][0]
+
+
+# ---- the reference is the take its record describes ---------------------------
+_REFERENCE_KEYS = ("held-default", "held-m5a-saw", "held-m5a-pulse", "phrase-m5a",
+                   "demo", "bar808-full")
+
+
+def _manifest():
+    return rc.rr.load_manifest(rc.rr.IMAGES["r0"]["manifest"])
+
+
+def _committed_frames(key="held-default"):
+    with wave.open(str(rc.REFERENCES / f"{key}.wav"), "rb") as w:
+        return w.getnframes()
+
+
+def _rewrite_record(ref, key, fn):
+    p = ref / f"{key}.json"
+    rec = json.loads(p.read_text())
+    fn(rec)
+    p.write_text(json.dumps(rec))
+
+
+def _reference_of_length(tmp_path, n_frames, *, key="held-default", channels=1):
+    """A copy of the corpus whose `key` WAV holds exactly `n_frames` frames:
+    the committed take's prefix, zero-padded past its end, written as a
+    well-formed WAV (header and data agree, so nothing but the length shows
+    the edit) with its record's wav_sha256 rewritten to match."""
+    ref = _copy_reference_corpus(tmp_path)
+    p = ref / f"{key}.wav"
+    with wave.open(str(p), "rb") as w:
+        sr, n = w.getframerate(), w.getnframes()
+        mono = np.frombuffer(w.readframes(n), dtype="<i2")
+    x = np.zeros(n_frames, "<i2")
+    x[: min(n, n_frames)] = mono[: n_frames]
+    with wave.open(str(p), "wb") as w:
+        w.setnchannels(channels)
+        w.setsampwidth(2)
+        w.setframerate(sr)
+        w.writeframes(np.repeat(x[:, None], channels, axis=1).tobytes())
+    _rewrite_record(ref, key, lambda rec: rec.update(wav_sha256=rc.sha256_file(p)))
+    return ref
+
+
+@pytest.mark.parametrize("frac", [0.99, 0.95, 0.40])
+def test_a_cut_reference_with_a_rewritten_hash_refuses(tmp_path, frac):
+    """99 / 95 / 40 % of held-default.wav, re-hashed: both readers must refuse,
+    naming the file and both lengths, and name the same problem."""
+    n = _committed_frames()
+    kept = int(n * frac)
+    assert kept < n
+    ref = _reference_of_length(tmp_path, kept)
+    with pytest.raises(rc.Refused) as e:
+        rc.load_reference(ref, "held-default")
+    msg = str(e.value)
+    assert "held-default.wav" in msg and f"{kept}" in msg and f"{n}" in msg, msg
+    why = rc.rr.reference_problems(ref, "held-default", _manifest())
+    assert why == [f"held-default: {msg}"], why
+
+
+@pytest.mark.parametrize("frac", [0.99, 0.95, 0.40])
+def test_a_cut_reference_refuses_the_verdict_through_the_path_that_ships(clean, tmp_path,
+                                                                          frac):
+    """The same cut through `analyse`, the entry the trial runs: a REFUSED
+    verdict naming the take -- not a verdict computed on its truncated prefix,
+    and not a refusal for some other reason the cut happens to cause."""
+    n = _committed_frames()
+    kept = int(n * frac)
+    ref = _reference_of_length(tmp_path, kept)
+    rec = rc.analyse(clean, ref, allow_synthetic=True)
+    assert rec["verdict"] == rc.REFUSED, (rec["verdict"], rec["reasons"])
+    assert f"{kept}" in rec["reasons"][0] and f"{n}" in rec["reasons"][0], rec["reasons"]
+
+
+def test_the_hash_still_refuses_a_take_of_the_right_length(tmp_path):
+    """Control: the length check must not displace the hash check. One bit
+    flipped in the last sample -- the length untouched, the hash not rewritten
+    -- still refuses on the hash, in both readers."""
+    ref = _copy_reference_corpus(tmp_path)
+    p = ref / "held-default.wav"
+    b = bytearray(p.read_bytes())
+    b[-2] ^= 1
+    p.write_bytes(bytes(b))
+    with pytest.raises(rc.Refused, match="missing or altered"):
+        rc.load_reference(ref, "held-default")
+    assert rc.rr.reference_problems(ref, "held-default", _manifest()) == \
+        ["held-default: wav missing or altered"]
+
+
+@pytest.mark.parametrize("key", _REFERENCE_KEYS)
+def test_every_committed_reference_is_the_take_its_record_describes(key):
+    """Control: the guard passes the six references it was written for -- the
+    committed take is `periods` frames long and its calibration window lies
+    inside it -- and both readers say so."""
+    ref = rc.load_reference(rc.REFERENCES, key)
+    rec = ref["record"]
+    assert ref["x"].size == rec["periods"]
+    assert 0 <= ref["cal"][0] < ref["cal"][1] <= rec["periods"]
+    assert rc.rr.reference_problems(rc.REFERENCES, key, _manifest()) == []
+
+
+@pytest.mark.parametrize("damage", [
+    lambda rec: rec.pop("periods"),
+    lambda rec: rec.update(periods=None),
+    lambda rec: rec.update(periods="51384"),
+    lambda rec: rec.update(periods=51384.0),
+], ids=["field-deleted", "none", "string", "float-of-the-right-value"])
+def test_a_record_that_declares_no_frame_count_refuses_rather_than_skips(tmp_path, damage):
+    """The guard's own defeating input, asked at write time (verification rule
+    8): delete the field it compares against. The WAV is the committed one,
+    byte for byte. A missing count must REFUSE -- a `rec.get` that falls
+    through would hand the guard nothing to compare, and it would pass."""
+    ref = _copy_reference_corpus(tmp_path)
+    _rewrite_record(ref, "held-default", damage)
+    with pytest.raises(rc.Refused, match=r"held-default\.wav.*not a frame count"):
+        rc.load_reference(ref, "held-default")
+    why = rc.rr.reference_problems(ref, "held-default", _manifest())
+    assert len(why) == 1 and "not a frame count" in why[0], why
+
+
+@pytest.mark.parametrize("mutate", [
+    lambda cal: cal.update(stop=10 ** 9),
+    lambda cal: cal.pop("stop"),
+    lambda cal: cal.update(stop=cal["start"]),
+    lambda cal: cal.update(start=-1),
+], ids=["stop-far-past-the-take", "stop-missing", "empty", "starts-before-the-take"])
+def test_a_calibration_window_outside_the_take_refuses(tmp_path, mutate):
+    """The window the record indexes the take by must lie inside it. On main a
+    stop past the end was sliced away silently (numpy clips) and a missing stop
+    was a KeyError: an execution error, so no verdict at all."""
+    ref = _copy_reference_corpus(tmp_path)
+
+    def damage(rec):
+        cal = dict(rec["calibration"])
+        mutate(cal)
+        rec["calibration"] = cal
+    _rewrite_record(ref, "held-default", damage)
+    with pytest.raises(rc.Refused, match="calibration window"):
+        rc.load_reference(ref, "held-default")
+    why = rc.rr.reference_problems(ref, "held-default", _manifest())
+    assert len(why) == 1 and "calibration window" in why[0], why
+
+
+def test_an_empty_take_refuses_even_with_its_record_made_to_agree(tmp_path):
+    """Edge: `periods` rewritten to 0 as well, so the lengths agree -- and no
+    calibration window can lie inside an empty take."""
+    ref = _reference_of_length(tmp_path, 0)
+    _rewrite_record(ref, "held-default", lambda rec: rec.update(periods=0))
+    with pytest.raises(rc.Refused, match="calibration window"):
+        rc.load_reference(ref, "held-default")
+    assert rc.rr.reference_problems(ref, "held-default", _manifest())
+
+
+def test_length_is_counted_in_frames_not_samples(tmp_path):
+    """Edge: a two-channel take of half the frames carries the same number of
+    samples. `load_reference` indexes channel 0, so what it reads is frames,
+    and the guard must count what it reads."""
+    n = _committed_frames()
+    ref = _reference_of_length(tmp_path, n // 2, channels=2)
+    with pytest.raises(rc.Refused) as e:
+        rc.load_reference(ref, "held-default")
+    assert f"{n // 2}" in str(e.value) and f"{n}" in str(e.value), str(e.value)
+    assert rc.rr.reference_problems(ref, "held-default", _manifest())
+
+
+def test_a_two_channel_take_of_the_whole_length_still_loads(tmp_path):
+    """Its twin: the same samples over the full `periods` frames IS the take
+    the record describes. A guard that counted samples would refuse it."""
+    n = _committed_frames()
+    ref = _reference_of_length(tmp_path, n, channels=2)
+    loaded = rc.load_reference(ref, "held-default")
+    assert loaded["x"].size == n
+    assert rc.rr.reference_problems(ref, "held-default", _manifest()) == []
+
+
+def test_a_longer_take_refuses_too(tmp_path):
+    """The other direction: padded past its end and re-hashed, the record
+    untouched."""
+    n = _committed_frames()
+    ref = _reference_of_length(tmp_path, n + 1000)
+    with pytest.raises(rc.Refused) as e:
+        rc.load_reference(ref, "held-default")
+    assert f"{n + 1000}" in str(e.value) and f"{n}" in str(e.value), str(e.value)
+
+
+def test_a_take_truncated_on_disk_refuses_though_its_header_still_promises_the_whole(tmp_path):
+    """The accidental shape of the same cut: a half-copied file whose header
+    still declares the committed length. The guard must count the frames it
+    can read, not the frames the header promises."""
+    n = _committed_frames()
+    frames_lost = 1000
+    ref = _copy_reference_corpus(tmp_path)
+    p = ref / "held-default.wav"
+    b = bytearray(p.read_bytes())
+    del b[-2 * frames_lost:]
+    p.write_bytes(bytes(b))
+    _rewrite_record(ref, "held-default", lambda rec: rec.update(wav_sha256=rc.sha256_file(p)))
+    with wave.open(str(p), "rb") as w:
+        assert w.getnframes() == n, "the header must still promise the whole take"
+    with pytest.raises(rc.Refused,
+                       match=f"{n - frames_lost} frames, its record describes {n} periods"):
+        rc.load_reference(ref, "held-default")
+    assert rc.rr.reference_problems(ref, "held-default", _manifest())
+
+
+def test_the_ci_check_sees_a_non_16bit_take_the_trial_refuses(tmp_path):
+    """Agreement beyond length: `reference_problems` reads the WAV the trial
+    reads, so a 24-bit take -- refused by `load_reference` since #784 -- is the
+    CI check's problem too, not a pass on its hash alone. Caught by the common
+    base: this refusal is raised by rr.read_wav_int16, a sibling of rc.Refused."""
+    ref = _copy_reference_corpus(tmp_path)
+    p = ref / "held-default.wav"
+    with wave.open(str(p), "rb") as w:
+        sr, n = w.getframerate(), w.getnframes()
+        x = np.frombuffer(w.readframes(n), dtype="<i2").astype("<i4")
+    with wave.open(str(p), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(3)
+        w.setframerate(sr)
+        w.writeframes(x.tobytes())
+    _rewrite_record(ref, "held-default", lambda rec: rec.update(wav_sha256=rc.sha256_file(p)))
+    with pytest.raises(refusal.Refused, match="16-bit"):
+        rc.load_reference(ref, "held-default")
+    why = rc.rr.reference_problems(ref, "held-default", _manifest())
+    assert len(why) == 1 and "16-bit" in why[0], why
 
 
 def test_an_unreadable_release_manifest_refuses_not_errors(tmp_path):

@@ -225,6 +225,33 @@ def calibration_window(x: np.ndarray, sr: int = SR) -> dict:
                     f"{CAL_WINDOW_S * 1e3:.0f} ms long"}
 
 
+def reference_take_problems(rec: dict, wav, n_frames: int) -> list:
+    """Why a reference WAV of `n_frames` frames is not the take its record
+    `rec` describes, or []. The hash binds the bytes and says nothing about
+    their length: a WAV cut short and re-hashed parses, and every index the
+    record carries -- the calibration window, the end a capture must reach --
+    then reads the shorter take as the whole one. The renderer writes
+    `periods` and the WAV from one array, so they must agree. A record that
+    declares no integer period count, or no calibration window inside the
+    take, REFUSES: deleting the field must not skip the check. Both readers
+    of a reference (r0_capture.load_reference, reference_problems) call this,
+    so the trial and the CI check refuse the same take for the same reason."""
+    why = []
+    periods = rec.get("periods")
+    if type(periods) is not int:
+        why.append(f"{wav}: record declares periods={periods!r}, not a frame count; "
+                   f"the WAV has {n_frames} frames")
+    elif periods != n_frames:
+        why.append(f"{wav}: {n_frames} frames, its record describes {periods} periods")
+    cal = rec.get("calibration")
+    cal = cal if isinstance(cal, dict) else {}
+    start, stop = cal.get("start"), cal.get("stop")
+    if type(start) is not int or type(stop) is not int or not 0 <= start < stop <= n_frames:
+        why.append(f"{wav}: calibration window [{start!r}, {stop!r}) is not inside its "
+                   f"{n_frames} frames")
+    return why
+
+
 def _host_image(manifest: dict) -> str:
     """uart_host's `--image` selector for the manifest's image."""
     return {"r0": "release", "r1": "r1"}[manifest["image_id"]]
@@ -550,10 +577,12 @@ def silence_problems(d: pathlib.Path, manifest: dict) -> list:
 def reference_problems(d: pathlib.Path, key: str, manifest: dict) -> list:
     """Why the committed reference for `key` is NOT the release's, or []:
     which image it declares, the pinned bytes, the image's bitstream and every
-    simulated source, the replay verdict, the wav's hash. tools/r0_capture.py
+    simulated source, the replay verdict, the wav's hash, and that the wav is
+    the take its record describes (reference_take_problems). tools/r0_capture.py
     calls this inside the analysis the trial runs (not only as a CI step), so a
     reference that has drifted from the release -- or belongs to the other
-    image -- REFUSES the verdict it would otherwise support."""
+    image, or is shorter than its record says -- REFUSES the verdict it would
+    otherwise support."""
     if key == "silence":
         return silence_problems(d, manifest)
     spec = manifest["commands"].get(key)
@@ -587,6 +616,13 @@ def reference_problems(d: pathlib.Path, key: str, manifest: dict) -> list:
     wav = d / str(rec.get("wav"))
     if not wav.is_file() or sha256_file(wav) != rec.get("wav_sha256"):
         why.append("wav missing or altered")
+    else:
+        try:
+            _, x = read_wav_int16(wav)
+        except Refused as exc:
+            why.append(str(exc))
+        else:
+            why += reference_take_problems(rec, wav, len(x))
     return [f"{key}: {w}" for w in why]
 
 
