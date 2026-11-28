@@ -181,7 +181,7 @@ def test_scorecard_binds_parsed_manifest_after_replacement(
 
 def test_cached_render_digest_and_samples_survive_replacement(tmp_path, monkeypatch, model_record):
     case, cached = model_record
-    target = Path(cached["audio"])
+    target = bass.ROOT / cached["audio"]
     expected_digest = hashlib.sha256(target.read_bytes()).hexdigest()
     sr, original = wavfile.read(target)
     replacement = tmp_path / "replacement.wav"
@@ -235,7 +235,7 @@ def test_changed_cached_audio_refuses(tmp_path):
               "diagnostics": {"configuration": {"patch": {}, "engine": {}, "inject": None},
                               "model_audio_sha256": "original"}}
     with pytest.raises(bass.Refused, match="hash mismatch"):
-        bass.load_model_cache(record, {}, {})
+        bass.load_model_cache(record, {}, {}, manifest_sha256="0" * 64)
 
 
 # --- attack qualification on BOTH sides ---------------------------------------
