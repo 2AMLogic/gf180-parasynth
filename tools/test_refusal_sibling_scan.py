@@ -2004,7 +2004,7 @@ def _scanner_with(old: str, new: str):
     assert src.count(old) == 1, (src.count(old), old)
     m = types.ModuleType("rss_mutant")
     m.__file__ = str(path)
-    exec(compile(src.replace(old, new), str(path), "exec"), m.__dict__)
+    exec(compile(src.replace(old, new), str(path), "exec"), m.__dict__)  # noqa: S102
     return m
 
 
@@ -2027,10 +2027,12 @@ def test_a_call_to_an_async_def_callee_is_a_site(tmp_path, monkeypatch):
 
 
 def test_a_try_in_an_async_main_is_the_cli_boundary(tmp_path):
-    """`in_boundary` matched `ast.FunctionDef` named `main`, so the repair
-    shape the #1160/#1162 fixes used in `main()` guarded nothing when `main`
-    was an `async def`. The second assertion is the control's other side:
-    the same try in any other async def is still no boundary, as for a def."""
+    """`in_boundary` matched `ast.FunctionDef` named `main`, so a module
+    whose `main` was an `async def` had no boundary in the census: a site
+    that module's `main()` catches was reported a candidate escape, the
+    repair shape of #1160/#1162 read as still open. The second assertion is
+    the control's other side: the same try in any other async def is still
+    no boundary, as for a def."""
     files = _async_files(tmp_path, {"caller_async_main": ASYNC_MAIN_BOUNDARY,
                                     "caller_async_run": ASYNC_NON_MAIN_GUARD})
     idx = rss.build_index(files)
@@ -2067,12 +2069,13 @@ def test_the_census_row_of_an_async_callee_follows_the_interpreter(
     node, so a walk that credits the Call node's own try reports a false
     covered there. The rule credits a call to an `async def` -- by the tries
     around it and by the CLI boundary -- only when it is written
-    `await <call>`. Two rows are the rule's own stated cost, both labelled
-    'caught' by Python and 'candidate-escape' by the census: a coroutine
-    awaited inside the try that created it, and one awaited under a try in
-    an async def that is not the boundary. Where the coroutine is awaited is
-    not in the AST at the Call node, so the census answers the one way that
-    is never a false covered."""
+    `await <call>`. One row is the rule's own stated cost: a coroutine
+    awaited INSIDE the try that created it is 'caught' by Python and
+    'candidate-escape' by the census, because where the coroutine is awaited
+    is not in the AST at the Call node. The last row is no cost of the rule:
+    Python catches that refusal in an intermediate frame, a blind spot the
+    module docstring already lists; it is here as the other side of the
+    boundary fix, the same try in an async def not named main."""
     files, idx = _async_tree(tmp_path, {"caller_async": src})
     assert _coroutine_verdict(monkeypatch, tmp_path, "caller_async", fn) == python, src
     got = _sites_for(files, idx, "caller_async")
@@ -2105,25 +2108,29 @@ def test_with_the_registration_reverted_the_async_site_is_absent_again(tmp_path)
     own measurement, re-derived on the shipped source -- `callee.funcs ==
     ['load_sync']`, the sync twin a site, the async site gone -- so the
     first control is red under it and green only through the registration."""
+    ind = " " * 16                    # the registration line's own indentation
     mut = _scanner_with(
-        "if isinstance(node, FUNCTION_NODES):\n                self.funcs.setdefault(node.name, node)",
-        "if isinstance(node, ast.FunctionDef):\n                self.funcs.setdefault(node.name, node)")
+        f"if isinstance(node, FUNCTION_NODES):\n{ind}self.funcs.setdefault(node.name, node)",
+        f"if isinstance(node, ast.FunctionDef):\n{ind}self.funcs.setdefault(node.name, node)")
     files = _async_files(tmp_path, {"caller_async": ASYNC_CALLER})
     idx = mut.build_index(files)
-    assert sorted(idx[str(tmp_path / "callee.py")].funcs) == ["load_sync"]      # the revert is ACTIVE
+    # the revert is ACTIVE: the async def is unregistered again
+    assert sorted(idx[str(tmp_path / "callee.py")].funcs) == ["load_sync"]
     got = sorted(s["callee"] for s in mut.scan(files, idx))
-    assert got == ["callee.load_sync"], got      # the control's claim is false: `callee.load` is gone
+    # the control's claim is false: `callee.load` is gone, the twin remains
+    assert got == ["callee.load_sync"], got
 
 
 def test_with_the_main_match_reverted_an_async_main_is_no_boundary(tmp_path):
     """Mutant 2 of 3: `in_boundary` back to `ast.FunctionDef` alone. The
-    try in `async def main` guards nothing again, so the site it catches is
-    a candidate escape -- the first control red under this revert."""
+    try in `async def main` is no boundary again, so the site it catches is
+    a candidate escape -- the control above red under this revert."""
     mut = _scanner_with('if isinstance(cur, FUNCTION_NODES) and cur.name == "main":',
                         'if isinstance(cur, ast.FunctionDef) and cur.name == "main":')
     files = _async_files(tmp_path, {"caller_async": ASYNC_MAIN_BOUNDARY})
     idx = mut.build_index(files)
-    assert mut.cli_boundary_guards(idx[str(tmp_path / "caller_async.py")], mut.stem_map(idx)) == []
+    caller = idx[str(tmp_path / "caller_async.py")]
+    assert mut.cli_boundary_guards(caller, mut.stem_map(idx)) == []
     got = [s for s in mut.scan(files, idx) if "caller_async.py" in s["site"]]
     assert [(s["classification"], s["guard"]) for s in got] == [("candidate-escape", "none")], got
 
@@ -2135,7 +2142,8 @@ def test_with_the_await_rule_reverted_a_bare_call_borrows_the_trys_handler(tmp_p
     refusal Python raises after the try reads `covered(base)` -- the false
     covered the rule exists to withhold."""
     mut = _scanner_with(
-        "    return not any(isinstance(c.funcs.get(fname), ast.AsyncFunctionDef) for c in callees)",
+        "    return not any(isinstance(c.funcs.get(fname), ast.AsyncFunctionDef)"
+        " for c in callees)",
         "    return True")
     files = _async_files(tmp_path, {"caller_async": ASYNC_STORED_THEN_AWAITED_AFTER})
     idx = mut.build_index(files)
