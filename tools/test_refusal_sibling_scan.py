@@ -16,13 +16,22 @@ is not a site), the repo-relative `candidates` format, and the shadowed-alias
 blind spot #1188's test plan named but never pinned. The #1573 section pins
 function-local imports: an `import x as y` written inside a function bound
 nothing, so its call site was ABSENT from the census (#1569's defect shape),
-and the scoping that keeps a function's import out of its siblings.
+and the scoping that keeps a function's import out of its siblings. The #1577
+section pins the blind spots that issue listed: a family class borrowed inside
+a function (raise, handler, the `scan` pre-filter, and the shadow that keeps it
+out of the rest of the module), the two roots outside `SCAN_ROOTS`, source
+order inside a function scope, and the one site the new roots add to the
+census, accepted with the runtime evidence for its acceptance.
 """
 from __future__ import annotations
 
 import ast
+import json
 import pathlib
 import sys
+import types
+
+import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
@@ -965,7 +974,9 @@ def test_local_family_then_aliased_borrow_keeps_the_local_origin(tmp_path):
 # r1_release.Refused. `_read_bindings` read `tree.body` only, so `rm` was
 # never bound and the site was ABSENT from the census, not misclassified: the
 # census could not flag the defect #1569 repairs. Every scope control below
-# started red against the module-level-only scanner; the two pins say so.
+# started red against the module-level-only scanner except two pins: the
+# module-level-bindings control, and the function-local family borrow, which
+# #1577 flipped into a positive control.
 
 LOCAL_SIBLING_CALLER = '''
 import mod_b as mb
@@ -1239,15 +1250,502 @@ def test_raise_through_a_function_local_import_names_the_real_module(tmp_path):
     assert got[0]["uncovered"] == [], got[0]
 
 
-def test_family_borrowed_inside_a_function_is_still_invisible(tmp_path):
-    """A stated blind spot, pinned so a scope-tracking change moves it
-    deliberately: only the family names bound at MODULE level are read, so
-    `from mod_b import Refused as R` inside a def binds no family name and
-    the `raise R(...)` still reads as raising nothing. The sibling call to
-    `own` is asserted present, so the absence is the blind spot and not an
-    unindexed module. Zero instances in the tree when #1573 landed."""
+def test_family_borrowed_inside_a_function_resolves_to_the_lender(tmp_path):
+    """The #1573 blind-spot pin, flipped by #1577. `from mod_b import Refused
+    as R` inside a def used to bind no family name, so `raise R(...)` read as
+    raising nothing and this caller's `fetch` site was ABSENT from the census
+    while `own` was listed -- the same silencing #1193's module-level borrow
+    had. The sibling call to `own` is still asserted, now for the other
+    direction: the borrow must not rebind the module's own class."""
     files, idx = _local_tree(tmp_path, {"local_borrower": LOCAL_FAMILY_BORROWER,
                                         "caller_local_borrow": LOCAL_BORROW_CALLER})
     got = {s["callee"]: s for s in _sites_for(files, idx, "caller_local_borrow")}
-    assert sorted(got) == ["local_borrower.own"], got
+    assert sorted(got) == ["local_borrower.fetch", "local_borrower.own"], got
     assert got["local_borrower.own"]["origins"] == ["local_borrower"], got
+    fetch = got["local_borrower.fetch"]
+    assert fetch["origins"] == ["mod_b"], fetch
+    assert fetch["classification"] == "candidate-escape", fetch
+    assert fetch["uncovered"] == ["mod_b"], fetch
+
+
+# --- #1577 controls: the remaining import-scope blind spots --------------------
+# Three blind spots the scanner's docstring had stated as accepted. Every
+# scanner control below started red against the #1573 scanner, each on the
+# assertion its docstring names; the two drum-solo controls at the end do not
+# involve the scanner at all.
+#
+# (1) A family class borrowed by a FUNCTION-LOCAL from-import bound no family
+#     name: `from mod_b import Refused as R` inside a def made `raise R(...)`
+#     read as raising nothing, `except R` read as shape `other`, and -- when
+#     that was the module's only family binding -- `scan`'s "no family at all"
+#     pre-filter dropped the module's sites before `raise_origins` could read
+#     them. Fixing the raise alone leaves that pre-filter skipping the module,
+#     so it has its own control, in both the single-callee branch and the
+#     same-stem-collision branch, which carries the same test.
+
+LOCAL_ONLY_BORROWER = '''
+def fetch(p):
+    from mod_b import Refused as R           # the module's ONLY family binding
+    raise R(f"cannot use {p}")
+'''
+
+LOCAL_ONLY_CALLER = '''
+import local_only
+
+def go(p):
+    return local_only.fetch(p)               # unguarded
+'''
+
+LOCAL_BORROWING_HANDLER = '''
+import mod_a
+import mod_b
+
+def go(p):
+    from mod_b import Refused as R           # the borrower's guard, function-local
+    try:
+        mod_a.load(p)                        # NOT covered: mod_a's is a sibling
+        mod_b.measure(p)                     # covered: the class IS mod_b's
+    except R as e:
+        print("REFUSED", e)
+'''
+
+LOCAL_UNALIASED_BORROWER = '''
+import refusal
+import mod_a
+
+class Refused(refusal.Refused, Exception):   # the module's own family
+    pass
+
+def own(p):
+    raise Refused("the module's own class")
+
+def fetch(p):
+    from mod_a import Refused                 # the SAME name, the lender's class, here only
+    raise Refused(f"cannot use {p}")
+
+def guarded(p):
+    from mod_a import Refused                 # the lender's class, here only
+    try:
+        mod_a.load(p)                         # covered: exact, not local
+    except Refused as e:
+        print("REFUSED", e)
+
+def sibling_guarded(p):                       # no borrow here: the name is the
+    try:                                      # module's own class again
+        mod_a.load(p)                         # a sibling: NOT covered
+    except Refused as e:
+        print("REFUSED", e)
+'''
+
+LOCAL_UNALIASED_CALLER = '''
+import local_unaliased
+
+def go(p):
+    local_unaliased.own(p)
+    local_unaliased.fetch(p)
+    local_unaliased.guarded(p)
+    local_unaliased.sibling_guarded(p)
+'''
+
+CALLER_AMBIG_LOCAL_FAMILY = '''
+from play import fetch
+
+def go(p):
+    return fetch(p)                 # one candidate borrows a family in a def only
+'''
+
+
+def test_callee_whose_only_family_is_function_local_is_not_skipped(tmp_path):
+    """The pre-filter, red first: `scan` dropped a callee with no module-level
+    family name before reading its raises, so this site was absent even with a
+    correct `raise_origins`. The module-level assertions keep the control
+    honest about which fix passes it: the name is read from the function
+    scope, not hoisted into the module's own family names."""
+    files, idx = _local_tree(tmp_path, {"local_only": LOCAL_ONLY_BORROWER,
+                                        "caller_local_only": LOCAL_ONLY_CALLER})
+    info = idx[str(tmp_path / "local_only.py")]
+    assert not info.refused_names and info.refused_origin is None, vars(info)
+    got = _sites_for(files, idx, "caller_local_only")
+    assert len(got) == 1, got
+    assert got[0]["callee"] == "local_only.fetch", got[0]
+    assert got[0]["origins"] == ["mod_b"], got[0]
+    assert got[0]["classification"] == "candidate-escape", got[0]
+
+
+def test_function_local_borrowed_handler_covers_exactly_the_lender(tmp_path):
+    """The handler side, red first: `except R` with `R` borrowed inside the
+    function read as shape `other`, so a guard that covers the callee exactly
+    was reported as a candidate escape."""
+    files, idx = _local_tree(tmp_path, {"caller_local_borrow_handler": LOCAL_BORROWING_HANDLER})
+    got = {s["callee"]: s for s in _sites_for(files, idx, "caller_local_borrow_handler")}
+    assert got["mod_b.measure"]["classification"] == "covered(exact)", got
+    assert got["mod_b.measure"]["guard"] == "exact", got
+    sib = got["mod_a.load"]
+    assert sib["classification"] == "candidate-escape", sib
+    assert sib["uncovered"] == ["mod_a"], sib
+
+
+def test_function_local_borrow_shadows_the_module_family_inside_its_def_only(tmp_path):
+    """Rule 8's guard-defeating input for the fix, red first on both sides. The
+    module defines its own `Refused` and one def borrows another module's class
+    under the SAME name: inside that def the name is the lender's, everywhere
+    else it is the module's own. Hoisting the function-local borrow into the
+    module's family names (last binding wins) rebinds `Refused` for the WHOLE
+    file -- `own` would read as raising mod_a's class and `sibling_guarded` as
+    covering it. Both directions are asserted, and so is the shape: the borrow
+    is `exact` in its def and `local` in the sibling's. The sibling's two
+    `mod_a.load` calls are read as the borrower's own sites, at lines 18 and
+    24 of the fixture."""
+    files, idx = _local_tree(tmp_path, {"local_unaliased": LOCAL_UNALIASED_BORROWER,
+                                        "caller_local_unaliased": LOCAL_UNALIASED_CALLER})
+    info = idx[str(tmp_path / "local_unaliased.py")]
+    assert info.has_local_family and info.refused_origin == "local_unaliased", vars(info)
+    assert info.refused_names == {"Refused": "local_unaliased"}, info.refused_names
+    got = {s["callee"]: s for s in _sites_for(files, idx, "caller_local_unaliased")}
+    assert got["local_unaliased.own"]["origins"] == ["local_unaliased"], got
+    assert got["local_unaliased.fetch"]["origins"] == ["mod_a"], got
+    internal = {s["site"].rsplit(":", 1)[1]: s
+                for s in _sites_for(files, idx, "local_unaliased")}
+    assert sorted(internal) == ["18", "24"], internal
+    assert internal["18"]["classification"] == "covered(exact)", internal
+    assert internal["18"]["guard"] == "exact", internal
+    sib = internal["24"]
+    assert sib["classification"] == "candidate-escape", sib
+    assert sib["guard"] == "local", sib
+    assert sib["uncovered"] == ["mod_a"], sib
+
+
+def test_collision_where_the_raising_candidates_family_is_function_local_is_a_site(tmp_path):
+    """The same pre-filter in the same-stem-collision branch, which tests each
+    candidate for a family before reading its raises: when the one raising
+    candidate's only family binding is a function-local borrow, a
+    `from play import fetch` caller was dropped as unable to refuse under any
+    resolution."""
+    files = _collision_tree(tmp_path, LOCAL_ONLY_BORROWER, PLAIN,
+                            "caller_local_amb", CALLER_AMBIG_LOCAL_FAMILY)
+    idx = rss.build_index(files)
+    got = _sites_for(files, idx, "caller_local_amb")
+    assert len(got) == 1, got
+    assert got[0]["classification"] == "ambiguous-callee", got[0]
+    assert len(got[0]["candidates"]) == 2, got[0]
+
+
+# (2) `rtl-sketch/` and `audition/` were outside `SCAN_ROOTS`, so the one
+#     cross-module refusal site between them was in no census.
+
+ROOT_PROBE = '''
+import refusal
+import mod_a
+
+class Refused(refusal.Refused, Exception):   # the caller's OWN class: a sibling
+    pass
+
+def go(p):
+    try:
+        mod_a.load(p)               # guarded by a SIBLING: the defect shape
+    except Refused as e:
+        print("REFUSED", e)
+'''
+
+# one fixture per root, written out: the control must name the roots it
+# demands, not read them back from the tuple it is checking
+SCAN_ROOT_FIXTURES = ("tools", "model", "pnr", "fpga", "rtl-sketch", "audition")
+
+
+def test_every_scan_root_reaches_the_census_through_main(tmp_path, monkeypatch, capsys):
+    """The root filter lives in `main()`, not in `scan()`, so the control
+    drives `main()`: one caller under EVERY root, all planting the defect
+    shape the census exists for -- a call to another module's raising code
+    under `except Refused` with `Refused` the caller's own class. Dropping a
+    root from `SCAN_ROOTS` (the #1573 state for `rtl-sketch` and
+    `audition`) removes its fixture from the census; the caller under no root
+    (`scratch/`) must stay out, so the control also pins that the roots are
+    still a filter. A root added without a fixture here fails the tuple
+    assertion, so the demand travels with the tuple."""
+    monkeypatch.setattr(rss, "ROOT", tmp_path)
+    files = [tmp_path / "mod_a.py"]
+    files[0].write_text(MOD_A)
+    for root in (*SCAN_ROOT_FIXTURES, "scratch"):
+        d = tmp_path / root
+        d.mkdir()
+        p = d / "probe.py"
+        p.write_text(ROOT_PROBE)
+        files.append(p)
+    monkeypatch.setattr(rss, "tracked_files", lambda: files)
+    assert rss.main(["--json"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert list(rss.SCAN_ROOTS) == list(SCAN_ROOT_FIXTURES), rss.SCAN_ROOTS
+    assert out["files_scanned"] == len(SCAN_ROOT_FIXTURES), out["files_scanned"]
+    assert all(s["classification"] == "candidate-escape" and s["guard"] == "local"
+               and s["uncovered"] == ["mod_a"] for s in out["sites"]), out["sites"]
+    got = sorted(s["site"] for s in out["sites"])
+    assert got == sorted(f"{root}/probe.py:10" for root in SCAN_ROOT_FIXTURES), got
+
+
+# (3) Inside a function scope the binding that won was `ast.walk`'s breadth-
+#     first order, not source order (PR #1579's review): the scope pass was one
+#     walk over the whole tree, so a deeper, earlier import was bound AFTER a
+#     shallower, later one and won -- the opposite of the module-level rule and
+#     of what runs. Only case B was wrong; A and C are carried so the control
+#     cannot pass by agreeing with walk order.
+
+ORDER_SHALLOW_THEN_DEEP = '''
+def f(c):
+    import a as x                 # shallow, FIRST in source
+    if c:
+        import b as x             # deep, LAST in source: wins
+    return x.go()
+'''
+
+ORDER_DEEP_THEN_SHALLOW = '''
+def f(c):
+    if c:
+        import a as x             # deep, FIRST in source
+    import b as x                 # shallow, LAST in source: wins
+    return x.go()
+'''
+
+ORDER_SAME_DEPTH = '''
+def f(c):
+    import a as x
+    import b as x                 # same depth, LAST in source: wins
+    return x.go()
+'''
+
+
+@pytest.mark.parametrize("label,body", [
+    ("A: shallow then deep", ORDER_SHALLOW_THEN_DEEP),
+    ("B: deep then shallow", ORDER_DEEP_THEN_SHALLOW),
+    ("C: same depth", ORDER_SAME_DEPTH),
+])
+def test_function_scope_bindings_follow_source_order_not_walk_order(tmp_path, label, body):
+    """The last import in SOURCE order wins in a function scope, exactly as at
+    module level. Case B was the divergence: the walk bound the shallow `b`
+    first and the deep `a` last, so `x` read as `a`."""
+    p = tmp_path / "order.py"
+    p.write_text(body)
+    mod = rss.ModInfo(p)
+    assert mod.resolve_head("x", _call_in(mod, "x", "go")) == "b", label
+
+
+# The one site the two new roots add to the census, and its disposition.
+# `rtl-sketch/verify_synth_top.py`'s `drum_solo_report` imports `run_case as rc`
+# inside the def, calls `rc.render_drum_solo` inside a nested helper `_render`,
+# and guards the two `_render()` calls with `except rc.Refused`. The call is
+# lexically outside that try (it sits in the helper's def), so the census
+# reports it `guard=none, candidate-escape`: a guard in the def that CALLS a
+# local helper is not credited. The site is ACCEPTED, not repaired -- a second
+# handler at the call would only restate the one that already catches it. The
+# controls below are the evidence for that acceptance, run on the shipped
+# function; the stipulated world is the drum model's trace and the callee,
+# nothing inside the def under test.
+
+def _run_case_stub(raise_cls=None):
+    """A `run_case` module whose `render_drum_solo` always refuses: with
+    `raise_cls` when given, else with the module's OWN `Refused` -- its own
+    class, as the real run_case's is preparation_contract's."""
+    m = types.ModuleType("run_case")
+    m.Refused = type("Refused", (Exception,), {})
+
+    def render_drum_solo(sound, accent=1.0, **kw):
+        raise (raise_cls or m.Refused)(f"stubbed refusal for {sound}")
+    m.render_drum_solo = render_drum_solo
+    return m
+
+
+def _drum_solo_report(monkeypatch, run_case):
+    """A callable that runs the REAL `drum_solo_report` as far as
+    `rc.render_drum_solo`: one strike of one stop at frame 600 and no other
+    circuit, one accent write that matches the spec, no coefficient writes."""
+    monkeypatch.syspath_prepend(str(ROOT / "rtl-sketch"))
+    import verify_synth_top as top
+    stop, strike, n = 3, 600, 2000
+
+    class Drums:
+        def play(self, dw, frames):
+            self.trace = {"fire": [0] * strike + [1 << stop] + [0] * (frames - strike - 1)}
+
+    class DrumsFxModule:
+        N_STOPS, STOP_NAMES = 16, [f"s{i}" for i in range(16)]
+        A_STOPS, A_ACCENT, A_RESET = 0x10, 0x20, 0x30
+        DrumsFx = Drums
+
+        @staticmethod
+        def accent_reg(accent):
+            return 7
+
+    monkeypatch.setattr(top, "dx", DrumsFxModule)
+    monkeypatch.setattr(sys, "path", list(sys.path))     # the def inserts tools/ into it
+    monkeypatch.setitem(sys.modules, "run_case", run_case)
+    writes = [(strike, 0, top.SEC_D, DrumsFxModule.A_ACCENT + stop, 7)]
+    spec = {"sound": "BD", "stop": stop, "accent": 1.0, "seconds": 0.15,
+            "requested_coef_offsets": [], "lead_frames": 480, "n_render": 100}
+    return lambda: top.drum_solo_report(writes, n, [0] * 400, spec, 1)
+
+
+def test_drum_solo_refusal_from_the_callee_is_caught_by_the_callers_handler(monkeypatch):
+    """Positive: a refusal raised by `rc.render_drum_solo` at the census site
+    comes back inside the report's `refused` list, not as an exception."""
+    rep, _ = _drum_solo_report(monkeypatch, _run_case_stub())()
+    assert rep["refused"] == ["stubbed refusal for BD"], rep
+
+
+def test_drum_solo_refusal_from_a_sibling_class_escapes_that_handler(monkeypatch):
+    """The control that makes the first test a measurement: the callee raises
+    a SIBLING `Refused` and the same handler lets it out of the report as an
+    exception -- the defect class the census exists to surface, injected into
+    the callee and observed where the verdict is issued."""
+    sibling = type("Refused", (Exception,), {})
+    with pytest.raises(sibling, match="stubbed refusal for BD"):
+        _drum_solo_report(monkeypatch, _run_case_stub(raise_cls=sibling))()
+
+
+# ---------------------------------------------------------------------------
+# #1598 review: three places the census disagreed with Python on the family
+# lookup. Each control states the Python behaviour it pins, then the census.
+# ---------------------------------------------------------------------------
+MIXED_FORMS_BORROWER = '''
+def mixed(p):
+    import math as R
+    from mod_a import Refused as R      # the LAST binding of R: mod_a's class
+    raise R("x")
+'''
+
+MIXED_FORMS_REVERSED = '''
+from mod_a import Refused as R
+import math as R                        # the LAST binding of R: the math module
+
+def mixed(p):
+    return R.floor(p)
+'''
+
+MIXED_FORMS_REVERSED_RAISING = '''
+from mod_a import Refused as R
+import math as R                        # R is math here, and `R(...)` is not a refusal
+
+def mixed(p):
+    raise R("x")
+'''
+
+MIXED_CALLER = '''
+import {mod}
+
+def go(p):
+    {mod}.mixed(p)
+'''
+
+
+def test_mixed_import_forms_last_binding_wins_so_the_refusal_is_not_hidden(tmp_path):
+    """Python: `import math as R` then `from mod_a import Refused as R` binds
+    R to mod_a's class, so `raise R()` escapes an unguarded caller. The two
+    import maps both kept R and the plain import won at lookup, so the census
+    omitted the call entirely."""
+    files, idx = _local_tree(tmp_path, {
+        "borrow_mixed": MIXED_FORMS_BORROWER,
+        "caller_mixed": MIXED_CALLER.format(mod="borrow_mixed")})
+    got = _sites_for(files, idx, "caller_mixed")
+    assert len(got) == 1, got
+    assert got[0]["origins"] == ["mod_a"], got[0]
+    assert got[0]["classification"] == "candidate-escape", got[0]
+
+
+def test_mixed_import_forms_reversed_unbinds_the_family_name(tmp_path):
+    """The negative control, in the other order: the plain import is the last
+    binding, R is `math`, and `raise R()` is no refusal. Without the unbinding
+    the stale family name would invent an escape."""
+    files, idx = _local_tree(tmp_path, {
+        "borrow_rev": MIXED_FORMS_REVERSED_RAISING,
+        "caller_rev": MIXED_CALLER.format(mod="borrow_rev")})
+    assert idx[str(tmp_path / "borrow_rev.py")].refused_names == {}, "R is math at module level"
+    assert _sites_for(files, idx, "caller_rev") == []
+
+
+RELAY = '''
+from mod_a import Refused               # a re-export: the lender's own class
+'''
+
+RELAY_RAISER = '''
+from relay import Refused as R
+
+def boom(p):
+    raise R("x")
+'''
+
+RELAY_CALLER = '''
+from {lender} import Refused as R
+import relay_raiser
+
+def go(p):
+    try:
+        relay_raiser.boom(p)
+    except R:
+        return None
+'''
+
+
+def test_reexported_class_resolves_to_one_origin_on_both_sides(tmp_path):
+    """Python: `relay.Refused` IS `mod_a.Refused`, so a handler naming it
+    catches a raise of it. The raise side kept the re-exporter's stem
+    (`relay`) while the handler side resolved to the definer (`mod_a`), so
+    the census read one class as two and reported an escape."""
+    files, idx = _local_tree(tmp_path, {
+        "relay": RELAY, "relay_raiser": RELAY_RAISER,
+        "caller_relay": RELAY_CALLER.format(lender="relay")})
+    got = _sites_for(files, idx, "caller_relay")
+    assert len(got) == 1, got
+    assert got[0]["origins"] == ["mod_a"], got[0]
+    assert got[0]["classification"] == "covered(exact)", got[0]
+
+
+def test_reexport_control_a_sibling_handler_still_leaves_the_escape(tmp_path):
+    """The negative control for the re-export fix: the handler names mod_b's
+    class, a sibling of mod_a's, so the raise still escapes it."""
+    files, idx = _local_tree(tmp_path, {
+        "relay": RELAY, "relay_raiser": RELAY_RAISER,
+        "caller_relay_sib": RELAY_CALLER.format(lender="mod_b")})
+    got = _sites_for(files, idx, "caller_relay_sib")
+    assert len(got) == 1 and got[0]["classification"] == "candidate-escape", got
+    assert got[0]["uncovered"] == ["mod_a"], got[0]
+
+
+BASE_RAISER = '''
+from mod_a import Refused
+
+def boom(p):
+    raise Refused("x")
+'''
+
+BASE_LOCAL_CALLER = '''
+import base_raiser
+
+def go(p):
+    from {lender} import Refused as R
+    try:
+        base_raiser.boom(p)
+    except R:
+        return None
+'''
+
+
+def test_locally_imported_common_base_covers_every_subclass(tmp_path):
+    """Python: `from refusal import Refused as R` inside the def and `except
+    R` catches a raise of any subclass, mod_a's included. The census took the
+    name for an exact guard on `refusal` and listed mod_a as uncovered."""
+    files, idx = _local_tree(tmp_path, {
+        "base_raiser": BASE_RAISER,
+        "caller_base_local": BASE_LOCAL_CALLER.format(lender="refusal")})
+    got = _sites_for(files, idx, "caller_base_local")
+    assert len(got) == 1, got
+    assert got[0]["classification"] == "covered(base)", got[0]
+    assert got[0]["uncovered"] == [], got[0]
+
+
+def test_locally_imported_sibling_is_not_a_base_guard(tmp_path):
+    """The negative control: the same shape naming mod_b's class, a sibling
+    of the raised mod_a class, covers nothing it was not named for."""
+    files, idx = _local_tree(tmp_path, {
+        "base_raiser": BASE_RAISER,
+        "caller_base_sib": BASE_LOCAL_CALLER.format(lender="mod_b")})
+    got = _sites_for(files, idx, "caller_base_sib")
+    assert len(got) == 1 and got[0]["classification"] == "candidate-escape", got
+    assert got[0]["uncovered"] == ["mod_a"], got[0]

@@ -60,7 +60,15 @@ WHAT THIS SCAN RESOLVES that the #1160 one-off dotted-call grep could not:
     overrides them, and a function's import never reaches a sibling function
     or the module. The tree needs the scoping, not just the walk:
     `r1_release.py` binds `rc` to record_compare at module level and to
-    r1_candidate inside three of its functions.
+    r1_candidate inside three of its functions;
+  * a family class borrowed INSIDE a function is a family name there (#1577):
+    after `from x import Refused as R` written in a def, a `raise R(...)` in
+    that def or one nested in it resolves to x's origin, and an `except R`
+    there covers it -- the module-level borrow's rule, read innermost-first
+    at the raise and at the handler alike. So the name shadows the module's
+    own `Refused` inside that def and leaves every sibling def reading the
+    module's. It never sets `<mod>.Refused`: a function-local name is not a
+    module attribute.
 
 WHAT IT CANNOT TELL YOU, and why the per-site list is an inventory, not a
 verdict. A dotted call is not necessarily a raising call on the CLI's input
@@ -73,26 +81,33 @@ is decided by tracing the caller with a known-answer input, as #1160 and
     refusal raised one frame deeper (the def calls a helper that raises)
     is invisible unless the helper is the credited def;
   * bindings are per scope, not per statement: within a module or within a
-    function the LAST import of a name wins for that whole scope, so a call
-    written above a later rebinding of its head is read through the later
-    binding; a local VARIABLE shadowing an import can misattribute;
+    function the LAST import of a name in SOURCE order wins for that whole
+    scope, so a call written above a later rebinding of its head is read
+    through the later binding; a local VARIABLE shadowing an import can
+    misattribute;
   * not modelled at all: `global`/`nonlocal` rebinding of an imported name,
-    an import in a class body, a name used in a decorator (evaluated in the
-    enclosing scope), and a family class borrowed by a FUNCTION-LOCAL
-    from-import -- `from x import Refused as R` inside a def binds no family
-    name, so a `raise R(...)` there still reads as raising nothing (no
-    instance in the tree at #1573; pinned in the test file so a change moves
-    it deliberately);
+    an import in a class body, and a name used in a decorator (evaluated in
+    the enclosing scope) -- each contrived or a runtime error;
   * handlers are found around the CALL SITE, plus ONE level above: the
     module's CLI boundary (`main()` / the `__main__` dispatch), which is
     where #1160/#1162's repairs live. Guards in intermediate library
-    frames are not modelled, so `candidate-escape` means "unguarded here
-    and no base guard at the boundary", never "escapes at the exit".
+    frames are not modelled, and neither is a guard in the def that CALLS a
+    local helper -- a call written inside a nested def is lexically outside
+    its caller's try -- so `candidate-escape` means "unguarded here and no
+    base guard at the boundary", never "escapes at the exit". That last
+    shape is the one site `rtl-sketch/` adds to the census, and it is
+    ACCEPTED rather than repaired (#1577): `verify_synth_top.drum_solo_report`
+    calls its nested `_render` inside a try whose handler is
+    `except rc.Refused`, the callee's own class. The acceptance is observed,
+    not read -- `tools/test_refusal_sibling_scan.py` runs the shipped
+    function with a refusing callee (caught, returned in the report's
+    `refused` list) and with a sibling class (escapes);
   * test files are excluded: they are not CLI callers and their
     `pytest.raises` sites are deliberate;
-  * only `SCAN_ROOTS` is scanned: `rtl-sketch/` and `audition/` are not in
-    it -- one cross-module refusal site between them at #1573, in
-    `rtl-sketch/verify_synth_top.py` -- so their calls are in no census.
+  * only `SCAN_ROOTS` is scanned: `tools`, `model`, `pnr`, `fpga`,
+    `rtl-sketch` and `audition` since #1577 -- the last two were outside it
+    at #1573, which put the site above in no census; `audition/` has none.
+    Every other tracked file is indexed as a CALLEE only.
 
 Four further gaps were filed against this list -- try-handler credit,
 stem collision and alias loss in #1188, the borrowed family in #1193 --
@@ -104,7 +119,13 @@ file" -- they were in fact INVISIBLE, the optimistic direction -- and
 `fpga/` was outside the roots: between them the census could not see the
 site of the defect #1569 repairs. Both blind spots are closed (#1573), and
 it took the `fpga` root and the scope walk together: either alone leaves
-that site absent.
+that site absent. Three more were stated here as accepted until #1577: a
+family class borrowed inside a function bound no family name, silencing
+its raises and handlers the way #1193's module-level borrow had;
+`rtl-sketch/` and `audition/` sat outside the roots; and inside a function
+scope the binding that won was the walk's breadth-first order where this
+list claimed last-import-wins. All three are closed. What #1577 left open
+on purpose is the one ACCEPTED census entry named under handlers above.
 
 NOT A GATE. Totals are reported, never pinned: the exit-status census
 (`tools/refusal_exit_census.py`) learned that a totals pin reds on every
@@ -126,8 +147,9 @@ import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-SCAN_ROOTS = ("tools", "model", "pnr", "fpga")   # tools/ includes tools/probes/
+SCAN_ROOTS = ("tools", "model", "pnr", "fpga", "rtl-sketch", "audition")   # tools/ includes tools/probes/
 FAMILY_NAME = "Refused"
+BASE_STEM = "refusal"                   # the module defining the common base class
 # a node whose body is a scope of its own: an import inside one binds that
 # scope's name, not the enclosing function's (nor the module's)
 SCOPE_NODES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
@@ -151,13 +173,19 @@ def _bind(stmt: ast.stmt, imports: dict[str, str],
     if isinstance(stmt, ast.Import):
         for a in stmt.names:
             stem = a.name.split(".")[0]
-            imports[a.asname or stem] = stem
+            nm = a.asname or stem
+            # a later plain import rebinds the name away from any earlier
+            # from-import of it: the last binding wins across BOTH forms
+            from_imports.pop(nm, None)
+            imports[nm] = stem
     elif isinstance(stmt, ast.ImportFrom) and stmt.module and stmt.level == 0:
         stem = stmt.module.split(".")[0]
         for a in stmt.names:
+            nm = a.asname or a.name
+            imports.pop(nm, None)                 # ... and the reverse
             # the ORIGINAL name is kept (`from x import f as g`):
             # a `g()` call resolves to f's def, not to a missing g
-            from_imports[a.asname or a.name] = (stem, a.name)
+            from_imports[nm] = (stem, a.name)
 
 
 class _Bindings:
@@ -179,6 +207,7 @@ class ModInfo:
         self.refused_origin: str | None = None   # stem whose class our Refused is
         self.refused_names: dict[str, str] = {}  # family name -> stem it last resolved to
         self.has_local_family = False            # a local `class Refused` def (maybe shadowed)
+        self.has_family = False                  # a family name bound anywhere: module level or a def
         self.parents: dict[ast.AST, ast.AST] = {}          # child -> parent, for the scope walk
         self.scopes: dict[ast.AST, _Bindings] = {}         # function node -> its own bindings
         self._read_bindings()
@@ -208,6 +237,22 @@ class ModInfo:
                 return ent
         return self.from_imports.get(name)
 
+    def family_name_at(self, name: str, at: ast.AST | None = None) -> str | None:
+        """The lender's stem a family NAME is bound to where `at` sits, or
+        None when the name is no family there. Function scopes are read
+        first, innermost first, as `resolve_head` does: `from x import
+        Refused as R` written inside a def makes `R` a family name in that
+        def and the defs nested in it only (#1577). Any binding of the name
+        in a nearer scope, family or not, shadows a module-level family of
+        the same name."""
+        for b in self._enclosing_scopes(at):
+            if name in b.imports:
+                return None
+            ent = b.from_imports.get(name)
+            if ent:
+                return ent[0] if ent[1] == FAMILY_NAME else None
+        return self.refused_names.get(name)
+
     def _enclosing_scopes(self, at: ast.AST | None):
         """The bindings of the function scopes `at` sits in, innermost
         first: a nested def reads its enclosing def's imports, and a
@@ -231,6 +276,9 @@ class ModInfo:
         for node in self.tree.body:
             if isinstance(node, (ast.Import, ast.ImportFrom)):
                 _bind(node, self.imports, self.from_imports)
+                if isinstance(node, ast.Import):
+                    for a in node.names:
+                        self.refused_names.pop(a.asname or a.name.split(".")[0], None)
                 if isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
                     stem = node.module.split(".")[0]
                     for a in node.names:
@@ -263,6 +311,7 @@ class ModInfo:
                 self.parents[ch] = node
             if isinstance(node, ast.FunctionDef):
                 self.funcs.setdefault(node.name, node)
+        scoped: dict[ast.AST, list[ast.stmt]] = {}
         for node in ast.walk(self.tree):
             # an import written inside a function binds that function's name,
             # whatever block (elif, with, try) it sits in, and the module's
@@ -272,8 +321,17 @@ class ModInfo:
                 continue
             owner = self._scope_owner(node)
             if isinstance(owner, FUNCTION_NODES):
-                b = self.scopes.setdefault(owner, _Bindings())
+                scoped.setdefault(owner, []).append(node)
+        for owner, nodes in scoped.items():
+            b = self.scopes.setdefault(owner, _Bindings())
+            # bound in SOURCE order, as at module level: `ast.walk` is
+            # breadth-first, so taken in walk order a deeper, earlier import
+            # was bound after a shallower, later one and won (#1577)
+            for node in sorted(nodes, key=lambda n: (n.lineno, n.col_offset)):
                 _bind(node, b.imports, b.from_imports)
+        self.has_family = bool(self.refused_names) or any(
+            ent[1] == FAMILY_NAME for b in self.scopes.values()
+            for ent in b.from_imports.values())
 
 
 def build_index(files: list[pathlib.Path]) -> dict[str, ModInfo]:
@@ -313,8 +371,15 @@ def origin_of(by_stem: dict[str, list[ModInfo]], stem: str,
     return origin_of(by_stem, ro, seen | {stem})
 
 
-def raise_origins(mod: ModInfo, fname: str) -> set[str]:
-    """The family origins the named def of `mod` raises itself."""
+def raise_origins(mod: ModInfo, fname: str,
+                  by_stem: dict[str, list[ModInfo]] | None = None) -> set[str]:
+    """The family origins the named def of `mod` raises itself. Given
+    `by_stem`, a re-exported class resolves to the module that DEFINES it, as
+    `handler_origins` resolves the guard side: both sides must name one class
+    by one origin or a re-export reads as two."""
+    def defining(stem: str) -> str:
+        return (origin_of(by_stem, stem) if by_stem is not None else None) or stem
+
     f = mod.funcs.get(fname)
     if f is None:
         return set()
@@ -325,12 +390,13 @@ def raise_origins(mod: ModInfo, fname: str) -> set[str]:
             if isinstance(exc, ast.Call):        # `raise Refused("reason")`
                 exc = exc.func
             txt = ast.unparse(exc)
-            if txt in mod.refused_names:
-                out.add(mod.refused_names[txt])
+            fam = mod.family_name_at(txt, node)
+            if fam is not None:
+                out.add(defining(fam))
             elif "." in txt:
                 head = txt.split(".")[0]
                 stem = mod.resolve_head(head, node) or head
-                out.add(stem)
+                out.add(defining(stem) if txt.endswith(f".{FAMILY_NAME}") else stem)
     return out
 
 
@@ -376,21 +442,30 @@ def handler_origins(mod: ModInfo, by_stem: dict[str, list[ModInfo]],
             if txt.endswith(f".{FAMILY_NAME}"):
                 o = origin_of(by_stem, stem) or stem
                 origins.add(o)
-                shapes.add("exact")
+                # `import refusal as rf; except rf.Refused` is the base too
+                shapes.add("base" if o == BASE_STEM else "exact")
             else:
                 shapes.add("other")
-        elif txt in mod.refused_names:
-            o = origin_of(by_stem, mod.refused_names[txt])
-            if o:
-                origins.add(o)
-            # shape: `local` only for a class DEFINED in this module; a
-            # borrowed or assigned name is the lender's own class, so the
-            # handler is exact (#1193)
-            shapes.add("local" if (mod.has_local_family
-                                   and mod.refused_names[txt] == mod.path.stem)
-                       else "exact")
         else:
-            shapes.add("other")
+            fam = mod.family_name_at(txt, handler)
+            if fam is None:
+                shapes.add("other")
+            else:
+                o = origin_of(by_stem, fam)
+                if o:
+                    origins.add(o)
+                if (o or fam) == BASE_STEM:
+                    # a name bound to the common base, module level or inside
+                    # the def (`from refusal import Refused as R`), catches
+                    # every subclass: the base guard, not an exact one
+                    shapes.add("base")
+                    continue
+                # shape: `local` only for a class DEFINED in this module; a
+                # borrowed or assigned name is the lender's own class, so the
+                # handler is exact (#1193)
+                shapes.add("local" if (mod.has_local_family
+                                       and fam == mod.path.stem)
+                           else "exact")
     shape = ("base" if "base" in shapes else "broad" if "broad" in shapes
              else "other" if shapes == {"other"} or "other" in shapes and not origins
              else "+".join(sorted(shapes - {"other"})))
@@ -473,7 +548,7 @@ def scan(files: list[pathlib.Path], idx: dict[str, ModInfo]) -> list[dict]:
                 # this callee cannot refuse under ANY resolution, so it is
                 # not a site at all -- the multi-candidate mirror of the
                 # single-callee filters below (#1214).
-                if not any(c.refused_names and raise_origins(c, fname or "")
+                if not any(c.has_family and raise_origins(c, fname or "", by_stem)
                            for c in cands):
                     continue
                 ashapes = []
@@ -494,9 +569,9 @@ def scan(files: list[pathlib.Path], idx: dict[str, ModInfo]) -> list[dict]:
                 ))
                 continue
             callee = cands[0]
-            if not callee.refused_names:
+            if not callee.has_family:
                 continue                      # callee has no family at all
-            origins = raise_origins(callee, fname or "")
+            origins = raise_origins(callee, fname or "", by_stem)
             if not origins:
                 continue                      # this function raises no refusal
             covered, shapes = set(), []
