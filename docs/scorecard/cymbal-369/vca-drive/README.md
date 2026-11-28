@@ -155,8 +155,9 @@ one formulation only to show that agreement is not two names for one code path.
 
 ## 4. Refusals
 
-- **The pinned scan.** Absent or wrong hash ⇒ `SourceUnavailable`, exit 3 (`--verify-source`) or exit 1
-  (`--require-source`). A schematic read checked against the wrong printing looks exactly like a checked one.
+- **The pinned scan.** Absent or wrong hash ⇒ `SourceUnavailable`, exit 3 (`--verify-source`) or exit 2
+  (`--require-source` — the declared `REFUSED` status since #1789; it was exit 1, which a batch runner reads as a
+  measured FAIL). A schematic read checked against the wrong printing looks exactly like a checked one.
 - **The gap this file is judged against.** `balance_targets()` re-reads `../balance/balance.json` and REFUSES if
   either figure has moved from the +10.13 / +39.79 quoted here. A conclusion quoted against a number that has
   since drifted is this repository's recurring failure, and it is cheap to make impossible.

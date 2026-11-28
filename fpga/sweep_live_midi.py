@@ -21,6 +21,11 @@ instead of arguing about them:
 Every row runs the SAME session and the SAME oracle (fpga/verify_live_midi.py)
 with the contract's two numbers overridden, and reports the verdict of every
 property -- a setting that admits the load by breaking something else shows it.
+
+Exit 0 once the table and sweep.json are written; 2 REFUSED, nothing written,
+when a frozen kit or target refuses before any row measured anything -- the
+classes the oracle catches at its own boundary (drums_fx.KitRefused,
+refusal.Refused), which its wrapper catches too.
 """
 from __future__ import annotations
 
@@ -30,10 +35,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "fpga"))
+if str(ROOT / "tools") not in sys.path:
+    sys.path.append(str(ROOT / "tools"))
 
 import live_midi_contract as C                      # noqa: E402
 import verify_live_midi as vlm                      # noqa: E402
 import drums_fx as dx                               # noqa: E402
+import refusal                                      # noqa: E402
 
 OUT = ROOT / "fpga/reports/live-midi/sweep.json"
 
@@ -80,7 +88,11 @@ def one(lookahead_ms: float, reserve: int) -> dict:
 
 
 def main() -> int:
-    rows = [one(ms, res) for ms in (12, 13, 14, 15, 16, 17, 18) for res in (2, 3, 4)]
+    try:
+        rows = [one(ms, res) for ms in (12, 13, 14, 15, 16, 17, 18) for res in (2, 3, 4)]
+    except (dx.KitRefused, refusal.Refused) as exc:
+        print(f"sweep_live_midi: REFUSED -- {exc}")
+        return 2
     print(f"{'L ms':>5} {'res':>3} {'verdict':>8} {'refused':>7} {'p95':>6} {'p99':>6} "
           f"{'max':>6} {'press.ref':>9} {'redund':>6} moved")
     for r in rows:

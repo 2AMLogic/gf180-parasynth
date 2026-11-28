@@ -126,7 +126,10 @@ def _event_errors(event: dict, label: str) -> dict[str, dict[str, float]]:
             raise ValueError("no measured harmonics")
         errors.update({f"Harmonic shape/{partial}": abs(float(value))
                        for partial, value in partials.items()})
-    except (KeyError, TypeError, ValueError) as exc:
+    except (KeyError, TypeError, ValueError, OverflowError) as exc:
+        # OverflowError: a JSON integer beyond float range, which `float()`
+        # refuses and which left here as a traceback -- exit 1, FAIL -- where
+        # the foldback excess above REFUSES the same input (#1669).
         raise m5a.Refused(f"{identity} lacks complete per-note property evidence") from exc
     if any(not math.isfinite(value) for value in errors.values()):
         raise m5a.Refused(f"{identity} has a non-finite per-note measurement")

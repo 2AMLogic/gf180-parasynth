@@ -6,6 +6,7 @@ import argparse
 from datetime import datetime, timezone
 import hashlib
 import json
+import math
 import pathlib
 import subprocess
 import sys
@@ -80,6 +81,67 @@ def _measure_control_response() -> dict:
     }
 
 
+def require_json_number(value, label: str, *, refused: type[Exception]) -> float:
+    """`value` as a float when it is a finite JSON number; otherwise raise.
+
+    A JSON number is an int or a float. `bool` is an `int` subclass in Python
+    and `float()` accepts strings, so a raw coercion reads `false` as a
+    perfect 0.0 and `"0.5"` as half; it raises on `null` and on an integer
+    beyond float range, and accepts a NaN or infinity without a word.
+    `refused` is the caller's own `Refused` class, so the name at its catch
+    sites does not change (#163). The same function is
+    `delta_report.require_json_number` in #1638; import that once it lands.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise refused(f"{label} must be a JSON number, not {value!r}")
+    try:
+        number = float(value)
+    except OverflowError:
+        number = math.inf if value > 0 else -math.inf
+    if not math.isfinite(number):
+        raise refused(f"{label} must be finite, not {number!r}")
+    return number
+
+
+def _gate_row(row: dict, label: str) -> None:
+    """REFUSE a saved measurement row unless every number `_compare_incremental`
+    reads from it is a finite JSON number (#1687).
+
+    The comparator coerces on faith: `abs(float(...))` on each
+    `metrics.*.error` and on every harmonic partial of every event. From JSON
+    that coercion raises for `null` and for an integer beyond float range --
+    a traceback, exit 1, which tools/exit_contract.py defines as FAIL -- and
+    accepts everything else: `true` reads as 1.0, `"1.5"` as 1.5, and a NaN
+    partial compares unequal to itself, so it lands in neither
+    `regressed_components` nor `improved_components` and is reported as no
+    change (#134's class). Rows measured in-process by `m5a.measure` never
+    pass through JSON, which is why the gate sits at the load boundary and
+    not in the comparator they share."""
+    if not isinstance(row, dict):
+        raise m5a.Refused(f"{label} is not an object")
+    metrics = row.get("metrics")
+    if not isinstance(metrics, dict):
+        raise m5a.Refused(f"{label} metrics is missing or not an object")
+    for name, metric in metrics.items():
+        if not isinstance(metric, dict):
+            raise m5a.Refused(f"{label} metrics.{name} is not an object")
+        require_json_number(metric.get("error"), f"{label} metrics.{name}.error",
+                            refused=m5a.Refused)
+    events = row.get("event_diagnostics")
+    if not isinstance(events, list):
+        raise m5a.Refused(f"{label} event_diagnostics is missing or not a list")
+    for index, event in enumerate(events):
+        if not isinstance(event, dict):
+            raise m5a.Refused(f"{label} event {index} is not an object")
+        partials = event.get("harmonic_error_db_model_minus_reference")
+        if not isinstance(partials, dict):
+            raise m5a.Refused(f"{label} event {index} harmonic partial evidence is missing "
+                              "or not an object")
+        where = f"{label} event {index} {event.get('wave')}/{event.get('midi')} harmonic partial"
+        for partial, value in partials.items():
+            require_json_number(value, f"{where} {partial}", refused=m5a.Refused)
+
+
 def _recompare_report(path: pathlib.Path) -> dict:
     """Re-run only the declared property-vector gate on saved measurements."""
     report = json.loads(path.read_text())
@@ -88,10 +150,13 @@ def _recompare_report(path: pathlib.Path) -> dict:
     expected_pulses = {"pulse29", "pulse479"}
     if set(report.get("configurations", {})) != expected_pulses:
         raise m5a.Refused("recomparison requires both pulse-width rows")
-    comparisons = {}
     for pulse, rows in report["configurations"].items():
         if set(rows) != {"clamped", "headroom", "causal_headroom"}:
             raise m5a.Refused(f"recomparison requires all three {pulse} configurations")
+        for mode, row in rows.items():
+            _gate_row(row, f"{pulse}/{mode}")
+    comparisons = {}
+    for pulse, rows in report["configurations"].items():
         comparisons[pulse] = {
             "headroom_vs_clamped_offline": experiment._compare_incremental(
                 rows["clamped"], rows["headroom"]),
@@ -136,6 +201,7 @@ def run(out_dir: pathlib.Path, reuse_offline_report: pathlib.Path | None = None,
                 row = previous["configurations"][pulse].get(mode)
                 if row is None or set(row.get("metrics", {})) != set(m5a.TOLERANCES):
                     raise m5a.Refused(f"reuse report lacks complete {pulse}/{mode} evidence")
+                _gate_row(row, f"reuse {pulse}/{mode}")
                 rows[pulse][mode] = row
         reused_sources["+".join(labels)] = {
             "reused_rows": list(labels),
@@ -230,6 +296,35 @@ def run(out_dir: pathlib.Path, reuse_offline_report: pathlib.Path | None = None,
     }
 
 
+def _summary(report: dict, out: pathlib.Path) -> dict:
+    """What `main` prints about a report, built before the report is written.
+
+    A report that cannot be summarised is then REFUSED with its file as it
+    was. Built after the write, as it was until #1687, it rewrote the file
+    and exited 1. `out` has already been confined to the repository."""
+    for key in ("source_commit", "source_dirty", "comparisons", "causal_converter"):
+        if key not in report:
+            raise m5a.Refused(f"report lacks {key}, so there is nothing to summarise")
+    return {
+        "report": str(out.resolve().relative_to(ROOT.resolve())),
+        "source_commit": report["source_commit"],
+        "source_dirty": report["source_dirty"],
+        "comparisons": {
+            pulse: {
+                comparison: {
+                    "accepts_incremental_improvement": row["accepts_incremental_improvement"],
+                    "case_passes": row["case_passes"],
+                    "improved_components": len(row["improved_components"]),
+                    "regressed_components": len(row["regressed_components"]),
+                }
+                for comparison, row in comparisons.items()
+            }
+            for pulse, comparisons in report["comparisons"].items()
+        },
+        "causal_converter": report["causal_converter"],
+    }
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", default="build/scorecard/m5a-filter-headroom-v1.json")
@@ -238,10 +333,11 @@ def main(argv=None) -> int:
     parser.add_argument("--recompare-report", type=pathlib.Path,
                         help="recompute acceptance decisions from a complete saved measurement without rerendering")
     args = parser.parse_args(argv)
-    out = repo_output_path.confine(
-        args.recompare_report if args.recompare_report is not None else args.out, ROOT)
+    raw, option = ((args.recompare_report, "--recompare-report")
+                   if args.recompare_report is not None else (args.out, "--out"))
+    out = repo_output_path.confine(raw, ROOT)
     if out is None:
-        print("measure_m5a_filter_headroom: REFUSED -- output must stay inside the repository")
+        print(f"REFUSED: {option} output must remain inside the repository, not {raw}")
         return REFUSED
     try:
         if args.recompare_report is not None:
@@ -249,28 +345,13 @@ def main(argv=None) -> int:
         else:
             report = run(ROOT / "build/scorecard/m5a-filter-headroom-audio",
                          args.reuse_offline_report, args.reuse_causal_report)
+        summary = _summary(report, out)
     except refusal.Refused as exc:
         print(f"REFUSED: {exc}")
         return REFUSED
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, indent=2) + "\n")
-    comparison_summary = {
-        pulse: {
-            comparison: {
-                "accepts_incremental_improvement": row["accepts_incremental_improvement"],
-                "case_passes": row["case_passes"],
-                "improved_components": len(row["improved_components"]),
-                "regressed_components": len(row["regressed_components"]),
-            }
-            for comparison, row in comparisons.items()
-        }
-        for pulse, comparisons in report["comparisons"].items()
-    }
-    print(json.dumps({"report": str(out.relative_to(ROOT)),
-                      "source_commit": report["source_commit"],
-                      "source_dirty": report["source_dirty"],
-                      "comparisons": comparison_summary,
-                      "causal_converter": report["causal_converter"]}, indent=2))
+    print(json.dumps(summary, indent=2))
     return 0
 
 

@@ -117,15 +117,152 @@ control passed on that tree, as it must on any tree.
 NOT CLAIMED: that the refused-stage path is reachable from the CLI. `probe`
 takes no `--notes` and its default grid (36..127) sits far above the floor;
 that path belongs to a Python caller.
+
+#1693, THE THIRD DEFECT, AS MEASURED ON main @ 3e2534c7 (2026-11-28): the
+boundary above was right, but three of the tool's own entry functions did not
+raise a refusal at a stated precondition. `decimator --gains 0.0` and `fine
+--gains 0.0` raised `RuntimeError("... silent decimator output")` from
+`decimator_run`: exit 1 with a traceback, a precondition rendered as FAIL. `mix
+--gains 0.0` completed with exit 0 and a report whose ten `0.000/three-rect/*`
+rows read `output_rms_dbfs: -240.0` -- a 1e-12 floor printing digital silence
+as a measurement; under `--scope rect` the default preset's two saws are
+untouched, so nothing stopped the run.
+
+THE KNOWN ANSWERS for those, independent of anything this repository models:
+
+  zero gain       a substep gain of exactly 0 is digital silence at the
+                  decimator and at the mixer output. `decimator` refuses at its
+                  first shape and note, `fine` at its first reachable shape and
+                  grid point, `mix` at its first rectangle row -- after the
+                  baseline rows and the candidate's saw rows, which measure:
+                  the partial-output hazard again, so no report may remain.
+  a square wave   +/-1 LSB has an RMS of exactly 1 LSB, -90.31 dBFS, 0.3 dB
+                  below mono_artifact_probe's -90.0 activity floor; +/-1.1 LSB
+                  is -89.48 dBFS, 0.5 dB above it. The floor is read from the
+                  probe's module at the call, so moving that attribute moves
+                  the tool's.
+  NaN             every IEEE comparison with NaN is False (#134), so a guard
+                  written `level < floor` lets a NaN level through: the rule-8
+                  adversary for the new floor, committed as a control.
+  quiet, not      a Q15 gain of 28 puts the three-rectangle mix at MIDI 60 at
+  silent          -74.7 dBFS on that tree, 58 dB under its baseline and 15 dB
+                  above the floor: it must still measure.
+  --scope all     applies the gain to the saws too, so the default preset is
+                  silent as well: the floor applies to every preset's rows and
+                  the refusal names that preset.
+
+The pre-saturation `RuntimeError` in `decimator_run` ("recorded pre-saturation
+samples do not produce the output") is an execution error, not a precondition,
+and has a stays-green control here like the ValueError one: exit 1 with its
+traceback.
+
+#1908, A CANDIDATE TRACED AND REFUTED (2026-11-28, origin/main @ e2d1bae7): the
+#1782 census listed this tool because `phrases()` calls `mono_m5a_score.measure`
+under `refusal.Refused` alone while `measure` reaches
+`audio_measure.harmonic_signature` unguarded -- per event, and inside
+`_stage_diagnostics` on the oscillator / mixer / ladder / output stage taps --
+and `InsufficientEvidence` is an `AssertionError`, not a `Refused`. Injected,
+the escape is real and is at exactly that site: an `InsufficientEvidence`
+raised at `score.measure`, and a silent oscillator tap beside a live output,
+both leave as exit 1 with the `audio_measure.InsufficientEvidence` traceback
+(`_stage_diagnostics` <- `harmonic_signature`, "harmonic_signature: silent").
+Through the real CLI it is UNREACHABLE, so the tool is unchanged -- the outcome
+the issue names. 21 command lines were run against the unmodified file
+(tools/probes/pulse2x_headroom_insufficient_evidence_trace.py): zero, the
+smallest non-zero Q15 gain, negative, large, int64-overflowing and non-finite
+`--gains`; both scopes; zero, tiny, negative, large and non-finite
+`--pulse-drive-comp`. None raised either class. What stopped each, read off
+the runs:
+
+  anything that     the chain is serial with ONE mixed source and no noise
+  silences the      (`_voice_patch`: mix (1, 0, 0) -> mixer weights [32768, 0,
+  output            0, 0]; noise 0.0), and `candidate()` applies one gain to
+                    every oscillator of a segment, so a zero gain silences the
+                    oscillator, the mixer, the ladder and the output together
+                    (--gains 0.0 and 1e-9, both Q15 0). A zero, tiny or
+                    negative --pulse-drive-comp silences only the ladder, whose
+                    gain register is 0 (measured: `patch_regs(...)["gain"]` is 0
+                    at each; a negative drive clamps to 0), and the output with
+                    it, while the oscillator and mixer stay live. Either way
+                    `refine_f0` on the OUTPUT slice refuses first
+                    (`mono_m5a_score.py`, `pitch refused:`), before
+                    `_stage_diagnostics` reads a tap, and `Refused` is what the
+                    handler catches: exit 2, "pulse MIDI 84 pitch refused:
+                    silent". Under --scope all the saw segment comes first and
+                    the same gate refuses "saw MIDI 84 pitch refused: silent".
+  a tiny signal     --gains 2e-5 (Q15 1) is NOT silence -- every stage tap is
+  with no pitch     live -- and `refine_f0` -> `dominant_frequency` refuses
+                    "no prominent line in the band": exit 2. The gate is a
+                    pitch estimator, not only a silence check.
+  an inverted or    --gains -0.85 / -1.0 / 2.0 / 100.0 and --pulse-drive-comp
+  overdriven one    1e6: every stage tap measures, exit 0.
+  a non-finite or   --gains nan / inf / 1e15 and --pulse-drive-comp nan / inf
+  overflowing       exit 1 with ValueError / OverflowError out of
+  float             `int(round(...))` in `q15()` and `LadderFx.regs_unclamped`:
+                    an execution error of another class. Recorded; not a
+                    refusal, and not this candidate. `-inf` is not an accepted
+                    input at all: argparse reads it as a flag and exits 2 with
+                    a usage error -- the same status as REFUSED, with no
+                    REFUSED line.
+
+Two routes are closed by construction rather than by a gate. `NonFiniteAudio`
+needs a non-finite sample, and every array `measure` hands an estimator is an
+integer render divided by 32768 (`render_mono_fx` returns int16; the stage
+taps are int64). `harmonic_signature`'s `.require` on the fundamental needs
+fewer than 12 periods in the window, and the frozen M5A / M5B grids hold at
+least 209 (M5B saw MIDI 72, gate 0.6 s) -- a property of the manifest that no
+CLI input moves. `harmonic_signature: no fundamental` needs `f0=None`, and
+both call sites pass `f0=`.
+
+WRONG, THEN RIGHT, in the instruments that produced the above (kept where
+the numbers are read). The trace probe's first outcome parser matched
+exception names ending in `Error` / `Exception` and so could not read
+`audio_measure.InsufficientEvidence` -- the one class it exists to find --
+and reported the injected control as "no traceback parsed"; that control is
+what showed the probe blind, which is what a control is for. Its second draft
+counted `-inf` among the exit-2 rows. And the one-note control below first
+asserted that the four taps are silent TOGETHER or live together: its drive
+rows refuted that -- oscillator and mixer live, ladder and output silent --
+so the gate it pins is the output's silence beside any silent tap, not the
+taps' agreement. Three wrong instruments, each caught by a control or an
+explicit expectation rather than by reading.
+
+WHAT THE #1908 CONTROLS PIN, so the refutation does not outlive its evidence:
+
+  the escape,     an `InsufficientEvidence` at `score.measure`, and the silent
+  injected        oscillator tap beside a live output, still exit 1 with the
+                  traceback and no REFUSED line: the candidate's start-red,
+                  kept committed. Both are TRUE on this tree and are the reason
+                  the gates below carry the weight. Should the handler ever be
+                  widened to `audio_measure.InsufficientEvidence` (as #1976
+                  does for the sibling `measure_mono_pulse_2x`), these two flip
+                  to exit 2 deliberately, in that diff.
+  the gate, on    inside the candidate context `phrases()` itself builds -- its
+  a one-note      own `voice_factory`, `candidate()` and `pulse_drive()` -- no
+  render          accepted (gain, scope, drive) input leaves a stage tap silent
+                  beside a LIVE output; which taps each input silences is
+                  pinned with it. A short render, because the question is
+                  about the stage arrays, not the phrase.
+  the gate, on    the real CLI: --gains 2e-5 is REFUSED by name, exit 2, no
+  the real CLI    report, after the baseline scored. The silenced-gain control
+                  above (#1613) already pins the silent route. About 45 s.
+
+NOT CLAIMED: that those 21 command lines are the whole input space. The
+structural controls carry the claim -- the serial chain, the one mixed source,
+the integer render -- and they assert on the model as it is; a noise source or
+a per-oscillator gain in the pulse patch would leave a silent tap beside a
+live output and redden them before any CLI run.
 """
 from __future__ import annotations
 
 import json
+import math
 import pathlib
 import shutil
 import subprocess
 import sys
 
+import numpy as np
 import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -357,3 +494,270 @@ def test_guard_refuses_every_row_that_is_not_a_measurement(over, expected):
     with pytest.raises(mph.Refused) as caught:
         mph._measured_numbers(_measured_row(**over), "where")
     assert str(caught.value) == expected
+
+# #1693: the tool's own preconditions must REFUSE, not traceback or floor
+# ---------------------------------------------------------------------------
+DECIMATOR_REASON = "pulse479 MIDI 0 gain Q15 0: silent decimator output"    # first shape, first note
+FINE_REASON = "square MIDI 90.0 gain Q15 0: silent decimator output"        # first reachable shape, first grid point
+MIX_REASON = ("mix preset three-rect MIDI 24 gain 0.000: silent: -inf dBFS "
+              "< activity floor -90.0 dBFS")
+DEFAULT_PRESET_REASON = ("mix preset default MIDI 60 gain 0.000: silent: -inf dBFS "
+                         "< activity floor -90.0 dBFS")
+QUIET_Q15 = 28         # three-rect MIDI 60 at -74.7 dBFS on main @ 3e2534c7: 15 dB above the floor
+
+
+def _square(amp, n: int = 24_000) -> np.ndarray:
+    """A +/- amp LSB square: RMS exactly amp LSB by definition, so its level
+    is known from arithmetic alone. An integer amplitude gives an integer
+    array, like VoiceFx.note's render; a fractional one stays float64."""
+    return np.where(np.arange(n) % 2, -amp, amp)
+
+
+@pytest.mark.parametrize("mode, reason", [("decimator", DECIMATOR_REASON), ("fine", FINE_REASON)])
+def test_zero_gain_decimator_or_fine_sweep_exits_refused_2(tmp_path, mode, reason):
+    out = tmp_path / f"{mode}.json"
+    p = _cli(mode, "--gains", SILENT_GAIN, "--out", str(out))
+    _assert_refused(p, reason, out)
+
+
+def test_zero_gain_mix_exits_refused_2_without_partial_report(tmp_path):
+    out = tmp_path / "mix.json"
+    p = _cli("mix", "--gains", SILENT_GAIN, "--out", str(out))
+    _assert_refused(p, MIX_REASON, out)
+    assert "mix gain None:" in p.stdout, (
+        "the baseline is rendered and summarised before the candidate; a run "
+        "that refused earlier did not reach the rectangle rows")
+    assert "mix gain 0.0:" not in p.stdout, "the candidate's summary prints only after its last row"
+
+
+def test_mix_floor_is_the_probe_activity_floor_on_a_known_level(monkeypatch):
+    import measure_pulse2x_headroom as mph
+    import mono_artifact_probe as mp
+
+    below = 20 * math.log10(1 / 32768)          # -90.31 dBFS: 0.3 dB under the floor
+    above = 20 * math.log10(1.1 / 32768)        # -89.48 dBFS: 0.5 dB above it
+    assert below < mp.SILENT_DBFS < above, "the two known levels must straddle the probe's floor"
+    assert mph.output_dbfs(_square(1.1), "known level") == pytest.approx(above, rel=1e-12)
+    floor = f"{mp.SILENT_DBFS:.1f}"
+    for what, out, level in (("silence", np.zeros(24_000, dtype=np.int64), "-inf"),
+                             ("one LSB", _square(1), f"{below:.1f}")):
+        with pytest.raises(refusal.Refused) as e:
+            mph.output_dbfs(out, f"mix preset {what} MIDI 0 gain x")
+        assert str(e.value) == (f"mix preset {what} MIDI 0 gain x: silent: {level} dBFS "
+                                f"< activity floor {floor} dBFS")
+    with pytest.raises(refusal.Refused):      # NaN: `level < floor` is False for it (#134)
+        mph.output_dbfs(np.full(24_000, np.nan), "known level")
+    monkeypatch.setattr(mp, "SILENT_DBFS", below - 1.0)
+    assert mph.output_dbfs(_square(1), "known level") == pytest.approx(below, rel=1e-12), (
+        "the floor is the probe's attribute, read at the call: a constant retyped "
+        "in the tool would not move with it")
+
+
+def test_mix_output_above_the_floor_still_measures():
+    import measure_pulse2x_headroom as mph
+    import mono_artifact_probe as mp
+
+    gain = QUIET_Q15 / 32768
+    assert mph.q15(gain) == QUIET_Q15
+    res = mph.mix_check([gain], notes=(60,))
+    level = res[f"{gain:.3f}/three-rect/60"]["output_rms_dbfs"]
+    assert mp.SILENT_DBFS <= level < mp.SILENT_DBFS + 20, (level, "quiet, and above the floor")
+    assert level < res["base/three-rect/60"]["output_rms_dbfs"] - 30, "far under the baseline"
+
+
+def test_mix_scope_all_zero_gain_refuses_on_the_default_preset():
+    import measure_pulse2x_headroom as mph
+
+    with pytest.raises(refusal.Refused) as e:
+        mph.mix_check([0.0], scope="all", notes=(60,))
+    assert str(e.value) == DEFAULT_PRESET_REASON
+
+
+def test_presaturation_mismatch_stays_an_execution_error_exit_1(tmp_path):
+    out = tmp_path / "decimator.json"
+    p = _run_patched(["decimator", "--gains", "0.84", "--out", str(out)],
+                     "import voice_fx as vf\n"
+                     "_orig = vf.sat16\n"
+                     "vf.sat16 = lambda v: _orig(v) + 1\n")
+    assert p.returncode == exit_contract.FAIL, (p.returncode, p.stdout[-200:], p.stderr[-400:])
+    assert "RuntimeError: recorded pre-saturation samples do not produce the output" in p.stderr
+    assert "Traceback" in p.stderr and not _refused_lines(p.stdout), (p.stdout[-200:], p.stderr[-400:])
+    assert not out.exists()
+
+
+def test_unfloored_level_equals_the_retired_floored_expression_on_real_renders(monkeypatch):
+    """The committed form of #1693's before/after control. On real `mix_check`
+    renders at the built gain and a default candidate gain, `output_dbfs`
+    returns what the retired `20 * log10(max(rms, 1e-12))` returned, so
+    removing the floor moved no measured level, and every level sits far
+    above the activity floor (the lowest default-gain row was -23.4 dBFS on
+    main @ 3e2534c7)."""
+    import measure_pulse2x_headroom as mph
+    import mono_artifact_probe as mp
+
+    real = mph.output_dbfs
+    rows = []
+
+    def spy(out, what):
+        retired = 20 * math.log10(max(float(np.sqrt(np.mean(
+            (out[12000:].astype(float) / 32768) ** 2))), 1e-12))
+        level = real(out, what)
+        rows.append((what, round(level, 3), round(retired, 3)))
+        return level
+    monkeypatch.setattr(mph, "output_dbfs", spy)
+    mph.mix_check([0.84], notes=(24, 84, 127))
+    assert len(rows) == 12, "2 gains x 2 presets x 3 notes must each reach the level check"
+    assert all(new == old for _, new, old in rows), rows
+    assert min(old for _, _, old in rows) > mp.SILENT_DBFS + 30, rows
+
+
+# ---------------------------------------------------------------------------
+# #1908: an estimator InsufficientEvidence beside the Refused-only handler.
+# UNREACHABLE through the CLI (module docstring); these pin the injected escape
+# and the gates that make it so. `measure_pulse2x_headroom.py` is unchanged.
+# ---------------------------------------------------------------------------
+IE_CLASS = "audio_measure.InsufficientEvidence"
+#: Q15 1: the smallest candidate gain that is not digital silence
+SMALLEST_NONZERO_GAIN = "2e-5"
+NO_FUNDAMENTAL_REASON = ("pulse MIDI 84 pitch refused: no fundamental near 1046.5 Hz "
+                         "(no prominent line in the band)")
+#: Q15 of 0.84, a candidate gain that measures on its own
+NEUTRAL_GAIN_Q15 = 27525
+#: the four stage arrays `_stage_diagnostics` reads
+ALL_TAPS = {"oscillator", "mixer", "ladder", "output"}
+LADDER_AND_OUTPUT = {"ladder", "output"}
+#: (Q15 gain, scope, drive multiplier, the stage taps that are silent) -- the
+#: boundary values of every accepted input class the trace ran. A gain silences
+#: the oscillators and so everything after them; a zero/tiny/negative drive
+#: leaves the oscillator and mixer LIVE and silences the ladder (gain register
+#: 0) and with it the output.
+STAGE_TAP_CASES = [
+    pytest.param(0, "rect", None, ALL_TAPS, id="gain 0 silences the rectangles"),
+    pytest.param(0, "all", None, ALL_TAPS, id="gain 0 under scope all"),
+    pytest.param(1, "rect", None, set(), id="the smallest non-zero gain is not silence"),
+    pytest.param(-27853, "rect", None, set(), id="inverted"),
+    pytest.param(65536, "rect", None, set(), id="2x, at the rail"),
+    pytest.param(NEUTRAL_GAIN_Q15, "rect", 0.0, LADDER_AND_OUTPUT, id="drive 0"),
+    pytest.param(NEUTRAL_GAIN_Q15, "rect", 1e-9, LADDER_AND_OUTPUT, id="drive 1e-9"),
+    pytest.param(NEUTRAL_GAIN_Q15, "rect", -1.0, LADDER_AND_OUTPUT, id="negative drive"),
+    pytest.param(NEUTRAL_GAIN_Q15, "rect", 1e6, set(), id="drive 1e6"),
+]
+
+
+def _stage_taps_silent(gain_q15: int, scope: str, drive_comp) -> tuple[dict, dict]:
+    """Per stage tap (`oscillator`, `mixer`, `ladder`, `output`): digitally
+    silent over the window `measure` analyses? -- for one held M5A pulse note
+    (MIDI 84, gate 0.6 s) rendered inside the candidate context `phrases()`
+    itself builds.
+
+    `score.measure` is replaced by a recorder and the real `phrases()` loop is
+    run, so its own `voice_factory`, `candidate()` and `pulse_drive()` are the
+    active contexts and nothing about the voice is restated here. The baseline
+    call answers an empty score, which is all `phrases()` reads of it; the
+    first candidate's taps are kept and the loop is stopped there. Returns
+    (baseline taps, candidate taps)."""
+    import measure_pulse2x_headroom as mph
+    import mono_m5a_score as score
+
+    # the base patch only: `_patch_for_wave` is itself what `pulse_drive()`
+    # replaces, so it has to be called from inside the context (first draft
+    # called it here, rendered every drive case at the as-built 0.75 and the
+    # three drive rows came out live against the real CLI's "silent")
+    base = score._voice_patch(score.load_reference("M5A").manifest)
+
+    class _Stop(Exception):
+        pass
+
+    calls = []
+
+    def _record(**kw):
+        voice = kw["voice_factory"]()
+        patch = score._patch_for_wave(base, "pulse")
+        pcm = score.vf.render_mono_fx([(0.0, 84, 0.6, {**patch, "gate": 0.6})], 0.6, voice)
+        calls.append((voice.trace, pcm))
+        if len(calls) == 2:                      # the first candidate: M5A at the gain under test
+            raise _Stop
+        return {"metrics": {}, "event_diagnostics": []}
+
+    real, score.measure = score.measure, _record
+    try:
+        with pytest.raises(_Stop):
+            mph.phrases([gain_q15 / 32768], scope, drive_comp)
+    finally:
+        score.measure = real
+    assert len(calls) == 2, "the recorder saw the baseline and one candidate"
+    a, b = int(0.12 * score.SR), int((0.6 - 0.08) * score.SR)       # measure's own window
+    return [{name: not np.count_nonzero(np.asarray(x)[a:b])
+             for name, x in zip(("oscillator", "mixer", "ladder", "output"),
+                                (tr["osc"][0], tr["mixed"], tr["ladder"], pcm))}
+            for tr, pcm in calls]
+
+
+@pytest.mark.parametrize("gain_q15, scope, drive_comp, silent_taps", STAGE_TAP_CASES)
+def test_1908_no_accepted_input_leaves_a_stage_tap_silent_beside_a_live_output(gain_q15, scope, drive_comp, silent_taps):
+    baseline, candidate = _stage_taps_silent(gain_q15, scope, drive_comp)
+    assert not any(baseline.values()), ("the as-built voice is live on every tap; "
+                                        "a silent baseline did not reach the candidate", baseline)
+    silent = {name for name, is_silent in candidate.items() if is_silent}
+    assert silent == set(silent_taps), candidate
+    # THE GATE. `_stage_diagnostics` is reached only after `refine_f0` accepted
+    # the OUTPUT, so a silent ladder or oscillator tap is harmless while the
+    # output is silent with it; a silent tap beside a LIVE output is the one
+    # input that reaches `harmonic_signature: silent` past `refine_f0`.
+    assert not silent or "output" in silent, candidate
+
+
+@pytest.mark.parametrize("drive_comp", [0.0, 1e-9, -1.0])
+def test_1908_a_silencing_drive_is_a_zero_ladder_gain_register(drive_comp):
+    import measure_pulse2x_headroom as mph
+    import mono_m5a_score as score
+
+    base = score._voice_patch(score.load_reference("M5A").manifest)
+    with mph.pulse_drive(drive_comp):
+        regs = score.vf.VoiceFx.patch_regs(**score._patch_for_wave(base, "pulse"))
+    assert regs["gain"] == 0, regs
+
+
+def test_1908_injected_insufficient_evidence_at_score_measure_still_exits_1(tmp_path):
+    out = tmp_path / "phrases.json"
+    p = _run_patched(["phrases", "--gains", "0.84", "--out", str(out)],
+                     "import audio_measure as am\n"
+                     "import mono_m5a_score as score\n"
+                     "def _measure(**kw):\n"
+                     "    raise am.InsufficientEvidence('injected: insufficient evidence at score.measure')\n"
+                     "score.measure = _measure\n")
+    assert p.returncode == exit_contract.FAIL, (p.returncode, p.stdout[-200:], p.stderr[-400:])
+    assert "Traceback" in p.stderr, p.stderr[-400:]
+    assert f"{IE_CLASS}: injected: insufficient evidence at score.measure" in p.stderr, p.stderr[-400:]
+    assert "REFUSED" not in p.stdout, "this handler catches refusal.Refused alone; that is the #1908 pin"
+    assert not out.exists()
+
+
+def test_1908_injected_silent_oscillator_tap_beside_a_live_output_exits_1_at_the_census_site(tmp_path):
+    """The one route to the census site: `trace["osc"][0]` is zeroed after every
+    render while the output stays live, which no command line can do."""
+    out = tmp_path / "phrases.json"
+    p = _run_patched(["phrases", "--gains", "0.84", "--out", str(out)],
+                     "import numpy as np\n"
+                     "import mono_m5a_score as score\n"
+                     "_render = score.vf.render_mono_fx\n"
+                     "def _silent_tap(seq, dur, voice=None, host=None):\n"
+                     "    pcm = _render(seq, dur, voice, host)\n"
+                     "    voice.trace['osc'][0] = np.zeros_like(voice.trace['osc'][0])\n"
+                     "    return pcm\n"
+                     "score.vf.render_mono_fx = _silent_tap\n")
+    assert p.returncode == exit_contract.FAIL, (p.returncode, p.stdout[-200:], p.stderr[-400:])
+    assert "Traceback" in p.stderr, p.stderr[-400:]
+    assert f"{IE_CLASS}: harmonic_signature: silent" in p.stderr, p.stderr[-400:]
+    assert "in _stage_diagnostics" in p.stderr and "in harmonic_signature" in p.stderr, p.stderr[-600:]
+    assert "REFUSED" not in p.stdout and not out.exists()
+
+
+def test_1908_smallest_non_zero_gain_is_refused_by_the_pitch_estimator(tmp_path):
+    """The real CLI, on the input nearest the census's suspected cause (a small
+    gain): not silent, so not the silence gate -- `refine_f0` finds no
+    fundamental, and that refusal is a `Refused`."""
+    out = tmp_path / "phrases.json"
+    p = _cli("phrases", "--gains", SMALLEST_NONZERO_GAIN, "--out", str(out))
+    _assert_refused(p, NO_FUNDAMENTAL_REASON, out)
+    assert BASELINE_LINE in p.stdout and "wrote" not in p.stdout, p.stdout[-200:]
