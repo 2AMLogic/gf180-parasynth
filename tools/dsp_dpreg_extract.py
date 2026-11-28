@@ -371,7 +371,11 @@ def write_fetched_drc(dst, text):
 
 def sh(cmd, **kw):
     print("+", " ".join(str(c) for c in cmd), flush=True)
-    return subprocess.run(cmd, text=True, **kw)
+    try:
+        return subprocess.run(cmd, text=True, **kw)
+    except OSError as exc:
+        print(f"REFUSED: cannot run {cmd[0]}: {exc.strerror or exc}")
+        return subprocess.CompletedProcess(cmd, 127, stdout="", stderr="")
 
 
 # --box local (#316): run ON the Vivado host itself, with no ssh to self. The
