@@ -185,7 +185,7 @@
         "role": "testbench",
         "path": "tools/trial_env.py",
         "passed": true,
-        "content_hash": "sha256:3bd9b5afbd800fc892eff8658bacc818a1ce483fbbf8e82196dfbabf07cfbc54"
+        "content_hash": "sha256:f641cfc4d5e43977ad8c24a1c870cc771a0e04f7a26025fc2798d61106216116"
       },
       {
         "check": "command",

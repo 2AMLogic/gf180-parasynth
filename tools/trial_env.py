@@ -72,23 +72,21 @@ def tool_identity(name: str, want: dict, path: str) -> tuple[str | None, str | N
 
 def package_versions(spec: dict, python: str | None = None) -> dict:
     """{distribution: installed version or None}, from the interpreter that will
-    run the checkers (not necessarily this one)."""
+    run the checkers (not necessarily this one). Always asked of THAT interpreter
+    in a subprocess, even when it is this one: a venv's bin/python is a symlink
+    to its base interpreter, so "the same realpath" holds for two interpreters
+    with different site-packages, and reading this process's metadata answers
+    for the wrong one (#1582)."""
     names = list(spec["packages"])
-    if python is None or os.path.realpath(python) == os.path.realpath(sys.executable):
-        from importlib import metadata
-        out = {}
-        for n in names:
-            try:
-                out[n] = metadata.version(n)
-            except metadata.PackageNotFoundError:
-                out[n] = None
-        return out
+    if not names:
+        return {}
     code = ("import json,sys\nfrom importlib import metadata\nout={}\n"
             "for n in sys.argv[1:]:\n"
             "  try: out[n]=metadata.version(n)\n"
             "  except metadata.PackageNotFoundError: out[n]=None\n"
             "print(json.dumps(out))")
-    r = subprocess.run([python, "-c", code, *names], capture_output=True, text=True)
+    r = subprocess.run([python or sys.executable, "-c", code, *names],
+                       capture_output=True, text=True)
     if r.returncode != 0:
         return {n: None for n in names}
     return json.loads(r.stdout)

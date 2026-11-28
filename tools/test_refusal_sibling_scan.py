@@ -13,10 +13,14 @@ loss) and the #1193 section the borrowed-family gap: each control there
 started red against the unfixed scanner, except the shadow pin noted inline.
 The #1214 section pins the ambiguous-callee filter (a non-raising collision
 is not a site), the repo-relative `candidates` format, and the shadowed-alias
-blind spot #1188's test plan named but never pinned.
+blind spot #1188's test plan named but never pinned. The #1573 section pins
+function-local imports: an `import x as y` written inside a function bound
+nothing, so its call site was ABSENT from the census (#1569's defect shape),
+and the scoping that keeps a function's import out of its siblings.
 """
 from __future__ import annotations
 
+import ast
 import pathlib
 import sys
 
@@ -952,3 +956,298 @@ def test_local_family_then_aliased_borrow_keeps_the_local_origin(tmp_path):
     assert own["classification"] == "covered(exact)" and own["guard"] == "exact", own
     assert lent["classification"] == "candidate-escape", lent
     assert lent["uncovered"] == ["mod_a"], lent
+
+
+# --- #1573 controls: function-local imports ------------------------------------
+# `fpga/release/r2_release.py`'s `stale_control` imports `release_manifest as
+# rm` inside an `elif` branch and calls `rm._capture` under a `with` there,
+# inside a try whose handler is `except Refused` -- an alias of
+# r1_release.Refused. `_read_bindings` read `tree.body` only, so `rm` was
+# never bound and the site was ABSENT from the census, not misclassified: the
+# census could not flag the defect #1569 repairs. Every scope control below
+# started red against the module-level-only scanner; the two pins say so.
+
+LOCAL_SIBLING_CALLER = '''
+import mod_b as mb
+
+Refused = mb.Refused
+
+def go(case):
+    try:
+        if case == "image":
+            touch(case)
+        elif case == "host":
+            import mod_a as rm
+            with open(case) as d:
+                cap = rm.load(d)
+    except Refused as exc:
+        return f"REFUSED {exc}"
+'''
+
+LOCAL_FROM_IMPORT_CALLER = '''
+def go(p):
+    from mod_a import load as l
+    return l(p)
+'''
+
+LOCAL_DOTTED_IMPORT_CALLER = '''
+def go(p):
+    import mod_a.pkg as ma
+    return ma.load(p)
+'''
+
+LOCAL_NESTED_FUNCTION_CALLER = '''
+def go(p):
+    def inner(q):
+        import mod_a as rm
+        return rm.load(q)
+    return inner(p)
+'''
+
+LOCAL_CLOSURE_CALLER = '''
+def go(p):
+    import mod_a as rm
+    def inner(q):
+        return rm.load(q)
+    return inner(p)
+'''
+
+LOCAL_SHADOW_CALLER = '''
+import mod_a as rm
+
+def first(p):
+    import mod_b as rm
+    return rm.measure(p)
+
+def second(p):
+    return rm.load(p)
+'''
+
+LOCAL_NESTED_SHADOW_CALLER = '''
+def go(p):
+    import mod_b as rm
+    def inner(q):
+        import mod_a as rm
+        return rm.load(q)
+    return rm.measure(p), inner(p)
+'''
+
+LOCAL_AND_MODULE_CALLER = '''
+import mod_a
+import mod_b as mb
+
+def go(p):
+    import mod_a as ma
+    return mod_a.load(p), ma.load(p), mb.measure(p)
+'''
+
+LOCAL_HANDLER_CALLER = '''
+import mod_a
+
+def go(p):
+    import mod_a as rm
+    try:
+        return mod_a.load(p)
+    except rm.Refused as e:
+        print(e)
+'''
+
+LOCAL_RAISER = '''
+import refusal
+
+class Refused(refusal.Refused, Exception):
+    pass
+
+def fetch(p):
+    import mod_b as mb
+    raise mb.Refused(f"cannot use {p}")
+'''
+
+LOCAL_RAISER_CALLER = '''
+import local_raiser
+import mod_b
+
+def go(p):
+    try:
+        local_raiser.fetch(p)
+    except mod_b.Refused as e:
+        print(e)
+'''
+
+LOCAL_FAMILY_BORROWER = '''
+import refusal
+
+class Refused(refusal.Refused, Exception):
+    pass
+
+def own(p):
+    raise Refused("the module's own class")
+
+def fetch(p):
+    from mod_b import Refused as R
+    raise R(f"cannot use {p}")
+'''
+
+LOCAL_BORROW_CALLER = '''
+import local_borrower
+
+def go(p):
+    local_borrower.own(p)
+    return local_borrower.fetch(p)
+'''
+
+
+def _local_tree(tmp_path, extra: dict[str, str]):
+    files = _tree(tmp_path)
+    for name, body in extra.items():
+        p = tmp_path / f"{name}.py"
+        p.write_text(body)
+        files.append(p)
+    return files, rss.build_index(files)
+
+
+def _call_in(mod, head: str, attr: str) -> ast.Call:
+    return next(n for n in ast.walk(mod.tree)
+                if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                and isinstance(n.func.value, ast.Name)
+                and n.func.value.id == head and n.func.attr == attr)
+
+
+def test_function_local_import_under_an_own_class_handler_is_an_escape(tmp_path):
+    """The #1569 shape, red first: `import mod_a as rm` sits in an `elif`
+    branch, the `rm.load` call in a `with` under it, and the handler is
+    `except Refused` with `Refused` an alias of a SIBLING's class. Against
+    the module-level-only scanner the site list is empty -- the site was
+    absent, so the census could not flag the defect."""
+    files, idx = _local_tree(tmp_path, {"caller_local": LOCAL_SIBLING_CALLER})
+    got = _sites_for(files, idx, "caller_local")
+    assert len(got) == 1, got
+    s = got[0]
+    assert s["callee"] == "mod_a.load", s
+    assert s["site"].endswith("caller_local.py:13"), s
+    assert s["classification"] == "candidate-escape", s
+    assert s["uncovered"] == ["mod_a"], s
+    assert s["guard"] == "exact", s
+
+
+def test_function_local_from_import_alias_resolves_to_the_original_function(tmp_path):
+    """`from x import y as z` inside a function: the `l()` call resolves to
+    mod_a.load, exactly as the module-level alias does (#1188 "alias loss")."""
+    files, idx = _local_tree(tmp_path, {"caller_local_from": LOCAL_FROM_IMPORT_CALLER})
+    got = _sites_for(files, idx, "caller_local_from")
+    assert len(got) == 1, got
+    assert got[0]["callee"] == "mod_a.load", got[0]
+    assert got[0]["classification"] == "candidate-escape", got[0]
+
+
+def test_function_local_dotted_import_binds_the_stem(tmp_path):
+    """`import a.b as c` inside a function: `c` binds the STEM, as at module
+    level, so `ma.load` resolves to mod_a.load."""
+    files, idx = _local_tree(tmp_path, {"caller_local_dotted": LOCAL_DOTTED_IMPORT_CALLER})
+    got = _sites_for(files, idx, "caller_local_dotted")
+    assert len(got) == 1, got
+    assert got[0]["callee"] == "mod_a.load", got[0]
+
+
+def test_local_import_in_a_nested_function_resolves_there(tmp_path):
+    files, idx = _local_tree(tmp_path, {"caller_local_nested": LOCAL_NESTED_FUNCTION_CALLER})
+    got = _sites_for(files, idx, "caller_local_nested")
+    assert len(got) == 1, got
+    assert got[0]["callee"] == "mod_a.load", got[0]
+
+
+def test_nested_function_reads_its_enclosing_defs_import(tmp_path):
+    """Lexical scoping, the inward direction: a nested def reads the import
+    of the def it sits in (a closure), so the call is not lost."""
+    files, idx = _local_tree(tmp_path, {"caller_local_closure": LOCAL_CLOSURE_CALLER})
+    got = _sites_for(files, idx, "caller_local_closure")
+    assert len(got) == 1, got
+    assert got[0]["callee"] == "mod_a.load", got[0]
+
+
+def test_function_local_import_does_not_leak_across_functions(tmp_path):
+    """Rule 8's guard-defeating input for the scope walk. `rm` is bound at
+    module level to mod_a and, in `first()` only, to mod_b. Hoisting the
+    local import into the module's bindings (last binding wins) rebinds `rm`
+    for the WHOLE file: `second()`'s call would read as mod_b.load -- a def
+    that does not exist -- and the real mod_a.load site would vanish. The
+    control asserts both directions: each function sees its own `rm`."""
+    files, idx = _local_tree(tmp_path, {"caller_local_shadow": LOCAL_SHADOW_CALLER})
+    got = {s["callee"]: s for s in _sites_for(files, idx, "caller_local_shadow")}
+    assert sorted(got) == ["mod_a.load", "mod_b.measure"], got
+    assert got["mod_a.load"]["classification"] == "candidate-escape", got
+    assert got["mod_a.load"]["uncovered"] == ["mod_a"], got
+    assert got["mod_b.measure"]["uncovered"] == ["mod_b"], got
+
+
+def test_nested_functions_import_shadows_its_enclosing_defs(tmp_path):
+    """Innermost wins, the inverse of the closure case: the nested def's own
+    `rm` must govern the call inside it, and the enclosing def's `rm` must
+    survive for its own call. A walk that credits the inner import to the
+    OUTER def (last binding wins there) rebinds the outer `rm` as well and
+    the mod_b.measure site vanishes. The real tree has this shape:
+    r1_release.py binds `rc` to record_compare at module level and to
+    r1_candidate inside three functions."""
+    files, idx = _local_tree(tmp_path, {"caller_local_nshadow": LOCAL_NESTED_SHADOW_CALLER})
+    got = {s["callee"]: s for s in _sites_for(files, idx, "caller_local_nshadow")}
+    assert sorted(got) == ["mod_a.load", "mod_b.measure"], got
+
+
+def test_module_level_bindings_are_unchanged_by_function_local_imports(tmp_path):
+    """A control, not a red-first case: the module's own `imports` hold what
+    they held before function scopes existed -- the function-local names are
+    not in them -- and `resolve_head` without a use site answers from module
+    level only, so every module-level caller of the API is unchanged."""
+    files, idx = _local_tree(tmp_path, {"caller_local_shadow": LOCAL_SHADOW_CALLER,
+                                        "caller_local_both": LOCAL_AND_MODULE_CALLER})
+    shadow = idx[str(tmp_path / "caller_local_shadow.py")]
+    assert shadow.imports == {"rm": "mod_a"}, shadow.imports
+    assert shadow.from_imports == {}, shadow.from_imports
+    assert shadow.resolve_head("rm") == "mod_a"
+    assert shadow.resolve_head("rm", _call_in(shadow, "rm", "measure")) == "mod_b"
+    both = idx[str(tmp_path / "caller_local_both.py")]
+    assert both.imports == {"mod_a": "mod_a", "mb": "mod_b"}, both.imports
+    assert both.resolve_head("ma") is None
+    assert both.resolve_head("ma", _call_in(both, "ma", "load")) == "mod_a"
+    got = sorted(s["callee"] for s in _sites_for(files, idx, "caller_local_both"))
+    assert got == ["mod_a.load", "mod_a.load", "mod_b.measure"], got
+
+
+def test_function_local_alias_in_a_handler_covers_its_module(tmp_path):
+    """The handler side of the same mechanism, red first: `except rm.Refused`
+    with `rm` imported inside the function used to credit an origin spelled
+    `rm` -- a stem no module carries -- so a handler that covers the callee
+    exactly read as a candidate escape."""
+    files, idx = _local_tree(tmp_path, {"caller_local_handler": LOCAL_HANDLER_CALLER})
+    got = _sites_for(files, idx, "caller_local_handler")
+    assert len(got) == 1, got
+    assert got[0]["classification"] == "covered(exact)", got[0]
+    assert got[0]["guard"] == "exact", got[0]
+    assert got[0]["origins"] == ["mod_a"], got[0]
+
+
+def test_raise_through_a_function_local_import_names_the_real_module(tmp_path):
+    """The raise side, red first: `raise mb.Refused(...)` with `mb` imported
+    inside the callee's def read as origin `mb`; a caller's exact
+    `except mod_b.Refused` could never cover a stem that is not a module."""
+    files, idx = _local_tree(tmp_path, {"local_raiser": LOCAL_RAISER,
+                                        "caller_local_raiser": LOCAL_RAISER_CALLER})
+    got = _sites_for(files, idx, "caller_local_raiser")
+    assert len(got) == 1, got
+    assert got[0]["origins"] == ["mod_b"], got[0]
+    assert got[0]["classification"] == "covered(exact)", got[0]
+    assert got[0]["uncovered"] == [], got[0]
+
+
+def test_family_borrowed_inside_a_function_is_still_invisible(tmp_path):
+    """A stated blind spot, pinned so a scope-tracking change moves it
+    deliberately: only the family names bound at MODULE level are read, so
+    `from mod_b import Refused as R` inside a def binds no family name and
+    the `raise R(...)` still reads as raising nothing. The sibling call to
+    `own` is asserted present, so the absence is the blind spot and not an
+    unindexed module. Zero instances in the tree when #1573 landed."""
+    files, idx = _local_tree(tmp_path, {"local_borrower": LOCAL_FAMILY_BORROWER,
+                                        "caller_local_borrow": LOCAL_BORROW_CALLER})
+    got = {s["callee"]: s for s in _sites_for(files, idx, "caller_local_borrow")}
+    assert sorted(got) == ["local_borrower.own"], got
+    assert got["local_borrower.own"]["origins"] == ["local_borrower"], got

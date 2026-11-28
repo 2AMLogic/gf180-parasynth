@@ -8,9 +8,11 @@ before any metric runs. Synthetic fixtures only; no reference corpus needed.
 
 Run: `python3 -m pytest tools/test_measure_partial_balance.py -q`
 """
+import hashlib
 import pathlib
 import sys
 
+import numpy as np
 import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -111,6 +113,115 @@ def test_the_tool_computes_no_ratio_of_its_own():
         assert prim not in src, (
             f"{prim} in measure_partial_balance -- an estimator assembled here "
             f"is a copy that can drift from run_case's")
+
+
+# --- #1568: the input helpers in the tool were still hand-copied from
+# run_case, under its own comment that nothing in it is reimplemented, and
+# had drifted the same way: `REF_MAIN` held two of its sixteen entries in a
+# different shape; the `wavfile.read` body guarded the sample width BEFORE the
+# finiteness assert, so a float32 NaN file was refused as a format mismatch
+# and the NaN itself (#133, #134) was never named; and `render_ours` hardcoded
+# 2.2 s where `render_drum_solo` reads `SOLO_SECONDS` for the cymbal and the
+# open hat. All three are now run_case's.
+#
+# WHAT DEFEATS THESE CHECKS (docs/verification-rules.md rule 8):
+#   - the two attribute legs and the source scan are name- and text-bound.
+#     `from run_case import REF_MAIN as _REF`, `getattr(scipy.io, "wavfile")
+#     .read(...)`, or a copy moved into a helper module passes all three.
+#   - so the delegation is also asserted BEHAVIOURALLY, by spies on the
+#     run_case objects driven through `cmd_measure` -- the command the operator
+#     runs. A copy reached by any route does not call the spy, and the call log
+#     is compared exactly: which function, which arguments, in which order.
+
+def test_the_tool_carries_no_private_reference_table_or_renderer():
+    """`REF_MAIN` and `render_ours` were the last two things defined again in
+    this module rather than taken from run_case (#636's shape, again)."""
+    assert not hasattr(tool, "REF_MAIN"), "a private REF_MAIN is a second reference mapping to go stale"
+    assert not hasattr(tool, "render_ours"), "a private render_ours hardcodes its own span"
+
+
+def test_the_tool_reads_no_wav_and_builds_no_drum_of_its_own():
+    """The private loader was a `wavfile.read` and the private renderer a
+    `DrumsFx()`. Neither primitive has a caller left in this file."""
+    src = pathlib.Path(tool.__file__).read_text()
+    for frag in ("wavfile.read", "DrumsFx("):
+        assert frag not in src, (
+            f"{frag} in measure_partial_balance -- the recording or the render "
+            f"is produced here rather than by run_case, where the guards live")
+
+
+def _two_line_strike(voice, sr, high_gain, lead_ms=1.0):
+    """The first known case `cmd_validate` proves the estimator on for `voice`,
+    after `lead_ms` of digital silence: two decaying lines, the shape
+    `rc.prepare` accepts. Synthetic and analytic, not our drum model."""
+    f_lo, tau_lo, f_hi, tau_hi = {"RS": (455, 0.0047, 1786, 0.0024),
+                                  "CB": (540, 0.060, 800, 0.060)}[voice]
+    a = int(round(lead_ms * 1e-3 * sr))
+    body = tool.two_partial(f_lo, tau_lo, 1.0, f_hi, tau_hi, high_gain,
+                            tool.OP[voice]["t_end"], sr)
+    x = np.zeros(a + len(body))
+    x[a:] = body
+    return x
+
+
+def test_load_reference_is_run_case_load_reference_plus_the_file_hash(tmp_path, monkeypatch):
+    """The delegate keeps the tool's own return tuple -- `(x, sr, rel, sha)`,
+    the hash being the provenance `cmd_measure` prints -- and loads from the
+    corpus the tool resolved (`REFDIR`, which stays here for that reason)."""
+    monkeypatch.setattr(tool, "REFDIR", tmp_path)
+    x, rel = _two_line_strike("RS", 44100, 1.0), "rs8/RS.WAV"
+    seen = []
+
+    def spy(voice, refdir, inject=""):
+        seen.append((voice, refdir, inject))
+        return x, 44100, rel, "no knob"               # run_case's tuple: no hash
+    monkeypatch.setattr(rc, "load_reference", spy)
+    p = tmp_path / rel
+    p.parent.mkdir(parents=True)
+    p.write_bytes(b"the bytes that were loaded")
+
+    got = tool.load_reference("RS")
+    assert seen == [("RS", tmp_path, "")]
+    assert got[0] is x
+    assert got[1:] == (44100, rel, tool.sha(p))
+
+
+def test_cmd_measure_loads_and_renders_through_run_case(tmp_path, monkeypatch, capsys):
+    """Spies on both run_case helpers, driven through `cmd_measure` itself, so
+    a copy reached by any route has to not call them. The render is called
+    with the sound and nothing else: the private `render_ours` fixed the span
+    at 2.2 s for every sound, which would end a cymbal's or an open hat's ring
+    early where `render_drum_solo` reads `SOLO_SECONDS`. The reference is
+    asked for under the corpus the tool resolved (`REFDIR`), where the files
+    the spy names exist because the delegate hashes them."""
+    calls = []
+    monkeypatch.setattr(tool, "REFDIR", tmp_path)
+    for voice in ("RS", "CB"):
+        p = tmp_path / f"{voice.lower()}8" / f"{voice}.WAV"
+        p.parent.mkdir(parents=True)
+        p.write_bytes(voice.encode())
+
+    def spy_load(voice, refdir, inject=""):
+        calls.append(("load", voice, refdir, inject))
+        return _two_line_strike(voice, 44100, 1.0), 44100, f"{voice.lower()}8/{voice}.WAV", "no knob"
+
+    def spy_render(sound, *args, **kwargs):
+        calls.append(("render", sound, args, kwargs))
+        return _two_line_strike(sound, 48000, 0.5), 48000
+    monkeypatch.setattr(rc, "load_reference", spy_load)
+    monkeypatch.setattr(rc, "render_drum_solo", spy_render)
+    # The estimator is not under test here (`cmd_validate` owns it), and its
+    # 0.05 Hz line search costs ~30 s on these fixtures, so it is stubbed.
+    monkeypatch.setattr(tool.PT, "find_partial",
+                        lambda x, sr, f_lo, f_hi, *, seconds=None, df=0.05: 0.5 * (f_lo + f_hi))
+
+    assert tool.cmd_measure() == 0
+    out = capsys.readouterr().out
+    assert calls == [("load", "RS", tmp_path, ""), ("render", "RS", (), {}),
+                     ("load", "CB", tmp_path, ""), ("render", "CB", (), {})]
+    # ...and what it printed is what the loader handed back: the hash of the
+    # file the spy named, read from under REFDIR.
+    assert f"cb8/CB.WAV sha256:{hashlib.sha256(b'CB').hexdigest()[:16]}" in out
 
 
 def test_the_usage_block_advertises_exactly_the_commands_that_dispatch():
