@@ -1115,9 +1115,470 @@ def aggregate_sites(sources: dict[str, str],
     return [site for _path, _line, _col, site in sites], unparsed
 
 
-#: The triage, in `SITE_VERDICTS`' own `(verdict, why, control)` shape, keyed
-#: `(path, builtin, qualified function, call text)`.
-AGGREGATE_VERDICTS: dict[tuple, tuple] = {}
+#: The triage, in `SITE_VERDICTS`' own `(verdict, why, control)` shape and its
+#: own vocabulary, keyed `(path, builtin, qualified function, call text)`. One
+#: entry covers every occurrence of its key: `holdout.py`'s seven
+#: `max(worst, FAIL)` are one verdict.
+#:
+#: 115 sites, 98 keys, on origin/main @ 616b8d63 with #2019 merged and this
+#: branch's two guards, 2026-11-28. 49 of the sites pass the filed walk's own
+#: test (the filed 48 and `rebalance`'s); the other 66 are what that test
+#: dropped. A `file:line` cites the tree the verdict was written against --
+#: origin/main as above -- and this branch's two guards come after it, shifting
+#: the lines from cymbal_band_balance.py:736 and cymbal_tone_render.py:292 down.
+#:
+#:   12 REACHABLE, 10 keys     7 repaired here behind two refusals, 2 with a
+#:                             repair in flight on #1928, 3 filed as one follow-up
+#:   42 UNREACHABLE, 36 keys   an integer, a literal beside a first-position
+#:                             value, a token grammar with no nan spelling, a
+#:                             guard that raises first, or a value nothing reads
+#:   61 UNDETERMINED, 52 keys  57 a value computed in process with no record or
+#:                             file between the computation and the call, 4 frame
+#:                             numbers read off a plan's JSON rows without a
+#:                             cast; each says what would settle it
+#:
+#: WRONG BEFORE RIGHT (98 keys): 1 was first judged unreachable and then found
+#: reachable -- `cymbal_tone_render.verdict`'s four, passed over on a reading
+#: of `verdict(ours, ref)`'s signature (two dicts, in-process) before
+#: `fischer_curves()` was read and turned out to be a `json.loads`. One
+#: hypothesis was confirmed FALSE rather than true: #2014 absorbed #2019's
+#: guess that its `targets()` guard closes `cymbal_vca_clip.verdict`'s four; it
+#: does not, because those populations are `sweep()`'s rows. They are
+#: unreachable for a different reason, and the entry says which.
+AGGREGATE_VERDICTS: dict[tuple, tuple] = {
+    # --- REACHABLE, repaired here: a reader refuses before anything aggregates
+    ('tools/cymbal_band_balance.py', 'min', 'rebalance', 'min(ceiling[b] / want[b] for b in BANDS)'):
+        _v(REACHABLE,
+           ("`want[b]` carries `gaps[b]['gap_db']`, which is `gap_db()` -> `relative_db()` -> "
+            "`schematic_tone_term()`'s `float(entry['db'])` off sn-p13-vr4.json, a json.loads with no "
+            "finiteness assertion on this tree (#1870's finding; PR #1950 guards the reader). The "
+            "`cal` half cannot: `calibrate()`'s render is `output_fx`'s int16 clip cast to float "
+            "(cymbal_candidate.py:677, drums_fx.py:627), and one run returned six finite energies. "
+            "Measured without the guard: a NaN SHORT level left `common_scale_db` at -8.88 for -35.38 "
+            "and came back as NaN."),
+           control='tools/test_cymbal_band_balance.py::test_the_ablation_refuses_a_non_finite_level_or_gap_before_min_drops_it'),
+    ('tools/cymbal_tone_render.py', 'max', 'verdict', 'max(abs(v) for v in d_hed.values())'):
+        _v(REACHABLE,
+           ("the EDT half of the `d_hml` entry: `d_hed` is a ratio of ours to "
+            "`ref[dec]['h_edt10_ratio']`, the same reader's `H.edt10_ms`; same measured false pass, "
+            "same repair at the reader."),
+           control='tools/test_cymbal_tone_render.py::test_the_record_reader_refuses_a_non_finite_cell_naming_the_setting_and_field'),
+    ('tools/cymbal_tone_render.py', 'max', 'verdict', 'max(abs(v) for v in d_hml.values())'):
+        _v(REACHABLE,
+           ("`d_hml` is ours less `ref[dec]['h_minus_l_anchored_db']`, and `ref` is "
+            "`fischer_curves()`'s H_minus_L_db off fischer.json, a json.loads that admitted a NaN or "
+            "Infinity literal. Measured: a NaN cell at TONE 75 removed that position's difference "
+            "from `h_minus_l_worst_db` and the column passed with worst_db 0.0. Repaired here at the "
+            "reader, before `verdict()` aggregates."),
+           control='tools/test_cymbal_tone_render.py::test_the_record_reader_refuses_a_non_finite_cell_naming_the_setting_and_field'),
+    ('tools/cymbal_tone_render.py', 'max', 'verdict', 'max(v["h_edt10_worst_rel"] for v in cols.values())'):
+        _v(REACHABLE,
+           ("the worst over the DECAY columns of the `d_hed` entry's own result; same reader, same "
+            "repair. `h-edt-tracks-808` is the property that reads it."),
+           control='tools/test_cymbal_tone_render.py::test_the_record_reader_refuses_a_non_finite_cell_naming_the_setting_and_field'),
+    ('tools/cymbal_tone_render.py', 'max', 'verdict', 'max(v["h_minus_l_worst_db"] for v in cols.values())'):
+        _v(REACHABLE,
+           ("the worst over the DECAY columns of the `d_hml` entry's own result; same reader, same "
+            "repair. `h-minus-l-tracks-808` is the property that reads it."),
+           control='tools/test_cymbal_tone_render.py::test_the_record_reader_refuses_a_non_finite_cell_naming_the_setting_and_field'),
+    # --- REACHABLE, repair already on another branch
+    ('tools/cymbal_band_balance.py', 'max', 'properties', 'max(abs(v["gap_db"]) for v in g.values())'):
+        _v(REACHABLE,
+           ("rule-bind's `biggest`. Repair in flight: #1928 (PR #2017), which asserts both routes' "
+            "`gap_db` and `bound_db` finite before these two calls.")),
+    ('tools/cymbal_band_balance.py', 'max', 'properties', 'max(v["bound_db"] for v in figg.values())'):
+        _v(REACHABLE,
+           ("rule-bind's `widest`. Repair in flight: #1928 (PR #2017), which measured a non-finite "
+            "figure-route bound turning this from 21.3 dB into 14.7 dB and asserts both fields before "
+            "these two calls.")),
+    # --- REACHABLE, filed as one follow-up
+    ('tools/check_m1a_selection.py', 'max', 'check', 'max(pairs, key=lambda p: abs(p[0] - p[1]))'):
+        _v(REACHABLE,
+           ("`pairs` is the record's `diagnostics.events[*].attack_10_90_ms.{model,reference}`, a "
+            "json.loads that refuses decode errors only -- the reader #2019 marked for this same "
+            "function (L149). A NaN key is never the greatest, so that event stops being 'its own "
+            "worst event'.")),
+    ('tools/cymbal_low_tail.py', 'max', 'summarise', 'max(v, key=v.get)'):
+        _v(REACHABLE,
+           "the `argmax` half of the entry above; same file, same reader."),
+    ('tools/cymbal_low_tail.py', 'min', 'summarise', 'min(v, key=v.get)'):
+        _v(REACHABLE,
+           ("`v` is the result file's `windows.<w>.fischer.<k>.rho.<band>.<depth>`, a json.loads "
+            "(L913) whose `is not None` test (L891) admits a NaN; a NaN key is never the least, so "
+            "`argmin` names another 808.")),
+    # --- UNREACHABLE: the entry cites the type, the grammar, the guard or the absence of a reader
+    ('tools/analyse_m1a_phase_cycle.py', 'max', 'summarise', 'max(binned)'):
+        _v(UNDETERMINED,
+           ("computed in process: `binned` is `_pmean` of each window's `levels_dbfs` (L177); whether "
+            "the level estimator can emit a non-finite value was not analysed. What would settle it: "
+            "a NaN in one window's `levels_dbfs` and `range_db` read beside it.")),
+    ('tools/analyse_m1a_phase_cycle.py', 'min', 'summarise', 'min(binned)'):
+        _v(UNDETERMINED,
+           "the other end of `range_db`; same population as `max(binned)`."),
+    ('tools/bd_glide_phase_sweep.py', 'max', 'range_report', 'max(abs(r["sin"]), abs(r["cos"]))'):
+        _v(UNREACHABLE,
+           ("`sin` / `cos` are `pt.glide_cents()` of `pt.trajectory()`, which refuses a non-finite "
+            "signal (pitch_trajectory.py:113) and a non-finite envelope (L175); `glide_cents` is "
+            "`log2` of the mean of that trajectory's finite frequencies over a finite `late`, and "
+            "`log2` raises on a non-positive one. A refused cell is a string and is excluded at L128.")),
+    ('tools/bd_glide_phase_sweep.py', 'max', 'range_report', 'max(err)'):
+        _v(UNREACHABLE,
+           "the list L129 builds, element by element; whatever holds of L129 holds here."),
+    ('tools/capture_m1a_phase_cycle.py', 'max', 'click_report', 'max(8, int(CLICK_PERIODS * sr / f0))'):
+        _v(UNREACHABLE,
+           "integer: `int(...)` against a literal (L151)."),
+    ('tools/capture_m1a_phase_cycle.py', 'max', 'click_report', 'max(CLICK_K * mad, CLICK_FLOOR_DB)'):
+        _v(UNREACHABLE,
+           ("first position: a non-finite `mad` would be RETURNED, not dropped, and what it then "
+            "meets is `res > thr` (L157), which is #1929's shape and outside both of its regexes; the "
+            "second argument is a module constant.")),
+    ('tools/capture_m1a_phase_cycle.py', 'max', 'sum_check', 'max(am.rms(r), 1e-30)'):
+        _v(UNREACHABLE,
+           ("first position, and the other argument is a literal: a NaN here is returned, not "
+            "dropped.")),
+    ('tools/crash_rate.py', 'max', 'batch_report', 'max((r["peak_rss_kb"] for r in runs), default=0)'):
+        _v(UNREACHABLE,
+           ("integer: `peak_rss_kb` is `rep['maxrss'] // _MAXRSS_TO_KB` (L213), `ru_maxrss` off "
+            "`os.wait4`, or the literal 0 (L220).")),
+    ('tools/cymbal_m_origin.py', 'max', 'verdict', 'max((r["rho_M_-10"] for r in got), default=None)'):
+        _v(UNREACHABLE,
+           ("`rho_M_-10` is `lt.measure`'s `round(times_ms[M][-10] / times_ms[Ln][-10], 4)` "
+            "(cymbal_low_tail.py:338), a ratio of two `j / sr` crossing times or None, and `got` "
+            "keeps the non-None ones (L368).")),
+    ('tools/cymbal_m_origin.py', 'max', 'verdict', "max(r['decay_rel_db'] for r in rows)"):
+        _v(UNREACHABLE,
+           "the same `SWEEP_DB` literal, in the refusal's text."),
+    ('tools/cymbal_m_origin.py', 'min', 'verdict', 'min((r["decay_rel_db"] for r in ok), default=None)'):
+        _v(UNREACHABLE,
+           ("`decay_rel_db` is the swept level `d` out of `SWEEP_DB`, a module literal (L149); "
+            "`main()` passes no levels (L435).")),
+    ('tools/cymbal_m_origin.py', 'min', 'verdict', "min(r['decay_rel_db'] for r in rows)"):
+        _v(UNREACHABLE,
+           "the same `SWEEP_DB` literal, in the refusal's text."),
+    ('tools/cymbal_tone_knob.py', 'max', 'shape_audit', 'max(real)'):
+        _v(UNREACHABLE,
+           ("`real` is one column of `measured` (L520), which `main()` passes as `art_1s` -- a "
+            "`from_artifact()` read that refuses a non-finite cell (L582).")),
+    ('tools/cymbal_tone_knob.py', 'min', 'shape_audit', 'min(real)'):
+        _v(UNREACHABLE,
+           "the other end of the same column; same reader."),
+    ('tools/cymbal_tone_knob.py', 'min', 'verdict', "min(v['measured_span_db'] for v in head['per_column'].values())"):
+        _v(UNREACHABLE,
+           ("`head` is `fit_balance()` of `from_artifact()`'s rows, each refused unless finite "
+            "(L582); the span is a difference of two of them (L473).")),
+    ('tools/cymbal_tone_nodal.py', 'max', 'properties', 'max(g[c][b] for c in CODES)'):
+        _v(UNDETERMINED,
+           ("computed in process: `tone_gain_db(cfg)` over the TONE codes (L587). A dropped NaN "
+            "narrows the band's span, and property 8's `ok` is `max(spans.values()) >= SPAN_MIN_DB`. "
+            "Whether `tone_gain_db()` can emit one was not analysed. What would settle it: a NaN in "
+            "one band's gain and property 8 read beside it.")),
+    ('tools/cymbal_tone_nodal.py', 'max', 'properties', 'max(gain, fixed - track)'):
+        _v(UNDETERMINED,
+           ("the running worst of the two entries above' difference; property 6's `ok` is `gain <= "
+            "TRACK_TOL_DB`.")),
+    ('tools/cymbal_tone_nodal.py', 'max', 'properties', 'max(math.log2(lo / p) if p < lo else 0.0, math.log2(p / hi) if p > hi else 0.0)'):
+        _v(UNREACHABLE,
+           ("each argument is `math.log2` of a positive ratio, which raises on a non-positive one, or "
+            "the literal 0.0 that a NaN `p` selects (both of its comparisons are False).")),
+    ('tools/cymbal_tone_nodal.py', 'max', 'properties', 'max(network_poles(0.0))'):
+        _v(UNDETERMINED,
+           "the same at the bottom of the wiper (L565); reported as `rotation_hz`."),
+    ('tools/cymbal_tone_nodal.py', 'max', 'properties', 'max(network_poles(1.0))'):
+        _v(UNDETERMINED,
+           "the same at the top of the wiper (L566); reported as `rotation_hz`."),
+    ('tools/cymbal_tone_nodal.py', 'max', 'properties', 'max(network_poles(alpha_of(c, cfg)))'):
+        _v(UNDETERMINED,
+           ("computed in process: `network_poles()`'s pole frequencies over the TONE codes (L563); "
+            "reported as `top_pole_hz`, not judged. Whether the network can yield a non-finite pole "
+            "was not analysed. What would settle it: a NaN from `network_poles()` and `tops` read "
+            "beside it.")),
+    ('tools/cymbal_tone_nodal.py', 'max', 'properties', 'max(shape_error_db(b, alpha_of(c, cfg), _tracked(b, v, c, cfg), v["dc_zeros"], cfg) for c in CODES)'):
+        _v(UNDETERMINED,
+           ("computed in process: `shape_error_db()` over the five TONE codes (L571), property 6's "
+            "`track`. Whether it can emit one was not analysed. What would settle it: a NaN tracking "
+            "error and property 6 read beside it.")),
+    ('tools/cymbal_tone_nodal.py', 'max', 'properties', 'max(spans.values())'):
+        _v(UNDETERMINED,
+           ("the largest of the three spans above, as property 8's `value_db` and in its `ok` (L588, "
+            "L590).")),
+    ('tools/cymbal_tone_nodal.py', 'max', 'properties', 'max(v["per_tone_db"].values())'):
+        _v(UNDETERMINED,
+           "computed in process: `chosen()`'s per-TONE dB (L570), property 6's `fixed`."),
+    ('tools/cymbal_tone_nodal.py', 'max', 'properties', 'max(v["worst_db"] for v in ch.values())'):
+        _v(UNDETERMINED,
+           ("computed in process: `chosen()`'s per-band `worst_db` (L393); property 4's `ok` is "
+            "`worst <= SHAPE_BOUND_DB`. Whether `choose()` can emit one was not analysed. What would "
+            "settle it: a NaN in one band's `worst_db` and property 4 read beside it.")),
+    ('tools/cymbal_tone_nodal.py', 'max', 'properties', 'max(worst_hz, min(abs(p - q) for q in net))'):
+        _v(UNDETERMINED,
+           ("the running worst of the entry below; a dropped NaN leaves the distance of the other "
+            "poles, and property 5's `ok` is `worst_hz <= POLE_TOL_HZ`.")),
+    ('tools/cymbal_tone_nodal.py', 'max', 'properties', 'max(worst_oct, max(math.log2(lo / p) if p < lo else 0.0, math.log2(p / hi) if p > hi else 0.0))'):
+        _v(UNREACHABLE,
+           ("the second argument is the inner max's value (next entry), which is finite or an "
+            "infinity -- and an infinity compares and is kept; the first starts at 0.0.")),
+    ('tools/cymbal_tone_nodal.py', 'min', 'properties', 'min(abs(p - q) for q in net)'):
+        _v(UNDETERMINED,
+           ("computed in process: `p` a pole of `chosen()`'s realisation and `q` one of "
+            "`network_poles()`'s (L527-531). Whether either can emit one was not analysed. What would "
+            "settle it: a NaN pole and property 5 read beside it.")),
+    ('tools/cymbal_tone_nodal.py', 'min', 'properties', 'min(g[c][b] for c in CODES)'):
+        _v(UNDETERMINED,
+           "the other end of the same span."),
+    ('tools/cymbal_tone_nodal.py', 'min', 'properties', 'min(r3["low"]["per_tone_nodal_db_raw"].values())'):
+        _v(UNDETERMINED,
+           ("computed in process: `rev3_realisation()`'s per-TONE error (L398). A NaN in first "
+            "position is returned and property 3 reads False; a dropped one leaves the minimum of the "
+            "rest, and `ok` is `worst_low > SHAPE_BOUND_DB`. Whether the nodal analysis can emit one "
+            "was not analysed. What would settle it: a NaN in one TONE position and property 3 read "
+            "beside it.")),
+    ('tools/cymbal_tone_render.py', 'max', 'print_report', 'max(sh[b][n], 1e-300)'):
+        _v(UNREACHABLE,
+           ("first position, and the other argument is a literal: a NaN share is returned, not "
+            "dropped, and is printed as nan.")),
+    ('tools/cymbal_tone_render.py', 'max', 'superposition_check', 'max(abs(v) for v in err.values())'):
+        _v(UNDETERMINED,
+           ("computed in process: `predict_anchored(shares)` less `measure_render()`'s anchored H - L "
+            "(main, L861); `ok` is `worst <= SUPERPOSITION_TOL_DB`. Whether either can emit one was "
+            "not analysed. What would settle it: a NaN in one predicted share and `superposition` "
+            "read beside it.")),
+    ('tools/cymbal_vca_clip.py', 'max', 'verdict', 'max((r["rho_M_-10"] for r in got), default=None)'):
+        _v(UNREACHABLE,
+           ("NOT for the reason #2019's body guessed: its `_refuse_non_finite` sits in `targets()`, "
+            "which feeds the ranges, while this population is `sweep()`'s rows. Each `rho_M_-10` is "
+            "`lt.measure`'s ratio of two finite crossing times or None (cymbal_low_tail.py:338) and "
+            "each `M_re_Ln` is `math.log10` of a ratio of two band energies (L530), which raises on a "
+            "non-positive one.")),
+    ('tools/cymbal_vca_clip.py', 'max', 'verdict', 'max((r["rho_M_-10"] for r in pg), default=None)'):
+        _v(UNREACHABLE,
+           "the per-position `rho` of the first entry; same rows."),
+    ('tools/cymbal_vca_clip.py', 'max', 'verdict', 'max((r[f"M_re_{REF}"] for r in p), default=None)'):
+        _v(UNREACHABLE,
+           "the per-position `M_re_Ln` of the first entry; same rows."),
+    ('tools/cymbal_vca_clip.py', 'max', 'verdict', 'max((r[f"M_re_{REF}"] for r in usable), default=None)'):
+        _v(UNREACHABLE,
+           "the `M_re_Ln` half of the entry above; same rows, same construction."),
+    ('tools/cymbal_vca_clip.py', 'min', 'verdict', 'min(got, key=miss)'):
+        _v(UNREACHABLE,
+           ("the same rows, and a NaN key would only pick another 'closest' row for the refusal's "
+            "text, which is written when no row is in the box.")),
+    ('tools/cymbal_vca_drive.py', 'max', 'envelope_properties', 'max(per_duty[str(d)]["short"] for d in ENV_DUTY)'):
+        _v(UNDETERMINED,
+           ("computed in process: the per-duty peaks of the entries above (L1285); property 12's "
+            "ceiling.")),
+    ('tools/cymbal_vca_drive.py', 'max', 'envelope_properties', 'max(times["short"], 1e-9)'):
+        _v(UNREACHABLE,
+           ("first position, and the other argument is a literal: a NaN time is returned, not "
+            "dropped.")),
+    ('tools/cymbal_vca_drive.py', 'max', 'envelope_properties', 'max(worst_decay, dd)'):
+        _v(UNDETERMINED,
+           "computed in process: the DECAY band's collector peak (L1251); property 11b's `ok`."),
+    ('tools/cymbal_vca_drive.py', 'max', 'properties', 'max(abs(f0 - HH1["f0_hz"]) / HH1["f0_hz"], abs(q - HH1["q"]) / HH1["q"] * (F0_TOL / Q_TOL))'):
+        _v(UNREACHABLE,
+           ("nothing reads it: `rel` is deleted on the next line (L1180 `del rel`) and property 4's "
+            "`ok` recomputes the two comparisons itself.")),
+    ('tools/cymbal_vca_drive.py', 'max', 'properties', 'max(term["chain_db"]["short"], term["bound_db"]["short"])'):
+        _v(UNDETERMINED,
+           ("computed in process: `vca_term_db(cfg)` (L1194); the gap beside it is refused unless "
+            "finite by #2019's `balance_targets()`. A dropped NaN overstates property 7's margin.")),
+    ('tools/cymbal_vca_drive.py', 'max', 'properties', 'max(worst, abs(db - ref))'):
+        _v(UNDETERMINED,
+           ("computed in process: `db` is `bandpass_peak()` of `config()` (L1144) and `ref` a model "
+            "constant; property 1's `ok` is `worst <= PEAK_TOL_DB`. Whether the analytic peak can be "
+            "non-finite was not analysed. What would settle it: a NaN gain from `bandpass_peak()` and "
+            "property 1 read beside it.")),
+    ('tools/cymbal_vca_drive.py', 'max', 'properties', 'max(worst_f0, abs(f0 - tgt) / tgt)'):
+        _v(UNDETERMINED,
+           "computed in process: `bandpass_f0_q()` of `config()` (L1157); property 2's `ok`."),
+    ('tools/cymbal_vca_drive.py', 'max', 'properties', 'max(worst_q, abs(q - 6.0) / 6.0)'):
+        _v(UNDETERMINED,
+           "computed in process: the Q of the same call (L1157); property 3's `ok`."),
+    ('tools/cymbal_vca_drive.py', 'min', 'envelope_properties', 'min(worst, d)'):
+        _v(UNDETERMINED,
+           ("computed in process: `envelope_peaks(cfg, duty)`'s short-band collector peak (L1249); "
+            "property 11's `ok` is `worst >= ENV_PEAK_UNEQUAL_DB`.")),
+    ('tools/holdout.py', 'max', 'check', 'max(worst, FAIL)'):
+        _v(UNREACHABLE,
+           "integer: `OK, FAIL, REFUSED = 0, 1, 2` (L100), and `worst` starts at `OK`."),
+    ('tools/lead_drive_337.py', 'max', 'summarise', 'max(abs(e["pitch"]) for e in events)'):
+        _v(UNDETERMINED,
+           ("computed in process: `pitch_cents_from_midi.model_minus_reference` (`_events`, L105); "
+            "`rule_failures()` (L83).")),
+    ('tools/lead_drive_337.py', 'max', 'summarise', 'max(e["alias"] for e in events)'):
+        _v(UNDETERMINED,
+           ("computed in process: `foldback_db.excess_over_reference_db` out of the probe's metrics "
+            "(`_events`, L104). The harmonic cells beside it ARE asserted finite (L49); this is not. "
+            "Whether the estimator can emit one was not analysed. What would settle it: a NaN alias "
+            "in one event and `rule_failures()` (L81) read beside it.")),
+    ('tools/measure_mono_m1a_reference.py', 'max', 'qualify_attack_basis', 'max(abs(o["error_ms"]) for o in observations)'):
+        _v(UNDETERMINED,
+           ("computed in process: `attack_fit()`'s `attack_10_90_ms` less the known span (L313). A "
+            "dropped NaN understates `max_known_error` and the known-signal gate (L319) stays green. "
+            "Whether `attack_fit()` can emit one was not analysed. What would settle it: a NaN fit in "
+            "one case and the gate read beside it.")),
+    ('tools/measure_mono_m1a_reference.py', 'max', 'qualify_attack_basis', 'max(lead_errors)'):
+        _v(UNDETERMINED,
+           ("computed in process: the same timing off a 5 ms window (L349-350); the premise check at "
+            "L352.")),
+    ('tools/measure_mono_m1a_reference.py', 'max', 'qualify_envelope_basis', 'max(abs(v - expected) for v in values)'):
+        _v(UNDETERMINED,
+           ("computed in process: `ref.envelope_timing()`'s `release_t20_ms` off `rms_envelope` of a "
+            "closed-form release (L391-392). A dropped NaN lets the bass window pass the gate at "
+            "L396. Whether `envelope_timing()` can emit one was not analysed. What would settle it: a "
+            "NaN release in one event and the gate read beside it.")),
+    ('tools/measure_mono_m1a_reference.py', 'min', 'qualify_attack_basis', 'min(abs(r["error_ms"]) for r in window_rows)'):
+        _v(UNDETERMINED,
+           ("computed in process: `ref.envelope_timing()`'s attack off a 40 ms RMS window (L334); the "
+            "control at L338 must stay red.")),
+    ('tools/measure_mono_m1a_reference.py', 'min', 'qualify_attack_basis', 'min(o["explained_ratio"] for o in observations)'):
+        _v(UNDETERMINED,
+           ("computed in process: `attack_fit()`'s `explained_ratio`, reported as "
+            "`min_explained_ratio`.")),
+    ('tools/measure_partial_balance.py', 'max', 'cmd_validate', 'max(worst, abs(got - truth))'):
+        _v(UNDETERMINED,
+           ("computed in process: `got` is `math.log10` of an amplitude ratio out of `balance_traj()` "
+            "(L150) and `truth` a closed-form finite value; a NaN needs inf/inf or 0/0 in that ratio, "
+            "which log10 passes through. Whether `balance_traj()` can produce one was not analysed. "
+            "What would settle it: a NaN amplitude and the printed worst error read beside it.")),
+    ('tools/measure_repeatability.py', 'max', 'audit', 'max(v)'):
+        _v(UNDETERMINED,
+           ("computed in process: `measure_all()`'s metrics over the TONE settings (L558), None "
+            "skipped; the reported `span`.")),
+    ('tools/measure_repeatability.py', 'min', 'audit', 'min(v)'):
+        _v(UNDETERMINED,
+           "the other end of the same span."),
+    ('tools/measure_saw_alias_after_2x.py', 'max', 'assert_report_instrument', 'max(worst, d)'):
+        _v(UNREACHABLE,
+           ("`want['value']` is `float()` of a `-?\\d+\\.\\d+` capture (L375), a grammar with no nan or "
+            "inf spelling; `got` is `inharmonic_fraction_db`'s `log10` of a positive energy ratio "
+            "over a signal `_as_float` vouched for (audio_measure.py:1656), or a Refused.")),
+    ('tools/measure_saw_alias_after_2x.py', 'max', 'verdict', 'max(ms)'):
+        _v(UNREACHABLE,
+           "the other end of the same margins."),
+    ('tools/measure_saw_alias_after_2x.py', 'max', 'verdict', 'max(r["improvement_db"] for r in alias_rows)'):
+        _v(UNREACHABLE,
+           ("`improvement_db` is the difference of two `round(float(est.value), 2)` (L441, L461) with "
+            "the estimator's `ok` required, or None -- which raises here; the value is `log10` of a "
+            "positive energy ratio (audio_measure.py:1656).")),
+    ('tools/measure_saw_alias_after_2x.py', 'min', 'verdict', 'min(ms)'):
+        _v(UNREACHABLE,
+           ("each margin is that same `got` less a `-?\\d+\\.\\d+` token (L506), or None, which L657 "
+            "filters.")),
+    ('tools/measure_saw_alias_after_2x.py', 'min', 'verdict', 'min(r["improvement_db"] for r in alias_rows)'):
+        _v(UNREACHABLE,
+           "the worst end of the same differences."),
+    ('tools/mono_artifact_probe.py', 'max', 'summarize', 'max(v)'):
+        _v(UNDETERMINED,
+           "the other end of the same tallies."),
+    ('tools/mono_artifact_probe.py', 'min', 'summarize', 'min(v)'):
+        _v(UNDETERMINED,
+           ("computed in process: the candidate-less-baseline differences of the probe's measurements "
+            "(`p[prop]`, L740) and of the intended level (L742), reported as each tally's min.")),
+    ('tools/mono_m1a_score.py', 'max', 'qualify_envelope_basis', 'max(abs(v - expected) for v in values)'):
+        _v(UNDETERMINED,
+           ("computed in process: `envelope_timing()`'s `release_t20_ms` off `lead.am.rms_envelope` "
+            "of a closed-form release (L185-186); the gate at L190. Whether `envelope_timing()` can "
+            "emit one was not analysed. What would settle it: a NaN release in one event and the gate "
+            "read beside it.")),
+    ('tools/mono_m5a_score.py', 'max', 'harmonic_summary', 'max(f0_model, f0_reference)'):
+        _v(UNDETERMINED,
+           ("caller arguments: the two fundamental estimates. A NaN in the second is dropped and the "
+            "Nyquist test (L168) admits partials for the other. Whether a caller's f0 can be one was "
+            "not analysed. What would settle it: a NaN f0 from either caller and the partial count "
+            "read beside it.")),
+    ('tools/mono_m5a_score.py', 'max', 'harmonic_summary', 'max(measured)'):
+        _v(UNDETERMINED,
+           ("computed in process: `_harmonic_error()`'s absolute errors (L176); the returned "
+            "`max_abs_error`.")),
+    ('tools/noise_stage_attribution.py', 'max', 'prediction_check', 'max(s["gate_nonlinearity"]["centroid"], s["gate_level"]["centroid"])'):
+        _v(UNDETERMINED,
+           ("computed in process: `attribute()`'s per-stage centroid distance (L285); the "
+            "pre-registered prediction's `holds`. Whether the centroid can be non-finite was not "
+            "analysed. What would settle it: a NaN stage distance and `holds` read beside it.")),
+    ('tools/pekonen_coloration_probe.py', 'max', 'verdict', 'max(ps)'):
+        _v(UNDETERMINED,
+           ("computed in process: `lopo()`'s per-fold fitted pole (L165). A dropped NaN narrows the "
+            "spread and `c` (L185) stays True. Whether `fit_pole()` can emit one was not analysed. "
+            "What would settle it: a NaN pole in one fold and `c` read beside it.")),
+    ('tools/pekonen_coloration_probe.py', 'min', 'verdict', 'min(ps)'):
+        _v(UNDETERMINED,
+           "the other end of the same spread."),
+    ('tools/perceptual_gate.py', 'min', 'crosscheck', 'min(res, key=lambda k: res[k]["worst_ratio"])'):
+        _v(UNDETERMINED,
+           ("computed in process: `verdict()`'s `worst_ratio`, or `math.inf` for a refusal (L956). A "
+            "NaN key keeps its candidate from being named `best`.")),
+    ('tools/pitch_trajectory.py', 'max', '_qualify_glide', 'max(float(np.min(tr.amp[m])), 1e-300)'):
+        _v(UNREACHABLE,
+           ("`tr.amp` is `trajectory()`'s `a`, refused unless `np.all(np.isfinite(a))` (L175); the "
+            "other argument is a literal, and the result meets `not (db >= GLIDE_LATE_MIN_DB)` "
+            "(L207), which is True for a NaN.")),
+    ('tools/r0_capture.py', 'max', 'command_identity', 'max(live_apply)'):
+        _v(UNDETERMINED,
+           ("`apply_frame`, off the same rows (L720-721); whether the writer can emit a non-finite "
+            "one was not analysed. What would settle it: a NaN `apply_frame` in one plan row and "
+            "`command_identity()` read beside it.")),
+    ('tools/r0_capture.py', 'min', 'command_identity', 'min(ev_due)'):
+        _v(UNDETERMINED,
+           ("`due` is a frame number read off the capture plan's JSON rows without a cast (L722-723). "
+            "Whether the plan's writer can emit a non-finite one was not analysed. What would settle "
+            "it: a NaN `due` in one plan row and `command_identity()` read beside it.")),
+    ('tools/run_case.py', 'max', 'lead_report', 'max(0, need - i)'):
+        _v(UNREACHABLE,
+           "the same two integers against a literal."),
+    ('tools/run_case.py', 'max', 'lead_report', 'max(i, 1)'):
+        _v(UNREACHABLE,
+           "the same index against a literal."),
+    ('tools/run_case.py', 'min', 'lead_report', 'min(i, need)'):
+        _v(UNREACHABLE,
+           "integer: `i` is `_onset_index()`'s index and `need` a sum of ints (L1519-1521)."),
+    ('tools/score_ensemble_i2s.py', 'min', 'control_report', 'min(len(injected), len(clean_mix))'):
+        _v(UNREACHABLE,
+           "integer: two lengths."),
+    ('tools/sensitivity.py', 'min', 'refuse_unmeasurable_objective', 'min(objectives)'):
+        _v(UNDETERMINED,
+           ("computed in process: the measured objective of each grid point, as `evaluate()` passes "
+            "it. A NaN not in first position is dropped and the `> 0` test (L222) can pass without "
+            "it. Whether an objective can evaluate to one was not analysed. What would settle it: a "
+            "NaN objective in one grid point and `evaluate()` read beside it.")),
+    ('tools/verify_attack_context_model.py', 'max', 'verify', 'max(rms_max_delta, abs(value - recorded))'):
+        _v(UNREACHABLE,
+           ("`math.isclose(value, recorded, ...)` is asserted on the line above (L131) and is False "
+            "for a NaN on either side, so the assert raises first.")),
+    ('tools/werner_fig9.py', 'max', 'check', 'max(float(np.max(d)) for v in data.values() for _, d in v["curves"])'):
+        _v(UNDETERMINED,
+           ("computed in process: the digitiser's dB curves off the hash-pinned PDF (`read_figure`, "
+            "L518). `np.max` hands a NaN on and this max drops it unless first, so `passive` (L589) "
+            "would read the loudest FINITE point. Whether the digitiser can emit one was not "
+            "analysed. What would settle it: a NaN in one curve and check() read beside it.")),
+    ('tools/werner_fig9.py', 'max', 'check', 'max(hi)'):
+        _v(UNDETERMINED,
+           ("computed in process: the sub-plots' upper axis edges (`axes_hz`, L598), in the same "
+            "property and text.")),
+    ('tools/werner_fig9.py', 'max', 'check', 'max(lo)'):
+        _v(UNDETERMINED,
+           ("computed in process: the sub-plots' lower axis edges (`axes_hz`, L597), in property 3's "
+            "`good` (L599) and its text (L603).")),
+    ('tools/werner_fig9.py', 'max', 'check', 'max(sp["Ht1"], sp["Ht2"])'):
+        _v(UNDETERMINED,
+           ("computed in process: `peak_spread_db` of the two lower bands (L550); property 5's "
+            "`good`.")),
+    ('tools/werner_fig9.py', 'max', 'check', "max(tc['points'], key=lambda r: abs(r['error_db']))"):
+        _v(UNDETERMINED,
+           ("computed in process: `truncation_control()`'s per-point error (L504). This call only "
+            "chooses the point named in the detail text; the verdict is `worst_error_db` (L637), "
+            "taken in a function the name filter does not visit.")),
+    ('tools/werner_fig9.py', 'max', 'report', 'max(f for f, _d, ok in cells if ok)'):
+        _v(UNREACHABLE,
+           ("`f` is a third-octave centre out of `THIRD_OCTAVE_HZ`, a module constant (`tilt_table`, "
+            "L729).")),
+    ('tools/werner_fig9.py', 'min', 'check', 'min(hi)'):
+        _v(UNDETERMINED,
+           "the other end of the same three edges."),
+    ('tools/werner_fig9.py', 'min', 'check', 'min(lo)'):
+        _v(UNDETERMINED,
+           "the other end of the same three edges."),
+}
+
 
 
 def aggregate_gaps(sites: list[Aggregate], root: pathlib.Path = ROOT) -> list[str]:
