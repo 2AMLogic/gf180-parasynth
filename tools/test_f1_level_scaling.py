@@ -192,6 +192,44 @@ def test_verify_on_the_committed_captures_is_unchanged(capsys):
 
 
 # --- verify(): an absent capture is REFUSED, a corrupted one FAIL (issue #1822) --
+# `verify()` caught every `Refused` from `load_capture` as `FAIL`, so a capture
+# the archive does not hold (no comparison ran) read exactly like one that is
+# present and hashes otherwise (a comparison that ran and disagreed). The
+# repair is at the raise site, not a string match: the two precondition raises
+# are `Unbindable`, a subclass of the module's `Refused`, so every other caller
+# (`except refusal.Refused` in tools/probes/f1_level_scaling.py) is unchanged.
+#
+# RED FIRST, this file against the module before the repair (`ed00ea2c`,
+# 2026-11-28): 10 failed, 29 passed.
+#   absent member            `FAIL     cut250/a0.1250/take1: ... is absent from the
+#                            archive` / `2 verified, 1 failed`, returned 1
+#   absent + corrupted       two `FAIL` lines / `1 verified, 2 failed`, no REFUSED
+#   the raise site           no `Unbindable`
+#   the seven wrong repairs  below: nothing to mutate until the repair exists,
+#                            each refused to build (`mutation site gone`)
+# The 29 are the 26 pre-existing tests and the three controls that are right
+# before and after by design (corrupted -> FAIL, clean, the committed captures).
+#
+# MEASURED, the controls against the wrong repairs (2026-11-28), RED / green:
+#                                      absent tampered mixed clean raise_site
+#   the tree before the repair          RED    green    RED   green RED
+#   plain Refused caught first          RED    green    RED   green green
+#   every raise is the precondition     green  RED      RED   green RED
+#   a refusal outranks a disagreement   green  green    RED   green green
+#   refused counted as verified         RED    green    RED   green green
+#   refused always on the summary line  green  RED      green RED   green
+#   Unbindable leaves the Refused family green green   green green RED
+# No control is blind to every repair and no repair is caught by none.
+#
+# WRONG-THEN-RIGHT (1, caught by running): the raise-site control first went
+# red on the pre-fix module by LEAKING its plain `Refused` out of
+# `pytest.raises(Unbindable)` -- an exception where a failed check belongs.
+# It now catches the base class and asserts the exact type.
+#
+# NOT CLAIMED (each provoked, 2026-11-28): an archive that is not a zip, under a
+# manifest that names a clip, escapes `verify()` as `zipfile.BadZipFile` -- not
+# a `Refused`; and a manifest with no clips returns 0 (`0 verified, 0 failed`)
+# without opening the archive at all. Both predate this repair.
 CAPTURE_KEYS = ("cut250/a0.2500/take1", "cut250/a0.1250/take1", "open20k/a0.0625/take2")
 KEPT, ABSENT, TAMPERED = CAPTURE_KEYS
 
@@ -212,11 +250,12 @@ class _Archive:
             wav = root / f"clip{i}.wav"
             rp.write_clip(wav, y)
             blobs[key] = wav.read_bytes()
-            self.clips[key] = {"condition": cond, "take": int(take[4:]), "frames": int(len(y)),
+            self.clips[key] = {"condition": cond, "take": int(take[4:]), "frames": len(y),
                                "sha256": cap._sha(blobs[key]),
                                "archive_member": cap._sha(blobs[key])[:16] + ".wav"}
         self.manifest, self.archive = root / "manifest.json", root / "audio.zip"
-        self.manifest.write_text(json.dumps({"schema": "f1-level-captures/1", "clips": self.clips}))
+        self.manifest.write_text(
+            json.dumps({"schema": "f1-level-captures/1", "clips": self.clips}))
         self.blobs = blobs
         self.write_archive()
         monkeypatch.setattr(mod, "MANIFEST", self.manifest)
@@ -253,7 +292,8 @@ def _absent_is_refused(mod, root, monkeypatch):
     code, lines = _verify(mod, root, monkeypatch, lambda a: a.drop(ABSENT))
     assert code == exit_contract.REFUSED, (code, lines)
     refused = [ln for ln in lines if ln.startswith("REFUSED")]
-    assert len(refused) == 1 and ABSENT in refused[0] and "absent from the archive" in refused[0], lines
+    assert len(refused) == 1 and ABSENT in refused[0], lines
+    assert "absent from the archive" in refused[0], lines
     assert not any(ln.startswith("FAIL") for ln in lines), lines
     assert [ln.split()[1] for ln in lines if ln.startswith("ok ")] == [KEPT, TAMPERED], lines
     assert lines[-1] == "2 verified, 0 failed, 1 refused", lines
@@ -369,7 +409,8 @@ def _mutant(sites):
     pytest.param([("return FAIL if bad else REFUSED if refused else OK",
                    "return REFUSED if refused else FAIL if bad else OK")],
                  ("mixed",), id="a-refusal-outranks-a-measured-disagreement"),
-    pytest.param([("len(m['clips']) - bad - refused} verified", "len(m['clips']) - bad} verified")],
+    pytest.param([("len(m['clips']) - bad - refused} verified",
+                   "len(m['clips']) - bad} verified")],
                  ("absent", "mixed"), id="refused-counted-as-verified"),
     pytest.param([("class Unbindable(Refused):", "class Unbindable(Exception):")],
                  ("raise_site",), id="precondition-class-leaves-the-refusal-family"),
