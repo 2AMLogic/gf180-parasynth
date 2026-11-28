@@ -266,3 +266,135 @@ def test_control_a_key_dropped_from_the_derivation_is_stale_not_bound(monkeypatc
     assert verdict == "STALE", \
         f"a derivation that stopped emitting presets.default.calibration read {verdict}: {detail}"
     assert "presets.default.calibration" in detail, detail
+
+
+# ---- a record that cannot be read is REFUSED, not a traceback (#1620) -----------
+# The shape #1618's scan found in this file 45 times: a loaded record read with
+# [] and no refusal for its absence, so a partial record died with `KeyError`,
+# exit 1 -- the code of "the comparison ran and disagreed". Each guard below is
+# proven through the tool's own main(), one control per key, each naming its key
+# and the record it came from (the #1604 pattern). The records are the committed
+# ones with exactly one key removed, never hand-written, and each directory is
+# substituted as a COPY: a test must not write under fpga/reports or evidence/.
+_PUB_KEYS = ("configuration", "published_sha256", "published_evidence_sha256", "source_sha256",
+             "bitstream_sha256", "original_artifact_sha256", "dsp_disposition", "verification",
+             "state", "part", "tool", "timing", "core_period_ns", "internal_timing_pass",
+             "external_io_timing_qualified", "output_delay_exceptions", "remaining_review")
+# (kind, module directory, the record under it, the keys read with [], how the
+#  refusal names the record): one row per json.loads the scan hit
+_RECORDS = [
+    ("publication", "PUB_DIR", "publication.json", _PUB_KEYS, "the publication at"),
+    ("report", "PUB_DIR", "report.json", ("artifact_sha256", "source_sha256"), "the report at"),
+    ("rollback-publication", "ROLLBACK_DIR", "publication.json",
+     ("bitstream_sha256", "configuration", "state"), "the rollback publication at"),
+    ("rolling-record", "ROLLING_DIR", "demo/verification.json", ("state",),
+     "the rolling-playback record at"),
+    ("rolling-identity", "ROLLING_DIR", "demo/rtl-replay/demo.run_identity.json", ("identity",),
+     "the replay run identity at"),
+    ("held-identity", "EVIDENCE_DIR", "held-note/default/run_identity.json", ("identity",),
+     "the held-note run identity at"),
+    ("held-record", "EVIDENCE_DIR", "held-note/default/held_note_audible.json",
+     ("verdict", "i2s_peak_lsb"), "the held-note record at"),
+    ("glide-summary", "EVIDENCE_DIR", "glide-boundary/summary.json",
+     ("wrapper_identities", "all_expectations_met", "verdicts"), "the glide-boundary summary at"),
+]
+_DROPS = [(kind, attr, rel, what, key) for kind, attr, rel, keys, what in _RECORDS for key in keys]
+
+
+def _substitute(monkeypatch, tmp_path, attr):
+    d = tmp_path / "sub"
+    shutil.copytree(getattr(rm, attr), d)
+    monkeypatch.setattr(rm, attr, d)
+    return d
+
+
+def _rewrite(path, fn):
+    path.write_text(json.dumps(fn(json.loads(path.read_text()))))
+
+
+def _main(capsys):
+    code = rm.main([])
+    return code, capsys.readouterr().out
+
+
+def test_the_committed_records_carry_the_keys_the_manifest_reads(capsys):
+    # the guards below must be satisfiable against the records that ship
+    for kind, attr, rel, keys, _what in _RECORDS:
+        assert set(keys) <= set(json.loads((getattr(rm, attr) / rel).read_text())), kind
+    assert _main(capsys)[0] == 0
+
+
+@pytest.mark.parametrize("attr", ["PUB_DIR", "ROLLBACK_DIR", "ROLLING_DIR", "EVIDENCE_DIR"])
+def test_an_intact_substituted_copy_is_compared_not_refused(tmp_path, monkeypatch, capsys, attr):
+    # every control below damages a COPY; the copy alone must refuse nothing
+    # (rule 8). With every key present the tree is derived in full and
+    # compared: STALE on the copy's absolute paths, which is a verdict.
+    _substitute(monkeypatch, tmp_path, attr)
+    code, out = _main(capsys)
+    assert code == 1 and "STALE" in out and "REFUSED" not in out, out
+
+
+@pytest.mark.parametrize("kind,attr,rel,what,key", _DROPS,
+                         ids=[f"{k}-without-{key}" for k, _a, _r, _w, key in _DROPS])
+def test_a_record_missing_one_key_is_refused_naming_it(kind, attr, rel, what, key, tmp_path,
+                                                        monkeypatch, capsys):
+    # before the repair: `KeyError: '<key>'`, a traceback, exit 1
+    d = _substitute(monkeypatch, tmp_path, attr)
+    _rewrite(d / rel, lambda rec: {k: v for k, v in rec.items() if k != key})
+    code, out = _main(capsys)
+    assert code == 2 and "REFUSED" in out and what in out and f"'{key}'" in out, out
+
+
+@pytest.mark.parametrize("kind,attr,rel,keys,what", _RECORDS, ids=[r[0] for r in _RECORDS])
+def test_an_empty_record_is_refused_naming_every_key(kind, attr, rel, keys, what, tmp_path,
+                                                     monkeypatch, capsys):
+    # #1620's own input, `publication.json` and `report.json` both `{}`: every
+    # key is named, so a record is not regenerated once per key
+    d = _substitute(monkeypatch, tmp_path, attr)
+    _rewrite(d / rel, lambda rec: {})
+    code, out = _main(capsys)
+    assert code == 2 and "REFUSED" in out and what in out, out
+    assert all(f"'{k}'" in out for k in keys), out
+
+
+@pytest.mark.parametrize("kind,attr,rel,keys,what", _RECORDS, ids=[r[0] for r in _RECORDS])
+def test_a_record_carrying_null_for_a_key_is_refused_naming_it(kind, attr, rel, keys, what,
+                                                                tmp_path, monkeypatch, capsys):
+    # a present-but-null key reads as a VALUE before the repair: `None` is
+    # compared, dereferenced or reported where the record should be refused
+    d = _substitute(monkeypatch, tmp_path, attr)
+    _rewrite(d / rel, lambda rec: {**rec, keys[0]: None})
+    code, out = _main(capsys)
+    assert code == 2 and "REFUSED" in out and what in out and f"'{keys[0]}'" in out, out
+
+
+@pytest.mark.parametrize("record", [[], None], ids=["list", "null"])
+@pytest.mark.parametrize("kind,attr,rel,keys,what", _RECORDS, ids=[r[0] for r in _RECORDS])
+def test_a_record_that_is_not_an_object_is_refused(kind, attr, rel, keys, what, record,
+                                                   tmp_path, monkeypatch, capsys):
+    d = _substitute(monkeypatch, tmp_path, attr)
+    (d / rel).write_text(json.dumps(record))
+    code, out = _main(capsys)
+    assert code == 2 and "REFUSED" in out and what in out and "not a JSON object" in out, out
+
+
+def test_publication_rewritten_after_the_derivation_is_refused(tmp_path, monkeypatch, capsys):
+    """tree_drift() re-reads publication.json AFTER build() has bound it, and
+    check() calls it outside its handler. A publication rewritten between the
+    two reads (a concurrent publish) was a KeyError out of check() itself:
+    the read carries its own guard, and check() reports that refusal."""
+    d = _substitute(monkeypatch, tmp_path, "PUB_DIR")
+    m = tmp_path / "m.json"
+    m.write_text(json.dumps(rm.build()))        # the copy's own manifest: the BOUND path
+    build = rm.build
+
+    def build_then_rewrite():
+        out = build()
+        _rewrite(d / "publication.json",
+                 lambda rec: {k: v for k, v in rec.items() if k != "source_sha256"})
+        return out
+    monkeypatch.setattr(rm, "build", build_then_rewrite)
+    code = rm.main(["--manifest", str(m)])
+    out = capsys.readouterr().out
+    assert code == 2 and "REFUSED" in out and "the publication at" in out \
+        and "'source_sha256'" in out, out

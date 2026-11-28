@@ -57,7 +57,8 @@ CASES, and the verdict each must give (exit status is the verdict):
     .venv/bin/python fpga/release/glide_boundary.py --level wrapper --case accept-247-shape
 
 Exit statuses are the benches': 0 identical, 1 differed, 2 did not run.
---expect-fail exits 0 only when the comparison gave 1.
+--expect-fail exits 0 only when the comparison gave 1. --summarize REFUSES
+(exit 2) a run identity it cannot read, naming the key (#1620).
 """
 from __future__ import annotations
 
@@ -68,9 +69,11 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path[:0] = [HERE, os.path.join(ROOT, "rtl-sketch"), os.path.join(ROOT, "model"),
-                os.path.join(ROOT, "audition")]
+                os.path.join(ROOT, "audition"), os.path.join(ROOT, "tools")]
 
+import manifest as mf                 # noqa: E402
 import qualified_domain as qd          # noqa: E402  the bounds under test
+import refusal                        # noqa: E402
 import verify_voice as vv              # noqa: E402
 import voice_fx as vf                  # noqa: E402
 
@@ -78,6 +81,10 @@ FULL24 = (1 << 24) - 1
 LO, HI = qd.INC_LO, qd.INC_HI
 SLOW = vf.glide_reg(0.02)              # 12118: 0.02 s per octave
 REF = vf.glide_reg(vf.GLIDE_REF_S)     # 2692: the preset rate
+
+
+class Refused(refusal.Refused, RuntimeError):
+    """A record --summarize reads cannot be read: a partial run identity."""
 
 
 def _incs3(base, spread=1000):
@@ -307,7 +314,9 @@ def summarize(run_json: str, out_dir: str) -> int:
         if k.startswith("wrapper:"):
             case = k.split(":", 1)[1]
             d = os.path.join(ROOT, "build", "release-glide", f"wrapper-{case}", case)
-            ident = json.load(open(os.path.join(d, "run_identity.json")))
+            ident_path = os.path.join(d, "run_identity.json")
+            ident = json.load(open(ident_path))
+            mf.require_keys(ident, "identity", f"the run identity at {ident_path}", refused=Refused)
             idents[case] = ident["identity"]["sources"]
             dst = os.path.join(out_dir, case)
             os.makedirs(dst, exist_ok=True)
@@ -341,7 +350,11 @@ def main(argv=None) -> int:
     ap.add_argument("--level", choices=("voice", "wrapper"), default="voice")
     a = ap.parse_args(argv)
     if a.summarize:
-        return summarize(a.summarize, os.path.join(HERE, "evidence", "glide-boundary"))
+        try:
+            return summarize(a.summarize, os.path.join(HERE, "evidence", "glide-boundary"))
+        except Refused as exc:
+            print(f"glide_boundary: REFUSED -- {exc}")
+            return 2
     if not a.case:
         ap.error("--case is required")
     outdir = a.outdir or os.path.join(ROOT, "build", "release-glide", f"{a.level}-{a.case}")

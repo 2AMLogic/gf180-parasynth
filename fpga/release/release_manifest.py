@@ -48,6 +48,7 @@ _REFUSAL_TOOLS = str(Path(__file__).resolve().parents[2] / "tools")
 if _REFUSAL_TOOLS not in sys.path:
     sys.path.append(_REFUSAL_TOOLS)
 import refusal  # noqa: E402
+import manifest as mf  # noqa: E402
 
 MANIFEST = HERE / "baseline-2025.1.json"
 PUB_DIR = ROOT / "fpga/reports/arty/integrated-baseline-2025.1"
@@ -165,6 +166,16 @@ def _require_population(what: str, got, expected) -> None:
 def image_identity() -> dict:
     pub = json.loads(_need(PUB_DIR / "publication.json").read_text())
     rep = json.loads(_need(PUB_DIR / "report.json").read_text())
+    # a record that parses but cannot be read is REFUSED naming the key (#1620):
+    # before, a partial publication was a KeyError traceback, exit 1
+    mf.require_keys(pub, ("configuration", "published_sha256", "published_evidence_sha256",
+                          "source_sha256", "bitstream_sha256", "original_artifact_sha256",
+                          "dsp_disposition", "verification", "state", "part", "tool", "timing",
+                          "core_period_ns", "internal_timing_pass", "external_io_timing_qualified",
+                          "output_delay_exceptions", "remaining_review"),
+                    f"the publication at {PUB_DIR / 'publication.json'}", refused=Refused)
+    mf.require_keys(rep, ("artifact_sha256", "source_sha256"),
+                    f"the report at {PUB_DIR / 'report.json'}", refused=Refused)
     if pub["configuration"] != CONFIG:
         raise Refused(f"publication configuration {pub['configuration']} is not {CONFIG}")
     _require_population("published files", pub["published_sha256"], IMAGE_PUBLISHED_FILES)
@@ -238,6 +249,8 @@ def tree_drift() -> dict:
     """Image sources the WORKING TREE no longer holds (informational: the
     tree has moved past this image; a new image would be a new release)."""
     pub = json.loads(_need(PUB_DIR / "publication.json").read_text())
+    mf.require_keys(pub, "source_sha256", f"the publication at {PUB_DIR / 'publication.json'}",
+                    refused=Refused)
     return {f: {"image": h, "tree": sha(ROOT / f) if (ROOT / f).exists() else None}
             for f, h in pub["source_sha256"].items()
             if not (ROOT / f).exists() or sha(ROOT / f) != h}
@@ -245,6 +258,8 @@ def tree_drift() -> dict:
 
 def rollback_identity() -> dict:
     pub = json.loads(_need(ROLLBACK_DIR / "publication.json").read_text())
+    mf.require_keys(pub, ("bitstream_sha256", "configuration", "state"),
+                    f"the rollback publication at {ROLLBACK_DIR / 'publication.json'}", refused=Refused)
     bit = sha(_need(ROLLBACK_DIR / "arty.bit"))
     if bit != pub["bitstream_sha256"]:
         raise Refused("rollback arty.bit does not match its publication")
@@ -337,6 +352,11 @@ def rolling_binding(fx: str) -> dict:
     rec = json.loads(_need(rec_dir / "verification.json").read_text())
     recorded = _need(rec_dir / "rtl-replay" / f"{fx}.cmds")
     ident = json.loads(_need(rec_dir / "rtl-replay" / f"{fx}.run_identity.json").read_text())
+    mf.require_keys(rec, "state", f"the rolling-playback record at {rec_dir / 'verification.json'}",
+                    refused=Refused)
+    mf.require_keys(ident, "identity",
+                    f"the replay run identity at {rec_dir / 'rtl-replay' / f'{fx}.run_identity.json'}",
+                    refused=Refused)
     with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
         run = vrp.run_cli(fx)
         ok = vrp.check(run)["ok"]
@@ -384,6 +404,10 @@ def evidence(image: dict) -> dict:
         d = EVIDENCE_DIR / "held-note" / p
         rec = json.loads(_need(d / "held_note_audible.json").read_text())
         ident = json.loads(_need(d / "run_identity.json").read_text())
+        mf.require_keys(rec, ("verdict", "i2s_peak_lsb"),
+                        f"the held-note record at {d / 'held_note_audible.json'}", refused=Refused)
+        mf.require_keys(ident, "identity", f"the held-note run identity at {d / 'run_identity.json'}",
+                        refused=Refused)
         _sources_agree(ident["identity"]["sources"], pub_sources, f"held-note {p}")
         name = f"held-{p}"
         cap_sha = sha(_need(d / "capture.cmds"))
@@ -400,6 +424,8 @@ def evidence(image: dict) -> dict:
                         "rc": {r["cmd"].split("--variant ")[1].split()[0]: r["rc"] for r in probes}}
     gb = EVIDENCE_DIR / "glide-boundary" / "summary.json"
     s = json.loads(_need(gb).read_text())
+    mf.require_keys(s, ("wrapper_identities", "all_expectations_met", "verdicts"),
+                    f"the glide-boundary summary at {gb}", refused=Refused)
     for case, r in s["wrapper_identities"].items():
         _sources_agree(r, pub_sources, f"glide-boundary wrapper {case}")
     if not s["all_expectations_met"]:
@@ -549,7 +575,12 @@ def check(manifest_path: Path = MANIFEST) -> tuple:
     diffs = _diff(committed, fresh)
     if diffs:
         return "STALE", "differs from a fresh derivation at: " + ", ".join(diffs[:20])
-    moved = tree_drift()
+    try:
+        moved = tree_drift()
+    except Refused as exc:
+        # the publication re-read after the derivation: refused here rather
+        # than let out of check(), which only build()'s call was guarded for
+        return "REFUSED", str(exc)
     note = (f"; NOTE the working tree has moved past this image in {sorted(moved)} -- "
             f"the image's sources are verified at {IMAGE_SOURCE_COMMIT[:12]}") if moved else ""
     return "BOUND", f"{_rel(manifest_path)} equals a fresh derivation; artifacts agree{note}"
