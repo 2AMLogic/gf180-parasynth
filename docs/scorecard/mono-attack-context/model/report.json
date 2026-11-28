@@ -1,12 +1,12 @@
 {
   "engine": "fixed-model",
   "analysis_version": "attack-context-model-v1",
-  "source_commit": "7039206b542bea79cde96f2cefab0f6c6adfe880",
+  "source_commit": "3d76b96497677fae50afe0d896c9b855bbaaafc7",
   "source_sha256": {
-    "tools/compare_mono_attack_context.py": "f697c93cff1dd2860612ec1a1802364c21fda88d9d4879185598bf3dacc74cca",
+    "tools/compare_mono_attack_context.py": "7728d77e2b21e6e66240350617bdb7d9b569b9d109101430d6f0282c62093dfb",
     "tools/measure_mono_attack_context.py": "b3e8020cc6b7ea71c27fc4a7202e94501f6d4a5eec8305efeafc9df5d9995c61",
-    "tools/measure_mono_m5a_reference.py": "5c8b5a3fa1e4f8668d1ec5baacbadf016fb68fc515b2bd658e667c763a9c4a74",
-    "tools/mono_m5a_score.py": "4b9683181b279cff1adc5db6baefc345bbb0f49454c98a237ca477b3afe343f3",
+    "tools/measure_mono_m5a_reference.py": "526a46b844cfdd692b53869355becf4503d78110b404d32d285866fd86a63597",
+    "tools/mono_m5a_score.py": "9107470be6e8738b9c9a44483ac60e23a81c44262c073b11eccf948520b5dced",
     "model/voice_fx.py": "a19ef99b338c73e04c5bfd09eef2ba4a938acc11f4372a94874363f92c897e70",
     "model/audio_measure.py": "dcae8826da819f4882eaef7267699926d1903eee7fdb00c5a38290b7eeb9141b",
     "model/filter_rate_chain.py": "134b958dec5308fd8cd0dc7ca7a75fdf4c7c93eddf181b8224e42c4a6c75a798"
@@ -52,7 +52,7 @@
         "attack_10_90_ms": 8.708333333333334,
         "release_t20_ms": 1234.2708333333333,
         "held_rms": 0.18357548713271765,
-        "tail_db": -285.2762937863532,
+        "tail_db": null,
         "release_complete_40db": true
       },
       "patch": {
@@ -118,7 +118,7 @@
         "attack_10_90_ms": 8.729166666666666,
         "release_t20_ms": 1234.2916666666667,
         "held_rms": 0.18357886690841888,
-        "tail_db": -285.2764536992532,
+        "tail_db": null,
         "release_complete_40db": true
       },
       "patch": {
@@ -184,7 +184,7 @@
         "attack_10_90_ms": 8.729166666666666,
         "release_t20_ms": 1234.2916666666667,
         "held_rms": 0.18357886690841888,
-        "tail_db": -285.2764536992532,
+        "tail_db": null,
         "release_complete_40db": true
       },
       "patch": {
@@ -255,7 +255,7 @@
         "attack_10_90_ms": 8.708333333333334,
         "release_t20_ms": 1234.2916666666667,
         "held_rms": 0.1835829381095852,
-        "tail_db": -285.27664632279703,
+        "tail_db": null,
         "release_complete_40db": true
       },
       "patch": {
@@ -326,7 +326,7 @@
         "attack_10_90_ms": 8.6875,
         "release_t20_ms": 1234.2708333333333,
         "held_rms": 0.18356619782392647,
-        "tail_db": -285.2758542508044,
+        "tail_db": null,
         "release_complete_40db": true
       },
       "patch": {
@@ -397,7 +397,7 @@
         "attack_10_90_ms": 8.520833333333334,
         "release_t20_ms": 1233.9375,
         "held_rms": 0.18355762253252972,
-        "tail_db": -285.27544848015935,
+        "tail_db": null,
         "release_complete_40db": true
       },
       "patch": {
@@ -463,7 +463,7 @@
         "attack_10_90_ms": 8.729166666666666,
         "release_t20_ms": 1242.3958333333333,
         "held_rms": 0.30501207442473227,
-        "tail_db": -289.6863406395415,
+        "tail_db": null,
         "release_complete_40db": true
       },
       "patch": {
@@ -529,7 +529,7 @@
         "attack_10_90_ms": 8.75,
         "release_t20_ms": 1242.4166666666667,
         "held_rms": 0.30500751424614925,
-        "tail_db": -289.6862107774563,
+        "tail_db": null,
         "release_complete_40db": true
       },
       "patch": {
@@ -595,7 +595,7 @@
         "attack_10_90_ms": 8.75,
         "release_t20_ms": 1242.4166666666667,
         "held_rms": 0.30500751424614925,
-        "tail_db": -289.6862107774563,
+        "tail_db": null,
         "release_complete_40db": true
       },
       "patch": {
@@ -666,7 +666,7 @@
         "attack_10_90_ms": 8.729166666666666,
         "release_t20_ms": 1241.9166666666667,
         "held_rms": 0.3050046125250935,
-        "tail_db": -289.6861281429389,
+        "tail_db": null,
         "release_complete_40db": true
       },
       "patch": {
@@ -737,7 +737,7 @@
         "attack_10_90_ms": 8.729166666666666,
         "release_t20_ms": 1242.3958333333333,
         "held_rms": 0.30501736105322663,
-        "tail_db": -289.68649118661017,
+        "tail_db": null,
         "release_complete_40db": true
       },
       "patch": {
@@ -808,7 +808,7 @@
         "attack_10_90_ms": 8.791666666666666,
         "release_t20_ms": 1242.0416666666667,
         "held_rms": 0.30500778771211184,
-        "tail_db": -289.68621856511396,
+        "tail_db": null,
         "release_complete_40db": true
       },
       "patch": {
