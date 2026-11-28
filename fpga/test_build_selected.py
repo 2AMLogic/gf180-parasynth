@@ -373,9 +373,12 @@ def test_a_malformed_stored_record_is_refused_naming_the_record(tmp_path, monkey
 
 @pytest.mark.parametrize("text, raised", _SHAPES, ids=list(_MALFORMED))
 def test_a_malformed_stored_record_leaves_main_refused(tmp_path, monkeypatch, capsys, text, raised):
-    """The same record through main(): REFUSED, exit 2, the callee's reason on
-    the report and on stdout, over the earlier record, no stage run."""
+    """The same record through main(): REFUSED, exit 2, the callee's reason --
+    the same string, not a paraphrase -- on the report and on stdout, over the
+    earlier record, no stage run."""
     _record_only_tree(tmp_path, monkeypatch, text)
+    with pytest.raises(RuntimeError) as refused:
+        build.simulation_evidence()
     _git_answers_only_the_commit(monkeypatch)
     out = tmp_path / "out"
     out.mkdir()
@@ -383,6 +386,7 @@ def test_a_malformed_stored_record_leaves_main_refused(tmp_path, monkeypatch, ca
     assert build.main(["--out", str(out)]) == 2
     report = json.loads((out / "report.json").read_text())
     assert report["state"] == "REFUSED"
+    assert report["reason"] == str(refused.value)
     assert report["reason"].startswith(M5A_RECORD) and f"({raised}:" in report["reason"]
     assert report["bitstream_built"] is False and report["stages"] == {}
     assert capsys.readouterr().out.strip() == report["reason"]

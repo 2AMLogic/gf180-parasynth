@@ -307,9 +307,12 @@ def test_a_malformed_stored_record_is_a_refused_publication_not_a_traceback(tmp_
     NO-VERDICT publication of #1631 with the record named as its reason."""
     artifact, _ = built_artifact(tmp_path)
     _record_only_tree(tmp_path / "tree", monkeypatch, text)
+    with pytest.raises(RuntimeError) as refused:
+        build_selected.simulation_evidence()
     out = tmp_path / "publication"
     summary = publish_selected.publish(artifact, out, WORKFLOW)
     assert summary["state"] == "NO-VERDICT"
+    assert summary["reason"] == str(refused.value)
     assert summary["reason"].startswith(M5A_RECORD) and f"({raised}:" in summary["reason"]
     assert summary["simulation_evidence"] is None and summary["bitstream_qualified"] is False
     assert json.loads((out / "publication.json").read_text()) == summary
