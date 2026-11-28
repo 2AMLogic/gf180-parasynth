@@ -31,6 +31,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 import mono_m1a_score as bass                                        # noqa: E402
 import manifest as mf                                                # noqa: E402
 import measure_m1a_volume_mapping as volume                           # noqa: E402
+from finite_number import is_finite_number  # noqa: E402
 
 RECORD = ROOT / "docs/scorecard/results/M1A.json"
 CANDIDATE = volume.OUT / "volume-minus4db.json"
@@ -45,21 +46,31 @@ def _norm(x):
 EVENT_ATOL = 1e-6
 
 
-def event_deviation(a, b):
+def event_deviation(a, b, where=""):
     """Largest absolute numeric difference between two diagnostics trees, or
-    None when their structure or any non-numeric value differs."""
+    None when their structure or any non-numeric value differs.
+
+    REFUSES (`mf.Refused`) a numeric leaf that is not a finite number on either
+    side, naming it. `abs(nan - x)` is nan, the `max()` below drops a nan that
+    is not the first part and returns one that is, and `nan > EVENT_ATOL` is
+    False: without this, either way the answer is a MATCH (#2107, the #134
+    shape)."""
     if isinstance(a, bool) or isinstance(b, bool) or a is None or b is None:
         return 0. if a == b else None
     if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+        bad = [x for x in (a, b) if not is_finite_number(x)]
+        if bad:
+            raise mf.Refused(f"{where.lstrip('.') or 'the tree'} = {bad[0]!r} "
+                             "is not a finite number")
         return abs(a - b)
     if isinstance(a, dict) and isinstance(b, dict):
         if set(a) != set(b):
             return None
-        parts = [event_deviation(a[k], b[k]) for k in a]
+        parts = [event_deviation(a[k], b[k], f"{where}.{k}") for k in a]
     elif isinstance(a, (list, tuple)) and isinstance(b, (list, tuple)):
         if len(a) != len(b):
             return None
-        parts = [event_deviation(x, y) for x, y in zip(a, b)]
+        parts = [event_deviation(x, y, f"{where}[{i}]") for i, (x, y) in enumerate(zip(a, b))]
     else:
         return 0. if a == b else None
     return None if None in parts else max(parts, default=0.)
@@ -77,8 +88,35 @@ def _skipped(record):
         else V2_EVENT_FIELDS
 
 
+def _unreadable_numbers(tree, where):
+    """`"{path} = {value!r}"` for every numeric leaf of `tree` that is not a
+    finite number, each path written below `where`."""
+    if isinstance(tree, bool) or tree is None:
+        return []
+    if isinstance(tree, (int, float)):
+        return [] if is_finite_number(tree) else [f"{where} = {tree!r}"]
+    if isinstance(tree, dict):
+        return [bad for k, v in tree.items() for bad in _unreadable_numbers(v, f"{where}.{k}")]
+    if isinstance(tree, (list, tuple)):
+        return [bad for i, v in enumerate(tree) for bad in _unreadable_numbers(v, f"{where}[{i}]")]
+    return []
+
+
 def candidate_event_deviation(record, candidate):
-    """event_deviation, ignoring the fields the later scorers add or re-measure."""
+    """event_deviation, ignoring the fields the later scorers add or re-measure.
+
+    REFUSES (`mf.Refused`) first when any numeric leaf of EITHER events list is
+    not a finite number, naming the record and every such leaf. This reads the
+    whole lists, not what is compared: the fields skipped below are not
+    compared at all, and a NaN in any of them printed MATCH."""
+    lists = ((record["diagnostics"]["events"], "the M1A board record", "diagnostics.events"),
+             (candidate["measurements"]["events"], "the -4 dB candidate record",
+              "measurements.events"))
+    for events, what, where in lists:
+        bad = _unreadable_numbers(events, where)
+        if bad:
+            raise mf.Refused(f"{what} carries a value that is not a finite number: "
+                             + ", ".join(bad))
     skip = _skipped(record)
     return event_deviation([{k: v for k, v in e.items() if k not in skip}
                             for e in record["diagnostics"]["events"]],
@@ -104,6 +142,10 @@ def print_properties(measured):
 
 def check(record: dict, candidate: dict, baseline: dict, manifest: dict) -> list[str]:
     """Every reason the record is not the selected candidate; [] when it is.
+
+    A record or candidate whose events carry a number that is not finite is
+    REFUSED (`mf.Refused`) by `candidate_event_deviation` (#2107): an unreadable
+    record is neither a match nor a mismatch.
 
     REFUSES (`mf.Refused`) a record that lacks a key this function reads with
     `[]` (#1604): that is a partial record, not a mismatch."""
