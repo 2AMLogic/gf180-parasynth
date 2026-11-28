@@ -301,3 +301,34 @@ def test_the_report_names_its_tree_and_marks_the_sites_that_have_a_control(capsy
     unmarked = [l for l in out.splitlines() if " REACHABLE  " in l]
     assert len(unmarked) == sum(1 for v in nga.SITE_VERDICTS.values()
                                 if v[0] == nga.REACHABLE and not v[2])
+
+
+def _tree_with_one_site(tmp_path):
+    (tmp_path / "tools").mkdir()
+    (tmp_path / "tools" / "new_tool.py").write_text(
+        "def f(a, b, tol):\n    if abs(a - b) > tol:\n        return 1\n    return 0\n")
+    return tmp_path
+
+
+@pytest.mark.parametrize("gate", [False, True], ids=["--sites", "--sites --check"])
+def test_sites_main_reports_an_untriaged_site_instead_of_crashing(tmp_path, monkeypatch,
+                                                                 capsys, gate):
+    """CONTROL (Judge, #2019). Before the fix `sites_main` indexed
+    SITE_VERDICTS[s.key] unconditionally and died with KeyError on exactly the
+    input the gate exists to catch. `triage_gaps()` was tested alone, so the
+    CLI path was never red."""
+    monkeypatch.setattr(nga, "SITE_VERDICTS", {})
+    rc = nga.sites_main(gate, None, root=_tree_with_one_site(tmp_path))
+    out = capsys.readouterr().out
+    assert "<no verdict>" in out
+    assert rc == (1 if gate else 0)
+    if gate:
+        assert "UNTRIAGED tools/new_tool.py" in out
+
+
+def test_sites_main_reports_a_verdict_outside_the_vocabulary(tmp_path, monkeypatch, capsys):
+    root = _tree_with_one_site(tmp_path)
+    key = ("tools/new_tool.py", "A", "if abs(a - b) > tol:")
+    monkeypatch.setattr(nga, "SITE_VERDICTS", {key: ("PROBABLY-FINE", "a guess", None)})
+    assert nga.sites_main(True, None, root=root) == 1
+    assert "BAD-VERDICT" in capsys.readouterr().out

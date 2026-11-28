@@ -992,9 +992,14 @@ def targets(low_tail=None, m_origin=None) -> dict:
             raise Refused(f"{mo_p.name}'s gap is in the "
                           f"{blob.get('gap', {}).get('window')} window, this module compares "
                           f"in {T_RHO_WINDOW}")
+        # The four compared keys are float()-converted below, and float("nan") is
+        # a NaN, so a JSON *string* "nan"/"inf" must be refused here too: convert
+        # them before the finiteness check, not only the numeric siblings.
+        compared = ("chain_bound_db", "measured_median", "measured_min", "measured_max")
         _refuse_non_finite(mo_p.name,
                            [(f"gap.bands.M.{k}", float(v))
-                            for k, v in g.items() if isinstance(v, (int, float))])
+                            for k, v in g.items()
+                            if isinstance(v, (int, float)) or (k in compared and v is not None)])
         for key, want in (("chain_bound_db", T_CHAIN_BOUND_DB),
                           ("measured_median", T_M_RE_LN_808_MEDIAN),
                           ("measured_min", M_RE_LN_808_RANGE[0]),

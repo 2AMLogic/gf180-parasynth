@@ -298,7 +298,7 @@ def _with_rho(low, window):
                     reason="step 7's artifacts are not present")
 @pytest.mark.parametrize("key", ["chain_bound_db", "measured_median", "measured_min",
                                  "measured_max"])
-@pytest.mark.parametrize("bad", [float("nan"), float("inf")])
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), "nan", "inf"])
 def test_targets_refuses_a_non_finite_m_origin_figure(tmp_path, key, bad):
     """#1929. `abs(float(got) - want) > 0.011` is False for a NaN. Measured on
     the tree before the fix: a NaN in any of the four figures passed the guard
@@ -308,7 +308,7 @@ def test_targets_refuses_a_non_finite_m_origin_figure(tmp_path, key, bad):
     targets, lt_p, mo_p = _artifacts(tmp_path, low, origin)
     with pytest.raises(v.Refused) as exc:
         targets(lt_p, mo_p)
-    assert f"m-origin.json carries a non-finite value: gap.bands.M.{key} = {bad!r}" \
+    assert f"m-origin.json carries a non-finite value: gap.bands.M.{key} = {float(bad)!r}" \
         in str(exc.value)
 
 

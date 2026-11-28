@@ -575,13 +575,13 @@ SITE_VERDICTS = {
     ('model/audio_measure.py', 'A', 'if abs(b - top) > MAX_PLATEAU_EXTRAPOLATION_DB:'):
         _v(UNDETERMINED,
            ('ordering not checked: this file contains a finiteness call elsewhere, and whether '
-           "it vouches for this comparison's operands was not traced.np.isfinite(g) selects "
+           "it vouches for this comparison's operands was not traced. np.isfinite(g) selects "
            "the curve's points at L2180, in the same function; whether b and top derive only "
            'from that selection was not traced.')),
     ('model/audio_measure.py', 'A', 'return float(np.mean(np.abs(c - mid) > 0.5 * half))'):
         _v(UNDETERMINED,
            ('ordering not checked: this file contains a finiteness call elsewhere, and whether '
-           "it vouches for this comparison's operands was not traced.The deviation abs(c - "
+           "it vouches for this comparison's operands was not traced. The deviation abs(c - "
            'mid) > 0.5 * half counts a NaN as not deviating.')),
     ('model/audio_measure.py', 'A', 'if min(abs(d - duty), abs((1 - d) - duty)) > duty_tol:'):
         _v(UNDETERMINED,
@@ -640,7 +640,7 @@ SITE_VERDICTS = {
      'if last is None or abs(float(last) - float(value)) > 1e-9:'):
         _v(UNDETERMINED,
            ('ordering not checked: this file contains a finiteness call elsewhere, and whether '
-           "it vouches for this comparison's operands was not traced.last and value are "
+           "it vouches for this comparison's operands was not traced. last and value are "
            "float()s of a lock's changelog entry; a NaN here would pass the lock comparison.")),
     ('tools/analyse_m1a_phase_cycle.py', 'A',
      'if abs(model["drift_hz"] - drift) > DRIFT_TOL * abs(drift):'):
@@ -677,7 +677,7 @@ SITE_VERDICTS = {
     ('tools/f1_level_capture.py', 'A', 'if abs(low - frozen_open_low) > OPEN_GUARD_DB:'):
         _v(UNDETERMINED,
            ('ordering not checked: this file contains a finiteness call elsewhere, and whether '
-           "it vouches for this comparison's operands was not traced.y is finite-checked at "
+           "it vouches for this comparison's operands was not traced. y is finite-checked at "
            'L195, in the same function; whether low derives only from y was not traced.')),
     ('tools/measure_m5_pulse_cutoff.py', 'A',
      'if abs(abs(ce["Gain"]) - abs(be["Gain"])) > 0.5:'):
@@ -700,7 +700,7 @@ SITE_VERDICTS = {
     ('tools/preparation_contract.py', 'A', 'if abs(lead - want) > LEAD_TOLERANCE_SAMPLES:'):
         _v(UNDETERMINED,
            ('ordering not checked: this file contains a finiteness call elsewhere, and whether '
-           "it vouches for this comparison's operands was not traced.y is finite-masked at "
+           "it vouches for this comparison's operands was not traced. y is finite-masked at "
            'L127, in the same function; whether lead derives only from y was not traced.')),
     ('tools/preparation_contract.py', 'A',
      'abs(sa["lead_samples"] - sb["lead_samples"]) > LEAD_TOLERANCE_SAMPLES:'):
@@ -710,7 +710,7 @@ SITE_VERDICTS = {
     ('tools/stage_case.py', 'A', 'if abs(region["tau_ms"] - float(fit["tau_ms"])) > 1e-6:'):
         _v(UNDETERMINED,
            ('ordering not checked: this file contains a finiteness call elsewhere, and whether '
-           "it vouches for this comparison's operands was not traced.The L378 guard asserts "
+           "it vouches for this comparison's operands was not traced. The L378 guard asserts "
            "fit['tau_ms'] finite on the line before; whether region['ok'] vouches for "
            "region['tau_ms'] was not traced.")),
     ('tools/tone_stage_schematic.py', 'A',
@@ -881,8 +881,13 @@ def sites_main(gate: bool, ref: str | None, root: pathlib.Path = ROOT) -> int:
     by_verdict = {v: 0 for v in VERDICTS}
     files_with_call = {path for path, src in sources.items()
                        if any(k in src for k in FINITENESS_NAMES)}
+    untriaged = 0
     for s in scoped:
-        by_verdict[SITE_VERDICTS[s.key][0]] += 1
+        entry = SITE_VERDICTS.get(s.key)
+        if entry is not None and entry[0] in by_verdict:
+            by_verdict[entry[0]] += 1
+        else:  # no verdict, or one outside VERDICTS: triage_gaps() names it below
+            untriaged += 1
     a = [s for s in sites if s.shape == "A"]
     print(f"NaN-blind comparison sites, read from {tree_label(ref, root)}")
     behind = _git(root, "rev-list", "--count", "HEAD..origin/main")
@@ -898,7 +903,7 @@ def sites_main(gate: bool, ref: str | None, root: pathlib.Path = ROOT) -> int:
           f"{len({s.path for s in scoped})} files = {n_yes} in files with a finiteness call "
           f"somewhere + {n_no} in files with none")
     print("  verdicts: " + ", ".join(f"{by_verdict[v]} {v}" for v in VERDICTS)
-          + f"   table: {len(SITE_VERDICTS)} entries")
+          + f", {untriaged} untriaged/invalid   table: {len(SITE_VERDICTS)} entries")
     for s in scoped:
         verdict, why, control = SITE_VERDICTS.get(s.key, ("<no verdict>", "", None))
         mark = " +" if control else ""
