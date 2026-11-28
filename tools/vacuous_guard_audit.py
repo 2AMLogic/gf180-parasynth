@@ -87,6 +87,13 @@ BOUNDARIES = (
     ("tools/cymbal_band_balance.py", "preconditions", ("content_checked",), "#431",
      "filter-figure and vca-drive are answered by reading the artifact, "
      "not by path.exists()"),
+    ("tools/cymbal_band_balance.py", "figure_tone_term", ("is_finite_number",), "#1928",
+     "the figure route's bound comes from extrapolation_bound, which no record "
+     "loader guards, and a NaN returned as a level is False in every comparison"),
+    ("tools/cymbal_band_balance.py", "properties", ("is_finite_number",), "#1928",
+     "rule-bind takes max() over the gaps and the bounds, and max() drops a "
+     "NaN that is not its first argument, so the property passed on an "
+     "understated widest bound"),
 )
 
 #: What a refusal looks like in this repository.
