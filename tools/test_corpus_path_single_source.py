@@ -110,6 +110,11 @@ CORPUS_ENV_TEST_FILES = {
     pathlib.PurePosixPath("tools/test_estimator_defects_refusal.py"): frozenset({"_probe"}),
     pathlib.PurePosixPath("tools/test_probe_tom_numerator_refusal.py"): frozenset({"_probe"}),
     pathlib.PurePosixPath("tools/test_audio_distance_floor_refusal.py"): frozenset({"_corpus_env"}),
+    # #1887: _cli scrubs both variables from the parent environment and sets
+    # them on the CHILD's, so the child's run_case.configured_refs() (evaluated
+    # as the --refs default even when --refs is passed) cannot raise on a
+    # disagreeing inherited pair. Resolution stays in the child.
+    pathlib.PurePosixPath("tools/test_clap_final_strike_reference_boundary.py"): frozenset({"_cli"}),
 }
 SELF = pathlib.PurePosixPath("tools/test_corpus_path_single_source.py")
 ENV_NAMES = {"GF180_TR808_REFS", "TR808_REFS", "GF180_TR808_REFS_DEFAULT"}   # env-var keys
