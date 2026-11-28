@@ -23,6 +23,7 @@ instrument that produced it.
 """
 from __future__ import annotations
 
+import copy
 from decimal import Decimal
 import json
 import math
@@ -729,3 +730,225 @@ def test_report_prints_finite_balance_for_a_subnormal_reference(low_level_record
     table = capsys.readouterr().out.split("Balance relative to the low band:")[1]
     row = next(line for line in table.splitlines() if line.strip().startswith("decay "))
     assert row.split()[-2] == f"{expected:+.2f}"
+
+
+# ---- #1870: a NON-FINITE value in either record used to pass the gate -----
+#
+# `schematic_tone_term` compared `abs(entry["hz"] - centre) > 1e-6`, which a
+# NaN passes, and returned `db` / `lo_db` / `hi_db` / `bound_db` with no
+# finiteness assertion; `tone-bound` and `figure_route_gains` asked
+# `width_db > BALANCE_BOUND_DB`, False for a NaN; `vca_drive_record` cached
+# whatever it read. Measured through `properties()` on `origin/main` @
+# `a92ba38b`, one field of the committed record made non-finite: of the 63 rows
+# below, 47 passed EVERY property, 10 went red without refusing, and 6 (`hz` at
+# +-inf) were refused by the frequency guard without naming the field.
+
+NAN, POS_INF, NEG_INF = float("nan"), float("inf"), float("-inf")
+NON_FINITE = (("nan", NAN), ("pos-inf", POS_INF), ("neg-inf", NEG_INF))
+
+#: Every scalar the term reads off one `at_hz` entry. `residual_db` and
+#: `alpha_db` are RETURNED but read by no property today; `hz` is compared but
+#: not returned.
+SCHEMATIC_TERM_FIELDS = ("hz", "db", "lo_db", "hi_db", "bound_db",
+                         "residual_db", "alpha_db")
+
+
+def _schematic_record(tmp_path, band, field, value):
+    """The committed record with ONE field of `band`'s centre entry replaced,
+    written the way a Python writer emits a non-finite float: a JSON `NaN` /
+    `Infinity` token."""
+    blob = json.loads(bb.SCHEMATIC_ARTIFACT.read_text())
+    blob["bands"][band]["at_hz"][f"{bb.CENTRE_HZ[band]:.1f}"][field] = value
+    p = tmp_path / "sn-p13-vr4.json"
+    p.write_text(json.dumps(blob))
+    return p
+
+
+@pytest.fixture
+def schematic_record_bytes(monkeypatch):
+    """Replace just `sn-p13-vr4.json`'s BYTES at the gate's normal input path.
+
+    `preconditions()` reports each path relative to the repo root, so a
+    substitute at a /tmp path raises `ValueError` there instead of measuring
+    anything; and `schematic_record` caches by path, so that cache is reset
+    for the test. `install(band, field, value)` sets one field of the band's
+    centre entry; `field=None` installs the unmodified record (the control
+    row)."""
+    artifact = bb.SCHEMATIC_ARTIFACT
+    blob = json.loads(pathlib.Path.read_text(artifact))
+    installed = {"text": None}
+    read_text = pathlib.Path.read_text
+
+    def read(path, *args, **kwargs):
+        return installed["text"] if path == artifact else read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(pathlib.Path, "read_text", read)
+    monkeypatch.setattr(bb, "_SCHEMATIC_CACHE", {})
+
+    def install(band, field, value):
+        mod = copy.deepcopy(blob)
+        if field is not None:
+            mod["bands"][band]["at_hz"][f"{bb.CENTRE_HZ[band]:.1f}"][field] = value
+        installed["text"] = json.dumps(mod)
+    return install
+
+
+@pytest.mark.parametrize("value", [v for _, v in NON_FINITE], ids=[n for n, _ in NON_FINITE])
+@pytest.mark.parametrize("field", SCHEMATIC_TERM_FIELDS)
+@pytest.mark.parametrize("band", bb.BANDS)
+def test_schematic_tone_term_refuses_a_non_finite_field_naming_band_and_field(
+        tmp_path, monkeypatch, band, field, value):
+    """Rule 8's inputs, each of which defeats a narrower guard: +-inf as well
+    as NaN (`isnan` is blind to them); every band; and `residual_db` /
+    `alpha_db`, which no property reads today (a guard over only the fields a
+    property reads lets those out). Refused on a SECOND call as well: the
+    record is cached as read, so a guard that ran only on the first read would
+    let the cached value through."""
+    monkeypatch.setattr(bb, "_SCHEMATIC_CACHE", {})
+    p = _schematic_record(tmp_path, band, field, value)
+    for call in range(2):
+        with pytest.raises(bb.Refused) as e:
+            bb.schematic_tone_term(band, path=p)
+        assert f"bands.{band}." in str(e.value), (call, str(e.value))
+        assert f"{field} = " in str(e.value), (call, str(e.value))
+
+
+@pytest.mark.parametrize("value", [v for _, v in NON_FINITE], ids=[n for n, _ in NON_FINITE])
+@pytest.mark.parametrize("field", SCHEMATIC_TERM_FIELDS)
+@pytest.mark.parametrize("band", bb.BANDS)
+def test_the_gate_refuses_every_non_finite_field_of_the_schematic_record(
+        figs, schematic_record_bytes, band, field, value):
+    """The issue's table row by row, through the gate that ships: one field of
+    the committed record made non-finite, then `properties()`."""
+    schematic_record_bytes(band, field, value)
+    fig9, corner = figs
+    with pytest.raises(bb.Refused) as e:
+        bb.properties(fig9, corner)
+    assert f"bands.{band}." in str(e.value), str(e.value)
+    assert f"{field} = " in str(e.value), str(e.value)
+
+
+def test_the_unmodified_schematic_record_still_passes_in_the_same_harness(
+        figs, schematic_record_bytes):
+    """The control row. The substitute keeps the real path and resets the
+    cache, so this proves the harness itself refuses nothing: the committed
+    record passes every property THROUGH it, before and after the guards."""
+    schematic_record_bytes("decay", None, None)
+    fig9, corner = figs
+    got = bb.properties(fig9, corner)
+    assert all(ok for ok, _ in got.values()), got
+
+
+VCA_WELL_FORMED = {"vca_term_db": {
+    "chain_db": {"low": 0.0, "decay": 3.52, "short": 4.97},
+    "bound_db": {"low": 0.0, "decay": 7.26, "short": 8.72},
+}}
+
+
+@pytest.mark.parametrize("value", [v for _, v in NON_FINITE], ids=[n for n, _ in NON_FINITE])
+@pytest.mark.parametrize("band", bb.BANDS)
+@pytest.mark.parametrize("section", ["chain_db", "bound_db"])
+def test_vca_drive_record_refuses_a_non_finite_term_naming_band_and_field(
+        tmp_path, section, band, value):
+    """`chain_db` is the field no property reads today -- it is not folded
+    into `balance_gains` (#432) -- so a guard over only what is read would
+    have skipped the issue's own `chain_db.low = NaN` case. Refused before the
+    cache is written, and on a second call."""
+    blob = copy.deepcopy(VCA_WELL_FORMED)
+    blob["vca_term_db"][section][band] = value
+    p = tmp_path / "vca-drive.json"
+    p.write_text(json.dumps(blob))
+    for call in range(2):
+        with pytest.raises(bb.Refused) as e:
+            bb.vca_drive_record(p)
+        assert f"{section}.{band} = " in str(e.value), (call, str(e.value))
+        assert str(p) not in bb._VCA_CACHE, "a refused record was cached"
+
+
+def test_the_committed_vca_drive_measurement_still_reads():
+    """The control row for `vca-drive.json`. `VCA_ARTIFACT` is deliberately
+    absent (#432), so the committed record is the measured one at its sibling
+    path; it must still be accepted, with its own numbers."""
+    p = bb.SCORECARD / "vca-drive" / "vca-drive.json"
+    assert p.exists(), p
+    rec = bb.vca_drive_record(p)
+    assert rec["chain_db"]["decay"] == pytest.approx(3.522, abs=1e-3)
+    assert rec["chain_db"]["short"] == pytest.approx(4.973, abs=1e-3)
+    assert rec["bound_db"]["short"] == pytest.approx(8.715, abs=1e-3)
+
+
+def test_a_non_finite_vca_drive_record_does_not_satisfy_the_precondition(monkeypatch):
+    """The issue left this unrun. `balance_gains` reads this table, so a
+    record the reader refuses must count as ABSENT. A well-formed file at the
+    same kind of path is the control that the table CAN report PRESENT."""
+    good = bb.VCA_ARTIFACT.parent / "_test_1870_vca-drive.json"
+    bad = bb.VCA_ARTIFACT.parent / "_test_1870_nan_vca-drive.json"
+    blob = copy.deepcopy(VCA_WELL_FORMED)
+    blob["vca_term_db"]["chain_db"]["low"] = NAN
+    good.write_text(json.dumps(VCA_WELL_FORMED))
+    bad.write_text(json.dumps(blob))
+    try:
+        monkeypatch.setattr(bb, "VCA_ARTIFACT", good)
+        present = {p["name"]: p["present"] for p in bb.preconditions()}
+        assert present["vca-drive"] is True
+        monkeypatch.setattr(bb, "VCA_ARTIFACT", bad)
+        present = {p["name"]: p["present"] for p in bb.preconditions()}
+        assert present["vca-drive"] is False
+    finally:
+        good.unlink(missing_ok=True)
+        bad.unlink(missing_ok=True)
+
+
+def _figure_term_with_non_finite_bound(monkeypatch, bands):
+    """The FIGURE route's term with a non-finite bound for `bands`: the source
+    the record guards cannot see, because these numbers come from
+    `werner_fig9.extrapolation_bound` and not from either JSON record."""
+    real = bb.figure_tone_term
+
+    def poisoned(band, fig9, *, at_hz=None, defect=None):
+        term = real(band, fig9, at_hz=at_hz, defect=defect)
+        if band in bands and at_hz is None:
+            term["lo_db"] = term["hi_db"] = NAN
+        return term
+
+    monkeypatch.setattr(bb, "figure_tone_term", poisoned)
+
+
+def test_tone_bound_does_not_pass_on_a_non_finite_width_from_another_source(figs, monkeypatch):
+    """Fixing only the record readers leaves this. `w > BOUND` is False for a
+    NaN, so the decay band's non-finite FIGURE width counted as inside the
+    bound and the property passed on it."""
+    _figure_term_with_non_finite_bound(monkeypatch, ("decay",))
+    fig9, corner = figs
+    fig = bb.relative_db(fig9, corner, route=bb.ROUTE_FIGURE)
+    assert math.isnan(fig["decay"]["width_db"]), fig
+    ok, detail = bb.properties(fig9, corner)["tone-bound"]
+    assert ok is False, detail
+    assert "figure decay" in detail, detail
+
+
+def test_the_figure_route_refuses_to_apply_a_balance_bounded_by_a_non_finite_width(figs, monkeypatch):
+    """`figure_route_gains` asked the same `w > BOUND`. With every figure width
+    non-finite (the low band is the reference, so poisoning it poisons all
+    three ratios) nothing was wider than the bound, and a balance known only
+    to +-nan dB was RETURNED as applicable."""
+    _figure_term_with_non_finite_bound(monkeypatch, ("low",))
+    fig9, corner = figs
+    fig = bb.relative_db(fig9, corner, route=bb.ROUTE_FIGURE)
+    assert all(math.isnan(v["width_db"]) for v in fig.values()), fig
+    with pytest.raises(bb.Refused) as e:
+        bb.figure_route_gains(fig9, corner)
+    assert "non-finite" in str(e.value), str(e.value)
+
+
+@pytest.mark.parametrize("mode", ["--check", "--json"])
+def test_cli_refuses_a_non_finite_schematic_record(mode, schematic_record_bytes, tmp_path, capsys):
+    """What a CI step runs: exit 2 with `REFUSED:` naming the band and the
+    field, and no evidence record written."""
+    schematic_record_bytes("decay", "db", NAN)
+    dest = tmp_path / "evidence.json"
+    args = [mode, str(dest)] if mode == "--json" else [mode]
+    assert bb.main(args) == 2
+    out = capsys.readouterr().out
+    assert out.startswith("REFUSED:") and "bands.decay." in out and "db = nan" in out, out
+    assert not dest.exists()
