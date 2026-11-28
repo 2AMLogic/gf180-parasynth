@@ -9,6 +9,10 @@ stop it? (#134)
                                                   # verdict (#1929); --ref origin/main to read
                                                   # main, not the checkout
     python3 tools/nan_guard_audit.py --sites --check  # exit 1 on an untriaged or stale site
+    python3 tools/nan_guard_audit.py --aggregates  # every builtin max()/min() with a
+                                                  # non-literal argument and its verdict
+                                                  # (#2014); --ref reads another tree
+    python3 tools/nan_guard_audit.py --aggregates --check  # exit 1 on an untriaged or stale site
 
 WHY THIS EXISTS
 
@@ -64,6 +68,11 @@ import sys
 import tarfile
 import tokenize
 from typing import NamedTuple
+
+TOOLS = pathlib.Path(__file__).resolve().parent
+if str(TOOLS) not in sys.path:
+    sys.path.insert(0, str(TOOLS))
+import vacuous_guard_audit as vga  # noqa: E402  -- the function walk every audit here shares
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -743,6 +752,11 @@ class Site(NamedTuple):
     def key(self) -> tuple:
         return (self.path, self.shape, self.text)
 
+    @property
+    def label(self) -> str:
+        """What a gap message quotes for the site."""
+        return self.text
+
 
 def is_test_path(path: str) -> bool:
     name = path.rsplit("/", 1)[-1]
@@ -771,14 +785,15 @@ def _inside(row: int, col: int, spans) -> bool:
     return any((sr, sc) <= (row, col) < (er, ec) for sr, sc, er, ec in spans)
 
 
-def py_sources(ref: str | None = None, root: pathlib.Path = ROOT) -> dict[str, str]:
-    """path -> source for every .py under SITE_ROOTS.
+def py_sources(ref: str | None = None, root: pathlib.Path = ROOT,
+               roots: tuple = SITE_ROOTS) -> dict[str, str]:
+    """path -> source for every .py under `roots`.
 
     `ref=None` reads the working tree. A ref is read with `git archive`, never
     from a checkout: a fact about main is read from origin/main (CLAUDE.md)."""
     if ref is None:
         out = {}
-        for d in SITE_ROOTS:
+        for d in roots:
             for p in sorted((root / d).rglob("*.py")):
                 out[p.relative_to(root).as_posix()] = p.read_text(
                     encoding="utf-8", errors="replace")
@@ -787,7 +802,7 @@ def py_sources(ref: str | None = None, root: pathlib.Path = ROOT) -> dict[str, s
         raise SystemExit(f"REFUSED: {ref} is not a revision in {root}")
     # `git archive` refuses the whole call if one pathspec matches nothing, so
     # only the roots this tree has are asked for.
-    have = [d for d in SITE_ROOTS
+    have = [d for d in roots
             if _git(root, "ls-tree", "-d", "--name-only", ref, "--", d).strip()]
     if not have:
         return {}
@@ -827,22 +842,29 @@ def comparison_sites(sources: dict[str, str]) -> tuple[list[Site], list[str]]:
     return sites, untokenised
 
 
-def triage_gaps(sites: list[Site], root: pathlib.Path = ROOT) -> list[str]:
-    """`--sites --check`'s entire content: what the table gets wrong about the
-    tree. An empty list is the all-clear; anything else is a gap with its fix."""
+def _key_text(key: tuple) -> str:
+    return "(" + ", ".join(repr(part) for part in key) + ")"
+
+
+def triage_gaps(sites: list, root: pathlib.Path = ROOT, table: dict | None = None,
+                table_name: str = "SITE_VERDICTS", what: str = "comparison") -> list[str]:
+    """`--sites --check`'s entire content, and `--aggregates --check`'s: what a
+    verdict table gets wrong about the tree. An empty list is the all-clear;
+    anything else is a gap with its fix."""
+    table = SITE_VERDICTS if table is None else table
     gaps = []
     live = {s.key for s in sites if s.in_scope}
     for s in sites:
-        if s.in_scope and s.key not in SITE_VERDICTS:
-            gaps.append(f"UNTRIAGED {s.path}:{s.lineno} [{s.shape}] {s.text}\n"
-                        f"    add an entry to tools/nan_guard_audit.py::SITE_VERDICTS keyed\n"
-                        f"    ({s.path!r}, {s.shape!r}, {s.text!r})")
-    for key in sorted(SITE_VERDICTS):
+        if s.in_scope and s.key not in table:
+            gaps.append(f"UNTRIAGED {s.path}:{s.lineno} [{s.shape}] {s.label}\n"
+                        f"    add an entry to tools/nan_guard_audit.py::{table_name} keyed\n"
+                        f"    {_key_text(s.key)}")
+    for key in sorted(table):
         if key not in live:
             gaps.append(f"STALE verdict names a line that is no longer a site: {key}\n"
-                        "    the comparison was edited, moved or deleted; re-triage or drop "
-                "the entry")
-    for key, (verdict, _why, control) in sorted(SITE_VERDICTS.items()):
+                        f"    the {what} was edited, moved or deleted; re-triage or drop "
+                        "the entry")
+    for key, (verdict, _why, control) in sorted(table.items()):
         if verdict not in VERDICTS:
             gaps.append(f"BAD-VERDICT {verdict!r} (not one of {VERDICTS}): {key}")
         if control is None:
@@ -924,6 +946,249 @@ def sites_main(gate: bool, ref: str | None, root: pathlib.Path = ROOT) -> int:
     return 0
 
 
+# ---------------------------------------------------------------------------
+# #2014: every builtin max() / min() a NaN can be dropped by, and what was
+# decided about each
+# ---------------------------------------------------------------------------
+#
+# The third shape. `max()` / `min()` keep their FIRST argument and replace it
+# only when a later one compares greater (or smaller), and a NaN compares with
+# nothing: a NaN that is not the first argument is DROPPED and the aggregate
+# stays finite, merely smaller (or larger) than it should be. #1928 measured
+# one: a non-finite figure-route bound in the decay band turned rule-bind's
+# widest tone bound from 21.3 dB into 14.7 dB and the property PASSED against
+# the smaller number. A NaN that IS the first argument is returned, which is
+# #1929's shape one comparison later.
+#
+# A site is one call, found by an AST walk over `vacuous_guard_audit`'s
+# function walk and keyed by its text, so EDITING a call -- not merely moving
+# it -- asks for a fresh verdict:
+#
+#   * the call is to the BUILTIN `max` / `min`, a bare name: `np.max` and
+#     friends propagate a NaN and are not this shape, and neither is a
+#     `sorted(...)[0]`;
+#   * at least one argument is not a literal, because a literal cannot be a NaN;
+#   * it sits in a function under AGGREGATE_ROOTS whose name matches
+#     AGGREGATE_NAME -- `vacuous_guard_audit.VERDICT_NAME`, widened as the
+#     filing widened it -- or that is registered in AGGREGATE_REGISTRY. A nested
+#     def is visited as its own function, never as part of the enclosing one.
+#
+# THE FILED COUNT, REPRODUCED, AND THE DIFFERENCE. #2014 filed 48 sites in 16
+# files, 28 of them in 8 files with no finiteness call anywhere, from a walk
+# whose population test -- read back off its own 48 lines -- was "the FIRST
+# argument is a comprehension, an `x.values()` / `.items()`, a `list()` /
+# `abs()` / `float()` call or a subscript". `_filed_population` is that test
+# and the report prints it as a subtotal, so
+# `--aggregates --ref origin/feature/issue-1928` reproduces 48 / 16 and 28 / 8
+# at 52d756ac -- e2d1bae7 plus #1928's two commits, the tree the filing
+# counted, 2026-11-28 -- and at 616b8d63, origin/main the day this was
+# written: 48 sites in 16 files, 20 in the 8 files with a finiteness call
+# and 28 in the 8 without. That test did not count a bare name, although the
+# filing's method lists one, and a bare name is where most of this shape
+# lives: a population held in a local (`max(err)`), a running accumulator's
+# other operand (`worst = max(worst, abs(db - ref))`), a non-literal argument
+# after a first one that is not a population (`max(math.log2(lo / p) ..., ...)`).
+# The rule here counts them: with `rebalance` registered, 115 sites in 32
+# files on each of those trees -- the filed 48, `rebalance`'s own `min()`
+# (a first-argument population the filed walk missed only because nothing in
+# the function's name matches), and 66 beyond both.
+#
+# WHAT THE GATE IS BLIND TO, stated rather than left to be found:
+#
+#   * THE NAME FILTER. A function that refuses but is named for neither a
+#     verdict nor a property (`rebalance`, `measure`, `capture`) is not
+#     visited unless registered, and the report counts what that hides on
+#     every run under NOT GATED. The filter is the filed walk's; every function
+#     is the audit's job (`vacuous_guard_audit.py`), not a per-site table's.
+#   * An alias: `builtins.max`, `from builtins import max as biggest`, or a
+#     local rebinding is not a bare `max` / `min`.
+#   * `model/` and `fpga/`: the filing scanned `tools/` only, so the gate does.
+#   * Whether a verdict is TRUE. Reading the operands is the human half, as it
+#     is for `audit_file`; each entry cites the guard that stops the NaN or the
+#     path it takes, by `file:line` on the tree the verdict was written against.
+
+AGGREGATES = ("max", "min")
+AGGREGATE_ROOTS = ("tools",)
+AGGREGATE_NAME = re.compile(vga.VERDICT_NAME.pattern[:-1]
+                            + r"|propert|score|report|summar|rank|decide)", re.I)
+#: The filing's per-file heuristic, which lists `is_finite_number` as well.
+AGGREGATE_FINITE_NAMES = FINITENESS_NAMES + ("is_finite_number",)
+_POPULATION_VIEWS = ("values", "items")
+_POPULATION_CALLS = ("list", "abs", "float")
+
+#: Functions the name filter misses whose max() / min() still decides a number
+#: that ships. `(file, qualified name, why it is verdict-shaped)`.
+AGGREGATE_REGISTRY = (
+    ("tools/cymbal_band_balance.py", "rebalance",
+     "its min() is the anchor every band of the ablation is scaled by, and "
+     "nothing in the name says so"),
+)
+
+
+def _filed_population(arg: ast.expr) -> bool:
+    """The filed walk's population test, on the FIRST argument: a comprehension;
+    `x.values()` / `x.items()`; `list()` / `abs()` / `float()`; a subscript.
+    Not a bare name, which is the difference this module counts."""
+    if isinstance(arg, (ast.GeneratorExp, ast.ListComp, ast.SetComp, ast.DictComp)):
+        return True
+    if isinstance(arg, ast.Call):
+        if isinstance(arg.func, ast.Attribute) and arg.func.attr in _POPULATION_VIEWS:
+            return True
+        return isinstance(arg.func, ast.Name) and arg.func.id in _POPULATION_CALLS
+    return isinstance(arg, ast.Subscript)
+
+
+def _call_text(src: str, call: ast.Call) -> str:
+    """The call as written, whitespace collapsed. Not `ast.unparse`: its quote
+    style differs between Python versions, and a version bump would turn every
+    key in the table stale."""
+    segment = ast.get_source_segment(src, call) or ast.unparse(call)
+    return " ".join(segment.split())
+
+
+class Aggregate(NamedTuple):
+    path: str
+    lineno: int
+    shape: str
+    func: str
+    text: str
+    filed: bool
+    named: str
+    is_test: bool
+    in_probes: bool
+
+    @property
+    def in_scope(self) -> bool:
+        return self.named != "refuses" and not (self.is_test or self.in_probes)
+
+    @property
+    def key(self) -> tuple:
+        return (self.path, self.shape, self.func, self.text)
+
+    @property
+    def label(self) -> str:
+        """What a gap message quotes for the site."""
+        return f"{self.func}: {self.text}"
+
+
+def aggregate_sites(sources: dict[str, str],
+                    roots: tuple = AGGREGATE_ROOTS) -> tuple[list[Aggregate], list[str]]:
+    """Every builtin max() / min() with a non-literal argument in a function
+    under `roots` that is named for a verdict, registered, or refuses -- and
+    the files that did not parse. Only the first two kinds are in scope; the
+    third is counted so the name filter's blind spot is a number."""
+    sites: list[tuple] = []
+    unparsed: list[str] = []
+    registered = {(path, func) for path, func, _why in AGGREGATE_REGISTRY}
+    prefixes = tuple(f"{d}/" for d in roots)
+    for path, src in sorted(sources.items()):
+        if not path.endswith(".py") or not path.startswith(prefixes):
+            continue
+        try:
+            tree = ast.parse(src)
+        except (SyntaxError, ValueError) as exc:
+            unparsed.append(f"{path} ({type(exc).__name__})")
+            continue
+        is_test, in_probes = is_test_path(path), path.startswith("tools/probes/")
+        for fn in vga._functions(tree):
+            if AGGREGATE_NAME.search(fn.node.name):
+                named = "name"
+            elif (path, fn.qual) in registered:
+                named = "registered"
+            elif any(vga._is_refusal_stmt(n) or isinstance(n, ast.Raise)
+                     for n in vga._own_nodes(fn.node)):
+                named = "refuses"
+            else:
+                continue
+            for n in vga._own_nodes(fn.node):
+                if not (isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+                        and n.func.id in AGGREGATES):
+                    continue
+                if not n.args or all(isinstance(a, ast.Constant) for a in n.args):
+                    continue
+                sites.append((path, n.lineno, n.col_offset, Aggregate(
+                    path, n.lineno, n.func.id, fn.qual, _call_text(src, n),
+                    _filed_population(n.args[0]), named, is_test, in_probes)))
+    # `_own_nodes` empties a stack, so a function's calls come out backwards;
+    # the report reads in source order.
+    sites.sort(key=lambda t: t[:3])
+    return [site for _path, _line, _col, site in sites], unparsed
+
+
+#: The triage, in `SITE_VERDICTS`' own `(verdict, why, control)` shape, keyed
+#: `(path, builtin, qualified function, call text)`.
+AGGREGATE_VERDICTS: dict[tuple, tuple] = {}
+
+
+def aggregate_gaps(sites: list[Aggregate], root: pathlib.Path = ROOT) -> list[str]:
+    """`--aggregates --check`'s entire content."""
+    return triage_gaps(sites, root, table=AGGREGATE_VERDICTS,
+                       table_name="AGGREGATE_VERDICTS", what="max()/min()")
+
+
+def aggregates_main(gate: bool, ref: str | None, root: pathlib.Path = ROOT) -> int:
+    sources = py_sources(ref, root, AGGREGATE_ROOTS)
+    sites, unparsed = aggregate_sites(sources)
+    scoped = [s for s in sites if s.in_scope]
+    by_verdict = {v: 0 for v in VERDICTS}
+    with_call = {path for path, src in sources.items()
+                 if any(k in src for k in AGGREGATE_FINITE_NAMES)}
+    for s in scoped:
+        verdict = AGGREGATE_VERDICTS.get(s.key)
+        if verdict:
+            by_verdict[verdict[0]] += 1
+    filed = [s for s in scoped if s.filed]
+    beyond = [s for s in scoped if not s.filed]
+    no_call = [s for s in filed if s.path not in with_call]
+    has_call = [s for s in filed if s.path in with_call]
+    print(f"NaN-blind max()/min() sites, read from {tree_label(ref, root)}")
+    behind = _git(root, "rev-list", "--count", "HEAD..origin/main")
+    if behind.isdigit() and int(behind) and ref is None:
+        print(f"!! THIS TREE IS {behind} COMMITS BEHIND origin/main. The lines below describe "
+              "that older tree, not main. Use --ref origin/main.")
+    print(f"  builtin max()/min() with a non-literal argument, in a function named for a "
+          f"verdict or registered: {len(scoped)} sites in "
+          f"{len({s.path for s in scoped})} files")
+    print(f"    the filed walk's own test (first argument a population): {len(filed)} sites in "
+          f"{len({s.path for s in filed})} files = {len(has_call)} sites in "
+          f"{len({s.path for s in has_call})} files with a finiteness call somewhere + "
+          f"{len(no_call)} sites in {len({s.path for s in no_call})} files with none")
+    print(f"    beyond that test: {len(beyond)} sites in {len({s.path for s in beyond})} files")
+    print("  verdicts: " + ", ".join(f"{by_verdict[v]} {v}" for v in VERDICTS)
+          + f"   table: {len(AGGREGATE_VERDICTS)} entries")
+    for s in scoped:
+        verdict, why, control = AGGREGATE_VERDICTS.get(s.key, ("<no verdict>", "", None))
+        mark = " +" if control else ""
+        print(f"{s.path}:{s.lineno} [{s.shape}] {s.func}: {verdict}{mark}  {why}")
+    refusing = [s for s in sites if s.named == "refuses"]
+    if refusing:
+        funcs = sorted({f"{s.path}:{s.func}" for s in refusing})
+        print(f"\nNOT GATED ({len(refusing)}): in {len(funcs)} functions under "
+              f"{', '.join(AGGREGATE_ROOTS)} that refuse but are named "
+              "for neither a verdict nor a property -- the name filter is the filed walk's. "
+              "Register a function in AGGREGATE_REGISTRY to gate its sites.")
+        print("  " + " ".join(funcs))
+    out = [s for s in sites if not s.in_scope and s.named != "refuses"]
+    if out:
+        print(f"\nnot in scope, not triaged ({len(out)}): "
+              + " ".join(f"{s.path}:{s.lineno}" for s in out))
+    if unparsed:
+        print(f"\nDID NOT PARSE: {', '.join(unparsed)}")
+    print("\n'+' marks a REACHABLE site whose injected-NaN control exists. A verdict is a reading "
+          "of the arguments, not a proof: each cites its guard or its path.")
+    if not gate:
+        return 0
+    gaps = aggregate_gaps(sites, root)
+    for g in gaps:
+        print(f"GAP      {g}")
+    if gaps:
+        print(f"\n{len(gaps)} gap(s) against tools/nan_guard_audit.py::AGGREGATE_VERDICTS. A "
+              "max()/min() that drops a NaN was added or changed without a verdict.")
+        return 1
+    print("OK       every in-scope site has a verdict and every verdict names a site")
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -934,12 +1199,18 @@ def main(argv=None) -> int:
                          "--sites, assert the per-site verdict table is complete and fresh")
     ap.add_argument("--sites", action="store_true",
                     help="list every shape A/B comparison site with its verdict (#1929)")
+    ap.add_argument("--aggregates", action="store_true",
+                    help="list every builtin max()/min() with a non-literal argument and its "
+                         "verdict (#2014)")
     ap.add_argument("--ref", help="read the sources from this git ref instead of the "
                                    "working tree (e.g. origin/main)")
     args = ap.parse_args(argv)
 
     if args.sites:
         return sites_main(args.check, args.ref)
+
+    if args.aggregates:
+        return aggregates_main(args.check, args.ref)
 
     if args.check:
         gaps = boundary_gaps()
