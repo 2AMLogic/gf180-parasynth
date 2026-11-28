@@ -484,6 +484,22 @@ def reference_audio():
     return manifest, reference.astype(np.float64), controls
 
 
+def committed_audio(path, n, what):
+    """The audio committed at `path`, REFUSED unless it is mono int16 at SR
+    holding exactly `n` frames. The count is asserted before anything hashes
+    it and the WHOLE file is returned: hashed against a render, a cut to
+    `[:n]` let a file carrying samples past `n` pass on its prefix (#2150),
+    the committed-side mirror of the render-side cut #2114 closed. A file cut
+    and padded back to `n` passes here and only the hash refuses it -- the
+    pad-back class #2038 records, not closed."""
+    rate, pcm = wavfile.read(path)
+    if rate != SR or pcm.dtype != np.int16 or pcm.ndim != 1:
+        raise Refused(f"committed {what} format differs (rate {rate}, {pcm.dtype}, {pcm.ndim} channel(s))")
+    if len(pcm) != n:
+        raise Refused(f"committed {what} holds {len(pcm)} samples, expected {n}")
+    return pcm
+
+
 def annotate(report):
     """Everything derived from measured numbers already in the report: the
     absolute-versus-ratio attribution, the repeat-pair classification and the
@@ -538,9 +554,9 @@ def _run() -> int:
     model = pcm_of("selected", selected)
     if renders["selected"]["pcm_sha256"] != pcm_sha(committed):
         raise Refused("selected-patch render does not reproduce the committed model audio")
-    rate, committed_detune = wavfile.read(DETUNE_DIR / "detune-diagnostic.wav")
+    committed_detune = committed_audio(DETUNE_DIR / "detune-diagnostic.wav", n_ref, "detune-diagnostic audio")
     pcm_of("detuned", detuned)
-    if renders["detuned"]["pcm_sha256"] != pcm_sha(committed_detune[:n_ref]):
+    if renders["detuned"]["pcm_sha256"] != pcm_sha(committed_detune):
         raise Refused("detune-diagnostic render does not reproduce its committed audio")
     record_scored = {i: record["diagnostics"]["events"][i]["harmonic_error_db_model_minus_reference"]
                      for i in range(3)}

@@ -138,6 +138,130 @@ def test_model_psi_integer_arithmetic_for_the_selected_patch():
         90 + 360 * rate_hz * (d.centre_s(d.EVENTS[0]) - .1), abs=1e-6)
 
 
+# ---- the committed detune-diagnostic precondition binds the WHOLE file (#2150)
+COMMITTED = 359956            # samples in the shipped detune-diagnostic.wav: 360000 - 44
+SHIPPED_DETUNE_DIR = d.DETUNE_DIR      # read before a test repoints d.DETUNE_DIR at a scratch copy
+
+
+class _PastPrecondition(Exception):
+    """Raised in place of `_run`'s third render. The two reproduction
+    preconditions sit between the second render and the first analysis render,
+    so a third means both passed."""
+
+
+def _committed_detune():
+    return d.wavfile.read(SHIPPED_DETUNE_DIR / "detune-diagnostic.wav")[1]
+
+
+def _detune_precondition(monkeypatch, tmp_path, capsys, pcm, rate=SR):
+    """`main()` on a scratch detune-diagnostic.wav holding `pcm`: (exit code,
+    stdout, the scratch OUT). Both reproduction renders are answered from the
+    shipped audio plus the 44 frames `pcm_of` trims, so the preconditions see
+    exactly what the real renders give them, without their 7.6 s each."""
+    model = np.concatenate([d.wavfile.read(d.MODEL_WAV)[1], np.zeros(44, np.int16)])
+    detune = np.concatenate([_committed_detune(), np.zeros(44, np.int16)])
+    answers = iter([model, detune])
+
+    def render(patch, osc2_phase=0, mix=None):
+        try:
+            return next(answers)
+        except StopIteration:
+            raise _PastPrecondition("reproduction preconditions passed; _run reached a third render") from None
+
+    monkeypatch.setattr(d, "render", render)
+    monkeypatch.setattr(d, "OUT", tmp_path / "out")
+    (tmp_path / "detune-diagnostic.json").symlink_to(SHIPPED_DETUNE_DIR / "detune-diagnostic.json")
+    monkeypatch.setattr(d, "DETUNE_DIR", tmp_path)
+    d.wavfile.write(tmp_path / "detune-diagnostic.wav", rate, pcm)
+    code = d.main()
+    return code, capsys.readouterr().out, tmp_path / "out"
+
+
+def test_the_expected_detune_length_is_the_reference_length_and_the_length_the_shipped_file_holds():
+    # the guard must be satisfiable, and anchored on the apparatus: n_ref is
+    # the reference's length, which is also the length the detune render is
+    # committed at (measure_m1a_volume_mapping writes it at [:len(reference)])
+    _, ref, _ = d.reference_audio()
+    assert len(ref) == len(d.wavfile.read(d.MODEL_WAV)[1]) == len(_committed_detune()) == COMMITTED
+    assert round(d.bass.reference.SECONDS * SR) - len(ref) == 44        # what pcm_of trims
+
+
+@pytest.mark.parametrize("appended", [1, 44])
+def test_main_refuses_a_detune_wav_with_samples_appended_past_the_reference_length(monkeypatch, tmp_path, capsys,
+                                                                                   appended):
+    # #2150's own input: the shipped file plus a tail. Before the repair the
+    # committed side was cut to n_ref, the file matched its own prefix, and
+    # the precondition passed on audio it had never checked past n_ref
+    pcm = np.concatenate([_committed_detune(), np.zeros(appended, np.int16)])
+    code, out, out_dir = _detune_precondition(monkeypatch, tmp_path, capsys, pcm)
+    assert code == 2, out[-400:]
+    assert f"REFUSED: committed detune-diagnostic audio holds {COMMITTED + appended} samples, " \
+           f"expected {COMMITTED}" in out
+    assert not out_dir.exists()
+
+
+@pytest.mark.parametrize("cut", [1, 44])
+def test_main_refuses_a_detune_wav_cut_short_of_the_reference_length(monkeypatch, tmp_path, capsys, cut):
+    pcm = _committed_detune()[:COMMITTED - cut]
+    code, out, out_dir = _detune_precondition(monkeypatch, tmp_path, capsys, pcm)
+    assert code == 2, out[-400:]
+    assert f"REFUSED: committed detune-diagnostic audio holds {COMMITTED - cut} samples, " \
+           f"expected {COMMITTED}" in out
+    assert not out_dir.exists()
+
+
+def _format_defect(name):
+    pcm = _committed_detune()
+    if name == "float32":
+        return pcm.astype(np.float32), SR
+    if name == "44100hz":
+        return pcm, 44100
+    return np.stack([pcm, pcm], 1), SR        # stereo: the frame count still equals n_ref
+
+
+@pytest.mark.parametrize("name, signature", [
+    ("float32", "format differs (rate 48000, float32, 1 channel(s))"),
+    ("44100hz", "format differs (rate 44100, int16, 1 channel(s))"),
+    ("stereo", "format differs (rate 48000, int16, 2 channel(s))")], ids=["float32", "44100hz", "stereo"])
+def test_main_refuses_a_detune_wav_in_the_wrong_format(monkeypatch, tmp_path, capsys, name, signature):
+    # only the model WAV's format was checked; pcm_sha casts anything to int16
+    # and never sees the rate, so both of the first two passed the old precondition
+    code, out, out_dir = _detune_precondition(monkeypatch, tmp_path, capsys, *_format_defect(name))
+    assert code == 2, out[-400:]
+    assert f"REFUSED: committed detune-diagnostic audio {signature}" in out
+    assert not out_dir.exists()
+
+
+def test_a_detune_wav_cut_and_padded_back_passes_the_format_and_length_guards_and_fails_the_hash(monkeypatch,
+                                                                                                 tmp_path, capsys):
+    # Rule 8, recorded rather than closed (the pad-back class #2038 records):
+    # the length guard is satisfied by a pad-back; only the byte comparison
+    # refuses it
+    pcm = _committed_detune()
+    code, out, out_dir = _detune_precondition(monkeypatch, tmp_path, capsys,
+                                              np.concatenate([pcm[44:], np.zeros(44, np.int16)]))
+    assert code == 2 and "REFUSED: detune-diagnostic render does not reproduce its committed audio" in out
+    assert not out_dir.exists()
+
+
+def test_the_untouched_committed_audio_passes_both_preconditions_with_real_renders(monkeypatch, tmp_path):
+    # the control: the shipped files at the shipped paths and the real renders;
+    # only the analysis that follows the preconditions is cut off
+    calls, real = [], d.render
+
+    def render(patch, osc2_phase=0, mix=None):
+        calls.append(1)
+        if len(calls) > 2:
+            raise _PastPrecondition
+        return real(patch, osc2_phase, mix)
+
+    monkeypatch.setattr(d, "render", render)
+    monkeypatch.setattr(d, "OUT", tmp_path / "out")
+    with pytest.raises(_PastPrecondition):
+        d._run()
+    assert not (tmp_path / "out").exists()
+
+
 def test_committed_report_reproduces_from_frozen_audio_without_rendering():
     """The frozen-audio half of report.json: reference phase rows, free-running
     and reset errors, and the reference partial table."""
