@@ -633,6 +633,126 @@ def test_summarise_refuses_a_result_whose_own_controls_did_not_pass():
         lt.summarise({"windows": {}, "skirt_baseline": {}})       # absent, not merely false
 
 
+# `summarise` reads five numbers it does not compute: the skirt baseline's min,
+# max and median, and the shipped and candidate rho. A NaN compares with
+# nothing, so a NaN baseline top had every 808 FAIL to clear it -- the row
+# printed 0/10 where the scorecard quotes 10/10 -- and a NaN in any of the
+# other four printed as `nan` in its column, all with exit 0 (#2110). REFUSED
+# now, naming window, band, depth and the field. `None` is not that: it is a
+# depth that record refused, and it keeps its place in the row.
+BASELINE_SITES = [  # (band, depth, aggregate) in `skirt_baseline`
+    pytest.param("M", "-10", "max", id="max"),
+    pytest.param("M", "-10", "min", id="min"),
+    pytest.param("M", "-10", "median", id="median"),
+    pytest.param("Mn", "-5", "max", id="other-band-depth"),
+]
+RENDER_SITES = [  # (window, band, depth, whose rho)
+    pytest.param("2.0s", "M", "-10", "shipped", id="shipped"),
+    pytest.param("2.0s", "M", "-10", "candidate", id="candidate"),
+    pytest.param("3.5s", "Mn", "-5", "shipped", id="other-window-shipped"),
+    pytest.param("3.5s", "Mn", "-5", "candidate", id="other-window-candidate"),
+]
+NON_FINITE = [float("nan"), float("inf"), -float("inf")]
+
+
+def _replaced(wname, band, depth, who, value):
+    """The committed result file with ONE of the five fields `summarise` reads
+    set to `value`. `who` is the skirt baseline's `min` / `max` / `median`, or
+    `shipped` / `candidate` for that render's rho in window `wname`."""
+    res = json.loads(RESULT.read_text())
+    if who in ("min", "max", "median"):
+        res["skirt_baseline"][f"{band}_{depth}"][who] = value
+    else:
+        res["windows"][wname][who]["rho"][band][depth] = value
+    return res
+
+
+def _committed():
+    if not RESULT.is_file():
+        pytest.skip(f"{RESULT} is not present")
+    return json.loads(RESULT.read_text())
+
+
+@pytest.mark.parametrize("band, depth, agg", BASELINE_SITES)
+@pytest.mark.parametrize("bad", NON_FINITE, ids=["nan", "inf", "-inf"])
+def test_a_non_finite_skirt_baseline_aggregate_is_refused_naming_where_it_sits(band, depth, agg, bad):
+    """Red before the repair: `summarise` answered. With `max` replaced the
+    2.0 s M(-10) row read `0.943-nan (0.970) ... 0/10`; with `min` or `median`
+    replaced it printed `nan` in the baseline column, exit 0."""
+    res = _replaced(None, band, depth, agg, bad)
+    with pytest.raises(lt.Refused) as e:
+        lt.summarise(res)
+    msg = str(e.value)
+    # The baseline is per band and depth, not per window, so the refusal
+    # names the FIRST window that reads it.
+    assert msg.startswith(f"window {next(iter(res['windows']))}:"), msg
+    assert f"skirt_baseline {band}_{depth} {agg}" in msg, msg
+    assert repr(bad) in msg, msg
+
+
+@pytest.mark.parametrize("wname, band, depth, who", RENDER_SITES)
+@pytest.mark.parametrize("bad", NON_FINITE, ids=["nan", "inf", "-inf"])
+def test_a_non_finite_render_rho_is_refused_naming_where_it_sits(wname, band, depth, who, bad):
+    """Red before the repair: the render's column printed `nan` (or `inf`)
+    and the row still printed, exit 0."""
+    with pytest.raises(lt.Refused) as e:
+        lt.summarise(_replaced(wname, band, depth, who, bad))
+    msg = str(e.value)
+    assert msg.startswith(f"window {wname}:"), msg
+    assert f"{who} rho_{band}({depth})" in msg, msg
+    assert repr(bad) in msg, msg
+
+
+def test_the_committed_row_carries_the_baseline_and_renders_the_scorecard_quotes():
+    """The control for everything here, green before and after the repair: the
+    five fields `summarise` reads without computing, off the committed file,
+    for the 2.0 s M(-10) row the issue reproduced on. They print as
+    `0.943-1.017 (0.970) 0.871 0.884`."""
+    row = lt.summarise(_committed())["windows"]["2.0s"]["rows"]["M-10"]
+    assert (row["baseline_min"], row["baseline_max"], row["baseline_median"]) == (0.9426, 1.0172, 0.9704), row
+    assert (row["shipped"], row["candidate"]) == (0.8709, 0.8843), row
+
+
+@pytest.mark.parametrize("who", ["shipped", "candidate"])
+def test_a_depth_a_render_refused_is_none_and_keeps_its_place_in_the_row(who):
+    """The guard is for non-finite NUMBERS and must not take `None` with it.
+    `None` is how `measure` reports a depth that record refused, and the
+    committed file's shipped and candidate rho ARE None at -15 and deeper in
+    the 1.5 s window; a guard that refused None would refuse a legitimate
+    file the first time a short record refused -5 or -10."""
+    assert _committed()["windows"]["1.5s"][who]["rho"]["M"]["-15"] is None     # the premise
+    row = lt.summarise(_replaced("2.0s", "M", "-10", who, None))["windows"]["2.0s"]["rows"]["M-10"]
+    assert row[who] is None
+
+
+def test_a_candidate_that_refused_wholesale_still_summarises():
+    """`main` writes `{"refused": ...}` for a candidate that will not
+    calibrate; its column is None in every row and the file is not refused."""
+    res = _committed()
+    for w in res["windows"].values():
+        w["candidate"] = {"refused": "calibration refused"}
+    rows = lt.summarise(res)["windows"]["2.0s"]["rows"]
+    assert rows and {r["candidate"] for r in rows.values()} == {None}
+
+
+@pytest.mark.parametrize("args", [
+    pytest.param((None, "M", "-10", "max"), id="baseline-max-prints-0-of-10"),
+    pytest.param(("2.0s", "M", "-10", "shipped"), id="shipped-prints-nan"),
+])
+def test_report_refuses_the_file_rather_than_printing_a_nan_row(tmp_path, capsys, args):
+    """The path the issue measured: the committed file with one field NaN,
+    written by `json.dumps` (which emits the bare `NaN` token `json.loads`
+    accepts), through `--report`. Red before the repair: the first case
+    printed the 2.0 s M(-10) row `... 0.943-nan (0.970) ... 0/10`, the second
+    printed `nan` in the shipped column, and both exited 0."""
+    path = tmp_path / "one-field-nan.json"
+    path.write_text(json.dumps(_replaced(*args, float("nan"))))
+    rc = lt.main(["--report", str(path)])
+    printed = capsys.readouterr().out
+    assert printed.startswith("REFUSED:"), printed
+    assert rc == lt.REFUSED == 2, (rc, printed)
+
+
 def test_the_committed_result_file_is_summarisable_and_says_what_the_scorecard_says():
     """The scorecard's headline numbers, read back out of the committed JSON by
     the same function that produced them. If a later run changes them, this fails
