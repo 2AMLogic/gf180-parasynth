@@ -9,6 +9,7 @@ import hashlib
 import json
 import math
 from pathlib import Path
+import re
 import numpy as np
 from scipy.io import wavfile
 import mono_m5a_score as lead
@@ -345,6 +346,32 @@ def required_metrics(measured):
             "bass level": props["Gain"]}
 
 
+#: What a record's `source_commit` may be: the lowercase hex object name that
+#: `provenance.source_commit` writes (`rev-parse --short`), abbreviated or
+#: full. Hex cannot begin with `-`, so git never reads it as an option.
+_SOURCE_COMMIT = re.compile(r"[0-9a-f]{4,40}")
+
+
+def resolve_commit(value):
+    """The full object ID a record's `source_commit` names, or `Refused`.
+
+    The value sits in git's object position, where a leading `-` is an
+    option: `git diff --exit-code --output=PATH -- model audition` truncates
+    PATH and exits 0 (#2082, #2104; that input is the committed control
+    `test_control_recorded_option_truncates_a_file_and_exits_zero`). So the
+    form is checked first, then the name is resolved to the one commit it
+    names -- an abbreviation naming nothing, or two objects, is refused -- and
+    only the resolved ID is handed on."""
+    if not isinstance(value, str) or not _SOURCE_COMMIT.fullmatch(value):
+        raise Refused(f"record source_commit is not a hex object name: {value!r}")
+    import subprocess
+    resolved = subprocess.run(["git", "rev-parse", "--verify", "-q", f"{value}^{{commit}}"],
+                              cwd=ROOT, capture_output=True, text=True)
+    if resolved.returncode != 0:
+        raise Refused(f"record source_commit names no single commit: {value!r}")
+    return resolved.stdout.strip()
+
+
 def load_model_cache(record, patch, engine):
     """Reanalyse a hash-bound model render only while its DSP tree is unchanged."""
     import subprocess
@@ -364,7 +391,8 @@ def load_model_cache(record, patch, engine):
         if rel.startswith(("model/", "audition/")):
             if digest.removeprefix("sha256:") not in (sha(ROOT / rel), sha(ROOT / rel)[:16]):
                 raise Refused(f"cached model input differs: {rel}")
-    changed = subprocess.run(["git", "diff", "--exit-code", record["source_commit"], "--", "model", "audition"],
+    commit = resolve_commit(record["source_commit"])
+    changed = subprocess.run(["git", "diff", "--exit-code", commit, "--", "model", "audition"],
                              cwd=ROOT, capture_output=True, text=True)
     if changed.returncode != 0:
         raise Refused("cached model DSP sources differ or cannot be checked")
