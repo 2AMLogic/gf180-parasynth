@@ -177,6 +177,65 @@ def load_json_refused(path, what: str) -> dict:
             f"re-seeds it") from e
 
 
+def require_keys(record, required, what: str, *, refused: Callable[[str], Exception]) -> None:
+    """REFUSE a record that parses but cannot be read: not a JSON object, or
+    missing -- or carrying `null` for -- any key in `required` (#1604).
+
+    `load_json_refused` refuses a record it cannot PARSE. This refuses one it
+    can parse but cannot READ. `record["takes"]` on `{"state": "CAPTURED"}`
+    is a `KeyError`, which a `main()` that catches only its own `Refused`
+    renders as a traceback and exit 1 -- FAIL, "the comparison ran and
+    disagreed" -- where `tools/exit_contract.py` says an unmet precondition
+    is exit 2 and nothing was measured. The traceback also reads as a bug in
+    the reader rather than as a statement about the record.
+
+    `refused` is the CALLER'S own `Refused` class, so what is raised here is
+    what its `main()` already catches and reports (refusal.py: the name at
+    the raise and catch sites is deliberate and greppable). It is
+    keyword-only with no default on purpose: a default of this module's
+    `Refused` would raise a class the caller's handler does not catch, which
+    is the traceback this function exists to replace, reintroduced without a
+    sound. Any class taking one message string qualifies, and every
+    `Refused` in the tree is one.
+
+    All three of these are refusals rather than a pass:
+
+      * the record is not a JSON object (`5`, `null`, `[]`). Checked here
+        because `key not in record` cannot answer it -- on a list that is
+        merely true and would read as a missing key; on a number, a
+        `TypeError`;
+      * a required key is absent;
+      * a required key is present but `null`. Every reader that subscripts a
+        record dereferences what it finds (`record["takes"].items()`), and
+        `None` there is the same traceback as no key. A key whose `null` is a
+        VALUE -- `measurement()`'s `value=None` is an explicit refusal -- must
+        not be listed in `required`: read it with `.get()` and say what the
+        `null` means.
+
+    Names every offending key, not only the first (as `validate_measurement`
+    does), so a record is not regenerated once per key. A bare string in
+    `required` is one key, not an iterable of characters.
+    """
+    if isinstance(required, str):
+        required = (required,)
+    if not isinstance(record, dict):
+        kind = "null" if record is None else f"a JSON {type(record).__name__}"
+        raise refused(f"{what} is {kind}, not a JSON object -- it carries no keys at "
+                      f"all, so none of the required ones can be read: the wrong file, "
+                      f"or a partial write")
+    missing = [k for k in required if k not in record]
+    null = [k for k in required if k in record and record[k] is None]
+    stated = []
+    if missing:
+        stated.append(f"is missing required key(s) {', '.join(map(repr, missing))}")
+    if null:
+        stated.append(f"carries null for required key(s) {', '.join(map(repr, null))}")
+    if stated:
+        raise refused(f"{what} {' and '.join(stated)} -- a partial record is not a result: "
+                      f"regenerate it with the tool that writes it rather than add the "
+                      f"key by hand")
+
+
 def _single_path_component(label: str, value) -> str:
     """REFUSE a value that is about to become one directory name under `runs/`
     or `jobs/` but is not a single path component.

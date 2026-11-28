@@ -16,6 +16,11 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 import run_case
 import scorecard
+import i2s_transcript
+
+# The question that is this tool's own; whether the transcript is one clean,
+# un-injected PASS from a named simulator is `i2s_transcript`'s.
+M5A_SPI_I2S_VERIFIED = "M5A path verified from SPI pins through the production voice and I2S pins"
 
 
 def main() -> int:
@@ -50,7 +55,15 @@ def main() -> int:
         print("M5A SPI-to-I2S evidence is missing or has changed", file=sys.stderr)
         return 2
     text = report.read_text()
-    if "M5A path verified from SPI pins through the production voice and I2S pins" not in text:
+    # `run_case` records no decoded-WAV digest; a record from the integrated
+    # scorer does. The transcript is bound to the WAV whenever one is named.
+    decoded = record["provenance"]["inputs"].get("decoded:I2S")
+    try:
+        i2s_transcript.validate_clean_pass(text, wav_sha256=decoded.removeprefix("sha256:") if decoded else None)
+    except ValueError as e:
+        print(f"M5A SPI-to-I2S report is not one clean PASS: {e}", file=sys.stderr)
+        return 2
+    if M5A_SPI_I2S_VERIFIED not in text:
         print("M5A SPI-to-I2S report lacks the expected end-to-end pass", file=sys.stderr)
         return 2
     print(f"M5A sound measurement is valid ({verdict['state']}); all seven metrics and "

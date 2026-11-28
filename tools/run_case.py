@@ -178,6 +178,7 @@ import audio_measure as am                                           # noqa: E40
 from finite_number import is_finite_number                           # noqa: E402
 import drum_verify as dv                                             # noqa: E402
 import holdout                                                       # noqa: E402
+import i2s_transcript                                                # noqa: E402
 import refprofile as rp                                              # noqa: E402
 import mono_m5a_score as mono_m5a                                    # noqa: E402
 import provenance                                                    # noqa: E402
@@ -202,6 +203,14 @@ REFS_ALIAS_ENV = "TR808_REFS"
 # corpus then fails them (REFUSED) instead of skipping, because a required
 # job that goes green through skips has checked nothing.
 REFS_REQUIRED_ENV = "GF180_REQUIRE_TR808_REFS"
+
+
+def refs_child_env(path) -> dict:
+    """Environment overlay that points a CHILD process's configured_refs() at
+    `path`. The variable names stay owned here (#522); the alias is blanked
+    (falsy to configured_refs) so an inherited one cannot make the child
+    REFUSE on disagreement."""
+    return {REFS_ENV: str(path), REFS_ALIAS_ENV: ""}
 
 
 def configured_refs() -> pathlib.Path:
@@ -3262,6 +3271,11 @@ worktree_state = provenance.worktree_state
 _file_sha = provenance.file_sha
 _now = provenance.now
 
+# The bench prints this, whole, on the exit-0 path of an M5A run and nowhere
+# else. It is the question that is the M5A runner's own; whether the transcript
+# is one clean, un-injected PASS from a named simulator is `i2s_transcript`'s.
+M5A_SPI_I2S_VERIFIED = "M5A path verified from SPI pins through the production voice and I2S pins"
+
 
 def mono_reference_pulse_mapping(manifest: dict) -> str:
     """Summarize only waveform labels the reference actually classified."""
@@ -4270,9 +4284,21 @@ def _measure_case(case: dict, refdir: pathlib.Path, inject: str = "",
                     cwd=ROOT, capture_output=True, text=True, timeout=3600)
                 report_path.parent.mkdir(parents=True, exist_ok=True)
                 report_path.write_text(smoke.stdout + smoke.stderr)
-                if (smoke.returncode != 0 or "PASS --" not in report_path.read_text()
-                        or "M5A path verified" not in report_path.read_text()):
-                    raise mono_m5a.Refused(f"SPI-to-I2S M5A smoke did not pass; see {report_path.relative_to(ROOT)}")
+                text = report_path.read_text()
+                where = report_path.relative_to(ROOT)
+                if smoke.returncode != 0:
+                    raise mono_m5a.Refused(f"SPI-to-I2S M5A smoke did not pass; see {where}")
+                wav_path = smoke_dir / "m5a-i2s.wav"
+                if not wav_path.is_file():
+                    raise mono_m5a.Refused(f"SPI-to-I2S M5A smoke wrote no decoded WAV; see {where}")
+                # The transcript must be ONE clean PASS and must digest the WAV
+                # the bench wrote beside it: a control run, a run that also said
+                # `FAIL --` (#1376) or a transcript from another WAV is not evidence.
+                i2s_transcript.validate_clean_pass(
+                    text, wav_sha256=hashlib.sha256(wav_path.read_bytes()).hexdigest(),
+                    refuse=mono_m5a.Refused, prefix=f"SPI-to-I2S M5A smoke ({where}): ")
+                if M5A_SPI_I2S_VERIFIED not in text:
+                    raise mono_m5a.Refused(f"SPI-to-I2S M5A smoke did not verify the M5A path; see {where}")
                 smoke_sha = hashlib.sha256(report_path.read_bytes()).hexdigest()
             profile = mono_m5a.MANIFESTS[cid]
             manifest = json.loads(profile.read_text())

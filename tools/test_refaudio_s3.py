@@ -80,6 +80,64 @@ def test_unknown_archive_and_path_traversal_are_refused(env):
     assert s3.main([ARCH, "/abs.wav"]) == s3.REFUSED
 
 
+# --- #1697: a member whose destination is another member's temporary path -------
+#
+# This route extracts through `refaudio_local.extract()`, so it has the same
+# `.part` collision: a member named `a/b.part` beside `a/b` is FETCHED, then
+# truncated and renamed away, and the run says `2 fetched, 0 failed`. Typed
+# members are checked before the download. Under `--prefix` the typed arguments
+# are folder prefixes, so only the expanded set is the member list, and that is
+# checked as soon as it is known.
+
+B, B_PART = b"b", b"b.part"
+
+
+def _named_zip(*members: tuple[str, bytes]) -> bytes:
+    b = io.BytesIO()
+    with zipfile.ZipFile(b, "w") as z:
+        for name, payload in members:
+            z.writestr(name, payload)
+    return b.getvalue()
+
+
+@pytest.mark.parametrize("asked", [["a/b.part", "a/b"], ["a/b", "a/b.part"]],
+                         ids=["part-first", "part-last"])
+def test_a_member_named_like_anothers_part_file_is_refused(env, monkeypatch, capsys, asked):
+    """START RED (#1697): against 69ce038d both orders exited 0; the first left
+    only `a/b` on disk. Refused before the archive is fetched, in either order."""
+    calls = _fake_aws(monkeypatch, _named_zip(("a/b", B), ("a/b.part", B_PART)))
+    assert s3.main([ARCH, *asked]) == s3.REFUSED
+    lines = capsys.readouterr().out.splitlines()
+    assert len(lines) == 1 and lines[0].startswith("REFUSED  "), lines
+    assert "'a/b.part'" in lines[0] and "'a/b'" in lines[0], lines[0]
+    assert calls == [], "REFUSED must not have fetched the archive"
+    assert not s3.CACHE.exists()
+
+
+def test_prefix_whose_members_are_the_pair_is_refused(env, monkeypatch, capsys):
+    """`--prefix` spells its members from the archive itself, sorted, so it can
+    only ask the winning order. The set is refused all the same, as it is on the
+    local route, nothing is extracted and the archive is not left behind."""
+    assert s3.rl.indexed_sizes(ARCH) is None, \
+        "ARCH gained a committed index: this case would now read it, not the zip"
+    _fake_aws(monkeypatch, _named_zip(("a/b", B), ("a/b.part", B_PART)))
+    assert s3.main(["--prefix", ARCH, "a/"]) == s3.REFUSED
+    lines = capsys.readouterr().out.splitlines()
+    assert len(lines) == 1 and lines[0].startswith("REFUSED  "), lines
+    assert "'a/b.part'" in lines[0] and "'a/b'" in lines[0], lines[0]
+    assert not (s3.CACHE / ARCH[:-4]).exists()
+    assert not (s3.ARCHIVES / ARCH).exists()
+
+
+def test_members_that_merely_end_in_part_are_fetched(env, monkeypatch):
+    """The guard's over-refusal input (rule 8): `a/c.part` is nobody's
+    temporary path. Refusing by suffix alone would fail this."""
+    _fake_aws(monkeypatch, _named_zip(("a/b", B), ("a/c.part", B_PART)))
+    assert s3.main([ARCH, "a/b", "a/c.part"]) == s3.FETCHED
+    got = s3.CACHE / ARCH[:-4]
+    assert (got / "a/b").read_bytes() == B and (got / "a/c.part").read_bytes() == B_PART
+
+
 def test_missing_aws_cli_is_refused(env, monkeypatch):
     monkeypatch.setattr(s3.shutil, "which", lambda n: None)
     assert s3.main([ARCH, MEMBER]) == s3.REFUSED
