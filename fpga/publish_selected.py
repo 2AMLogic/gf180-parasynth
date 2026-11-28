@@ -84,7 +84,8 @@ def publish(artifact: Path, output: Path, workflow_url: str, *, historical=False
     commit = report["source_commit"]
     changed_sources = []
     for name, digest in report["source_sha256"].items():
-        saved = subprocess.check_output(["git", "show", f"{commit}:{name}"], cwd=ROOT)
+        saved = subprocess.check_output(["git", "show", f"{commit}:{name}"], cwd=ROOT,
+                                        stderr=subprocess.PIPE)
         if hashlib.sha256(saved).hexdigest() != digest:
             raise Refused(f"build source differs: {name}")
         if not (ROOT / name).is_file() or sha256(ROOT / name) != digest:
@@ -96,18 +97,23 @@ def publish(artifact: Path, output: Path, workflow_url: str, *, historical=False
     inputs = dict(report["source_sha256"])
     for path in [ROOT / "fpga/boards/ulx3s.lpf", *sorted((ROOT / "rtl-sketch").glob("*.hex"))]:
         name = str(path.relative_to(ROOT))
-        saved = subprocess.check_output(["git", "show", f"{commit}:{name}"], cwd=ROOT)
+        saved = subprocess.check_output(["git", "show", f"{commit}:{name}"], cwd=ROOT,
+                                        stderr=subprocess.PIPE)
         if path.read_bytes() != saved and not historical:
             raise Refused(f"build input differs: {name}")
         inputs[name] = hashlib.sha256(saved).hexdigest()
     if historical:
         simulation = report["simulation_evidence"]
-        transcript = subprocess.check_output(["git", "show", f"{commit}:{simulation['transcript']}"], cwd=ROOT)
+        transcript = subprocess.check_output(
+            ["git", "show", f"{commit}:{simulation['transcript']}"],
+            cwd=ROOT, stderr=subprocess.PIPE)
         if hashlib.sha256(transcript).hexdigest() != simulation["sha256"]:
             raise Refused("historical simulation transcript differs")
         for name, digest in inputs.items():
             if name.startswith("rtl-sketch/"):
-                simulated = subprocess.check_output(["git", "show", f"{simulation['commit']}:{name}"], cwd=ROOT)
+                simulated = subprocess.check_output(
+                    ["git", "show", f"{simulation['commit']}:{name}"],
+                    cwd=ROOT, stderr=subprocess.PIPE)
                 if hashlib.sha256(simulated).hexdigest() != digest:
                     raise Refused(f"historical core differs from simulation: {name}")
     else:
@@ -169,6 +175,9 @@ if __name__ == "__main__":
         result = publish(args.artifact, args.out, args.workflow_url, historical=args.historical)
     except Refused as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
+        raise SystemExit(exit_contract.REFUSED)
+    except subprocess.CalledProcessError as exc:
+        print(f"REFUSED: {build_selected.child_failure(exc)}", file=sys.stderr)
         raise SystemExit(exit_contract.REFUSED)
     print(json.dumps(result, indent=2))
     raise SystemExit(0 if result["bitstream_qualified"] else 2)

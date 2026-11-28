@@ -205,6 +205,63 @@ def test_live_midi_known_state_is_the_frozen_target():
     assert tuple(ws[:2]) == r1c.PREAMBLE and r1c.check_init(ws, kit_expected=True) == []
 
 
+def _presets_only_drift(tmp_path, monkeypatch):
+    """uart_host.R1_KIT pointed at a copy whose ONLY drift is the presets table
+    (presets["LT"][0][1] ^= 1): `writes` and `sha256` are untouched, so both
+    kit-hash guards (frozen_kit, kit_identity) pass and the drift reaches the
+    session construction (#1652)."""
+    rec = json.loads(uh.R1_KIT.read_text())
+    rec["presets"]["LT"][0][1] ^= 1
+    p = tmp_path / "r1-kit.json"
+    p.write_text(json.dumps(rec))
+    monkeypatch.setattr(uh, "R1_KIT", p)
+    return p
+
+
+def test_control_a_presets_only_drift_refuses_live_midi_init(tmp_path, monkeypatch):
+    """#1652: MidiSession.__init__ reads the frozen presets table after the kit,
+    and KitRefused (a RuntimeError) is not r1_candidate.Refused. The construction
+    converts it: REFUSED with the host's reason, never a traceback."""
+    _presets_only_drift(tmp_path, monkeypatch)
+    assert r1c.kit_identity()["sha256"] == r1c.KIT_R14_SHA256, "the drift must stay presets-only"
+    with pytest.raises(r1c.Refused, match="frozen sound presets"):
+        r1c.live_midi_init()
+
+
+def test_control_a_presets_only_drift_refuses_the_cli_with_2(tmp_path, monkeypatch):
+    """#1652: the CLI's contract is BOUND 0 / STALE 1 / REFUSED 2. A drifted
+    sound table is the same precondition as a drifted kit and is REFUSED on
+    stdout with the host's reason."""
+    _presets_only_drift(tmp_path, monkeypatch)
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        rc = r1c.main(["check"])
+    assert rc == 2, out.getvalue()
+    assert "REFUSED" in out.getvalue() and "frozen sound presets" in out.getvalue()
+
+
+def test_control_an_unrelated_error_at_the_session_read_is_not_a_refusal(monkeypatch):
+    """#1652 injected-bug control: the guard is `except dx.KitRefused`, never
+    `except RuntimeError` / `except Exception` (KitRefused IS a RuntimeError).
+    An unrelated error raised at the same construction must propagate out of
+    the CLI (exit 1 by traceback as a script), not become REFUSED 2. uart_host
+    and release_manifest build no session, so r1_candidate.py's live_midi_init
+    is the only MidiSession() on the check path."""
+    import midi_session as ms
+
+    class _NotAKitRefusal(RuntimeError):
+        pass
+
+    def boom(*a, **k):
+        raise _NotAKitRefusal("injected: not a kit refusal")
+
+    monkeypatch.setattr(ms, "MidiSession", boom)
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out), pytest.raises(_NotAKitRefusal, match="injected"):
+        r1c.main(["check"])
+    assert "REFUSED" not in out.getvalue()
+
+
 # ---- the committed record binds, and its controls ----------------------------
 def test_committed_r1_record_is_bound():
     verdict, detail = r1c.check()
