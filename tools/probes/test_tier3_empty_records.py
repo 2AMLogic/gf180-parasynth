@@ -145,7 +145,10 @@ def test_census_reconciles_against_known_tier3_set():
                        r"|problems|defects|violations)\b", re.M)
     handled = {"tools/probes/verify_109_claims.py",
                "tools/probes/estimator_domains.py",
-               "tools/probes/estimator_ground_truth.py"}
+               "tools/probes/estimator_ground_truth.py",
+               # false positive: `if bad in pair:` -- `bad` is a parametrized loop
+               # variable there, not a failure list
+               "tools/test_audio_distance_floor_refusal.py"}
     gates = ["Makefile"] + [str(p.relative_to(ROOT))
                             for p in sorted((ROOT / ".github/workflows").glob("*.yml"))]
     texts = {g: (ROOT / g).read_text(errors="replace") for g in gates}
@@ -317,8 +320,9 @@ def test_unreachable_refusals_and_constant_populations_hold(tmp_path, monkeypatc
 
     # tools/measure_m5_operating_level.py: bad-drive guard rejects out-of-budget drives
     import measure_m5_operating_level as mmol
-    with pytest.raises(SystemExit, match="REFUSED"):
-        mmol.main(["--out", str(tmp_path / "m5.json"), "--drives", "99.0"])
+    # main() catches refusal.Refused and returns exit_contract.REFUSED (2); only the
+    # __main__ wrapper raises SystemExit.
+    assert mmol.main(["--out", str(tmp_path / "m5.json"), "--drives", "99.0"]) == 2
 
     # tools/measure_mono_case.py: 12-harmonic range check
     import measure_mono_case as mmc
