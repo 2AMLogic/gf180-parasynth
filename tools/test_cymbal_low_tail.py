@@ -19,19 +19,26 @@ The module under test adds a QUALIFIED 1-2.5 kHz decay to the cymbal work
     transformation asserted blind stays blind;
   * one of them, `FORWARD_INTEGRAL`, does it by ANSWERING a wrong time: it
     refused for its first two months and the refusal was credited as a catch,
-    so `edt-known` had no live control (#1869).
+    so `edt-known` had no live control (#1869);
+  * a render that REFUSES -- non-finite, or shorter than the window -- reaches
+    the process exit status as REFUSED, never as an exit-1 traceback, and an
+    implementation error at the same boundary is not relabelled as one.
 """
 import json
 import math
 import pathlib
+import subprocess
 import sys
 
 import numpy as np
 import pytest
+from scipy.io import wavfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import cymbal_low_tail as lt  # noqa: E402
 import cymbal_bands as cb  # noqa: E402
+import exit_contract  # noqa: E402
+import refusal  # noqa: E402
 
 SR = lt.SR
 
@@ -721,3 +728,145 @@ def test_the_committed_result_files_noise_floor_control_excludes_the_floor_artef
     # And the gap it was meant to explain is 25x larger than what it moved.
     assert n["gap_before"] > 0.2, n
     assert abs(n["moved_toward_other_by"]) < 0.02 * n["gap_before"], n
+
+
+# --------------------------------------------------------------------------
+# the exit contract (#1890): a refusing RENDER is REFUSED, never a traceback
+# --------------------------------------------------------------------------
+# THE DEFECT, AS MEASURED RED on origin/main @ e2d1bae7 (2026-11-28): with
+# `run_case.render_drum_solo` returning an all-NaN record and `main([])` run as
+# a process against the real Fischer corpus, the process exited 1 with a
+# `preparation_contract.Refused` traceback raised in `run_case.prepare` out of
+# `shipped`. Inf read the same. A FINITE render too short for the window also
+# exited 1, with this module's OWN `cymbal_low_tail.Refused` out of `_trim`:
+# `main` had handlers only at `--report`, `--candidate` and per record in
+# `fischer`, so every other refusal escaped as FAIL (tools/exit_contract.py).
+# `--check` reaches `rc.prepare` only inside `synth()`, whose every argument is
+# a code constant: no accepted input makes it refuse, so it is not driven here.
+RENDER_SR = 48_000
+RENDER_N = 172_800                      # the 3.6 s the real CY render returns
+
+
+def _render(kind):
+    """The record `render_drum_solo("CY")` is replaced with, at the boundary."""
+    if kind == "NaN":
+        return np.full(RENDER_N, np.nan)
+    if kind == "Inf":
+        return np.full(RENDER_N, np.inf)
+    n = RENDER_SR                        # 1.0 s: shorter than the first window
+    y = np.zeros(n)
+    y[4800:] = (np.random.default_rng(1890).standard_normal(n - 4800)
+                * np.exp(-np.arange(n - 4800) / 4800.0))
+    return y
+
+
+REFUSING_RENDER = [
+    ("NaN", "shipped CY holds 172800 non-finite samples of 172800 (172800 NaN, 0 Inf"),
+    ("Inf", "shipped CY holds 172800 non-finite samples of 172800 (0 NaN, 172800 Inf"),
+    ("short", "less than the 1.500 s common analysis window"),
+]
+
+
+def _a_synthetic_cy5025(path):
+    """A PCM16 stand-in for Fischer CY5025.WAV. NOT the 808's record, and
+    nothing below is asserted about it: it exists only so `fischer()` returns
+    through its own path. An ABSENT file is a different escape (#1793:
+    `cb._load` -> FileNotFoundError) and would turn this section red for a
+    reason that is not the one under test."""
+    sr, n = 44100, int(4.5 * 44100)
+    sig = np.zeros(n)
+    sig[4410:] = (np.random.default_rng(1890).standard_normal(n - 4410)
+                  * np.exp(-np.arange(n - 4410) / (0.3 * sr)))
+    wavfile.write(str(path), sr, np.round(sig * 20000).astype("<i2"))
+
+
+def _refs_with_a_cy5025(tmp_path):
+    (tmp_path / "refs" / "cy8").mkdir(parents=True)
+    _a_synthetic_cy5025(tmp_path / "refs" / "cy8" / "CY5025.WAV")
+    return tmp_path / "refs"
+
+
+def test_the_class_a_non_finite_record_escapes_prepare_in_is_a_sibling_of_this_modules():
+    """What the census called NonFiniteAudio does not leave `prepare` under
+    that name: `prepare` converts it to `preparation_contract.Refused`, which
+    shares only the base with this module's own `Refused` -- so no `except
+    Refused` written in this module can catch it."""
+    with pytest.raises(refusal.Refused, match="non-finite") as why:
+        lt.rc.prepare(np.full(8, np.nan), RENDER_SR, side="the probe")
+    assert type(why.value) is lt.rc.Refused
+    assert lt.rc.Refused is not lt.Refused and not issubclass(lt.rc.Refused, lt.Refused)
+    assert issubclass(lt.Refused, refusal.Refused)
+
+
+@pytest.mark.parametrize("kind, expected", REFUSING_RENDER, ids=[k for k, _ in REFUSING_RENDER])
+def test_a_refusing_shipped_render_is_refused_not_a_traceback(kind, expected, tmp_path, monkeypatch,
+                                                              capsys):
+    """The render refuses at the first window, BEFORE any window report is
+    printed or any result file is written, and the refusal names the record."""
+    refs = _refs_with_a_cy5025(tmp_path)
+    out = tmp_path / "result.json"
+    y = _render(kind)
+    monkeypatch.setattr(lt.rc, "render_drum_solo", lambda *a, **k: (y, RENDER_SR))
+    monkeypatch.setattr(lt, "check", lambda: (True, []))      # has its own tests; ~3 s a run
+    rc = lt.main(["--refs", str(refs), "--out", str(out)])
+    printed = capsys.readouterr().out
+    assert rc == exit_contract.REFUSED, printed[-700:]
+    assert "REFUSED:" in printed and expected in printed, printed[-700:]
+    assert "=== common analysis window" not in printed, \
+        "a refused run must not start a window report"
+    assert not out.exists(), "a refused run must not write a result file"
+
+
+def test_an_implementation_error_at_the_render_boundary_is_not_relabelled_a_refusal(
+        tmp_path, monkeypatch, capsys):
+    """Rule 8: the input that would defeat the handler is a widened one. An
+    AssertionError raised at the same boundary must still escape as itself."""
+    refs = _refs_with_a_cy5025(tmp_path)
+
+    def _bomb(*a, **k):
+        raise AssertionError("injected control: an implementation error, not a precondition")
+    monkeypatch.setattr(lt.rc, "render_drum_solo", _bomb)
+    monkeypatch.setattr(lt, "check", lambda: (True, []))
+    with pytest.raises(AssertionError, match="injected control"):
+        lt.main(["--refs", str(refs)])
+    assert "REFUSED:" not in capsys.readouterr().out
+
+
+def _as_a_process(tmp_path, render_source):
+    """The real module through the real interpreter, so what is asserted is the
+    exit status a batch runner reads rather than `main`'s return value, with
+    `run_case.render_drum_solo` replaced at the boundary the issue names."""
+    refs = _refs_with_a_cy5025(tmp_path)
+    out = tmp_path / "result.json"
+    driver = "\n".join([
+        "import runpy, sys",
+        "import numpy as np",
+        "import run_case as rc",
+        render_source,
+        f"sys.argv = ['cymbal_low_tail.py', '--refs', {str(refs)!r}, '--out', {str(out)!r}]",
+        "runpy.run_module('cymbal_low_tail', run_name='__main__')",
+    ])
+    p = subprocess.run([sys.executable, "-c", driver], capture_output=True, text=True,
+                       timeout=300, cwd=str(pathlib.Path(lt.__file__).resolve().parent))
+    return p, out
+
+
+def test_the_process_exit_status_of_a_non_finite_render_is_refused(tmp_path):
+    """Exit 2 alone would be satisfied by a misinvoked CLI (argparse also
+    exits 2), so the refusal's own line is pinned with it."""
+    src = f"rc.render_drum_solo = lambda *a, **k: (np.full({RENDER_N}, np.nan), {RENDER_SR})"
+    p, out = _as_a_process(tmp_path, src)
+    assert p.returncode == exit_contract.REFUSED, (p.returncode, p.stdout[-400:], p.stderr[-400:])
+    assert "REFUSED:" in p.stdout and "shipped CY holds" in p.stdout, p.stdout[-400:]
+    assert "Traceback" not in p.stderr, p.stderr[-400:]
+    assert not out.exists()
+
+
+def test_the_process_exit_status_of_an_implementation_error_is_still_1(tmp_path):
+    src = ("def _render(*a, **k):\n"
+           "    raise AssertionError('injected control: not a precondition')\n"
+           "rc.render_drum_solo = _render")
+    p, out = _as_a_process(tmp_path, src)
+    assert p.returncode == exit_contract.FAIL, (p.returncode, p.stderr[-400:])
+    assert "Traceback" in p.stderr and "AssertionError" in p.stderr, p.stderr[-400:]
+    assert "REFUSED:" not in p.stdout, p.stdout[-400:]

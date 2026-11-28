@@ -963,6 +963,20 @@ def _row(label, m) -> str:
 
 
 def main(argv=None) -> int:
+    try:
+        return _run(argv)
+    except refusal.Refused as e:
+        # The BASE class, not this module's sibling (#1160): `shipped` and
+        # `noise_floor_control` hand the render to run_case.prepare, whose
+        # Refused is preparation_contract.Refused, and nothing between there
+        # and here handles it -- so a non-finite render left as an exit-1
+        # traceback, a refusal rendered as FAIL. An unrelated exception still
+        # escapes as an execution error.
+        print(f"REFUSED: {e}")
+        return REFUSED
+
+
+def _run(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--refs", default=str(rc.configured_refs()))
     ap.add_argument("--out", type=pathlib.Path, default=None)
