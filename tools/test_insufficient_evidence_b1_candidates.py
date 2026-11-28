@@ -43,9 +43,10 @@ WHAT THE RUNS FOUND: 3 of 5 reachable, 2 not.
     one no constructor emits. No production change.
 
 WHAT WAS RUN AND DID NOT REACH IT
-  --drive 0.0, --cutoff 30, --cutoff 21600 --drive 6.15, --disable-polyblep
+  --drive 0.0, --cutoff 30 and --cutoff 30 --drive 0.0 --disable-polyblep
       on measure_m5a_signal_path.py: each REFUSED through `m5a.Refused`
-      (exit 2) or measured (exit 0)
+      (exit 2), by the handler that was always there (pinned below);
+      --cutoff 21600 --drive 6.15 measures (exit 0, the clean row)
   non-finite audio: `load_reference` refuses it before any estimator
       (pinned in test_mono_m5a_score.py, row "nan")
   f1_selected_path.py: clean, --level-sweep, both REF_PROFILE injects,
@@ -125,6 +126,12 @@ disagreed with what reading had predicted):
 The red-first run was therefore made three times before it was clean: 12 red
 (6 the defect, 6 this file), 7 red (6, 1), then 6; and the first green run
 came back 21 of 22 on item 6.
+
+The three `SIGNAL_EDGE` rows were added after the repair, when the runs
+behind "--drive 0.0, --cutoff 30" above existed only as hand runs. They are
+claims about behaviour the repair must leave alone, so they were run once
+against the pre-fix module (the same `_pre_fix` replay the control rows use)
+before being trusted: 3 passed there, as on the repaired tree.
 """
 from __future__ import annotations
 
@@ -666,3 +673,29 @@ def test_the_holdout_probe_at_its_boundary_cutoffs_never_reaches_the_raise(name,
     if code == exit_contract.FAIL:
         assert any(line[:15].strip() in ("corner", "lowband", "rolloff") and "REFUSED" in line
                    for line in lines), "exit 1 without a refused estimator row: " + p.stdout[-600:]
+
+
+SIGNAL_EDGE = (
+    ("drive-0-silent-ladder", ("--cutoff", "14073", "--drive", "0.0"),
+     "REFUSED: ladder MIDI 84 f0 refused: silent"),
+    ("cutoff-30-no-fundamental", ("--cutoff", "30", "--drive", "1.0"),
+     "REFUSED: ladder MIDI 84 f0 refused: no fundamental near 1046.5 Hz"),
+    ("cutoff-30-drive-0-polyblep-off", ("--cutoff", "30", "--drive", "0.0", "--disable-polyblep"),
+     "REFUSED: ladder MIDI 84 f0 refused: silent"),
+)
+
+
+@pytest.mark.parametrize(("name", "args", "line"), SIGNAL_EDGE, ids=[row[0] for row in SIGNAL_EDGE])
+def test_the_signal_path_probes_own_boundary_arguments_refuse_before_the_raise(name, args, line,
+                                                                               tmp_path, repo_out):
+    """No seam, committed reference. The extremes `measure_m5a_signal_path.py`
+    accepts -- drive 0, the lowest cutoff, PolyBLEP off -- leave the ladder
+    stage one `refine_f0` refuses, and `measure` has already made that a
+    `m5a.Refused`: exit 2 through the handler that was always there, before
+    any `harmonic_signature` call. The other boundary #1972 names, `--cutoff
+    21600 --drive 6.15`, is the clean row above."""
+    p = _run(_cli(SIGNAL, "", *args, "--out", OUT + "signal-path.json"), tmp_path)
+    out = p.stdout + p.stderr
+    assert p.returncode == exit_contract.REFUSED, (p.returncode, out[-600:])
+    assert p.stdout.splitlines()[-1].startswith(line), out[-600:]
+    assert "Traceback" not in out and "InsufficientEvidence" not in out, out[-600:]
