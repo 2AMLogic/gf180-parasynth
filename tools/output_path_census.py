@@ -254,10 +254,12 @@ class Scan:
                 self.aliases.setdefault((fn, target.id), []).append(value)
 
     @staticmethod
-    def mode(node) -> str:
-        """The `open` mode as a literal, else 'r' (a variable mode is not read)."""
-        if len(node.args) > 1 and isinstance(node.args[1], ast.Constant):
-            return str(node.args[1].value)
+    def mode(node, method: bool) -> str:
+        """The `open` mode as a literal, else 'r' (a variable mode is not
+        read).  `open(p, m)` takes it second; `p.open(m)` takes it first."""
+        index = 0 if method else 1
+        if len(node.args) > index and isinstance(node.args[index], ast.Constant):
+            return str(node.args[index].value)
         for kw in node.keywords:
             if kw.arg == "mode" and isinstance(kw.value, ast.Constant):
                 return str(kw.value.value)
@@ -267,8 +269,9 @@ class Scan:
         fn = self.enclosing(node)
         func = node.func
         name = dotted(func)
-        mode = self.mode(node)
-        if isinstance(func, ast.Attribute):
+        method = isinstance(func, ast.Attribute)
+        mode = self.mode(node, method)
+        if method:
             if func.attr == "mkdir":
                 deep = any(k.arg == "parents" and isinstance(k.value, ast.Constant)
                            and k.value.value is True for k in node.keywords)

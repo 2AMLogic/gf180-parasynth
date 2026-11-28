@@ -2,9 +2,10 @@
 
 A census can be wrong two ways: crying NOT-MADE (or UNKNOWN) at a tool that
 does make the directory, or calling MADE a write whose directory nothing
-makes.  The first happened five times while this tool was written, each found
-by reading its output against the code rather than by inspecting it, and each
-is pinned here with the shape that defeated it:
+makes.  The first happened eight times while this tool was written, each
+found by reading its output against the code, by one of the cases below, or
+-- twice -- by a second census disagreeing with it, and never by inspecting
+it; each is pinned here with the shape that defeated it:
 
   * `pathlib.Path` compared against the bare name `Path`, so the five-line
     sample itself was missed (caught by the tool's own self-check, which
@@ -18,7 +19,11 @@ is pinned here with the shape that defeated it:
     `verify_synth_top.py`) -- and `os.makedirs` itself not read as a mkdir;
   * a local bound twice in one function (`path = a.resume.parent / ...`, then
     `path = a.out / ...`), whose two candidates collapsed into one
-    (`tools/measure_mono_attack_context.py`).
+    (`tools/measure_mono_attack_context.py`);
+  * `with a.out.open("w")`, whose mode is the FIRST argument, read with the
+    builtin's `open(path, mode)` position and so as a read -- five sites
+    (`tools/dphase_floor_sweep.py`, three `tools/probes/*` sweeps) were
+    invisible until a second census, #2095's, listed them.
 
 Every case below is a few lines whose answer you can see without the tool.
 """
@@ -217,6 +222,20 @@ def test_a_write_through_a_parameter_nothing_supplies_is_counted_not_guessed():
                       "tools/sample.py")
     assert scanned.candidates == []
     assert [(fn.name, node.lineno) for fn, node in scanned.unresolved] == [("write_config", 2)]
+
+
+def test_a_path_opened_for_writing_is_a_write():
+    """`with a.out.open("w") as fh:` carries its mode FIRST.  Read as
+    `open(path, mode)`, it looked like a read and five sites vanished."""
+    (c,) = census("""
+        import argparse
+        ap = argparse.ArgumentParser()
+        ap.add_argument("--out")
+        a = ap.parse_args()
+        with a.out.open("w") as fh:
+            fh.write("done")
+    """)
+    assert (c.verdict, c.sink, c.root) == ("NOT-MADE", "open", "a.out")
 
 
 def test_the_self_check_refuses_when_a_detector_goes_blind(monkeypatch):
