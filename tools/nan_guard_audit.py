@@ -1128,7 +1128,7 @@ def aggregate_sites(sources: dict[str, str],
 #: the lines from cymbal_band_balance.py:736 and cymbal_tone_render.py:292 down.
 #:
 #:   12 REACHABLE, 10 keys     7 repaired here behind two refusals, 2 with a
-#:                             repair in flight on #1928, 3 filed as one follow-up
+#:                             repair in flight on #1928, 3 filed as #2081
 #:   42 UNREACHABLE, 36 keys   an integer, a literal beside a first-position
 #:                             value, a token grammar with no nan spelling, a
 #:                             guard that raises first, or a value nothing reads
@@ -1197,15 +1197,15 @@ AGGREGATE_VERDICTS: dict[tuple, tuple] = {
            ("`pairs` is the record's `diagnostics.events[*].attack_10_90_ms.{model,reference}`, a "
             "json.loads that refuses decode errors only -- the reader #2019 marked for this same "
             "function (L149). A NaN key is never the greatest, so that event stops being 'its own "
-            "worst event'. Filed with the follow-up.")),
+            "worst event'. Filed with the follow-up, #2081.")),
     ('tools/cymbal_low_tail.py', 'max', 'summarise', 'max(v, key=v.get)'):
         _v(REACHABLE,
-           "the `argmax` half of the entry above; same file, same reader, same follow-up."),
+           "the `argmax` half of the entry above; same file, same reader, same follow-up (#2081)."),
     ('tools/cymbal_low_tail.py', 'min', 'summarise', 'min(v, key=v.get)'):
         _v(REACHABLE,
            ("`v` is the result file's `windows.<w>.fischer.<k>.rho.<band>.<depth>`, a json.loads "
             "(L960) whose `is not None` test (L891) admits a NaN; a NaN key is never the least, so "
-            "`argmin` names another 808. Filed with the follow-up.")),
+            "`argmin` names another 808. Filed with the follow-up, #2081.")),
     # --- UNREACHABLE: the entry cites the type, the grammar, the guard or the absence of a reader
     ('tools/analyse_m1a_phase_cycle.py', 'max', 'summarise', 'max(binned)'):
         _v(UNDETERMINED,
