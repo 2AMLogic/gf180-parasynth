@@ -1,7 +1,14 @@
+import json
+
+import numpy as np
 import pytest
 
 import measure_m5a_filter_oversample as experiment
 import mono_m5a_score as m5a
+import refusal
+
+TONES = (150, 1_000, 2_000, 4_000, 8_000, 12_000, 16_000)
+MODES = ("production_2x_sample_hold", "reconstructed_2x", "reconstructed_4x")
 
 
 def _row(target_error):
@@ -77,3 +84,83 @@ def test_incremental_gate_uses_declared_materiality_deadbands_not_case_limits():
     candidate["metrics"]["Gain"]["error"] = 0.2
     result = experiment._compare_incremental(baseline, candidate)
     assert result["accepts_incremental_improvement"] is False
+
+
+def _tone_of(x):
+    crossings = np.count_nonzero(np.signbit(x[1:]) != np.signbit(x[:-1]))
+    measured_hz = crossings * experiment.vf.SR / (2 * len(x))
+    return min(TONES, key=lambda tone: abs(tone - measured_hz))
+
+
+def _ladder(monkeypatch, output):
+    def process(self, x, *args, **kwargs):
+        return output(x, _tone_of(x))
+    monkeypatch.setattr(experiment.fixed.LadderFx, "process", process)
+    monkeypatch.setattr(experiment.frc.RateConvertedLadder, "process", process)
+
+
+def _cli(monkeypatch, output):
+    monkeypatch.setattr(experiment.m5a, "measure", lambda **kwargs: _row(1.0))
+    _ladder(monkeypatch, output)
+    report = experiment.ROOT / "build/scorecard/test-m5a-filter-rate-report.json"
+    report.unlink(missing_ok=True)
+    return experiment.main(["--out", str(report.relative_to(experiment.ROOT))]), report
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_zero_output_at_cutoff_is_json_null_while_the_other_bins_hold(monkeypatch, mode):
+    _ladder(monkeypatch, lambda x, f: np.zeros_like(x) if f == 8_000 else np.array(x))
+    report = experiment._linear_response(mode)
+    assert report["measured_absolute_gain_db"] == {
+        "150": 0.0, "1000": 0.0, "2000": 0.0, "4000": 0.0,
+        "8000": None, "12000": 0.0, "16000": 0.0}
+    assert report["measured_response_relative_to_150_hz_db"] == {
+        "150": 0.0, "1000": 0.0, "2000": 0.0, "4000": 0.0,
+        "8000": None, "12000": 0.0, "16000": 0.0}
+    assert report["measured_at_cutoff_db"] is None
+    json.dumps(report, allow_nan=False)
+
+
+@pytest.mark.parametrize("mode", MODES)
+@pytest.mark.parametrize(("ratio", "expected_db"), [(1.0, 0.0), (0.5, -6.0206), (1e-16, -320.0)],
+                         ids=["unity", "half", "sub-floor"])
+def test_absolute_gain_is_20_log10_of_the_ratio_without_a_floor(monkeypatch, mode, ratio, expected_db):
+    _ladder(monkeypatch, lambda x, f: x * ratio)
+    report = experiment._linear_response(mode)
+    assert set(report["measured_absolute_gain_db"].values()) == {expected_db}
+    assert report["measured_at_cutoff_db"] == 0.0
+
+
+@pytest.mark.parametrize("mode", MODES)
+@pytest.mark.parametrize("all_zero", [True, False], ids=["all-zero ladder", "150 Hz only"])
+def test_zero_output_at_the_150_hz_reference_refuses_instead_of_normalising(monkeypatch, mode, all_zero):
+    _ladder(monkeypatch, lambda x, f: np.zeros_like(x) if all_zero or f == 150 else np.array(x))
+    with pytest.raises(refusal.Refused, match="150 Hz"):
+        experiment._linear_response(mode)
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_zero_input_projection_cannot_be_the_gain_denominator(monkeypatch, mode):
+    _ladder(monkeypatch, lambda x, f: np.array(x))
+    with pytest.raises(refusal.Refused, match="input projection is exactly zero"):
+        experiment._linear_response(mode, amplitude=0.0)
+
+
+@pytest.mark.parametrize("all_zero", [True, False], ids=["all-zero ladder", "150 Hz only"])
+def test_cli_refuses_a_ladder_silent_at_150_hz_and_writes_no_report(monkeypatch, capsys, all_zero):
+    status, report = _cli(monkeypatch,
+                          lambda x, f: np.zeros_like(x) if all_zero or f == 150 else np.array(x))
+    assert status == 2
+    lines = capsys.readouterr().out.splitlines()
+    assert [line for line in lines if line.startswith("REFUSED:") and "150 Hz" in line]
+    assert not report.exists()
+
+
+def test_cli_writes_a_report_when_every_ladder_passes_every_tone(monkeypatch):
+    status, report = _cli(monkeypatch, lambda x, f: np.array(x))
+    try:
+        assert status == 0
+        written = json.loads(report.read_text())
+        assert [written["filter_response"][mode]["measured_at_cutoff_db"] for mode in MODES] == [0.0, 0.0, 0.0]
+    finally:
+        report.unlink(missing_ok=True)
