@@ -61,6 +61,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, ".."))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(ROOT, "audition"))
+sys.path.append(os.path.join(ROOT, "tools"))      # manifest.require_keys; last, so it shadows nothing
 
 import audio_measure as am                                          # noqa: E402
 import ladder_headroom as lh                                        # noqa: E402
@@ -69,6 +70,7 @@ from ring_estimator import (MIN_CYCLES, AGREE_REL, SUSTAIN_FLOOR,   # noqa: E402
                             SUSTAIN_DROP_DB, Refused, _finite,
                             is_sustained, ring_frequency)
 import voice_fx as vf                                               # noqa: E402
+import manifest as mf                                               # noqa: E402
 
 SR = rr.SR
 PLAN = os.path.join(ROOT, "docs", "res-tuning", "plan.json")
@@ -106,6 +108,9 @@ def load_plan(path: str = PLAN, *, require_committed: bool = True) -> dict:
             raise Refused(f"{rel} is modified relative to HEAD; commit the change first")
     with open(path) as fh:
         plan = json.load(fh)
+    # object-ness only: the schema and stated-before-results reads below are
+    # refusals in their own right, with their own message.
+    mf.require_keys(plan, (), f"the res-tuning plan at {path}", refused=Refused)
     if plan.get("schema") != "res-tuning-plan-v1" or plan.get("stated_before_results") is not True:
         raise Refused(f"{path}: not a res-tuning-plan-v1 stated before results")
     return plan

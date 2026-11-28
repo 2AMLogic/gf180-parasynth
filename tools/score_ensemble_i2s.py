@@ -70,6 +70,7 @@ import scorecard
 import verify_synth_top as vst
 import i2s_transcript
 import refusal
+import manifest as mf
 
 SR = 48000
 STEM_PARTS = ("mix", "voice", "drum-mix", "body")
@@ -227,6 +228,7 @@ def validate_part(case_id: str, part: str, report_text: str, wav_path: pathlib.P
         schedule = json.loads(schedule_path.read_text())
     except json.JSONDecodeError as exc:
         raise Refused(f"{part}: the schedule is not readable: {exc}") from exc
+    mf.require_keys(schedule, "case_frames", f"{part}: the schedule at {schedule_path}", refused=Refused)
     if schedule.get("case_id") != case_id or schedule.get("part") != part:
         raise Refused(f"{part}: the schedule names a different case or part")
     if schedule.get("i2s_delay_periods") != 1 or schedule.get("sample_rate_hz") != SR:
@@ -394,6 +396,8 @@ def _injected_event_timing(case_id: str, stop: str, outdir: pathlib.Path, *,
         return {"stop": stop, "measured": False,
                 "why": "the injected run produced no decoded WAV or schedule"}
     schedule = json.loads(paths["schedule"].read_text())
+    mf.require_keys(schedule, (), f"{part}: the injected run's schedule at {paths['schedule']}",
+                    refused=Refused)
     rows = schedule.get("stops", {}).get(stop) or []
     if not rows:
         return {"stop": stop, "measured": False, "why": "no raise in the injected schedule"}
@@ -535,6 +539,9 @@ def fixed_model_comparison(case_id: str, record: dict, *candidates: pathlib.Path
             held = json.loads(candidate.read_text())
         except json.JSONDecodeError:
             continue
+        # Not skipped like an unparseable file: a twin that parses but is not
+        # a record would drop the comparison this function exists to keep.
+        mf.require_keys(held, (), f"the fixed-model twin record at {candidate}", refused=Refused)
         if held.get("engine") == "integrated-rtl":
             continue                         # an earlier anchor, not the model twin
         twin, twin_path = held, candidate
@@ -771,7 +778,11 @@ def main(argv=None) -> int:
     record["provenance"]["config"]["scored_audio_artifact_sha256"] = _sha256(audio)
 
     # ---- the fixed-model twin, preserved and compared -----------------------
-    comparison = fixed_model_comparison(a.case, record, out, twin)
+    try:
+        comparison = fixed_model_comparison(a.case, record, out, twin)
+    except Refused as exc:
+        print(f"score_ensemble_i2s: REFUSED -- {exc}")
+        return 2
     if comparison is not None:
         twin.parent.mkdir(parents=True, exist_ok=True)
         source = ROOT / comparison.pop("twin_read_from")

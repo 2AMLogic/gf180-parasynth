@@ -431,6 +431,8 @@ def render(case_id: str, config: dict, render_fn: Callable[[], tuple], *,
         prior_path = out_dir / "manifest.json"
         if prior_path.exists():
             prior = json.loads(prior_path.read_text())
+            require_keys(prior, "wav_sha256", f"the prior render manifest at {prior_path}",
+                         refused=Refused)
             if prior.get("wav_sha256") != wav_hash:
                 raise Refused(
                     f"{prior_path} already records a DIFFERENT retained WAV for "
