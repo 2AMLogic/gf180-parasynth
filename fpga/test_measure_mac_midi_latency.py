@@ -162,3 +162,112 @@ os.cpu_count = lambda: 8
     assert r.stdout.startswith(f"mac-latency: REFUSED -- {reason}")
     assert r.stderr == ""
     assert not report.exists()
+
+
+# ---- a drifted frozen kit is a precondition: REFUSED (exit 2), never FAIL (#1645) --
+import json                                                  # noqa: E402
+
+import uart_host as uh                                       # noqa: E402
+
+_RUN_SCRIPT = ("import runpy, sys; sys.argv = sys.argv[1:]; "
+               "runpy.run_path(sys.argv[0], run_name='__main__')")
+_DRIFT = {"kit": f"not R1's frozen kit {uh.R1_KIT_SHA256[:12]}",
+          "presets": f"not R1's frozen sound presets {uh.R1_PRESETS_SHA256[:12]}"}
+
+
+def _cli(*args, setup: str = ""):
+    """The script's public path in a fresh interpreter with NumPy available
+    (the measurement needs it); `setup` runs first in that interpreter."""
+    return subprocess.run([sys.executable, "-B", "-c", setup + "\n" + _RUN_SCRIPT,
+                           os.path.join(HERE, "measure_mac_midi_latency.py"), *args],
+                          check=False, capture_output=True, text=True, timeout=120)
+
+
+def _drifted_kit(tmp_path, drift: str):
+    """A copy of fpga/release/r1-kit.json with only `drift` moved: `kit`
+    flips the first kit write, `presets` one value of the LT position."""
+    rec = json.loads(uh.R1_KIT.read_text())
+    if drift == "kit":
+        rec["writes"][0][1] ^= 1
+    else:
+        rec["presets"]["LT"][0][1] ^= 1
+    p = tmp_path / "r1-kit.json"
+    p.write_text(json.dumps(rec))
+    return p
+
+
+@pytest.mark.parametrize("drift,reason", sorted(_DRIFT.items()))
+def test_a_drifted_frozen_kit_is_refused_not_failed(drift, reason, tmp_path):
+    """#1645, through the real CLI (__main__ -> main): the session and its
+    reference both read R1's frozen kit, so a drifted kit or sound table is
+    a precondition of the measurement. Exit 2 with the KitRefused reason in
+    each run's REFUSED line and no traceback. Before the repair: exit 1 by
+    traceback, before anything was printed."""
+    kit = _drifted_kit(tmp_path, drift)
+    report = tmp_path / "latency.json"
+    setup = (f"import pathlib, sys; sys.path.insert(0, {HERE!r}); import uart_host as uh; "
+             f"uh.R1_KIT = pathlib.Path({str(kit)!r})")
+    r = _cli("--source", "direct", "--seconds", "1", "--control-seconds", "1",
+             "--allow-loaded", "--json", str(report), setup=setup)
+    assert r.returncode == 2, r.stderr[-800:]
+    assert "Traceback" not in r.stderr, r.stderr[-800:]
+    refused = [line for line in r.stdout.splitlines() if ": REFUSED -- " in line]
+    assert [line.split(":")[0] for line in refused] == [
+        "mac-latency[clean]", "mac-latency[control stall 25 ms]"], r.stdout
+    for line in refused:
+        assert f"KitRefused: {kit.name}" in line and reason in line, line
+    rec = json.loads(report.read_text())
+    assert rec["verdict"] == "REFUSED"
+    assert rec["clean"]["preconditions"] and rec["control"]["preconditions"]
+
+
+@pytest.mark.parametrize("drift,reason", sorted(_DRIFT.items()))
+def test_sim_reference_reports_a_drifted_kit_as_no_verdict(drift, reason, tmp_path, monkeypatch):
+    """The other construction site (#1645): the known-answer reference cannot
+    be built from a drifted kit and says so the way check() does -- NO
+    VERDICT with the precondition named -- instead of raising KitRefused into
+    the caller. The probe record carries the same precondition and no
+    property a test could mistake for a result."""
+    monkeypatch.setattr(uh, "R1_KIT", _drifted_kit(tmp_path, drift))
+    mine, ref = mml.sim_reference(1.0)
+    assert ref["verdict"] == "NO VERDICT"
+    why = ref["preconditions"][0]
+    assert len(ref["preconditions"]) == 1 and ref["reasons"] == ref["preconditions"]
+    assert "KitRefused: r1-kit.json" in why and reason in why
+    assert mine == {"preconditions": ref["preconditions"], "props": {}}
+
+
+def test_control_an_unrelated_error_at_the_kit_read_is_not_a_refusal(tmp_path, monkeypatch):
+    """The catch is narrow -- `except (uh.Refused, dx.KitRefused)`, never
+    `except Exception`. A RuntimeError that is not a KitRefused, raised at
+    the same read (uart_host.image_kit, where the refusal comes from), still
+    propagates from both construction sites; through the CLI that is exit 1
+    with a traceback, as before the repair."""
+    def boom(image=uh.DEFAULT_IMAGE):
+        raise RuntimeError("boom")
+    monkeypatch.setattr(uh, "image_kit", boom)
+    calls = [lambda: mml.measure("direct", 0.5),
+             lambda: mml.main(["--source", "direct", "--seconds", "0.5",
+                               "--control-seconds", "0.5",
+                               "--json", str(tmp_path / "j.json")]),
+             lambda: mml.sim_reference(0.5)]
+    for call in calls:
+        with pytest.raises(RuntimeError, match="boom"):
+            call()
+    setup = (f"import sys; sys.path.insert(0, {HERE!r}); import uart_host as uh\n"
+             "def boom(image=uh.DEFAULT_IMAGE): raise RuntimeError('boom')\n"
+             "uh.image_kit = boom")
+    r = _cli("--source", "direct", "--seconds", "1", "--control-seconds", "1",
+             "--allow-loaded", "--json", str(tmp_path / "latency.json"), setup=setup)
+    assert r.returncode == 1, (r.returncode, r.stdout[-400:], r.stderr[-400:])
+    assert "Traceback" in r.stderr and "RuntimeError: boom" in r.stderr
+
+
+def test_the_undrifted_kit_still_measures():
+    """Control for the guard: with R1's frozen kit as shipped, measure()
+    reaches its analysis on the real clock -- no precondition, the four
+    properties present, anchors paired."""
+    rec = mml.measure("direct", 0.5)
+    assert rec["preconditions"] == []
+    assert set(rec["props"]) == {"target", "all_delivered", "on_time", "load_admitted"}
+    assert rec["endpoint_ms"]["n"] > 0
