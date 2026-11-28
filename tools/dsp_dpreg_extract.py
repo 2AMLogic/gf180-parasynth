@@ -18,7 +18,10 @@ REFUSED is a first-class outcome:
   * every one of the 13 instance names must be found exactly once;
   * the pulled artifacts are re-hashed locally against the box manifest.
 
-Anything else reports REFUSED with the exact evidence and exits non-zero.
+Anything else reports REFUSED with the exact evidence and exits REFUSED
+(tools/exit_contract.py: 2), which tools/run_all.py reports as NO-VERDICT.
+1 is reserved for a measurement that disagreed, and this tool measures
+nothing -- it extracts; a refusal here means no evidence exists (#1807).
 
 Output: fpga/reports/arty/vivado-2025.1/dsp-dpreg-evidence/
   dsp_cells_dump.txt   per-cell properties, pins, drivers, OPMODE control cone
@@ -44,6 +47,22 @@ _TOOLS = str(pathlib.Path(__file__).resolve().parent)
 if _TOOLS not in sys.path:
     sys.path.append(_TOOLS)
 import dsp_dpreg_analyse  # noqa: E402
+import exit_contract  # noqa: E402
+
+
+def refuse(message):
+    """Report a precondition that was not met and exit REFUSED.
+
+    Every refusal in this tool is a precondition: the box could not be
+    reached, a step failed, the pulled bytes are not the box's, the evidence
+    does not name the checkpoint. Nothing was measured, so the status is
+    tools/exit_contract.py's REFUSED (2), which tools/run_all.py reports as
+    NO-VERDICT. These sites used to leave with 1 -- nine through a print and
+    `return 1`, eight through a SystemExit carrying the message, which prints
+    it and exits 1 -- the status reserved for a measurement that disagreed,
+    so run_all.py rendered every refusal as a RESULT (#1807)."""
+    print(f"REFUSED: {message}", file=sys.stderr, flush=True)
+    raise SystemExit(exit_contract.REFUSED)
 
 BOX = "repo-remote-wt-arty-bringup"
 DCP = "/home/ubuntu/parasynth-arty-attempt02/build/arty/routed.dcp"
@@ -280,7 +299,7 @@ def flagged_from_drc(drc_text):
     try:
         return dsp_dpreg_analyse.parse_drc_targets(drc_text)
     except dsp_dpreg_analyse.Refused as exc:
-        raise SystemExit(f"REFUSED: {exc}") from None
+        refuse(str(exc))
 
 
 def cell_targets(flagged):
@@ -297,9 +316,8 @@ def cell_targets(flagged):
         elif re.search(r"/p_1_out(__\d+)?$", name):
             pass
         else:
-            raise SystemExit(
-                "REFUSED: drc.rpt flags an instance shape this derivation "
-                "does not know: " + name)
+            refuse("drc.rpt flags an instance shape this derivation "
+                   "does not know: " + name)
     return cells
 
 
@@ -343,20 +361,18 @@ def verify_dcp_binding(evidence, dcp, dcp_sha256):
     the dump opened that same path. Returns the digest; REFUSED otherwise."""
     rec = evidence / "routed_dcp.sha256"
     if not rec.is_file():
-        raise SystemExit("REFUSED: no routed_dcp.sha256 in the pulled evidence")
+        refuse("no routed_dcp.sha256 in the pulled evidence")
     words = rec.read_text().split()
     if len(words) != 2 or not re.fullmatch(r"[0-9a-f]{64}", words[0]):
-        raise SystemExit(f"REFUSED: malformed routed_dcp.sha256: {words}")
+        refuse(f"malformed routed_dcp.sha256: {words}")
     if words[0] != dcp_sha256:
-        raise SystemExit(f"REFUSED: routed_dcp.sha256 digest {words[0]} "
-                         f"!= asserted {dcp_sha256}")
+        refuse(f"routed_dcp.sha256 digest {words[0]} != asserted {dcp_sha256}")
     if words[1] != dcp:
-        raise SystemExit(f"REFUSED: routed_dcp.sha256 names {words[1]}, "
-                         f"not the checkpoint asserted ({dcp})")
+        refuse(f"routed_dcp.sha256 names {words[1]}, "
+               f"not the checkpoint asserted ({dcp})")
     head = (evidence / "dsp_cells_dump.txt").read_text().splitlines()[:3]
     if f"DCP {dcp}" not in head:
-        raise SystemExit(f"REFUSED: the dump opened {head[1:2]}, "
-                         f"not {dcp}")
+        refuse(f"the dump opened {head[1:2]}, not {dcp}")
     return words[0]
 
 
@@ -364,8 +380,8 @@ def write_fetched_drc(dst, text):
     """Land the fetched box drc.rpt, refusing to replace a DIFFERENT local
     report (e.g. a committed, host-scrubbed publication's)."""
     if dst.exists() and dst.read_text() != text:
-        raise SystemExit(f"REFUSED: {dst} exists with different content; "
-                         "extract into a fresh evidence directory")
+        refuse(f"{dst} exists with different content; "
+               "extract into a fresh evidence directory")
     dst.write_text(text)
 
 
@@ -420,8 +436,7 @@ def main(argv=None):
     stage = stage_script(a.dcp, a.dcp_sha256, a.drc_rpt, a.remote_dir)
     r = sh(on_box(a.box, "bash -s"), input=stage)
     if r.returncode != 0:
-        print("REFUSED: box preconditions failed")
-        return 1
+        refuse("box preconditions failed")
 
     # ---- phase 1.5: bind the targets to THIS build's drc.rpt ----
     # the DRC body is fetched and kept as evidence: the analyser re-parses
@@ -431,8 +446,7 @@ def main(argv=None):
     r = sh(on_box(a.box, f"cat {a.drc_rpt}"),
            capture_output=True)
     if r.returncode != 0:
-        print("REFUSED: could not fetch drc.rpt")
-        return 1
+        refuse("could not fetch drc.rpt")
     write_fetched_drc(evidence.parent / "drc.rpt", r.stdout)
     # the bytes just fetched must be the bytes the box hashed in phase 1
     # (re-checked against drc_rpt.sha256 after the pull in phase 4)
@@ -448,8 +462,7 @@ def main(argv=None):
     tcl_local.write_text(make_tcl(a.dcp, a.remote_dir, cells))
     r = sh(to_box(a.box, tcl_local, f"{a.remote_dir}/dsp_dpreg_extract.tcl"))
     if r.returncode != 0:
-        print("REFUSED: could not stage Tcl")
-        return 1
+        refuse("could not stage Tcl")
 
     # ---- phase 2: run under the shared vivado lock ----
     run = (
@@ -463,14 +476,13 @@ def main(argv=None):
     )
     r = sh(on_box(a.box, "bash -s"), input=run)
     if r.returncode != 0:
-        print(f"REFUSED: vivado batch failed rc={r.returncode}")
+        print(f"REFUSED: vivado batch failed rc={r.returncode}", file=sys.stderr, flush=True)
         sh(on_box(a.box, f"tail -40 {a.remote_dir}/vivado_extract.log || true"))
-        return 1
+        raise SystemExit(exit_contract.REFUSED)
     # read-only means the checkpoint is byte-identical afterwards
     r = sh(on_box(a.box, "bash -s"), input=recheck_script(a.dcp, a.dcp_sha256))
     if r.returncode != 0:
-        print("REFUSED: checkpoint digest changed or could not be re-checked")
-        return 1
+        refuse("checkpoint digest changed or could not be re-checked")
 
     # ---- phase 3: manifest + pull back ----
     r = sh(on_box(a.box,
@@ -478,14 +490,12 @@ def main(argv=None):
                   "> MANIFEST.sha256 && cat MANIFEST.sha256 && "
                   "grep -c '^ERROR' vivado_extract.log || true"))
     if r.returncode != 0:
-        print("REFUSED: manifest failed")
-        return 1
+        refuse("manifest failed")
 
     for f in MANIFEST_FILES + ("MANIFEST.sha256",):
         r = sh(from_box(a.box, f"{a.remote_dir}/{f}", evidence / f))
         if r.returncode != 0:
-            print(f"REFUSED: could not pull {f}")
-            return 1
+            refuse(f"could not pull {f}")
 
     # ---- phase 4: verify locally against the box manifest ----
     bad = []
@@ -499,15 +509,13 @@ def main(argv=None):
         if got != h:
             bad.append(name)
     if bad:
-        print(f"REFUSED: local copies differ from box manifest: {bad}")
-        return 1
+        refuse(f"local copies differ from box manifest: {bad}")
     # and the drc.rpt the targets were derived from is the box's bytes
     box_hash = next((l.split()[0]
                      for l in (evidence / "drc_rpt.sha256").read_text().splitlines()
                      if l.endswith("drc.rpt")), None)
     if box_hash != fetched:
-        print(f"REFUSED: fetched drc.rpt {fetched} != box drc.rpt {box_hash}")
-        return 1
+        refuse(f"fetched drc.rpt {fetched} != box drc.rpt {box_hash}")
 
     # the evidence names, by digest, the checkpoint the dump opened
     bound = verify_dcp_binding(evidence, a.dcp, a.dcp_sha256)

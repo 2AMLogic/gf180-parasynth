@@ -18,6 +18,7 @@ because a SystemExit carrying a string prints it and exits 1 -- so
 tools/run_all.py rendered every one as a RESULT.  The controls hold the
 status to `exit_contract.REFUSED` and never retype the 2.
 """
+import ast
 import hashlib
 import importlib.util
 import shutil
@@ -200,7 +201,7 @@ def test_the_binding_checks_refuse_with_the_refused_status(tmp_path, box, capsys
     which exits 1."""
     ev = tmp_path / "pulled"
     shutil.copytree(box, ev)
-    dcp, sha = "/box/arty/routed.dcp", DCP_SHA
+    dcp, sha = DCP, DCP_SHA                # the path the shipped record and dump header name
     rec = ev / "routed_dcp.sha256"
     dump = ev / "dsp_cells_dump.txt"
 
@@ -210,11 +211,11 @@ def test_the_binding_checks_refuse_with_the_refused_status(tmp_path, box, capsys
     assert _refused_by(dx.verify_dcp_binding, ev, dcp, sha) == REFUSED
     assert "no routed_dcp.sha256" in capsys.readouterr().err
 
-    rec.write_text("not-a-digest  /box/arty/routed.dcp\n")
+    rec.write_text(f"not-a-digest  {dcp}\n")
     assert _refused_by(dx.verify_dcp_binding, ev, dcp, sha) == REFUSED
     assert "malformed routed_dcp.sha256" in capsys.readouterr().err
 
-    rec.write_text(f"{'f' * 64}  /box/arty/routed.dcp\n")
+    rec.write_text(f"{'f' * 64}  {dcp}\n")
     assert _refused_by(dx.verify_dcp_binding, ev, dcp, sha) == REFUSED   # its label: the test below
     capsys.readouterr()
 
@@ -237,8 +238,8 @@ def test_the_binding_checks_refuse_with_the_refused_status(tmp_path, box, capsys
 def test_the_binding_checks_leave_a_digest_mismatch_labelled(tmp_path, box, capsys):
     ev = tmp_path / "pulled"
     shutil.copytree(box, ev)
-    (ev / "routed_dcp.sha256").write_text(f"{'f' * 64}  /box/arty/routed.dcp\n")
-    assert _refused_by(dx.verify_dcp_binding, ev, "/box/arty/routed.dcp", DCP_SHA) == REFUSED
+    (ev / "routed_dcp.sha256").write_text(f"{'f' * 64}  {DCP}\n")
+    assert _refused_by(dx.verify_dcp_binding, ev, DCP, DCP_SHA) == REFUSED
     err = capsys.readouterr().err
     assert err.startswith("REFUSED: routed_dcp.sha256 digest ffff") and "!= asserted" in err
 
@@ -287,8 +288,9 @@ def test_an_unknown_flagged_instance_shape_refuses_before_any_tcl_is_staged(
     """cell_targets' own refusal: a drc.rpt flagging an instance outside the
     two known families means the netlist mapping changed; STOP, never guess.
     One body, so the duplicate-instance refusal is not what fires."""
-    one_unknown = SAME_INSTANCE_TWICE.split("DPREG-4#2")[0].replace(
-        "p0/pair/dec/prod0__0", "somewhere/entirely_unrelated")
+    one_unknown = (SAME_INSTANCE_TWICE.split("DPREG-4#2")[0]
+                   .replace("p0/pair/dec/prod0__0", "somewhere/entirely_unrelated")
+                   .replace("| 2      |", "| 1      |"))    # the summary must count the one body left
     assert "DPREG-4#2" not in one_unknown and "entirely_unrelated" in one_unknown
     rc, calls, ev = _run(monkeypatch, tmp_path, box, "local", drc=one_unknown)
     assert rc == REFUSED
@@ -297,8 +299,15 @@ def test_an_unknown_flagged_instance_shape_refuses_before_any_tcl_is_staged(
 
 
 def test_no_refusal_in_the_tool_retypes_the_status():
-    """The two are read from the contract, never as a literal."""
+    """By AST, not by text: the status is read from the contract, so the
+    module holds no literal `return 1`/`return 2` and no SystemExit carrying
+    a string (which would exit 1)."""
     src = (HERE / "dsp_dpreg_extract.py").read_text()
     assert "import exit_contract" in src
-    assert "raise SystemExit(" not in src.replace('raise SystemExit(exit_contract.REFUSED)', '')
-    assert "return 1" not in src and "return 2" not in src
+    tree = ast.parse(src)
+    literal_returns = [n.lineno for n in ast.walk(tree) if isinstance(n, ast.Return)
+                       and isinstance(n.value, ast.Constant) and n.value.value in (1, 2)]
+    string_exits = [n.lineno for n in ast.walk(tree) if isinstance(n, ast.Raise)
+                    and isinstance(n.exc, ast.Call) and n.exc.args
+                    and isinstance(n.exc.args[0], (ast.Constant, ast.JoinedStr, ast.BinOp))]
+    assert literal_returns == [] and string_exits == []

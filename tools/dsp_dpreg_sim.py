@@ -53,6 +53,19 @@ run REFUSES:
                      (oscillation/unknown).
 Only after both controls have fired does mode 0 (the extracted, routed
 configuration) run; it must report 0 X and 0 wrong-value cycles.
+
+EXIT STATUS (tools/exit_contract.py; the statuses were its two swapped
+until #1807):
+  0  PASS     both controls fired and the clean sequence is clean
+  1  FAIL     both controls fired and the clean sequence DISAGREED -- the
+              extracted configuration is refuted.  A result.  This half used
+              to exit 2, which tools/run_all.py reports as NO-VERDICT, so a
+              refutation read as the absence of a verdict.
+  2  REFUSED  the run failed, a hash mismatched, a trace came back short, or
+              a control did not fire -- a harness that cannot see the
+              injected defect has shown nothing about the clean run.  These
+              used to exit 1 (except the unfired control), the status
+              reserved for a measurement that disagreed.
 """
 
 import hashlib
@@ -62,6 +75,8 @@ import re
 import shutil
 import subprocess
 import sys
+
+import exit_contract
 
 EVIDENCE = pathlib.Path(__file__).resolve().parents[1] / (
     "fpga/reports/arty/vivado-2025.1/dsp-dpreg-evidence")
@@ -358,7 +373,7 @@ def main():
     rc = run_local()
     if rc != 0:
         print(f"REFUSED: local sim run failed rc={rc}")
-        return 1
+        return exit_contract.REFUSED
 
     ok = True
     for line in (DSIM / "MANIFEST.sha256").read_text().splitlines():
@@ -369,7 +384,7 @@ def main():
             print(f"REFUSED: hash mismatch {name}")
             ok = False
     if not ok:
-        return 1
+        return exit_contract.REFUSED
 
     # ---- classify: X is a distinct failure class from wrong value ----
     verdict = {}
@@ -407,7 +422,7 @@ def main():
                   f"{verdict[m]['cycles']} actual / "
                   f"{verdict[m]['expected_cycles']} expected cycles, "
                   f"stimulus has {len(rows)} rows")
-        return 1
+        return exit_contract.REFUSED
     vlog2 = DSIM / "vvp_mode2.log"
     loop_evidence = vlog2.exists() and re.search(
         r"iteration limit|INFINITE|stopped|abort", vlog2.read_text(),
@@ -439,7 +454,14 @@ def main():
          "unisim_commit": commit,
          "run_order": "controls (1=pregflip, 2=opmodep) before clean (0)"},
         indent=2))
-    return 0 if (red1 and red2 and clean0) else 2
+    # the two halves of what used to be one expression, `0 if (...) else 2`:
+    # a control that did not fire leaves the clean run proving nothing (no
+    # evidence); a clean run that fails under controls that DID fire refutes
+    # the extracted configuration (a result) -- and must not be reported
+    # NO-VERDICT (#1807)
+    if not (red1 and red2):
+        return exit_contract.REFUSED
+    return exit_contract.PASS if clean0 else exit_contract.FAIL
 
 
 if __name__ == "__main__":

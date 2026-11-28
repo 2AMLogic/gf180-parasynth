@@ -277,6 +277,23 @@ _xspec = importlib.util.spec_from_file_location(
 xmod = importlib.util.module_from_spec(_xspec)
 _xspec.loader.exec_module(xmod)
 
+sys.path.insert(0, str(HERE))
+import exit_contract                                             # noqa: E402
+
+
+def _refusal(capsys, fn, *args) -> tuple[int, str]:
+    """(status, message) of an extractor refusal.  Every one is a precondition
+    that was not met, so every one must exit exit_contract.REFUSED with its
+    exact evidence on stderr.  Until #1807 each was a SystemExit carrying the
+    MESSAGE, which prints it and exits 1 -- the status the contract reserves
+    for a measurement that disagreed -- and these controls matched the
+    message alone."""
+    with pytest.raises(SystemExit) as exc:
+        fn(*args)
+    status = exc.value.code
+    assert status == exit_contract.REFUSED, (status, str(exc.value))
+    return status, capsys.readouterr().err
+
 
 def _fake_box(tmp_path):
     dcp = tmp_path / "build" / "routed.dcp"
@@ -343,29 +360,28 @@ def test_extractor_binding_accepts_the_digest_and_path_it_asserted(tmp_path):
     ("a" * 64, "/old/routed.dcp", "/b/routed.dcp", "names"),
     ("a" * 64, "/b/routed.dcp", "/old/routed.dcp", "dump opened"),
 ])
-def test_extractor_binding_refuses_drift(tmp_path, sha, rec_path, dump_path,
+def test_extractor_binding_refuses_drift(tmp_path, capsys, sha, rec_path, dump_path,
                                          why):
     ev = _pulled(tmp_path, sha, rec_path, dump_path)
-    with pytest.raises(SystemExit) as exc:
-        xmod.verify_dcp_binding(ev, "/b/routed.dcp", "a" * 64)
-    assert str(exc.value).startswith("REFUSED:") and why in str(exc.value)
+    _status, msg = _refusal(capsys, xmod.verify_dcp_binding, ev, "/b/routed.dcp", "a" * 64)
+    assert msg.startswith("REFUSED:") and why in msg
 
 
-def test_extractor_binding_refuses_a_missing_digest_record(tmp_path):
+def test_extractor_binding_refuses_a_missing_digest_record(tmp_path, capsys):
     ev = _pulled(tmp_path, "a" * 64, "/b/routed.dcp", "/b/routed.dcp")
     (ev / "routed_dcp.sha256").unlink()
-    with pytest.raises(SystemExit, match="REFUSED: no routed_dcp.sha256"):
-        xmod.verify_dcp_binding(ev, "/b/routed.dcp", "a" * 64)
+    _status, msg = _refusal(capsys, xmod.verify_dcp_binding, ev, "/b/routed.dcp", "a" * 64)
+    assert "REFUSED: no routed_dcp.sha256" in msg
 
 
-def test_extractor_will_not_overwrite_a_different_local_drc(tmp_path):
+def test_extractor_will_not_overwrite_a_different_local_drc(tmp_path, capsys):
     # the fetched box drc.rpt lands at <evidence>/../drc.rpt; pointed at a
     # committed publication that would silently replace its host-scrubbed
     # report with the box's bytes
     dst = tmp_path / "drc.rpt"
     dst.write_text("| Host : omitted from public report\n")
-    with pytest.raises(SystemExit, match="REFUSED: .*drc.rpt"):
-        xmod.write_fetched_drc(dst, "| Host : buildbox\n")
+    _status, msg = _refusal(capsys, xmod.write_fetched_drc, dst, "| Host : buildbox\n")
+    assert "REFUSED: " in msg and "drc.rpt" in msg
     xmod.write_fetched_drc(dst, dst.read_text())  # identical bytes: fine
     new = tmp_path / "fresh" / "drc.rpt"
     new.parent.mkdir()
@@ -379,9 +395,9 @@ NO_SUMMARY_ROW = "\n".join(l for l in DRC_SNIPPET.splitlines()
                            if "| DPREG-4 |" not in l) + "\n"
 
 
-def test_extractor_refuses_a_drc_that_flags_the_same_instance_twice():
-    with pytest.raises(SystemExit, match=r"REFUSED: .*same instance twice"):
-        xmod.flagged_from_drc(SAME_INSTANCE_TWICE)
+def test_extractor_refuses_a_drc_that_flags_the_same_instance_twice(capsys):
+    _status, msg = _refusal(capsys, xmod.flagged_from_drc, SAME_INSTANCE_TWICE)
+    assert "same instance twice" in msg
 
 
 def test_extractor_keeps_two_distinct_instances_in_report_order():
@@ -397,12 +413,11 @@ def test_extractor_keeps_two_distinct_instances_in_report_order():
      "no DPREG-4 violations parsed"),
     (SAME_INSTANCE_TWICE, "same instance twice"),
 ])
-def test_extractor_refuses_exactly_what_the_analyser_refuses(drc, why):
+def test_extractor_refuses_exactly_what_the_analyser_refuses(drc, why, capsys):
     with pytest.raises(mod.Refused, match=why) as analyser:
         mod.parse_drc_targets(drc)
-    with pytest.raises(SystemExit) as extractor:
-        xmod.flagged_from_drc(drc)
-    assert str(extractor.value) == f"REFUSED: {analyser.value}"
+    _status, msg = _refusal(capsys, xmod.flagged_from_drc, drc)
+    assert msg.strip() == f"REFUSED: {analyser.value}"
 
 
 def test_extractor_targets_come_from_the_canonical_parser(monkeypatch):
@@ -417,19 +432,18 @@ def test_extractor_targets_come_from_the_canonical_parser(monkeypatch):
     assert seen == ["any drc bytes"]
 
 
-def test_extractor_refusal_is_the_analysers_reason(monkeypatch):
+def test_extractor_refusal_is_the_analysers_reason(monkeypatch, capsys):
     def refuse(drc_text):
         raise mod.Refused("stub reason")
 
     monkeypatch.setattr(mod, "parse_drc_targets", refuse)
-    with pytest.raises(SystemExit) as exc:
-        xmod.flagged_from_drc("any drc bytes")
-    assert str(exc.value) == "REFUSED: stub reason"
+    _status, msg = _refusal(capsys, xmod.flagged_from_drc, "any drc bytes")
+    assert msg.strip() == "REFUSED: stub reason"
 
 
 BY_PATH_LOADER = r"""
 import importlib.util, sys
-for sibling in ("refusal", "dsp_dpreg_analyse"):
+for sibling in ("refusal", "dsp_dpreg_analyse", "exit_contract"):
     assert importlib.util.find_spec(sibling) is None, sibling
 spec = importlib.util.spec_from_file_location("dsp_dpreg_extract", sys.argv[1])
 mod = importlib.util.module_from_spec(spec)
@@ -437,7 +451,7 @@ spec.loader.exec_module(mod)
 try:
     mod.flagged_from_drc(sys.stdin.read())
 except SystemExit as exc:
-    print(exc)
+    print(exc.code)            # the status the process would exit with
     sys.exit(0)
 sys.exit(3)
 """
@@ -445,13 +459,14 @@ sys.exit(3)
 
 def test_extractor_loads_by_path_with_tools_off_sys_path(tmp_path):
     """Loaded by path from outside tools/ (#1557's import note): the analyser's
-    sibling `refusal` import must resolve from the extractor's own
-    directory."""
+    sibling `refusal` import, and exit_contract's, must resolve from the
+    extractor's own directory; and the refusal reaches the loader as the
+    contract's status, its message on stderr."""
     r = subprocess.run([sys.executable, "-I", "-c", BY_PATH_LOADER,
                         str(HERE / "dsp_dpreg_extract.py")],
                        input=SAME_INSTANCE_TWICE, text=True,
                        capture_output=True, cwd=tmp_path, timeout=120,
                        check=False)
     assert r.returncode == 0, r.stdout + r.stderr
-    assert r.stdout.strip() == (
-        "REFUSED: drc.rpt flags the same instance twice")
+    assert r.stdout.strip() == str(exit_contract.REFUSED)
+    assert r.stderr.strip() == "REFUSED: drc.rpt flags the same instance twice"
