@@ -40,6 +40,7 @@ import cymbal_tone_realisation as ct           # noqa: E402
 import tone_stage_schematic as ts              # noqa: E402
 import werner_fig4 as wf                       # noqa: E402
 import werner_fig9 as w9                       # noqa: E402
+import exit_contract                           # noqa: E402
 
 ABLATION = bb.SCORECARD / "balance" / "balance-ablation.json"
 
@@ -855,8 +856,8 @@ def test_a_gain_common_to_all_three_bands_is_blind_everywhere(figs):
 
 def test_the_clean_gate_passes_and_every_control_is_caught(figs):
     fig9, corner = figs
-    ok, lines = bb.check(fig9, corner)
-    assert ok, "\n".join(lines)
+    status, lines = bb.check(fig9, corner)
+    assert status == exit_contract.PASS, "\n".join(lines)
     assert any("5/5 controls" in ln for ln in lines), "\n".join(lines)
     assert any("1/1 blind-by-construction" in ln for ln in lines), "\n".join(lines)
 
@@ -926,3 +927,101 @@ def test_report_prints_finite_balance_for_a_subnormal_reference(low_level_record
     table = capsys.readouterr().out.split("Balance relative to the low band:")[1]
     row = next(line for line in table.splitlines() if line.strip().startswith("decay "))
     assert row.split()[-2] == f"{expected:+.2f}"
+
+
+# ---- #1852: a rule-bind refusal is REFUSED, never FAIL ----------------------
+#
+# Measured on the unmodified base, main @ 528a228b, red-first: with
+# `shipped_rule_levels` planted to refuse, `--check` printed
+# `FAIL rule-bind  REFUSED: <reason>` under `gate: FAIL` and exited 1, while
+# `--report` and `--json` on the same input printed `REFUSED: <reason>` and
+# exited 2. Nothing had been measured -- the registers could not be READ --
+# and the reader was told they disagreed with the energies.
+
+
+PLANTED = "planted: candidate3.json is unreadable"
+LABEL = {exit_contract.PASS: "PASS", exit_contract.FAIL: "FAIL",
+         exit_contract.REFUSED: "REFUSED"}
+
+
+def _refusing_rule_bind(monkeypatch, *, once=False):
+    """Make the rule-bind read REFUSE: `shipped_rule_levels` raises with
+    `PLANTED`. With `once` it answers from its second call on, which is the
+    only way a WRITTEN record comes to carry a refused gate: `record()` reads
+    the gate before its own tables, and a really unreadable record refuses
+    those too, so no file is written at all (the `--json` case of
+    `test_cli_refuses_a_zero_unit_energy`)."""
+    real = bb.shipped_rule_levels
+    calls = []
+
+    def plant(*args, **kwargs):
+        calls.append(1)
+        if once and len(calls) > 1:
+            return real(*args, **kwargs)
+        raise bb.Refused(PLANTED)
+
+    monkeypatch.setattr(bb, "shipped_rule_levels", plant)
+
+
+def _swap_peaks_on_the_clean_path(monkeypatch):
+    """A MEASURED failure in a row other than rule-bind: every `properties()`
+    call runs under the existing SWAP_PEAKS control, which `EXPECTED` pins to
+    `chain-normalisation` alone. `main()` never passes `defect=`, so the
+    control is applied by wrapping the call rather than the keyword."""
+    real = bb.properties
+    monkeypatch.setattr(bb, "properties", lambda fig9, corner, *, defect=None:
+                        real(fig9, corner, defect="SWAP_PEAKS"))
+
+
+def _row(out, name):
+    """The gate's one `<PASS|FAIL|REFUSED>  <name>  ...` row, unindented."""
+    hits = [ln for ln in out.splitlines() if ln.split()
+            and ln.split()[0] in LABEL.values() and ln.split()[1:2] == [name]]
+    assert len(hits) == 1, f"expected one {name!r} row in:\n{out}"
+    return hits[0].strip()
+
+
+def test_a_rule_bind_refusal_is_printed_refused_and_exits_with_the_refusal_status(
+        capsys, monkeypatch, figs):
+    """The issue's reproduction. The row carries the reader's own reason, the
+    other four properties still report, the gate says REFUSED, and the exit
+    status is this tool's declared refusal status -- not FAIL's 1."""
+    _refusing_rule_bind(monkeypatch)
+    status, lines = bb.check(*figs)
+    assert status == exit_contract.REFUSED, "\n".join(lines)
+    assert bb.main(["--check"]) == exit_contract.REFUSED
+    out = capsys.readouterr().out
+    row = _row(out, "rule-bind")
+    assert row.startswith("REFUSED  rule-bind"), row
+    assert PLANTED in row, row
+    for name in ("chain-normalisation", "tone-bound", "centre-bound-tighter", "refusal-live"):
+        assert _row(out, name).startswith("PASS  "), out
+    assert "gate: REFUSED" in out and "gate: FAIL" not in out, out
+    # The controls did not run, and are not reported as if they had.
+    assert "the clean run does not pass; the controls below mean nothing" in out, out
+    assert "MOVED" not in out and "controls turned" not in out, out
+
+
+@pytest.mark.parametrize("mode", ["--check", "--json"])
+@pytest.mark.parametrize("refuse, swap_peaks, expected", [
+    (False, False, exit_contract.PASS),
+    (False, True, exit_contract.FAIL),
+    (True, False, exit_contract.REFUSED),
+    (True, True, exit_contract.FAIL)],
+    ids=["clean", "measured-failure", "refusal", "failure-over-refusal"])
+def test_the_gate_answers_fail_over_refused_over_pass(
+        capsys, tmp_path, monkeypatch, mode, refuse, swap_peaks, expected):
+    """FAIL outranks REFUSED and REFUSED is not PASS, through both `--check`
+    and `--json`, whose `gate` block carries the outcome instead of a bare
+    `pass: false` that a measured failure would print identically."""
+    if refuse:
+        _refusing_rule_bind(monkeypatch, once=True)
+    if swap_peaks:
+        _swap_peaks_on_the_clean_path(monkeypatch)
+    dest = tmp_path / "record.json"
+    rc = bb.main([mode, str(dest)] if mode == "--json" else [mode])
+    assert rc == expected, capsys.readouterr().out
+    if mode == "--json":
+        gate = json.loads(dest.read_text())["gate"]
+        assert (gate["status"], gate["outcome"], gate["pass"]) == (
+            expected, LABEL[expected], expected == exit_contract.PASS), gate

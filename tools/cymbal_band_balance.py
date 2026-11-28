@@ -67,6 +67,19 @@ still REFUSES today because ONE of its four preconditions is unmet -- the VCA
 drives. That refusal is verified to be non-vacuous in both directions: it names
 `vca-drive` and no longer names `schematic-vr4`, and handed a complete
 synthetic precondition set it answers.
+
+WHAT THE GATE ANSWERS, IN THREE WORDS AND NOT TWO (#1852). `--check` prints
+each property as `PASS` or `FAIL`, and a property that could not run as
+`REFUSED` with its own reason: `rule-bind` reads the kit's registers and the
+balance's energies through readers that refuse when a record is absent or
+unreadable, and "the registers cannot be checked against the energies" is not
+the statement "they do not reproduce them". The gate line and the exit status
+follow: `FAIL` (1) something MEASURED wrong, which outranks everything else so
+a missing record can never hide it; `REFUSED` (2, this tool's own refusal
+status) nothing did but a property refused; `PASS` (0). Every row is still
+evaluated on every run. Before #1852 the refusal printed as `FAIL rule-bind`
+under `gate: FAIL` and exited 1, while `--report` and `--json` on the same
+input refused with 2.
 """
 from __future__ import annotations
 
@@ -86,6 +99,7 @@ import cymbal_tone_realisation as ct        # noqa: E402
 import tone_stage_schematic as ts           # noqa: E402
 import werner_fig4 as wf                    # noqa: E402
 import werner_fig9 as w9                    # noqa: E402
+import exit_contract                        # noqa: E402
 from finite_number import is_finite_number  # noqa: E402
 
 Refused = ct.Refused
@@ -925,7 +939,11 @@ def properties(fig9, corner_hz, *, defect=None) -> dict:
             + "  ".join(f"{b} {v['gap_db']:+.1f}" for b, v in g.items())
             + f" dB re low; worst |gap| {biggest:.1f} vs widest FIGURE tone bound {widest:.1f}")
     except Refused as exc:
-        out["rule-bind"] = (False, f"REFUSED: {exc}")
+        # Not `(False, ...)`: a reader that refused has not said the registers
+        # disagree with the energies, only that they could not be compared
+        # (#1852). `None` is the third outcome -- `check()` prints it REFUSED
+        # with this reason and still evaluates every row below.
+        out["rule-bind"] = (None, str(exc))
 
     # 5. refusal-live: the refusal must fire on the real tree AND must lift on
     #    a complete precondition set, AND the excluded figure route must refuse
@@ -969,16 +987,43 @@ def properties(fig9, corner_hz, *, defect=None) -> dict:
     return out
 
 
-def check(fig9, corner_hz) -> tuple[bool, list[str]]:
+def _row_status(good) -> int:
+    """A property's verdict as an `exit_contract` status: PASS when it held,
+    FAIL when it measured wrong, REFUSED when it could not run (`rule-bind`
+    carries `None` for that)."""
+    if good is None:
+        return exit_contract.REFUSED
+    return exit_contract.PASS if good else exit_contract.FAIL
+
+
+_OUTCOME = {exit_contract.PASS: "PASS", exit_contract.FAIL: "FAIL",
+            exit_contract.REFUSED: "REFUSED"}
+
+
+def _worst(*outcomes: int) -> int:
+    """The outcome a set of checks adds up to: FAIL, else REFUSED, else PASS.
+    Something measured wrong is a result, so a refusal elsewhere in the gate
+    must not hide it, and a refusal is not a pass. (`max` would rank REFUSED,
+    exit 2, above FAIL.)"""
+    if exit_contract.FAIL in outcomes:
+        return exit_contract.FAIL
+    return exit_contract.REFUSED if exit_contract.REFUSED in outcomes else exit_contract.PASS
+
+
+def check(fig9, corner_hz) -> tuple[int, list[str]]:
+    """The gate: its `exit_contract` status and its lines. Every property is
+    evaluated on every run, so a refusal in one row cannot hide a measured
+    failure in another; the defect controls run only on a clean PASS, and
+    their own verdict is PASS or FAIL."""
     lines = []
     clean = properties(fig9, corner_hz)
-    ok = all(v[0] for v in clean.values())
+    status = _worst(*(_row_status(clean[p][0]) for p in PROPERTIES))
     for name in PROPERTIES:
         good, detail = clean[name]
-        lines.append(f"  {'PASS' if good else 'FAIL'}  {name:20s} {detail}")
-    if not ok:
+        lines.append(f"  {_OUTCOME[_row_status(good)]}  {name:20s} {detail}")
+    if status != exit_contract.PASS:
         lines.append("the clean run does not pass; the controls below mean nothing")
-        return False, lines
+        return status, lines
     lines.append("")
     lines.append(f"  {'defect':22s} " + " ".join(f"{p:>20s}" for p in PROPERTIES))
     caught, blind_ok = [], []
@@ -1001,7 +1046,8 @@ def check(fig9, corner_hz) -> tuple[bool, list[str]]:
     lines.append(f"  {sum(caught)}/{len(DEFECTS)} controls turned at least one property red; "
                  f"{sum(blind_ok)}/{len(BLIND_BY_CONSTRUCTION)} blind-by-construction "
                  "controls stayed blind")
-    return all(caught) and all(blind_ok), lines
+    return (exit_contract.PASS if all(caught) and all(blind_ok)
+            else exit_contract.FAIL), lines
 
 
 # ---------------------------------------------------------------------------
@@ -1066,7 +1112,7 @@ def report(fig9, corner_hz) -> list[str]:
 
 
 def record(fig9, corner_hz) -> dict:
-    ok, lines = check(fig9, corner_hz)
+    status, lines = check(fig9, corner_hz)
     try:
         applied = balance_gains(fig9, corner_hz)
         refusal = None
@@ -1093,7 +1139,8 @@ def record(fig9, corner_hz) -> dict:
         "preconditions": preconditions(),
         "applied": applied,
         "refused": refusal,
-        "gate": {"pass": bool(ok), "lines": lines},
+        "gate": {"status": status, "outcome": _OUTCOME[status],
+                 "pass": status == exit_contract.PASS, "lines": lines},
     }
 
 
@@ -1108,24 +1155,24 @@ def main(argv=None) -> int:
     try:
         fig9 = w9.from_artifact()[0]
         corner = ct.level_corner_hz()
-        rc = 0
+        rc = exit_contract.PASS
         if a.report:
             print("\n".join(report(fig9, corner)))
         if a.check:
-            ok, lines = check(fig9, corner)
+            status, lines = check(fig9, corner)
             print("\n".join(lines))
-            print("gate:", "PASS" if ok else "FAIL")
-            rc = 0 if ok else 1
+            print("gate:", _OUTCOME[status])
+            rc = status
         if a.json:
             rec = record(fig9, corner)
             a.json.parent.mkdir(parents=True, exist_ok=True)
             a.json.write_text(json.dumps(rec, indent=1, default=float) + "\n")
             print(f"wrote {a.json}")
-            rc = rc or (0 if rec["gate"]["pass"] else 1)
+            rc = _worst(rc, rec["gate"]["status"])
         return rc
     except (w9.Refused, Refused) as exc:
         print(f"REFUSED: {exc}")
-        return 2
+        return exit_contract.REFUSED
 
 
 if __name__ == "__main__":
