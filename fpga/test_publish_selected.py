@@ -8,11 +8,14 @@ from pathlib import Path
 import runpy
 import subprocess
 import sys
+import types
 import pytest
 
 import build_selected
 import publish_selected
 from publish_selected import timing_summary
+from test_build_selected import (_ARTIFACTS, _CONFIG, _INPUTS, M5A_RECORD, _MALFORMED,
+                                 _json, _record_only_tree)
 
 ROOT = publish_selected.ROOT
 WORKFLOW = "https://example.invalid/runs/1"
@@ -291,3 +294,46 @@ def test_an_execution_error_in_publish_is_not_masked_as_a_refusal(tmp_path, monk
     with pytest.raises(TypeError, match="genuine bug"):
         runpy.run_path(publish_selected.__file__, run_name="__main__")
     assert not out.exists()
+
+
+# ------------- the stored record the callee reads is malformed or absent ----
+
+@pytest.mark.parametrize("text, raised", list(_MALFORMED.values()), ids=list(_MALFORMED))
+def test_a_malformed_stored_record_is_a_refused_publication_not_a_traceback(tmp_path, monkeypatch, text, raised):
+    """START RED (#1938). The shapes are `test_build_selected`'s: through
+    publish() each left as the callee's TypeError, KeyError or JSONDecodeError,
+    past `except RuntimeError` at the call and past the build checks' handler,
+    as a traceback at exit 1. The callee now states the refusal, so it is the
+    NO-VERDICT publication of #1631 with the record named as its reason."""
+    artifact, _ = built_artifact(tmp_path)
+    _record_only_tree(tmp_path / "tree", monkeypatch, text)
+    out = tmp_path / "publication"
+    summary = publish_selected.publish(artifact, out, WORKFLOW)
+    assert summary["state"] == "NO-VERDICT"
+    assert summary["reason"].startswith(M5A_RECORD) and f"({raised}:" in summary["reason"]
+    assert summary["simulation_evidence"] is None and summary["bitstream_qualified"] is False
+    assert json.loads((out / "publication.json").read_text()) == summary
+
+
+@pytest.mark.parametrize("site", ["hashlib", "validate_clean_pass"], ids=["hash-comparison", "transcript-gate"])
+def test_a_bug_after_the_record_read_is_not_masked_as_a_refusal(tmp_path, monkeypatch, site):
+    """The callee converts the record's read and nothing after it (#1938). With
+    the record well-formed -- `test_build_selected`'s readable tree, whose
+    transcript carries the recorded digest -- a TypeError from the hash
+    comparison or the transcript gate is the genuine bug of the test two above,
+    one level deeper: it must leave publish() as it arrived, not be filed as a
+    NO-VERDICT publication. That test replaces the callee whole and cannot see
+    this; `tools/control_publish_selected_refusal.py` widens the conversion over
+    the callee's whole body and requires this test to go red."""
+    artifact, _ = built_artifact(tmp_path)
+    _record_only_tree(tmp_path / "tree", monkeypatch, _json(artefacts=_ARTIFACTS, inputs=_INPUTS, config=_CONFIG))
+
+    def bug(*_args, **_kwargs):
+        raise TypeError("genuine bug")
+    if site == "validate_clean_pass":
+        monkeypatch.setattr(build_selected.i2s_transcript, "validate_clean_pass", bug)
+    else:
+        monkeypatch.setattr(build_selected, "hashlib", types.SimpleNamespace(sha256=bug))
+    with pytest.raises(TypeError, match="genuine bug"):
+        publish_selected.publish(artifact, tmp_path / "publication", WORKFLOW)
+    assert not (tmp_path / "publication").exists()

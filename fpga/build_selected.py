@@ -26,6 +26,7 @@ import i2s_transcript                                             # noqa: E402
 # The question that is this gate's own; whether the transcript is one clean,
 # un-injected PASS from a named simulator is `i2s_transcript`'s.
 M5A_SPI_I2S_VERIFIED = "M5A path verified from SPI pins through the production voice and I2S pins"
+M5A_RECORD = "docs/scorecard/results/M5A.json"
 
 
 def sources():
@@ -36,21 +37,51 @@ def sources():
     return [ROOT / "fpga/rtl/ulx3s_top.v"] + [ROOT / "rtl-sketch" / n for n in names]
 
 
+def stored_record():
+    """The fields `simulation_evidence()` reads from the committed M5A record:
+    where the SPI-I2S transcript is, the digests it is bound to and the 2x paths
+    it selected -- or `RuntimeError` naming the record and the class it could
+    not be read as.
+
+    A record that is not this mapping is a precondition that was not met, so it
+    is REFUSED here: both callers record `RuntimeError` as exit 2, and neither
+    names the classes a bare read raises (#1938). The tuple is the one
+    `tools/cymbal_band_balance.py` catches for `werner_fig4.from_artifact`, and
+    it stops at the read and the lookups. An absent record stays
+    `FileNotFoundError`, an OSError to both callers, and what the rest of
+    `simulation_evidence()` computes raises what it raises.
+    """
+    try:
+        record = json.loads((ROOT / M5A_RECORD).read_text())
+        provenance = record["provenance"]
+        inputs = provenance["inputs"]
+        decoded = inputs.get("decoded:I2S")
+        return {"transcript": ROOT / provenance["artefacts"]["spi_i2s"],
+                "transcript_sha256": inputs["verification:SPI-I2S"].removeprefix("sha256:"),
+                "decoded": decoded,
+                "wav_sha256": None if decoded is None else decoded.removeprefix("sha256:"),
+                "config": {name: provenance["config"][name]
+                           for name in ("oscillator_oversample_2x", "filter_rate_converted")}}
+    except (json.JSONDecodeError, UnicodeDecodeError, KeyError, TypeError, AttributeError) as exc:
+        raise RuntimeError(f"{M5A_RECORD} is not a readable M5A record "
+                           f"({type(exc).__name__}: {exc})") from None
+
+
 def simulation_evidence():
-    record = json.loads((ROOT / "docs/scorecard/results/M5A.json").read_text())
-    transcript = ROOT / record["provenance"]["artefacts"]["spi_i2s"]
+    stored = stored_record()
+    transcript = stored["transcript"]
     content = transcript.read_bytes()
-    expected = record["provenance"]["inputs"]["verification:SPI-I2S"].removeprefix("sha256:")
+    expected = stored["transcript_sha256"]
     if hashlib.sha256(content).hexdigest() != expected:
         raise RuntimeError("stored SPI-I2S transcript hash differs")
-    config = record["provenance"]["config"]
+    config = stored["config"]
     if not config["oscillator_oversample_2x"] or not config["filter_rate_converted"]:
         raise RuntimeError("stored simulation does not select both 2x paths")
     text = content.decode("utf-8", errors="replace")
-    decoded = record["provenance"]["inputs"].get("decoded:I2S")
+    decoded = stored["decoded"]
     if not decoded:
         raise RuntimeError("stored simulation records no decoded I2S WAV digest")
-    i2s_transcript.validate_clean_pass(text, wav_sha256=decoded.removeprefix("sha256:"), refuse=RuntimeError)
+    i2s_transcript.validate_clean_pass(text, wav_sha256=stored["wav_sha256"], refuse=RuntimeError)
     if M5A_SPI_I2S_VERIFIED not in text:
         raise RuntimeError("stored SPI-I2S transcript does not verify the M5A path from the SPI pins")
     stamp = re.search(r"built from ([0-9a-f]+)(-dirty)?", text)

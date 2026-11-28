@@ -1,5 +1,6 @@
 import subprocess
 import sys
+import types
 import hashlib
 import json
 import pathlib
@@ -290,3 +291,129 @@ def test_a_clean_build_stamp_is_cleared_so_the_refusal_above_is_the_stamps(tmp_p
     report = json.loads((out / "report.json").read_text())
     assert report["state"] == "REFUSED"
     assert "yosys" in report["reason"] and "simulation_evidence" in report
+
+
+# ------------ a committed record that cannot be read as a record (#1938) ----
+
+M5A_RECORD = "docs/scorecard/results/M5A.json"
+#: The transcript a well-formed record names, carrying the digest `_INPUTS`
+#: records, so that a malformed `text` is the one thing wrong with the tree.
+_TRANSCRIPT = b"stored SPI-to-I2S transcript\n"
+_ARTIFACTS = {"spi_i2s": "verification.txt"}
+_INPUTS = {"verification:SPI-I2S": "sha256:" + hashlib.sha256(_TRANSCRIPT).hexdigest(),
+           "decoded:I2S": "sha256:" + "0" * 64}
+_CONFIG = {"oscillator_oversample_2x": True, "filter_rate_converted": True}
+
+
+def _json(**provenance):
+    """A record whose `provenance` mapping is exactly `provenance`."""
+    return json.dumps({"provenance": provenance})
+
+
+#: The committed record malformed one way per entry -- the shapes of the issue's
+#: Observed table first -- and the class the bare read or lookup raised.
+_MALFORMED = {
+    "list": ("[]", "TypeError"),
+    "null": ("null", "TypeError"),
+    "not-json": ("{", "JSONDecodeError"),
+    "no-provenance": ('{"case_id": "M5A"}', "KeyError"),
+    "no-artefacts": (_json(inputs=_INPUTS, config=_CONFIG), "KeyError"),
+    "not-utf8": (b"\xff\xfe M5A", "UnicodeDecodeError"),
+    "artefacts-not-a-mapping": (_json(artefacts="verification.txt", inputs=_INPUTS, config=_CONFIG),
+                                "TypeError"),
+    "transcript-not-a-path": (_json(artefacts={"spi_i2s": 7}, inputs=_INPUTS, config=_CONFIG), "TypeError"),
+    "digest-not-a-string": (_json(artefacts=_ARTIFACTS, config=_CONFIG,
+                                  inputs={**_INPUTS, "verification:SPI-I2S": 64}), "AttributeError"),
+    "decoded-not-a-string": (_json(artefacts=_ARTIFACTS, config=_CONFIG,
+                                   inputs={**_INPUTS, "decoded:I2S": 64}), "AttributeError"),
+    "config-without-a-flag": (_json(artefacts=_ARTIFACTS, inputs=_INPUTS,
+                                    config={"oscillator_oversample_2x": True}), "KeyError"),
+}
+_SHAPES = list(_MALFORMED.values())
+
+
+def _record_only_tree(tmp_path, monkeypatch, text=None):
+    """A scratch ROOT for the callee holding an M5A record that reads as `text`
+    and the transcript a well-formed record names; `None` leaves the record
+    absent. Nothing else is there: the record is the only thing that can refuse."""
+    (tmp_path / "docs/scorecard/results").mkdir(parents=True)
+    (tmp_path / "verification.txt").write_bytes(_TRANSCRIPT)
+    if text is not None:
+        (tmp_path / M5A_RECORD).write_bytes(text if isinstance(text, bytes) else text.encode())
+    monkeypatch.setattr(build, "ROOT", tmp_path)
+
+
+def _git_answers_only_the_commit(monkeypatch):
+    """What main() needs to reach its evidence check: the source commit. The
+    source list is empty and every other child fails, so no tool can pass."""
+
+    def check_output(cmd, *args, **kwargs):
+        if cmd[:2] == ["git", "rev-parse"]:
+            return "abc1234\n"
+        raise subprocess.CalledProcessError(1, cmd)
+    monkeypatch.setattr(build.subprocess, "check_output", check_output)
+    monkeypatch.setattr(build, "sources", lambda: [])
+
+
+@pytest.mark.parametrize("text, raised", _SHAPES, ids=list(_MALFORMED))
+def test_a_malformed_stored_record_is_refused_naming_the_record(tmp_path, monkeypatch, text, raised):
+    """START RED (#1938). `simulation_evidence()` read the committed M5A record
+    without saying what a record it cannot interpret is, so each shape here left
+    as whatever the read or the lookup raised -- and neither caller's handler
+    names those classes: a traceback at exit 1 from both. A record that is not
+    the mapping this function expects is a precondition that was not met, so it
+    is REFUSED in the callee as the RuntimeError both callers already record,
+    naming the record and the class it could not be read as."""
+    _record_only_tree(tmp_path, monkeypatch, text)
+    with pytest.raises(RuntimeError) as refused:
+        build.simulation_evidence()
+    assert str(refused.value).startswith(M5A_RECORD), str(refused.value)
+    assert f"({raised}:" in str(refused.value), str(refused.value)
+
+
+@pytest.mark.parametrize("text, raised", _SHAPES, ids=list(_MALFORMED))
+def test_a_malformed_stored_record_leaves_main_refused(tmp_path, monkeypatch, capsys, text, raised):
+    """The same record through main(): REFUSED, exit 2, the callee's reason on
+    the report and on stdout, over the earlier record, no stage run."""
+    _record_only_tree(tmp_path, monkeypatch, text)
+    _git_answers_only_the_commit(monkeypatch)
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "report.json").write_text(json.dumps({"state": "BUILT", "bitstream_built": True}))
+    assert build.main(["--out", str(out)]) == 2
+    report = json.loads((out / "report.json").read_text())
+    assert report["state"] == "REFUSED"
+    assert report["reason"].startswith(M5A_RECORD) and f"({raised}:" in report["reason"]
+    assert report["bitstream_built"] is False and report["stages"] == {}
+    assert capsys.readouterr().out.strip() == report["reason"]
+    assert [p.name for p in out.iterdir()] == ["report.json"]
+
+
+def test_an_absent_stored_record_is_left_as_the_os_error(tmp_path, monkeypatch):
+    """The one record that is not the record's own: an absent file is
+    FileNotFoundError, which both callers already handle as OSError (#1676).
+    The callee's refusal is for what the file says, not for its absence."""
+    _record_only_tree(tmp_path, monkeypatch)
+    with pytest.raises(FileNotFoundError):
+        build.simulation_evidence()
+
+
+@pytest.mark.parametrize("site", ["hashlib", "validate_clean_pass", "git show"])
+def test_a_bug_after_the_record_read_is_not_converted(tmp_path, monkeypatch, site):
+    """The other side of the refusal above: the conversion covers reading the
+    record and nothing after it. A TypeError from the hash comparison, the
+    transcript gate or the `git show` loop is a bug to surface at exit 1, and
+    leaves as it arrived. `tools/control_publish_selected_refusal.py` widens the
+    conversion over the whole body and requires a test to go red."""
+    _stored_simulation(monkeypatch, tmp_path, _committed_transcript())
+    bug = _raising(TypeError("genuine bug"))
+    if site == "git show":
+        shown = build.subprocess.check_output
+        monkeypatch.setattr(build.subprocess, "check_output",
+                            lambda cmd, *a, **k: bug() if cmd[:2] == ["git", "show"] else shown(cmd, *a, **k))
+    elif site == "hashlib":
+        monkeypatch.setattr(build, "hashlib", types.SimpleNamespace(sha256=bug))
+    else:
+        monkeypatch.setattr(build.i2s_transcript, "validate_clean_pass", bug)
+    with pytest.raises(TypeError, match="genuine bug"):
+        build.simulation_evidence()

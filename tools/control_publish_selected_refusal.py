@@ -26,6 +26,14 @@ failures**. The mutation is a text substitution applied to the source of
 pytest collects. Nothing on disk is touched, so this is safe to run beside
 anything else and leaves no state behind.
 
+One entry substitutes into the callee instead (#1938). `simulation_evidence()`
+converts the committed M5A record's read into a stated refusal, and the
+narrowness of that conversion -- the record read, and nothing after it -- is
+what keeps a bug in the hash comparison or the transcript gate surfacing at
+exit 1. `RECORD_CONVERSION_WIDENED_OVER_THE_BODY` wraps the callee's whole
+body in the conversion, the way an "also catch these" edit would, and requires
+the test that raises a `TypeError` past the record read to go red.
+
 WHAT THIS CANNOT REACH
 ----------------------
 `test_cli_exits_2_without_a_traceback_when_the_stored_simulation_is_refused`
@@ -45,6 +53,7 @@ from control_dag_lib import ROOT, main as lib_main, run_control, run_raw  # noqa
 SUITE = "test_publish_selected.py"
 REFUSED = "test_refused_stored_simulation_is_a_no_verdict_publication_not_a_traceback"
 NOT_MASKED = "test_a_genuine_bug_is_not_masked_as_a_refusal"
+NOT_MASKED_AFTER_THE_READ = "test_a_bug_after_the_record_read_is_not_masked_as_a_refusal"
 
 RUNNER = """
 import inspect, pathlib, sys
@@ -65,8 +74,22 @@ assert patched != source, "the injection site is gone: this control no longer in
 exec(patched, vars(ps))
 """
 
+#: The same substitution, applied to the callee's source in `build_selected`.
+BUILD_PATCH = """
+import inspect
+import build_selected as bs
+source = inspect.getsource(bs.simulation_evidence)
+patched = source.replace({old!r}, {new!r})
+assert patched != source, "the injection site is gone: this control no longer injects anything"
+exec(patched, vars(bs))
+"""
+
 AT_THE_CALL = "except RuntimeError as exc:"
 BUILD_HANDLER = "except (ValueError, FileNotFoundError, KeyError) as exc:"
+
+#: The controls whose substitution is applied to the callee's source rather
+#: than to `publish`: the record read's conversion lives in the callee (#1938).
+IN_THE_CALLEE = {"RECORD_CONVERSION_WIDENED_OVER_THE_BODY"}
 
 #: name -> (the text replaced inside `publish`, its replacement), the test that
 #: MUST be among the failures, why it is a plausible way for the fix to be undone
@@ -112,6 +135,20 @@ CONTROLS = {
         "'also catch everything' applied at the call: a malformed record's "
         "TypeError is reported as a refusal, with its message, instead of "
         "surfacing as the bug it is"),
+    "RECORD_CONVERSION_WIDENED_OVER_THE_BODY": (
+        ("def simulation_evidence():",
+         "def simulation_evidence():\n"
+         "    try:\n"
+         "        return _simulation_evidence_body()\n"
+         "    except (json.JSONDecodeError, UnicodeDecodeError, KeyError, TypeError, AttributeError) as exc:\n"
+         "        raise RuntimeError(f'stored record unreadable ({type(exc).__name__}: {exc})') from None\n"
+         "\n\n"
+         "def _simulation_evidence_body():"),
+        f"{NOT_MASKED_AFTER_THE_READ}[hash-comparison]",
+        "'convert the record read' applied to the callee's whole body instead of "
+        "its read and lookups: a bug in the hash comparison or the transcript "
+        "gate is filed as a NO-VERDICT publication with its own message, instead "
+        "of surfacing as the bug it is (#1938)"),
 }
 
 
@@ -124,7 +161,8 @@ def run_suite(mutation: str) -> tuple[int, list, str]:
 def run_one(name: str) -> tuple[bool, list, str]:
     """Apply one mutation and run the suite. Returns (fired, failed tests, why)."""
     (old, new), must_fail, _why = CONTROLS[name]
-    return run_control(RUNNER.format(root=str(ROOT), mutation=PATCH.format(old=old, new=new),
+    patch = BUILD_PATCH if name in IN_THE_CALLEE else PATCH
+    return run_control(RUNNER.format(root=str(ROOT), mutation=patch.format(old=old, new=new),
                                      suite=SUITE),
                        "red", must_fail)
 
