@@ -605,11 +605,11 @@ def e7_ceiling() -> dict:
         try:
             a, sa = load_ref(pa)
             b, sb = load_ref(pb)
-        except Refused as exc:
+            a = norm(rc.prepare(a, sa, side=pa))
+            b = norm(rc.prepare(b, sb, side=pb))
+        except refusal.Refused as exc:
             out[f"{pa} vs {pb}"] = f"refused: {exc}"
             continue
-        a = norm(rc.prepare(a, sa))
-        b = norm(rc.prepare(b, sb))
         if sa != sb:
             out[f"{pa} vs {pb}"] = (f"refused: {pa} is {sa} Hz but {pb} is {sb} Hz; "
                                     "one mel filterbank cannot serve both")
@@ -635,9 +635,9 @@ def e9_noise_floor() -> dict:
     out = {}
     try:
         raw, sr = load_ref("bd8/BD5050.WAV")
-    except Refused as exc:
+        x = norm(rc.prepare(raw, sr, side="bd8/BD5050.WAV"))
+    except refusal.Refused as exc:
         return {"refused": str(exc)}
-    x = norm(rc.prepare(raw, sr))
     pk = float(np.abs(x).max())
     for db in (-60.0, -50.0, -40.0):
         g = x.copy()
@@ -681,10 +681,10 @@ def main(argv=None) -> int:
     try:
         import run_case as rc
         raw, sr = load_ref(a.ref)
-    except Refused as exc:
+        x = norm(rc.prepare(raw, sr, side=a.ref))
+    except refusal.Refused as exc:
         print(f"REFUSED: {exc}")
         return 2
-    x = norm(rc.prepare(raw, sr))
 
     # PRECONDITION, asserted at the point of use. The decay sweep perturbs the
     # signal's OWN measured T20 by a stated percentage, so a reference whose
@@ -700,9 +700,9 @@ def main(argv=None) -> int:
         for q in sorted(REFDIR.glob("bd8/*.WAV")):
             try:
                 z, zs = load_ref(f"bd8/{q.name}")
-            except Refused:
+                zz = norm(rc.prepare(z, zs, side=f"bd8/{q.name}"))
+            except refusal.Refused:
                 continue
-            zz = norm(rc.prepare(z, zs))
             e = am.schroeder_t20(zz, zs)
             if e.ok:
                 print(f"    bd8/{q.name}  T20 {e.value * 1000:.1f} ms")
