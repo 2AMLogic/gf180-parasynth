@@ -34,6 +34,11 @@ WHAT THIS SCAN RESOLVES that the #1160 one-off dotted-call grep could not:
     the body it guards, not the same statement's except/else/finally
     clauses, where the raised refusal propagates past it (#1188
     "try-handler credit", fixed);
+  * `except*` is read as `except` (#1708): the two parse to different node
+    kinds (`ast.TryStar` is not an `ast.Try`), and a walk that knew only the
+    second read a wrapper the dispatch reaches from an `except*` clause as
+    entry -- a false `covered` -- and saw no guard in an `except*` handler,
+    which catches a plain refusal the same way;
   * every tracked file is indexed by its own path -- two same-stem files
     (audition/play.py and fpga/play.py in this tree) are both scanned with
     their own trees, and a callee imported through a colliding stem is
@@ -149,6 +154,11 @@ is decided by tracing the caller with a known-answer input, as #1160 and
     acceptance is observed, not read -- `tools/test_refusal_sibling_scan.py`
     runs the shipped function with a refusing callee (caught, returned in the
     report's `refused` list) and with a sibling class (escapes);
+  * what an `except*` handler is handed: an ExceptionGroup, never the
+    refusal itself (`as e` is the group; the refusal is `e.exceptions[0]`),
+    and it cannot `return`. The census says whether the refusal is caught,
+    not what the handler then does with it -- under `except` or `except*`
+    alike;
   * that await rule is conservative where only the await could tell: a bare
     call to an `async def` whose coroutine is awaited INSIDE the try that
     created it reads `candidate-escape`, though Python catches it there,
@@ -213,6 +223,12 @@ BASE_STEM = "refusal"                   # the module defining the common base cl
 # scope's name, not the enclosing function's (nor the module's)
 SCOPE_NODES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
 FUNCTION_NODES = (ast.FunctionDef, ast.AsyncFunctionDef)
+# a try statement is two node kinds: `except` parses to ast.Try and `except*`
+# (3.11+) to ast.TryStar, neither a subclass of the other. Every narrowing on
+# a try goes through this tuple (#1708); one that named ast.Try alone read a
+# wrapper the dispatch reaches from an `except*` clause as entry -- a false
+# `covered` -- and saw no guard in an `except*` handler, which catches.
+TRY_NODES = (ast.Try, ast.TryStar)
 
 
 # ---------------------------------------------------------------------------
@@ -511,7 +527,7 @@ def raise_origins(mod: ModInfo, fname: str,
 # ---------------------------------------------------------------------------
 # per-call-site analysis
 # ---------------------------------------------------------------------------
-def enclosing_try_parents(tree: ast.AST, call: ast.AST) -> list[ast.Try]:
+def enclosing_try_parents(tree: ast.AST, call: ast.AST) -> list[ast.Try | ast.TryStar]:
     """The try statements whose handlers can actually catch `call`'s
     exceptions: only tries whose BODY contains the call. A try's handlers
     cover the body they guard -- NOT the same statement's except/else/
@@ -523,7 +539,7 @@ def enclosing_try_parents(tree: ast.AST, call: ast.AST) -> list[ast.Try]:
     out, cur = [], call
     while cur in parents:
         prev, cur = cur, parents[cur]
-        if isinstance(cur, ast.Try) and prev in cur.body:
+        if isinstance(cur, TRY_NODES) and prev in cur.body:
             out.append(cur)
     return out
 
@@ -600,7 +616,7 @@ def _entry_calls(guard: ast.If) -> set[str]:
             continue
         if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
             out.add(n.func.id)
-        if isinstance(n, ast.Try):
+        if isinstance(n, TRY_NODES):
             todo.extend(n.body)
             todo.extend(n.orelse)
         else:
@@ -630,7 +646,7 @@ def cli_boundary_guards(mod: ModInfo, by_stem: dict[str, list[ModInfo]]) -> list
         if _is_main_guard(node):
             wrappers |= _entry_calls(node)
 
-    def in_boundary(tr: ast.Try) -> bool:
+    def in_boundary(tr: ast.Try | ast.TryStar) -> bool:
         cur = parents.get(tr)
         if isinstance(cur, FUNCTION_NODES) and cur.name == "main":
             return True
@@ -645,7 +661,7 @@ def cli_boundary_guards(mod: ModInfo, by_stem: dict[str, list[ModInfo]]) -> list
 
     out: list[tuple[set[str], str]] = []
     for node in ast.walk(mod.tree):
-        if isinstance(node, ast.Try) and in_boundary(node):
+        if isinstance(node, TRY_NODES) and in_boundary(node):
             out.extend(handler_origins(mod, by_stem, h) for h in node.handlers)
     return out
 

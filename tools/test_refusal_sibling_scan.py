@@ -42,6 +42,7 @@ import asyncio
 import importlib.util
 import json
 import pathlib
+import subprocess
 import sys
 import types
 
@@ -2214,10 +2215,15 @@ def _wrapper_cli(wrapper: str, dispatch: str) -> str:
 
 def _wrapper_scan(tmp_path, wrapper: str, dispatch: str) -> dict:
     """The one `mod_a.load` site of a wrapper-shaped CLI: a second site there
-    would be a fixture mistake, so it is refused rather than indexed."""
+    would be a fixture mistake, so it is refused rather than indexed. So is a
+    fixture that is not a program at all: the census parses and never runs,
+    so `except*`'s ban on `return` inside the block (#1708) is invisible to
+    it, and a classification of a SyntaxError would read as data."""
     files = _tree(tmp_path)
     p = tmp_path / "caller_wrapped.py"
-    p.write_text(_wrapper_cli(wrapper, dispatch))
+    text = _wrapper_cli(wrapper, dispatch)
+    compile(text, "<wrapper-cli>", "exec")
+    p.write_text(text)
     files.append(p)
     idx = rss.build_index(files)
     got = [s for s in _sites_for(files, idx, "caller_wrapped") if s["callee"] == "mod_a.load"]
@@ -2340,6 +2346,241 @@ def helper():
 ''')
     assert s["classification"] == "candidate-escape", s
     assert s["uncovered"] == ["mod_a"], s
+
+
+# --- #1708 controls: `except*` is a try statement too -------------------------
+# `except*` parses to `ast.TryStar` (3.11+), which is not an `ast.Try`. The
+# module narrowed on `ast.Try` alone in three places, and no control saw it:
+# all 70 that had shipped were green on a scanner that read a wrapper the
+# dispatch reaches from an `except*` clause as entry -- a false
+# `covered(cli-base)`, the silent direction, and #1708's repro. The other two
+# places miss the same node in the loud direction and are widened here too,
+# on the interpreter's word rather than a reading: `except* X` DOES catch a
+# plain `raise X` (CPython matches it as a one-member group), so an `except*`
+# handler around the call site, or in the wrapper, is a guard the census was
+# not crediting. A first reading of `except*` as catching only groups was
+# wrong; running the planted programs is what showed it, and
+# `test_the_interpreter_agrees_with_the_census` keeps doing so.
+#
+# Red against the unwidened scanner: the repro; the `except*` rows for
+# `handler`, `finalbody`, `site-base`, `site-exact` and `boundary`; and the
+# class search. Green before and after: `body`, `orelse`, `site-other` and
+# every plain-`except` row. Those pin the inputs that would defeat a WRONG
+# widening (rule 8) -- a fix that dropped `orelse`, kept `finalbody`, or
+# credited a handler of another class turns them red -- and
+# `test_each_injection_is_seen_by_its_control` keeps the shipped bug and two
+# such wrong fixes as permanent reds (rule 5).
+#
+# Stated, not modelled: an `except*` handler is handed an ExceptionGroup
+# (`as e` is the group; the refusal is `e.exceptions[0]`), cannot `return`
+# and cannot be bare. The census says whether the refusal is caught, never
+# what the handler then does with it. Two more limits of the census, under
+# either keyword, shape the rows: credit at the boundary is by PRESENCE, not
+# by path (#1656), so the rows that must agree with the interpreter reach the
+# site THROUGH the wrapper; and a wrapper called from a `finally` under
+# `sys.exit(...)` displaces the in-flight refusal with its own exit (exit 2,
+# no traceback), so `finalbody` calls it bare.
+
+STAR = {"except": "", "except*": "*"}
+
+STAR_DISPATCH = {
+    "body": "    try:\n        sys.exit(_cli())\n    except{kw} OSError:\n        pass\n",
+    "orelse": "    try:\n        pass\n    except{kw} OSError:\n        pass\n"
+              "    else:\n        sys.exit(_cli())\n",
+    "handler": "    try:\n        sys.exit(go(None))\n    except{kw} OSError:\n"
+               "        sys.exit(_cli())\n",
+    "finalbody": "    try:\n        sys.exit(go(None))\n    except{kw} OSError:\n        pass\n"
+                 "    finally:\n        _cli()\n",
+}
+
+STAR_BOUNDARY_WRAPPER = '''
+def _cli(argv=None):
+    try:
+        return go(argv)
+    except{kw} refusal.Refused as e:
+        print(f"REFUSED  {{e}}")
+    return 2
+'''
+
+STAR_SITE = '''
+import sys
+import refusal
+import mod_a
+
+def go(p):
+    try:
+        return mod_a.load(p)           # guarded HERE, by the handler under test
+    except{kw} {handler} as e:
+        print(f"REFUSED  {{e}}")
+    return 2
+
+if __name__ == "__main__":
+    sys.exit(go(None))
+'''
+
+SITE_HANDLERS = {"site-base": "refusal.Refused", "site-exact": "mod_a.Refused",
+                 "site-other": "KeyError"}
+
+STAR_SHAPES = [
+    # shape         the census's answer   does the site's refusal escape the program
+    ("body",        "covered(cli-base)",  False),   # the wrapper is on the way in
+    ("orelse",      "covered(cli-base)",  False),   # it runs only if the body raised
+    ("handler",     "candidate-escape",   True),    # reached after the work is over
+    ("finalbody",   "candidate-escape",   True),
+    ("boundary",    "covered(cli-base)",  False),   # the wrapper's own guard
+    ("site-base",   "covered(base)",      False),
+    ("site-exact",  "covered(exact)",     False),
+    ("site-other",  "candidate-escape",   True),    # a handler of another class
+]
+SHAPE_IDS = [s for s, _, _ in STAR_SHAPES]
+
+
+def _star_program(shape: str, keyword: str) -> str:
+    """A whole CLI whose one `mod_a.load` site can raise: the try under test
+    written with `keyword` (`except` or `except*`) in the clause `shape`."""
+    kw = STAR[keyword]
+    if shape == "boundary":
+        return _wrapper_cli(STAR_BOUNDARY_WRAPPER.format(kw=kw), "    sys.exit(_cli())\n")
+    if shape in STAR_DISPATCH:
+        return _wrapper_cli(WRAPPER_BASE_GUARD, STAR_DISPATCH[shape].format(kw=kw))
+    return STAR_SITE.format(kw=kw, handler=SITE_HANDLERS[shape])
+
+
+def _scan_program(tmp_path, src: str, scanner=rss) -> dict:
+    """The one `mod_a.load` site of a whole program, read by `scanner` -- the
+    shipped module, or a mutant of it. A fixture that is not a program, or
+    that has other than exactly one such site, is REFUSED rather than
+    classified."""
+    compile(src, "<star-program>", "exec")
+    files = _tree(tmp_path)
+    p = tmp_path / "caller_star.py"
+    p.write_text(src)
+    files.append(p)
+    got = [s for s in scanner.scan(files, scanner.build_index(files))
+           if s["site"].split("/")[-1].startswith("caller_star.py:")
+           and s["callee"] == "mod_a.load"]
+    assert len(got) == 1, got
+    return got[0]
+
+
+def _run_program(tmp_path, src: str) -> subprocess.CompletedProcess:
+    """The same program run by the interpreter, with a real `refusal.Refused`
+    on its path: the answer is Python's, read from the exit status and
+    stderr, not the census's."""
+    (tmp_path / "refusal.py").write_text("class Refused(Exception):\n    pass\n")
+    p = tmp_path / "caller_star.py"
+    p.write_text(src)
+    return subprocess.run([sys.executable, str(p)], cwd=tmp_path,
+                          capture_output=True, text=True)
+
+
+def test_wrapper_called_only_from_an_except_star_handler_is_not_entry(tmp_path):
+    """#1708's repro as filed: the shipped control's own fixture with `except`
+    replaced by `except*`. Red against the scanner that shipped -- it read
+    `covered(cli-base)`, crediting the wrapper's guard to a site the wrapper
+    never sees, because it runs from the handler after the site's work is
+    over."""
+    s = _wrapper_scan(tmp_path, WRAPPER_BASE_GUARD, '''
+    try:
+        sys.exit(go())
+    except* OSError:
+        sys.exit(_cli())
+''')
+    assert s["classification"] == "candidate-escape", s
+
+
+@pytest.mark.parametrize("keyword", sorted(STAR))
+@pytest.mark.parametrize("shape,want,escapes", STAR_SHAPES, ids=SHAPE_IDS)
+def test_the_census_reads_except_star_as_except(tmp_path, keyword, shape, want, escapes):
+    """`ast.TryStar` exactly as `ast.Try`, at each of the three places the
+    module narrowed on the latter alone: the dispatch's entry calls
+    (body/orelse/handler/finalbody), the handlers around the call site
+    (site-*) and the CLI boundary (boundary)."""
+    s = _scan_program(tmp_path, _star_program(shape, keyword))
+    assert s["classification"] == want, s
+
+
+@pytest.mark.parametrize("keyword", sorted(STAR))
+@pytest.mark.parametrize("shape,want,escapes", STAR_SHAPES, ids=SHAPE_IDS)
+def test_the_interpreter_agrees_with_the_census(tmp_path, keyword, shape, want, escapes):
+    """The reference the row above is checked against, and the control that
+    corrected the reading this section was first written from: each program
+    run for real must do what the census says. A `candidate-escape` site is
+    a traceback and exit 1; a `covered` one exits 2 through a handler that
+    ran, with no traceback."""
+    prog = _star_program(shape, keyword)
+    s = _scan_program(tmp_path, prog)
+    r = _run_program(tmp_path, prog)
+    assert s["classification"] == want, s
+    if escapes:
+        assert "Traceback (most recent call last)" in r.stderr and r.returncode == 1, r
+        assert "Refused" in r.stderr, r          # the refusal escaped, not an unrelated crash
+    else:
+        assert "Traceback" not in r.stderr and r.returncode == 2, r
+        assert "REFUSED" in r.stdout, r          # through the handler, not around it
+
+
+INJECTIONS = {
+    # id: (the source replaced, by)
+    "shipped": ("TRY_NODES = (ast.Try, ast.TryStar)", "TRY_NODES = (ast.Try,)"),
+    "no-orelse": ("            todo.extend(n.body)\n            todo.extend(n.orelse)\n",
+                  "            todo.extend(n.body)\n"),
+    "with-finally": ("            todo.extend(n.body)\n",
+                     "            todo.extend(n.body + n.finalbody)\n"),
+}
+
+
+def _mutant(old: str, new: str):
+    """The scanner with `old` replaced by `new` in its source, loaded in
+    memory. The injection point must be there exactly once: one that has
+    moved or gone is REFUSED, never skipped -- a mutant that matches nothing
+    is not a control (#755)."""
+    path = ROOT / "tools" / "refusal_sibling_scan.py"
+    src = path.read_text()
+    assert src.count(old) == 1, (src.count(old), old)
+    ns = {"__name__": "refusal_sibling_scan_mutant", "__file__": str(path)}
+    exec(compile(src.replace(old, new), str(path), "exec"), ns)
+    return types.SimpleNamespace(**ns)
+
+
+@pytest.mark.parametrize("injection,shape,keyword,wrong", [
+    ("shipped", "handler", "except*", "covered(cli-base)"),      # the false cover
+    ("shipped", "finalbody", "except*", "covered(cli-base)"),
+    ("shipped", "site-base", "except*", "candidate-escape"),     # a guard not seen
+    ("shipped", "site-exact", "except*", "candidate-escape"),
+    ("shipped", "boundary", "except*", "candidate-escape"),
+    ("no-orelse", "orelse", "except", "candidate-escape"),
+    ("no-orelse", "orelse", "except*", "candidate-escape"),
+    ("with-finally", "finalbody", "except", "covered(cli-base)"),
+    ("with-finally", "finalbody", "except*", "covered(cli-base)"),
+])
+def test_each_injection_is_seen_by_its_control(tmp_path, injection, shape, keyword, wrong):
+    """Rule 5: the bug as it shipped, and the two wrong widenings the
+    green-before-and-after rows exist for, reinstated in the scanner's source
+    -- each must move its control to the answer named here, which is the
+    assertion of `test_the_census_reads_except_star_as_except` failing."""
+    scanner = _mutant(*INJECTIONS[injection])
+    s = _scan_program(tmp_path, _star_program(shape, keyword), scanner)
+    assert s["classification"] == wrong, (injection, shape, keyword, s)
+
+
+def test_the_module_narrows_on_a_try_only_through_try_nodes():
+    """The issue's class search (`grep -n "ast.Try" tools/refusal_sibling_scan.py`),
+    kept as a control: every statement kind that has handlers is in
+    `TRY_NODES`, and no `isinstance` in the module names `ast.Try` outside
+    it. Red against the scanner that shipped, which did so three times. A
+    narrowing written without `isinstance` (`type(n) is ast.Try`) is not
+    seen: this is the search mechanised, with the search's own reach."""
+    with_handlers = {c for c in vars(ast).values()
+                     if isinstance(c, type) and issubclass(c, ast.stmt)
+                     and "handlers" in c._fields}
+    assert with_handlers == set(rss.TRY_NODES), with_handlers
+    tree = ast.parse((ROOT / "tools" / "refusal_sibling_scan.py").read_text())
+    bare = [ast.unparse(n) for n in ast.walk(tree)
+            if isinstance(n, ast.Call) and ast.unparse(n.func) == "isinstance"
+            and any(isinstance(x, ast.Attribute) and x.attr == "Try"
+                    for a in n.args[1:] for x in ast.walk(a))]
+    assert bare == [], bare
 
 
 # ---------------------------------------------------------------------------
