@@ -1109,7 +1109,6 @@ def _clean(obj):
 
 
 def main(argv=None) -> int:
-    global HARNESS_IMAGE
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--outdir", type=Path, default=REPORT_DIR)
     ap.add_argument("--image", choices=HARNESS_IMAGES, default=HARNESS_IMAGE,
@@ -1138,6 +1137,18 @@ def main(argv=None) -> int:
     ap.add_argument("--expect-fail", action="store_true",
                     help="with --control: exit 0 only when it is caught by its own property")
     a = ap.parse_args(argv)
+    try:
+        return _run(a)
+    except (dx.KitRefused, r1c.Refused) as exc:
+        out = (a.json or a.outdir /
+               ("start-red.json" if a.start_red and not a.control else "verification.json"))
+        out.unlink(missing_ok=True)
+        print(f"live-midi: REFUSED -- {exc}")
+        return 2
+
+
+def _run(a) -> int:
+    global HARNESS_IMAGE
     HARNESS_IMAGE = a.image
     if a.image != "r1" and a.json is None:
         a.outdir = a.outdir / a.image              # never over the release target's record

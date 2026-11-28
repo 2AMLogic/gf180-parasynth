@@ -194,7 +194,7 @@ def say(*a):
     print(*a, flush=True)
 
 
-class Refused(refusal.Refused, SystemExit):
+class Refused(refusal.Refused):
     """A precondition of the apparatus failed. REFUSED is a first-class outcome
     here, distinct from pass and from fail (CLAUDE.md, run_case.py)."""
 
