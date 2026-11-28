@@ -312,8 +312,7 @@ per-strike refusals inside a measured row do not count, so a corpus that
 excludes and declines loops those ways still measures: over a complete
 inventory with one loop excluded and one pasted, every planned metric is
 measured and the run exits 0.
-<!-- claim: test=tools/test_measure_repeatability.py::test_the_loops_cli_exits_refused_when_a_plan_metric_has_no_spread -->
-<!-- claim: test=tools/test_measure_repeatability.py::test_per_loop_acoustic_exclusions_are_kept_on_a_complete_inventory -->
+<!-- claim: test=tools/test_measure_repeatability.py::test_a_planned_metric_with_no_row_at_all_is_refused -->
 <!-- claim: test=tools/test_measure_repeatability.py::test_by_design_exclusions_do_not_refuse_the_run -->
 
 **Audit (passed — not REFUSED).** 27 loops in `4x4/`. The audit does not trust
