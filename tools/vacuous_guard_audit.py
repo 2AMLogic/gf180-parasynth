@@ -167,6 +167,10 @@ def _domain(base: ast.expr) -> str:
         return "const?"
     if isinstance(base, ast.Attribute) and base.attr.isupper():
         return "const?"
+    if isinstance(base, ast.BinOp):
+        left, right = _domain(base.left), _domain(base.right)
+        if left and right:
+            return "const?" if "const?" in (left, right) else "int?"
     return ""
 
 

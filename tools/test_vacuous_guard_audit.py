@@ -122,6 +122,21 @@ def test_constant_and_integer_populations_are_advisory_not_dropped():
     assert sorted(h.mark for h in _hits(src)) == ["const?", "const?", "int?"]
 
 
+def test_a_sum_of_module_constants_is_marked_const_like_either_alone():
+    """`DEFECTS + BLIND_BY_CONSTRUCTION` is one constant population, not an
+    input-sized one: the advisory mark must survive the `+` (#1957 triage)."""
+    src = (
+        "def check_k(x):\n"
+        "    for k in KEYS + MORE_KEYS:\n"
+        "        if k not in x:\n"
+        "            raise Refused(k)\n"
+        "    for k in KEYS + x['more']:\n"
+        "        if k not in x:\n"
+        "            raise Refused(k)\n"
+    )
+    assert sorted(h.mark for h in _hits(src)) == ["", "const?"]
+
+
 def test_a_loop_that_cannot_refuse_is_not_a_verdict_hole():
     src = (
         "def check_sum(xs):\n"
