@@ -92,6 +92,9 @@ def _row(record: dict, label: str) -> dict:
     analysis_version = record.get("analysis_version")
     if not isinstance(analysis_version, str) or not analysis_version:
         raise m5a.Refused(f"{label} omits its analysis-version identifier")
+    if analysis_version != m5a.ANALYSIS_VERSIONS[case_id]:
+        raise m5a.Refused(f"{label} says it is {case_id} but was scored by "
+                          f"{analysis_version!r}, not {m5a.ANALYSIS_VERSIONS[case_id]!r}")
     if not isinstance(record.get("reference_profile"), str) or not record["reference_profile"]:
         raise m5a.Refused(f"{label} omits its reference profile")
     return {"case_id": case_id, "state": row["verdict"]["state"], "metrics": metrics,

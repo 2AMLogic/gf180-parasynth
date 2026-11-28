@@ -20,7 +20,7 @@ def _record(*, ref="a", engine="integrated-rtl", events=None, harmonic=-2.0, cas
     # which is the state it stores. The provenance is the complete set the
     # board requires for a verdict (#1601).
     return {"engine": engine, "case_id": case_id, "scorecard_state": "fail",
-            "analysis_version": "m5a-score-v3",
+            "analysis_version": m5a.ANALYSIS_VERSIONS[case_id],
             "reference_profile": "frozen Mini V3",
             "tolerance_policy": copy.deepcopy(m5a.TOLERANCES),
             "metrics": metrics, "diagnostics": {
@@ -126,7 +126,7 @@ def test_refuses_unrelated_or_incomplete_baselines(mutation, match):
 
 @pytest.mark.parametrize("mutation,match", [
     (lambda rec: rec["metrics"]["Pitch"].update(valid=False), "Pitch is invalid"),
-    (lambda rec: rec.update(analysis_version="m5a-score-v999"), "analysis-version"),
+    (lambda rec: rec.update(analysis_version="m5a-score-v999"), "was scored by"),
     (lambda rec: rec["metrics"]["Gain"].update(tolerance=30.0), "measurement contract"),
     (lambda rec: rec["tolerance_policy"].update(Gain=(30.0, "loose")), "tolerance policy"),
     (lambda rec: rec.update(reference_profile="different patch"), "reference profiles differ"),
@@ -348,6 +348,19 @@ def test_refuses_the_committed_m5a_pair_relabelled_as_m5b():
     baseline = _relabel(_committed("mono-pulse-2x/rtl/M5A.json"), "M5B")
     candidate = _relabel(_committed("m5-artifacts-333/pulse2x-rtl/M5A.json"), "M5B")
     with pytest.raises(m5a.Refused, match="says it is M5B.*manifest"):
+        compare.compare_records(baseline, candidate)
+
+
+def test_refuses_the_relabelled_pair_with_its_manifest_digest_also_edited():
+    """Second variant of the relabel: header AND manifest digest both say M5B,
+    but the record is still scored by M5A's analysis version, so it
+    contradicts itself in a field the comparator already reads."""
+    m5b_digest = hashlib.sha256(m5a.MANIFESTS["M5B"].read_bytes()).hexdigest()
+    baseline = _relabel(_committed("mono-pulse-2x/rtl/M5A.json"), "M5B")
+    candidate = _relabel(_committed("m5-artifacts-333/pulse2x-rtl/M5A.json"), "M5B")
+    for record in (baseline, candidate):
+        record["diagnostics"]["reference_manifest_sha256"] = m5b_digest
+    with pytest.raises(m5a.Refused, match="says it is M5B but was scored by"):
         compare.compare_records(baseline, candidate)
 
 
