@@ -47,6 +47,7 @@ import numpy as np
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "model"), str(ROOT / "tools")]
+import exit_contract  # noqa: E402
 import voice_fx as vf  # noqa: E402
 import refusal
 
@@ -551,6 +552,31 @@ def run_sweep(out: pathlib.Path, part: int = 0, parts: int = 1, which: str = "st
     return {"rows": rows}
 
 
+REFUSED_SHOWN = 5           # rows the sweep's REFUSED line names before "and N more"
+
+
+def _sweep_refusal_line(rows) -> str | None:
+    """The sweep's one REFUSED line when any row holds no output number, else None.
+
+    `_output_status` is the one definition of a refused row -- the function
+    summarize reads over the record this sweep writes -- so every shape it
+    refuses counts: a whole-row REFUSED, a FAIL-ACTIVITY, and a row still
+    stamped MEASURED whose output stage refused (measure_point keeps that
+    verdict, #1770). run_sweep prints such a row with `None` where its
+    numbers belong, and the sweep exited 0 on it (#1796). The reason is the
+    text summarize reports for the same row."""
+    refused = [(r["engine"], r["note"], r.get("reason", _output_status(r))) for r in rows
+               if _output_status(r) != "MEASURED"]
+    if not refused:
+        return None
+    named = "; ".join(f"{engine} note {note}: {reason}" for engine, note, reason in refused[:REFUSED_SHOWN])
+    if len(refused) > REFUSED_SHOWN:
+        named += f"; and {len(refused) - REFUSED_SHOWN} more"
+    verb = "holds" if len(refused) == 1 else "hold"
+    return (f"REFUSED: {len(refused)} of {len(rows)} rows {verb} no output number, "
+            f"so this sweep is NO-VERDICT, not a pass: {named}")
+
+
 def drive_sweep(notes=(72, 84, 96), drives=(0.05, 0.25, 0.5, 0.75, 1.0, 1.6),
                 wave="saw", cutoff=20000) -> dict:
     """Localize the M5 harmonic-shape deficit: the same held note at the M5A
@@ -793,7 +819,10 @@ def main(argv=None) -> int:
             res["pulse2x_rect_gain_q15"] = RECT_GAIN_Q15
             res["pulse2x_rect_mix_comp"] = RECT_MIX_COMP
             res["pulse2x_rect_drive_comp"] = RECT_DRIVE_COMP
-            rc = 0
+            refusal = _sweep_refusal_line(res["rows"])
+            if refusal is not None:
+                print(refusal)
+            rc = exit_contract.REFUSED if refusal is not None else exit_contract.PASS
     except Refused as e:
         print(f"REFUSED: {e}")
         return 2
