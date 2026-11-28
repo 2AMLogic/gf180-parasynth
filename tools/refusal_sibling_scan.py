@@ -500,9 +500,36 @@ def _invoked_in_place(mod: ModInfo, node: ast.Lambda) -> bool:
     callee of a call, or as a decorator, which is called with the def it
     decorates -- so that its body runs there and not elsewhere."""
     p = mod.parents.get(node)
-    return ((isinstance(p, ast.Call) and p.func is node)
-            or (isinstance(p, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
-                and node in p.decorator_list))
+    return (not _lambda_yields(node)
+            and ((isinstance(p, ast.Call) and p.func is node)
+                 or (isinstance(p, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                     and node in p.decorator_list)))
+
+
+def _lambda_yields(node: ast.Lambda) -> bool:
+    """Whether the lambda is a generator: a `yield` / `yield from` in its OWN
+    body. Calling it only creates the generator; the body runs at `next()`,
+    which may be after the try. A yield inside a NESTED lambda belongs to
+    that lambda and leaves this one's timing alone (#1702)."""
+    stack = [node.body]
+    while stack:
+        n = stack.pop()
+        if isinstance(n, (ast.Yield, ast.YieldFrom)):
+            return True
+        if not isinstance(n, ast.Lambda):
+            stack.extend(ast.iter_child_nodes(n))
+    return False
+
+
+def _postponed_annotations(mod: ModInfo) -> bool:
+    """`from __future__ import annotations` in this module: a variable
+    annotation is then stored as a string and evaluated only if something
+    calls `get_type_hints`, which may be after the try. Without it (3.12) a
+    class- or module-level annotation runs where it is written. Python 3.14
+    defers them regardless; the scanner targets the 3.12 CI."""
+    return any(isinstance(n, ast.ImportFrom) and n.module == "__future__"
+               and any(a.name == "annotations" for a in n.names)
+               for n in mod.tree.body)
 
 
 def scope_try_parents(mod: ModInfo, call: ast.AST) -> list[ast.Try]:
@@ -528,6 +555,9 @@ def scope_try_parents(mod: ModInfo, call: ast.AST) -> list[ast.Try]:
         if not deferred and isinstance(cur, DEFERRED_NODES):
             in_place = isinstance(cur, ast.Lambda) and _invoked_in_place(mod, cur)
             deferred = not (in_place or any(_within(call, p) for p in _eager_parts(cur)))
+        elif (not deferred and isinstance(cur, ast.AnnAssign)
+              and prev is cur.annotation and _postponed_annotations(mod)):
+            deferred = True      # the value expression stays eager: only the annotation waits
         if not deferred and isinstance(cur, ast.Try) and prev in cur.body:
             out.append(cur)
     return out

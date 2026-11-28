@@ -2534,6 +2534,72 @@ def test_a_lambda_invoked_where_written_runs_inside_the_try(tmp_path, monkeypatc
     _reads(s, "covered(exact)")
 
 
+@pytest.mark.parametrize("body", [
+    'rows = (lambda: (yield mod_a.load("x")))()',
+    'rows = (lambda: (yield from mod_a.load("x")))()',
+    '@lambda f: (yield mod_a.load("x"))\ndef decorated():\n    return 1\nrows = decorated',
+], ids=["yield", "yield-from", "as-a-decorator"])
+def test_a_generator_lambda_invoked_in_place_defers_its_body(tmp_path, monkeypatch, body):
+    """Calling a generator lambda only creates the generator; the call runs at
+    `next()`, after the try (#1702 review)."""
+    s = _plant(tmp_path, monkeypatch, "scope_lambda_gen",
+               _scope_try(body, "next(rows)"), "escaped")
+    _reads(s, "candidate-escape")
+
+
+def test_a_yield_in_a_nested_lambda_leaves_the_outer_lambda_eager(tmp_path, monkeypatch):
+    """The yield belongs to the inner lambda, which is never called: the outer
+    lambda is not a generator and its body runs under the try."""
+    body = 'row = (lambda: (lambda: (yield 1)) and mod_a.load("x"))()'
+    s = _plant(tmp_path, monkeypatch, "scope_lambda_nested_yield", _scope_try(body), "caught")
+    _reads(s, "covered(exact)")
+
+
+def test_a_generator_lambda_default_is_still_eager(tmp_path, monkeypatch):
+    """A default value is evaluated as the lambda is created, generator or not."""
+    body = 'rows = (lambda a=mod_a.load("x"): (yield a))()'
+    s = _plant(tmp_path, monkeypatch, "scope_lambda_gen_default", _scope_try(body), "caught")
+    _reads(s, "covered(exact)")
+
+
+_ANN_CLASS = 'class C:\n    x: mod_a.load("x")'
+_ANN_MODULE = 'x: mod_a.load("x")'
+
+
+def _with_future(src: str, trigger: str) -> str:
+    return ("from __future__ import annotations\nimport typing, sys\n"
+            + _scope_try(src, trigger))
+
+
+@pytest.mark.parametrize("body,trigger", [
+    (_ANN_CLASS, "typing.get_type_hints(C)"),
+    (_ANN_MODULE, "typing.get_type_hints(sys.modules[__name__])"),
+], ids=["class", "module"])
+def test_a_postponed_variable_annotation_escapes_the_try(tmp_path, monkeypatch, body, trigger):
+    """With `from __future__ import annotations` the annotation is a string
+    until `get_type_hints`, after the try (#1702 review)."""
+    s = _plant(tmp_path, monkeypatch, "scope_ann_postponed",
+               _with_future(body, trigger), "escaped")
+    _reads(s, "candidate-escape")
+
+
+@pytest.mark.parametrize("body", [_ANN_CLASS, _ANN_MODULE], ids=["class", "module"])
+def test_an_ordinary_variable_annotation_runs_inside_the_try(tmp_path, monkeypatch, body):
+    """Control: without the future import (3.12) the annotation runs where it
+    is written, so the try covers it -- the distinction is preserved."""
+    s = _plant(tmp_path, monkeypatch, "scope_ann_eager",
+               "import typing, sys\n" + _scope_try(body), "caught")
+    _reads(s, "covered(exact)")
+
+
+def test_a_postponed_annotated_assignments_value_stays_eager(tmp_path, monkeypatch):
+    """Only the annotation waits; the assigned value runs under the try."""
+    body = 'x: int = mod_a.load("x")'
+    s = _plant(tmp_path, monkeypatch, "scope_ann_value",
+               _with_future(body, ""), "caught")
+    _reads(s, "covered(exact)")
+
+
 SCOPE_DEF_IN_A_DEF = '''
 import mod_a
 
