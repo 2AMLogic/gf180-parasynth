@@ -170,6 +170,17 @@ properties, each moved by at least one injected defect, one defect asserted blin
 and verified blind, and `main()` refuses to report a measurement if the matrix
 does not pass.
 
+A bound whose estimator REFUSES is a third state, neither a pass nor a fail
+(#1769): it prints REFUSED rather than FAIL, is not credited as MOVED under a
+defect, does not read a blind defect as NOT BLIND, and the run exits
+`exit_contract.REFUSED` (2) rather than 0 or 1 -- unless something MEASURED
+failed, which is `FAIL` (1) and outranks it. A refused cell beside a MEASURED
+MOVED in the same defect row is reported and does not change the exit, because
+that row's question -- is the defect seen? -- is already answered; two of the
+real defects refuse `im-known-answer` this way (their a2 is zero, so the
+known-answer ratio is 0/0). `check()` returns that status as data beside `ok`;
+see its docstring.
+
   chain-exact        the time-domain cascade's magnitude response equals
                      `cymbal_tone_realisation`'s analytic one to < 1e-6 dB rms.
                      Not a tolerance: both are built from the same bank
@@ -252,6 +263,7 @@ import cymbal_candidate as cc              # noqa: E402
 import cymbal_low_tail as lt               # noqa: E402
 import cymbal_m_origin as mo               # noqa: E402
 import cymbal_tone_realisation as tr       # noqa: E402
+from exit_contract import FAIL, PASS, REFUSED  # noqa: E402  -- the declared exit statuses
 
 SR = lt.SR
 BANDS = mo.BANDS
@@ -925,33 +937,87 @@ def properties(*, defect=None) -> dict:
     return out
 
 
-def check(*, fast=True) -> tuple[bool, list[str]]:
+# how a bound's row reads in the matrix. `properties()` records a refusal with
+# `pass: False` because `pass` is a bool, so "not pass" must never be read as
+# "measured wrong": a refusal is a third state (#1769).
+_CELL = {"pass": "", "fail": "MOVED", "refused": "REFUSED"}
+
+
+def _state(row: dict) -> str:
+    return "refused" if "refused" in row else ("pass" if row["pass"] else "fail")
+
+
+def check(*, fast=True) -> tuple[bool, list[str], int]:
     """The clean measurement, then every injected defect, then the blind ones.
-    A defect that turns nothing red is a defect the suite cannot see."""
-    lines, ok = [], True
+    A defect that turns nothing red is a defect the suite cannot see.
+
+    Returns (ok, lines, status). `status` is the exit this matrix earns, by
+    `tools/exit_contract.py`, returned as data rather than left to `main` to
+    infer from `ok`, because `ok` alone cannot tell these apart:
+
+      FAIL     something MEASURED wrong: a clean bound failed, a defect moved
+               nothing and refused nothing, or a blind defect moved something.
+               A result, and it outranks any refusal.
+      REFUSED  nothing measured wrong, but a refusal left a control without an
+               answer: a clean bound, a defect that moved nothing measurable,
+               a blind defect that could not be verified blind. A refusal is
+               no evidence (#1699's ruling) -- not credited as a detection,
+               and never exit 0.
+      PASS     every control answered by MEASUREMENT. A defect that moved
+               something measurable is seen even when another of its cells
+               refused: that row's question is already answered, and the
+               refused cell is reported beside the MOVED ones. Two real
+               defects do exactly that -- they zero the clipper's a2, so
+               `im-known-answer` is 0/0 under them -- and on main both of
+               those cells printed MOVED (#1769).
+    """
+    lines, failed, refused = [], [], []
     clean = properties()
     lines.append("  clean measurement")
     for k, v in clean.items():
-        lines.append(f"    {k:20s} {'PASS' if v['pass'] else 'FAIL'}   {v['value']}")
-        ok &= v["pass"]
+        s = _state(v)
+        if s == "refused":
+            lines.append(f"    {k:20s} REFUSED   {v['refused']}")
+            refused.append(f"clean {k}: {v['refused']}")
+        else:
+            lines.append(f"    {k:20s} {'PASS' if s == 'pass' else 'FAIL'}   {v['value']}")
+            if s == "fail":
+                failed.append(f"clean {k}")
     lines.append("")
     lines.append("  defect            " + " ".join(f"{p:>18s}" for p in PROPERTIES))
     for d in DEFECTS:
         got = properties(defect=d)
-        moved = {k: (not got[k]["pass"]) for k in PROPERTIES}
-        if not any(moved.values()):
-            ok = False
+        states = {k: _state(got[k]) for k in PROPERTIES}
+        refusals = [f"{k} ({got[k]['refused']})" for k in PROPERTIES if states[k] == "refused"]
+        if any(s == "fail" for s in states.values()):
+            # seen by MEASUREMENT, which answers this row's question; a refused
+            # cell beside it is reported and does not reopen that question
+            lines.append(f"  {d:18s}" + " ".join(f"{_CELL[states[k]]:>18s}" for k in PROPERTIES))
+            lines += [f"  {'':18s} REFUSED, not a detection: {r}" for r in refusals]
+        elif refusals:
+            refused += [f"{d} {r}" for r in refusals]
+            lines.append(f"  {d:18s} NO VERDICT -- moved nothing MEASURABLE and REFUSED "
+                         f"{'; '.join(refusals)}: a refusal is not a detection")
+        else:
+            failed.append(f"{d} turned nothing red")
             lines.append(f"  {d:18s} TURNED NOTHING RED -- this defect is invisible to the suite")
-            continue
-        lines.append(f"  {d:18s}" + " ".join(f"{('MOVED' if moved[p] else ''):>18s}"
-                                             for p in PROPERTIES))
     for d in BLIND_BY_CONSTRUCTION:
         got = properties(defect=d)
-        bad = [k for k in PROPERTIES if not got[k]["pass"]]
-        lines.append(f"  {d:18s}" + ("  (blind by construction, verified blind)" if not bad
-                                     else f"  NOT BLIND: {bad}"))
-        ok &= not bad
-    return ok, lines
+        states = {k: _state(got[k]) for k in PROPERTIES}
+        bad = [k for k in PROPERTIES if states[k] == "fail"]
+        refusals = [f"{k} ({got[k]['refused']})" for k in PROPERTIES if states[k] == "refused"]
+        refused += [f"{d} {r}" for r in refusals]
+        if bad:
+            failed.append(f"{d} not blind: {bad}")
+            lines.append(f"  {d:18s}  NOT BLIND: {bad}"
+                         + (f"; also REFUSED, not a detection: {'; '.join(refusals)}" if refusals else ""))
+        elif refusals:
+            lines.append(f"  {d:18s}  NO VERDICT on its blindness -- REFUSED {'; '.join(refusals)}; "
+                         f"a refusal is not a measurement")
+        else:
+            lines.append(f"  {d:18s}  (blind by construction, verified blind)")
+    status = FAIL if failed else (REFUSED if refused else PASS)
+    return status == PASS, lines, status
 
 
 # ---------------------------------------------------------------------------
@@ -1110,11 +1176,15 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
 
     if not a.skip_controls:
-        ok, lines = check()
+        ok, lines, status = check()
         print("\n".join(lines))
-        if not ok:
-            print("\nREFUSED: this instrument's own controls do not pass")
-            return 1
+        if status == REFUSED:
+            print("\nREFUSED: this instrument's own controls have no verdict -- the REFUSED rows above "
+                  "name the estimators that refused; a refusal is not a measurement")
+        elif status == FAIL:
+            print("\nFAIL: this instrument's own controls do not pass")
+        if status != PASS:
+            return status
         print()
     else:
         ok = None

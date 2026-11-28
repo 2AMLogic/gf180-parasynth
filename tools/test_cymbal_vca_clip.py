@@ -15,6 +15,12 @@ The module makes two claims and they need different kinds of test:
 Plus the usual: every named property must be moved by some injected defect, the
 two blind defects must be blind, and the numbers quoted in the docstring must
 come from the artifacts rather than from the prose.
+
+And one about how the matrix is READ: a bound whose estimator refuses is
+neither a pass nor a fail. It must not print as FAIL, count as MOVED, or read
+as NOT BLIND. A refusal that leaves a control without an answer makes the run
+REFUSED (2), unless something MEASURED failed, which is FAIL (1) and wins
+(#1769).
 """
 import math
 import pathlib
@@ -28,6 +34,7 @@ import cymbal_vca_clip as v      # noqa: E402
 import cymbal_m_origin as mo     # noqa: E402
 import cymbal_low_tail as lt     # noqa: E402
 import cymbal_tone_realisation as tr  # noqa: E402
+import exit_contract                 # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 LOW_TAIL = ROOT / "docs/scorecard/cymbal-369/low-tail/low-tail.json"
@@ -297,9 +304,240 @@ def test_the_blind_defects_are_verified_blind(defect):
 
 def test_the_clean_matrix_passes_and_main_refuses_when_it_does_not(monkeypatch):
     """`main` must not report a measurement over a failed control matrix, and
-    that is asserted by making the matrix fail."""
-    monkeypatch.setattr(v, "check", lambda **k: (False, ["forced"]))
-    assert v.main([]) == 1
+    that is asserted by making the matrix fail. A MEASURED failure is exit 1:
+    the comparison ran and disagreed (`tools/exit_contract.py`)."""
+    monkeypatch.setattr(v, "check", lambda **k: (False, ["forced"], exit_contract.FAIL))
+    assert v.main([]) == exit_contract.FAIL
+
+
+# ---------------------------------------------------------------------------
+# a refusal is neither a pass nor a fail (#1769, the ruling in #1699)
+# ---------------------------------------------------------------------------
+# `properties()` records a bound whose estimator refused as
+# {"value": None, "pass": False, "refused": ...}. `pass` is a bool, so every
+# reader that asks "not pass?" read a refusal as a MEASURED failure: printed
+# FAIL, credited as MOVED under a defect, read as NOT BLIND, and exited 1
+# under a REFUSED label. The two REAL controls below force ONE `_BOUNDS`
+# entry, so `properties()`'s row shape itself is under test; the scripted ones
+# pin how `check()` reads each row, which the real defects cannot isolate
+# because they move other bounds as well.
+FORCED = "forced refusal (control)"
+
+
+def _on_clean(real, behaviour):
+    """The real bound under every defect; `behaviour` on the clean run. A
+    forced bound that also misbehaves under the defects would contaminate the
+    defect and blind rows this control is not about."""
+    def fn(*, defect=None):
+        if defect is None:
+            return behaviour()
+        return real(defect=defect)
+    return fn
+
+
+def _refuse():
+    raise v.Refused(FORCED)
+
+
+def _fail():
+    return 0.0
+
+
+def _controls_block(out):
+    return out.split("the ANALYSIS filter")[0]
+
+
+def _defect_row(lines, name):
+    """A defect's one row in the matrix. Not `_row`, which is the verdict
+    tests' sweep row above, and not the indented reason lines a refusal adds
+    beneath a defect's row."""
+    hits = [l for l in lines if l.startswith(f"  {name} ")]
+    assert len(hits) == 1, f"{name} has {len(hits)} rows: {hits}"
+    return hits[0]
+
+
+def _clean_row(lines, name):
+    hits = [l for l in lines if l.lstrip().startswith(f"{name} ")]
+    assert len(hits) == 1, f"{name} has {len(hits)} clean rows: {hits}"
+    return hits[0]
+
+
+def _cell(row, prop):
+    """The matrix cell of `prop` in a defect row: an 18-wide field after the
+    20-character `  {defect:18s}` prefix, one space between cells."""
+    i = v.PROPERTIES.index(prop)
+    return row[20 + 19 * i: 20 + 19 * i + 18].strip()
+
+
+def test_a_refusing_clean_bound_exits_refused_not_fail(monkeypatch, capsys):
+    """Wrong-then-right, as a control: on main this printed `FAIL` and exited 1
+    under a REFUSED label -- a refusal rendered as a measured failure, with
+    the label and the status disagreeing. The message is pinned beside the
+    status because argparse's usage error ALSO exits 2."""
+    fn, ok = v._BOUNDS["product-law"]
+    monkeypatch.setitem(v._BOUNDS, "product-law", (_on_clean(fn, _refuse), ok))
+    assert v.main([]) == exit_contract.REFUSED
+    assert exit_contract.REFUSED in exit_contract.NO_EVIDENCE
+    out = _controls_block(capsys.readouterr().out)
+    assert "REFUSED: this instrument's own controls have no verdict" in out, out[-300:]
+    lines = out.splitlines()
+    clean, matrix = out.split("\n  defect ")
+    row = _clean_row(clean.splitlines(), "product-law")
+    assert FORCED in row and "REFUSED" in row and "FAIL" not in row, row
+    assert "FAIL" not in clean
+    for d in v.BLIND_BY_CONSTRUCTION:
+        assert "verified blind" in _defect_row(lines, d)
+    assert "NOT BLIND" not in matrix and "TURNED NOTHING RED" not in matrix, matrix
+
+
+def test_a_measured_failure_outranks_a_refusal(monkeypatch, capsys):
+    """A measured FAIL is a RESULT (1) and wins: a refusal never hides it,
+    and it never turns the refusal into a FAIL."""
+    fn, ok = v._BOUNDS["product-law"]
+    monkeypatch.setitem(v._BOUNDS, "product-law", (_on_clean(fn, _refuse), ok))
+    fn, ok = v._BOUNDS["tau-reads-back"]
+    monkeypatch.setitem(v._BOUNDS, "tau-reads-back", (_on_clean(fn, _fail), ok))
+    assert v.main([]) == exit_contract.FAIL
+    out = capsys.readouterr().out
+    assert "FAIL: this instrument's own controls do not pass" in out, out[-300:]
+    clean = out.split("\n  defect ")[0].splitlines()
+    refused = _clean_row(clean, "product-law")
+    measured = _clean_row(clean, "tau-reads-back")
+    assert "REFUSED" in refused and "FAIL" not in refused, refused
+    assert "FAIL" in measured and "REFUSED" not in measured, measured
+
+
+def test_the_clean_real_run_still_exits_zero_with_every_defect_moved(tmp_path, capsys):
+    """The unchanged path, on the real tree: the process exits 0, every defect
+    moves something MEASURABLE, both blind defects are verified blind by
+    measurement.
+
+    And the live instance of #1769, which this run found: NO_NONLINEARITY and
+    SYMMETRIC_NL zero the clipper's a2, so `im-known-answer` -- a ratio over
+    the predicted a2 -- is 0/0 under them and REFUSES. On main both cells
+    printed MOVED, crediting a refusal as a detection. Each defect is still
+    seen through its other, measured cells, so its row's question is answered
+    and the exit is unchanged; the cell is REFUSED, and REFUSED appears
+    nowhere else in the matrix."""
+    out_json = tmp_path / "o.json"
+    assert v.main(["--out", str(out_json)]) == exit_contract.PASS
+    block = _controls_block(capsys.readouterr().out)
+    clean, matrix = block.split("\n  defect ")
+    assert "REFUSED" not in clean and "FAIL" not in clean, clean
+    assert "NOT BLIND" not in matrix and "TURNED NOTHING RED" not in matrix, matrix
+    assert "NO VERDICT" not in matrix, matrix
+    lines = block.splitlines()
+    for d in v.DEFECTS:
+        assert "MOVED" in _defect_row(lines, d), d
+    for d in v.BLIND_BY_CONSTRUCTION:
+        assert "verified blind" in _defect_row(lines, d), d
+    a2_zero = ("NO_NONLINEARITY", "SYMMETRIC_NL")
+    for d in v.DEFECTS:
+        assert _cell(_defect_row(lines, d), "im-known-answer") == \
+            ("REFUSED" if d in a2_zero else ""), d
+    reasons = [l for l in lines if "REFUSED, not a detection" in l]
+    assert len(reasons) == len(a2_zero), reasons
+    assert all("second-order coefficient is zero" in r for r in reasons), reasons
+
+
+def _scripted(clean, under):
+    """A `properties()` whose rows are scripted: `clean` maps a property to
+    its row on the clean measurement, `under[defect]` likewise under a defect;
+    every property not named returns a measured pass. Only the two row shapes
+    the real `properties()` emits are used."""
+    def properties(*, defect=None):
+        rows = clean if defect is None else under.get(defect, {})
+        return {p: dict(rows.get(p, {"value": 1.0, "pass": True})) for p in v.PROPERTIES}
+    return properties
+
+
+REFUSED_ROW = {"value": None, "pass": False, "refused": FORCED}
+FAILED_ROW = {"value": 0.0, "pass": False}
+
+
+def test_a_defect_that_only_makes_a_bound_refuse_is_not_credited_as_a_detection(monkeypatch):
+    """Wrong-then-right, as a control: on main `moved = {k: not pass}` read
+    this defect as MOVED, so a defect that silences an estimator passed the
+    "turned nothing red" control. A refusal is no detection and no verdict."""
+    under = {d: {"im-known-answer": FAILED_ROW} for d in v.DEFECTS if d != "NO_NONLINEARITY"}
+    under["NO_NONLINEARITY"] = {"product-law": REFUSED_ROW}
+    monkeypatch.setattr(v, "properties", _scripted({}, under))
+    res = v.check()
+    row = _defect_row(res[1], "NO_NONLINEARITY")
+    assert "MOVED" not in row, row
+    assert "REFUSED" in row and FORCED in row, row
+    assert res[0] is False
+    assert res[2] == exit_contract.REFUSED
+
+
+def test_a_defect_that_moves_something_measurable_is_seen_even_if_another_cell_refuses(monkeypatch):
+    """The live shape on the real tree: NO_NONLINEARITY and SYMMETRIC_NL zero
+    the clipper's a2, so `im-known-answer` refuses under them. The defect is
+    seen through other cells, so its row answers its question and the exit is
+    unchanged -- but the refused cell is REFUSED, never MOVED. A strict "any
+    refusal exits 2" would make the real instrument refuse on every run, and
+    crediting the cell as MOVED is the defect; this pins the line between."""
+    under = {d: {"im-known-answer": FAILED_ROW} for d in v.DEFECTS}
+    under["NO_NONLINEARITY"] = {"im-known-answer": FAILED_ROW, "product-law": REFUSED_ROW}
+    monkeypatch.setattr(v, "properties", _scripted({}, under))
+    res = v.check()
+    row = _defect_row(res[1], "NO_NONLINEARITY")
+    assert _cell(row, "im-known-answer") == "MOVED", row
+    assert _cell(row, "product-law") == "REFUSED", row
+    assert any("REFUSED, not a detection" in l and FORCED in l for l in res[1]), res[1]
+    assert res[0] is True
+    assert res[2] == exit_contract.PASS
+
+
+def test_a_blind_defect_that_makes_a_bound_refuse_has_no_verdict_not_not_blind(monkeypatch):
+    """Wrong-then-right, as a control: on main `bad = [k for k if not pass]`
+    read this as NOT BLIND. The defect's blindness was not measured, so it is
+    neither verified nor refuted."""
+    under = {d: {"im-known-answer": FAILED_ROW} for d in v.DEFECTS}
+    under["POST_GAIN_2X"] = {"product-law": REFUSED_ROW}
+    monkeypatch.setattr(v, "properties", _scripted({}, under))
+    res = v.check()
+    row = _defect_row(res[1], "POST_GAIN_2X")
+    assert "NOT BLIND" not in row and "(blind by construction, verified blind)" not in row, row
+    assert "NO VERDICT" in row and "REFUSED" in row and FORCED in row, row
+    assert "verified blind" in _defect_row(res[1], "SEED_PHASE")
+    assert res[0] is False
+    assert res[2] == exit_contract.REFUSED
+
+
+@pytest.mark.parametrize("measured_failure", ["invisible-defect", "not-blind", "clean-fail"])
+def test_a_measured_control_failure_is_still_exit_1_and_outranks_a_refusal(monkeypatch, measured_failure):
+    """The paths that were already exit 1 stay exit 1, and each wins over a
+    refusal elsewhere in the matrix."""
+    under = {d: {"im-known-answer": FAILED_ROW} for d in v.DEFECTS}
+    clean = {}
+    if measured_failure == "invisible-defect":
+        under["NO_NONLINEARITY"] = {}                  # moves nothing, refuses nothing
+    elif measured_failure == "not-blind":
+        under["POST_GAIN_2X"] = {"im-known-answer": FAILED_ROW}
+        clean = {"product-law": REFUSED_ROW}
+    else:
+        clean = {"product-law": REFUSED_ROW, "tau-reads-back": FAILED_ROW}
+    monkeypatch.setattr(v, "properties", _scripted(clean, under))
+    res = v.check()
+    assert len(res) == 3, "check() must return (ok, lines, status): the exit status is data"
+    assert res[0] is False
+    assert res[2] == exit_contract.FAIL
+
+
+def test_an_implementation_error_in_a_bound_is_not_relabelled_refused(monkeypatch):
+    """The input that would defeat the third state (verification-rules 8): a
+    bound that CRASHES has not refused, and must still escape as itself. Only
+    `Refused` is a refusal; a blanket `except Exception` would hide a bug as
+    "no evidence"."""
+    name = next(iter(v._BOUNDS))
+    def crash(**k):
+        raise ValueError("an implementation error, not a precondition")
+    monkeypatch.setitem(v._BOUNDS, name, (crash, lambda x: True))
+    with pytest.raises(ValueError, match="an implementation error"):
+        v.check()
+    with pytest.raises(ValueError, match="an implementation error"):
+        v.main([])
 
 
 def test_rho_is_refused_on_a_band_below_the_instruments_qualified_range():
