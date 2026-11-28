@@ -1,6 +1,7 @@
 """Timing evidence must cover the actual PLL core clock and fit the device,
 and a publication whose precondition is not met is REFUSED -- exit 2, the
-reason on stderr, nothing written -- never a traceback at exit 1 (#1663)."""
+reason on stderr, nothing written -- never a traceback at exit 1 (#1663); a
+refused stored simulation is a NO-VERDICT publication, never a traceback."""
 import copy
 import hashlib
 import json
@@ -16,6 +17,12 @@ import pytest
 import build_selected
 import publish_selected
 from publish_selected import timing_summary
+
+ROOT = publish_selected.ROOT
+WORKFLOW = "https://example.invalid/runs/1"
+TOP = "rtl-sketch/synth_top.v"
+REFUSAL = "synth_top.v differs from recorded simulation 36137df"
+TRANSCRIPT = "docs/scorecard/mono-m5a-miniv3/saw-cutoff-20khz-i2s.txt"
 
 
 def valid_report():
@@ -59,10 +66,7 @@ def test_wrong_or_incomplete_report_refuses(mutation):
     with pytest.raises(ValueError): timing_summary(report)
 
 
-ROOT = publish_selected.ROOT
-WORKFLOW = "https://example.invalid/runs/1"
 BUNDLE = ROOT / "fpga/reports/selected/linux-85f"
-TOP = "rtl-sketch/synth_top.v"
 EMPTY = "publication directory must be empty; refuse stale artifacts"
 HINT = "; use --historical for the recorded build"
 
@@ -166,6 +170,54 @@ def edit_report(build, change):
 
 def drift(path):
     path.write_bytes(path.read_bytes() + b"\n// drifted after the recorded build\n")
+
+
+def git_bytes(spec):
+    return subprocess.check_output(["git", "show", spec], cwd=ROOT)
+
+
+def built_artifact(tmp_path, state="BUILT"):
+    """A build of THIS commit, laid out like the CI download: the build
+    directory beside build/oss-cad-pinned/toolchain.json. Its recorded hashes
+    are the committed bytes, which is what a clean build of HEAD would record,
+    so every check before the stored-simulation call passes. `state` leaves
+    what build_selected.main() leaves for it: a refused build runs no stage,
+    and a failed route has no config and never reaches the bitstream stage."""
+    artifact = tmp_path / "download"
+    build, pinned = artifact / "fpga-selected-85k", artifact / "oss-cad-pinned"
+    build.mkdir(parents=True)
+    pinned.mkdir()
+    commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    sources = {str(p.relative_to(ROOT)): hashlib.sha256(git_bytes(f"{commit}:{p.relative_to(ROOT)}")).hexdigest()
+               for p in build_selected.sources()}
+    stages = {}
+    for name, filename in (("synthesis", "ecp5.json"), ("place_route", "ecp5.config"), ("bitstream", "ecp5.bit")):
+        (build / filename).write_bytes(f"{name} of {commit}\n".encode())
+        stages[name] = {"state": "PASS", "exit_code": 0, "artifact": str(build / filename),
+                        "artifact_sha256": hashlib.sha256((build / filename).read_bytes()).hexdigest()}
+    (build / "timing.json").write_text(json.dumps(valid_report()))
+    evidence = {"commit": commit, "transcript": TRANSCRIPT,
+                "sha256": hashlib.sha256(git_bytes(f"{commit}:{TRANSCRIPT}")).hexdigest(),
+                "core_files_and_roms_identical": True,
+                "scope": "reused complete-phrase SPI-to-I2S core simulation; FPGA wrapper is not covered"}
+    report = {"configuration": {"OSC2X": 1, "FILTER2X": 1, "pulse_duty_percent": 47.90},
+              "source_commit": commit, "source_sha256": sources, "device": "85k", "package": "CABGA381",
+              "stages": stages, "bitstream_built": True, "hardware_playback_tested": False,
+              "state": "BUILT", "simulation_evidence": evidence}
+    if state == "REFUSED":
+        report.update(state="REFUSED", reason=REFUSAL, stages={}, bitstream_built=False)
+        for path in build.iterdir():
+            path.unlink()
+    if state == "FAIL":
+        report.update(state="FAIL", bitstream_built=False)
+        report["stages"]["place_route"].update(state="FAIL", exit_code=1, artifact_sha256=None)
+        del report["stages"]["bitstream"]
+        for filename in ("ecp5.config", "ecp5.bit"):
+            (build / filename).unlink()
+    (build / "report.json").write_text(json.dumps(report))
+    (pinned / "toolchain.json").write_text(json.dumps(
+        {"sha256": publish_selected.toolchain_pin.SHA256, "release": publish_selected.toolchain_pin.VERSION}))
+    return artifact, evidence
 
 
 def raising(exc):
@@ -386,8 +438,56 @@ def test_an_unrelated_value_error_is_an_execution_error_not_a_refusal(
     assert not out.exists()
 
 
+@pytest.mark.parametrize("report_state", ["BUILT", "REFUSED", "FAIL"])
+def test_refused_stored_simulation_is_a_no_verdict_publication_not_a_traceback(tmp_path, monkeypatch, report_state):
+    artifact, _ = built_artifact(tmp_path, state=report_state)
+    monkeypatch.setattr(build_selected, "simulation_evidence", raising(RuntimeError(REFUSAL)))
+    out = tmp_path / "publication"
+    summary = publish_selected.publish(artifact, out, WORKFLOW)
+    assert summary["state"] == "NO-VERDICT"
+    assert summary["reason"] == REFUSAL
+    assert summary["bitstream_qualified"] is False
+    assert summary["simulation_evidence"] is None
+    assert (out / "report.json").is_file()
+    assert json.loads((out / "publication.json").read_text()) == summary
+
+
+def test_cli_exits_2_without_a_traceback_when_the_stored_simulation_is_refused(tmp_path, monkeypatch, capsys):
+    artifact, _ = built_artifact(tmp_path)
+    monkeypatch.setattr(build_selected, "simulation_evidence", raising(RuntimeError(REFUSAL)))
+    out = tmp_path / "publication"
+    monkeypatch.setattr(sys, "argv", ["publish_selected.py", str(artifact), "--workflow-url", WORKFLOW, "--out", str(out)])
+    with pytest.raises(SystemExit) as stopped:
+        runpy.run_path(publish_selected.__file__, run_name="__main__")
+    assert stopped.value.code == 2
+    assert json.loads(capsys.readouterr().out) == json.loads((out / "publication.json").read_text())
+
+
+@pytest.mark.parametrize("site, bug", [
+    pytest.param("timing_summary", RuntimeError("genuine bug"), id="runtime-error-after-the-call"),
+    pytest.param("simulation_evidence", TypeError("genuine bug"), id="other-exception-at-the-call")])
+def test_a_genuine_bug_is_not_masked_as_a_refusal(tmp_path, monkeypatch, site, bug):
+    artifact, evidence = built_artifact(tmp_path)
+    monkeypatch.setattr(build_selected, "simulation_evidence", lambda: evidence)
+    monkeypatch.setattr(publish_selected if site == "timing_summary" else build_selected, site, raising(bug))
+    with pytest.raises(type(bug), match="genuine bug"):
+        publish_selected.publish(artifact, tmp_path / "publication", WORKFLOW)
+    assert not (tmp_path / "publication").exists()
+
+
+@pytest.mark.parametrize("historical", [False, True])
+def test_the_same_build_qualifies_when_its_stored_simulation_is_current(tmp_path, monkeypatch, historical):
+    artifact, evidence = built_artifact(tmp_path)
+    consulted = []
+    monkeypatch.setattr(build_selected, "simulation_evidence", lambda: consulted.append(1) or evidence)
+    summary = publish_selected.publish(artifact, tmp_path / "publication", WORKFLOW, historical=historical)
+    assert (summary["state"], summary["bitstream_qualified"]) == ("BUILT-TIMING-PASS", True)
+    assert "reason" not in summary
+    assert bool(consulted) is not historical
+
+
 # ----------------------- a recorded commit that git cannot show (#1690) ----
-LPF, TRANSCRIPT = "fpga/boards/ulx3s.lpf", "docs/sim.txt"
+LPF, SIM_TRANSCRIPT = "fpga/boards/ulx3s.lpf", "docs/sim.txt"
 COMMIT, SIM_COMMIT = "1" * 40, "2" * 40
 
 
@@ -412,8 +512,8 @@ def _artifact(tmp_path, *, with_simulation=False):
               "source_sha256": {TOP: hashlib.sha256(_recorded(TOP)).hexdigest()}}
     if with_simulation:
         report["simulation_evidence"] = {
-            "commit": SIM_COMMIT, "transcript": TRANSCRIPT,
-            "sha256": hashlib.sha256(_recorded(TRANSCRIPT)).hexdigest()}
+            "commit": SIM_COMMIT, "transcript": SIM_TRANSCRIPT,
+            "sha256": hashlib.sha256(_recorded(SIM_TRANSCRIPT)).hexdigest()}
     (build / "report.json").write_text(json.dumps(report))
     (pinned / "toolchain.json").write_text(json.dumps(
         {"sha256": publish_selected.toolchain_pin.SHA256,
@@ -468,7 +568,7 @@ _SITES = [
                  id="source-75"),
     pytest.param(False, lambda commit, name: name == LPF,
                  id="build-input-87"),
-    pytest.param(True, lambda commit, name: name == TRANSCRIPT,
+    pytest.param(True, lambda commit, name: name == SIM_TRANSCRIPT,
                  id="transcript-93"),
     pytest.param(True, lambda commit, name: commit == SIM_COMMIT and name.startswith("rtl-sketch/"),
                  id="simulated-core-98"),
