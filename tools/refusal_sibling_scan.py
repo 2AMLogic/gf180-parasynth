@@ -68,7 +68,21 @@ WHAT THIS SCAN RESOLVES that the #1160 one-off dotted-call grep could not:
     at the raise and at the handler alike. So the name shadows the module's
     own `Refused` inside that def and leaves every sibling def reading the
     module's. It never sets `<mod>.Refused`: a function-local name is not a
-    module attribute.
+    module attribute;
+  * an `async def` callee is a callee (#1718): `funcs` registered
+    `ast.FunctionDef` alone, so a call to an `async def` resolved to no def,
+    read as raising nothing and was ABSENT from the census -- not
+    misclassified, the same optimistic direction #1573 found for
+    function-level imports. It is registered now and its raises are read
+    like any def's; a try in an `async def main()` is the CLI boundary like
+    one in `main()`. Whether the guards around such a call can catch what
+    it raises is decided by where Python raises it, and the call only
+    CREATES the coroutine: `await callee.load(p)` raises in the try body it
+    is written in, while `coro = callee.load(p)` in a try with `await coro`
+    after it raises past the try, though the Call node sits in its body. So
+    a call to an `async def` is credited by the tries around it and by the
+    CLI boundary only when it is written `await <call>`; a bare call reads
+    `candidate-escape` with no guard and every origin uncovered.
 
 WHAT IT CANNOT TELL YOU, and why the per-site list is an inventory, not a
 verdict. A dotted call is not necessarily a raising call on the CLI's input
@@ -111,6 +125,18 @@ is decided by tracing the caller with a known-answer input, as #1160 and
     acceptance is observed, not read -- `tools/test_refusal_sibling_scan.py`
     runs the shipped function with a refusing callee (caught, returned in the
     report's `refused` list) and with a sibling class (escapes);
+  * that await rule is conservative where only the await could tell: a bare
+    call to an `async def` whose coroutine is awaited INSIDE the try that
+    created it reads `candidate-escape`, though Python catches it there,
+    and so does one awaited under a guard further up the call chain. Which
+    variable holds the coroutine, and where it is awaited, is not in the AST
+    at the Call node; the same goes for the driver forms,
+    `asyncio.run(callee.load(p))` and `asyncio.gather(callee.load(p))` inside
+    a try, which surface the refusal there yet read `candidate-escape`. The
+    price is a row to triage, never a false covered.
+    An `async def` that yields is read as a coroutine function: its refusal
+    surfaces at the `async for` that drives it, which the rule does not
+    model;
   * test files are excluded: they are not CLI callers and their
     `pytest.raises` sites are deliberate;
   * only `SCAN_ROOTS` is scanned: `tools`, `model`, `pnr`, `fpga`,
@@ -212,7 +238,7 @@ class ModInfo:
         self.tree = ast.parse(path.read_text(), filename=str(path))
         self.imports: dict[str, str] = {}                  # local name -> module stem
         self.from_imports: dict[str, tuple[str, str]] = {}  # local name -> (stem, original name)
-        self.funcs: dict[str, ast.FunctionDef] = {}
+        self.funcs: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {}
         self.refused_origin: str | None = None   # stem whose class our Refused is
         self.refused_names: dict[str, str] = {}  # family name -> stem it last resolved to
         self.has_local_family = False            # a local `class Refused` def (maybe shadowed)
@@ -318,7 +344,7 @@ class ModInfo:
         for node in ast.walk(self.tree):
             for ch in ast.iter_child_nodes(node):
                 self.parents[ch] = node
-            if isinstance(node, ast.FunctionDef):
+            if isinstance(node, FUNCTION_NODES):
                 self.funcs.setdefault(node.name, node)
         scoped: dict[ast.AST, list[ast.stmt]] = {}
         for node in ast.walk(self.tree):
@@ -511,13 +537,14 @@ def _entry_calls(guard: ast.If) -> set[str]:
 
 def cli_boundary_guards(mod: ModInfo, by_stem: dict[str, list[ModInfo]]) -> list[tuple[set[str], str]]:
     """The refusal handlers at the module's CLI boundary -- try statements
-    that sit directly in a `main()` def or in the `if __name__ == "__main__"`
-    dispatch, where #1160/#1162's repairs live, or directly in a module-level
-    function the DISPATCH calls by bare name: the `_cli()` wrapper hh_probe5's
-    repair first used and this census read as no guard at all (#1641). One
-    level only, and from the dispatch only -- a function `main()` calls is a
-    sibling of main's other callees, and its try guards its own branch alone
-    (#1656 has the tree that showed it). Returns (origins, shape) per
+    that sit directly in a `main()` def, `def` or `async def` (#1718), or in the
+    `if __name__ == "__main__"` dispatch, where #1160/#1162's repairs live, or
+    directly in a module-level function the DISPATCH calls by bare name: the
+    `_cli()` wrapper hh_probe5's repair first used and this census read as no
+    guard at all (#1641). One level only, and from the dispatch only -- a
+    function `main()` calls is a sibling of main's other callees, and its try
+    guards its own branch alone (#1656 has the tree that showed it). Returns
+    (origins, shape) per
     handler: `except refusal.Refused` covers every origin; an exact/alias
     handler covers only its own origin (measure_partial_balance's `except
     Refused` with `Refused = pc.Refused` is exact, not local-only)."""
@@ -532,7 +559,7 @@ def cli_boundary_guards(mod: ModInfo, by_stem: dict[str, list[ModInfo]]) -> list
 
     def in_boundary(tr: ast.Try) -> bool:
         cur = parents.get(tr)
-        if isinstance(cur, ast.FunctionDef) and cur.name == "main":
+        if isinstance(cur, FUNCTION_NODES) and cur.name == "main":
             return True
         if (isinstance(cur, FUNCTION_NODES) and cur.name in wrappers
                 and parents.get(cur) is mod.tree):
@@ -548,6 +575,22 @@ def cli_boundary_guards(mod: ModInfo, by_stem: dict[str, list[ModInfo]]) -> list
         if isinstance(node, ast.Try) and in_boundary(node):
             out.extend(handler_origins(mod, by_stem, h) for h in node.handlers)
     return out
+
+
+def refusal_runs_at_call(mod: ModInfo, call: ast.Call, callees: list[ModInfo],
+                         fname: str) -> bool:
+    """Whether a refusal raised through this call would surface where the
+    Call node stands, so that the tries around it -- and the CLI boundary --
+    can catch it from there. False for one shape only (#1718): a bare call
+    to an `async def` CREATES a coroutine and runs none of the callee's code;
+    the refusal is raised wherever the coroutine is awaited, which no walk
+    up from the Call node can see. Only `await <call>` runs the callee where
+    the call is written. Among same-stem candidates one `async def` decides:
+    which module the import binds is not decidable, and the reading that
+    cannot report a false covered is the one taken."""
+    if isinstance(mod.parents.get(call), ast.Await):
+        return True
+    return not any(isinstance(c.funcs.get(fname), ast.AsyncFunctionDef) for c in callees)
 
 
 def _rel_label(path: pathlib.Path) -> str:
@@ -587,6 +630,9 @@ def scan(files: list[pathlib.Path], idx: dict[str, ModInfo]) -> list[dict]:
             cands = by_stem.get(callee_stem, [])
             if not cands:
                 continue                      # callee outside the tracked tree
+            # (#1718) a bare call to an `async def` is credited by no guard
+            # at all: its refusal is raised where the coroutine is awaited
+            runs_here = refusal_runs_at_call(mod, node, cands, fname or "")
             if len(cands) > 1:
                 # stem collision: which module the import binds is not
                 # decidable from the AST, so name the candidates instead of
@@ -600,7 +646,7 @@ def scan(files: list[pathlib.Path], idx: dict[str, ModInfo]) -> list[dict]:
                            for c in cands):
                     continue
                 ashapes = []
-                for tr in enclosing_try_parents(mod.tree, node):
+                for tr in (enclosing_try_parents(mod.tree, node) if runs_here else []):
                     for h in tr.handlers:
                         _, shape = handler_origins(mod, by_stem, h)
                         if shape in ("base", "broad"):
@@ -623,7 +669,7 @@ def scan(files: list[pathlib.Path], idx: dict[str, ModInfo]) -> list[dict]:
             if not origins:
                 continue                      # this function raises no refusal
             covered, shapes = set(), []
-            for tr in enclosing_try_parents(mod.tree, node):
+            for tr in (enclosing_try_parents(mod.tree, node) if runs_here else []):
                 for h in tr.handlers:
                     ho, shape = handler_origins(mod, by_stem, h)
                     if shape in ("base", "broad"):
@@ -633,9 +679,10 @@ def scan(files: list[pathlib.Path], idx: dict[str, ModInfo]) -> list[dict]:
                         covered |= ho & origins
                         shapes.append(shape)
             uncovered = origins - covered
-            bshapes = {shape for _, shape in boundary}
+            bguards = boundary if runs_here else []
+            bshapes = {shape for _, shape in bguards}
             borigins: set[str] = set()
-            for ho, shape in boundary:
+            for ho, shape in bguards:
                 if shape == "base":
                     borigins |= origins
                 elif shape != "broad" and shape != "other":
