@@ -347,10 +347,9 @@ def test_balance_targets_accepts_the_committed_record():
 # REFUSED, not a traceback (#1604, #1623). One control per key: each deletes
 # ONE key from the committed record and runs the tool's own main().
 #
-# The exit status here is 1, not 2, on purpose: main()'s handler for
 # A PARTIAL balance artifact exits 2 (exit_contract.REFUSED, in NO_EVIDENCE) so
-# a batch caller reads NO-VERDICT; an absent or drifted one keeps the legacy
-# exit 1 that tools/refusal_exit_census.py pins (#804).
+# a batch caller reads NO-VERDICT. So does an absent or drifted one since #1789
+# retired the legacy exit 1 that tools/refusal_exit_census.py used to pin (#804).
 @pytest.mark.parametrize("key", ["gap_db", "centre_hz"])
 def test_a_balance_artifact_missing_a_key_is_refused_by_name(tmp_path, monkeypatch, capsys, key):
     rec = json.loads(vd.BALANCE_ARTIFACT.read_text())
@@ -808,10 +807,10 @@ def test_a_partial_balance_artifact_exit_is_declared_no_evidence(tmp_path, monke
     assert vd.main(["--check"]) in exit_contract.NO_EVIDENCE
 
 
-def test_a_drifted_balance_artifact_keeps_the_legacy_exit_1(tmp_path, monkeypatch, capsys):
+def test_a_drifted_balance_artifact_exits_refused_not_fail(tmp_path, monkeypatch, capsys):
     rec = json.loads(vd.BALANCE_ARTIFACT.read_text())
     rec["gap_db"]["decay"]["gap_db"] += 1.0
     p = tmp_path / "balance.json"
     p.write_text(json.dumps(rec))
     monkeypatch.setattr(vd, "BALANCE_ARTIFACT", p)
-    assert vd.main([]) == 1
+    assert vd.main([]) == REFUSED

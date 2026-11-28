@@ -221,7 +221,7 @@ class PartialRecord(Refused):
     """The balance artifact parses but cannot be read: not a JSON object, or a
     required key absent or null (#1623). Exits 2 (`exit_contract.REFUSED`, in
     NO_EVIDENCE), so a batch caller reads NO-VERDICT rather than a failed
-    comparison. A drifted or absent artifact keeps its legacy exit 1."""
+    comparison. A drifted or absent artifact exits the same status (#1789)."""
 
 
 class SourceUnavailable(Refused):
