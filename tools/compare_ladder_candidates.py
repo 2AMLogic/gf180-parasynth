@@ -663,7 +663,7 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     try:
         rep = compare(quick=a.quick, names=a.only)
-    except Refused as exc:
+    except (Refused, am.InsufficientEvidence) as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
         return 2
     _print(rep)
