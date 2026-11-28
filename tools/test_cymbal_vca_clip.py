@@ -234,6 +234,111 @@ def test_the_second_order_coefficient_has_no_subtraction_and_is_exact_at_every_b
                 assert abs(got - want) / abs(want) < v.CLIP_REL_ERR_MAX, (asym, d)
 
 
+def test_zero_bias_is_the_symmetric_clipper_and_tanh_itself():
+    """`defect="SYMMETRIC_NL"` is b = 0, where the definition collapses to
+    tanh(u) / g: a second route to the same numbers through libm's and numpy's
+    tanh, neither of which the new evaluation calls."""
+    x = v.clip_input(1.0, 256)
+    assert max(_errors(0.0, n=256).values()) < v.CLIP_REL_ERR_MAX
+    for d in v.DRIVE_DB:
+        g = v._gain(d, UNIT_SINE_RMS)
+        assert v.clip(x, d, v.ASYM, defect="SYMMETRIC_NL", rms=UNIT_SINE_RMS) == \
+            pytest.approx(np.tanh(g * x) / g, rel=1e-14, abs=0.0), d
+
+
+def test_the_clipper_is_exactly_odd_under_flipping_the_bias_and_the_signal():
+    """f(-u, -b) = -f(u, b) by the definition. Held exactly, not to a
+    tolerance: the evaluation never mixes the two signs, so a negative bias
+    is the positive one read the other way round."""
+    x = v.clip_input(60.0)
+    for asym in GRID_ASYM:
+        for d in GRID_DRIVE_DB:
+            assert np.array_equal(v.clip(-x, d, -asym, rms=UNIT_SINE_RMS),
+                                  -v.clip(x, d, asym, rms=UNIT_SINE_RMS)), (asym, d)
+
+
+def test_the_clipper_stays_exact_at_arguments_where_cosh_overflows():
+    """The renders reach |u| = 237 at +12 dB (KA_CREST); 3000 is far past
+    float64's cosh, which overflows near 710. Known in closed form: y*g tends
+    to 1 / (1 + tanh b) as u -> +inf and to -1 / (1 - tanh b) as u -> -inf,
+    which with q = e^(-2|b|) is (1 + q)/2 at the side that clips and
+    (1 + q)/(2q) at the side that grows. Checked against those and against the
+    decimal reference, at the sweep's extreme drives as well."""
+    for asym in (0.5, 19.0, -19.0):
+        q = math.exp(-2.0 * abs(asym))
+        clips, grows = (1.0 + q) / 2.0, (1.0 + q) / (2.0 * q)
+        hi, lo = (clips, -grows) if asym > 0 else (grows, -clips)
+        got = v.clip(np.array([3000.0, -3000.0]), 0.0, asym, rms=1.0)
+        assert np.isfinite(got).all() and got == pytest.approx([hi, lo], rel=1e-12, abs=0.0), asym
+        assert v.clip_rel_error([3000.0, -3000.0], 0.0, asym, rms=1.0) < v.CLIP_REL_ERR_MAX, asym
+    for crest in (1.0, v.KA_CREST):
+        for d in (v.DRIVE_DB[0], v.DRIVE_DB[-1]):
+            assert v.clip_rel_error(v.clip_input(crest, 256), d, 19.0, rms=UNIT_SINE_RMS) \
+                < v.CLIP_REL_ERR_MAX, (crest, d)
+
+
+# ---------------------------------------------------------------------------
+# the injected bug: the clipper as it was written before #2147
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("asym", (12.0, 19.0))
+def test_the_tanh_difference_fails_the_definition_check_at_12_and_19(asym):
+    """`defect="TANH_DIFFERENCE"` is the expression `clip()` used to evaluate,
+    kept as the permanent control for `clip-exact` (#2147). On the grid it
+    must be red at every point; the issue's minimum was 12 and 19."""
+    err = _errors(asym, defect="TANH_DIFFERENCE")
+    assert min(err.values()) > v.CLIP_REL_ERR_MAX, err
+
+
+def test_the_tanh_difference_passes_at_the_documented_bias_which_is_why_nothing_saw_it():
+    """The other half of the control, and the reason the defect lived: at
+    ASYM and every ASYM_SWEEP value the cancelling form is within the same
+    bound, so no property that runs at the documented bias could see it. It
+    is first red at 5 (1.0e-11 at -12 dB), which is in no sweep."""
+    for asym in (v.ASYM, *v.ASYM_SWEEP):
+        err = _errors(asym, defect="TANH_DIFFERENCE")
+        assert max(err.values()) < v.CLIP_REL_ERR_MAX, (asym, err)
+    assert max(_errors(5.0, defect="TANH_DIFFERENCE").values()) > v.CLIP_REL_ERR_MAX
+
+
+def test_the_tanh_difference_moves_clip_exact_and_nothing_else():
+    """Rule 4's matrix for this one defect, as a number: ten properties blind,
+    because all ten run the clipper at ASYM, and one that sees it."""
+    got = v.properties(defect="TANH_DIFFERENCE")
+    assert [p for p in v.PROPERTIES if not got[p]["pass"]] == ["clip-exact"]
+    assert v.properties()["clip-exact"]["pass"]
+
+
+def test_nothing_shipped_moves_at_the_documented_asymmetries():
+    """#2147's own acceptance: every render at ASYM 0.5 and ASYM_SWEEP
+    0.15-0.8, all three clipped positions and three drives, is the same record
+    the cancelling form rendered, to 1e-12 of the peak. Both sources at ASYM,
+    the staircase alone across the sweep; the difference is the clipper's and
+    does not depend on the source."""
+    worst = 0.0
+    for asym in v.ASYM_SWEEP:
+        for kind in (("staircase", "white") if asym == v.ASYM else ("staircase",)):
+            for pos in ("pre_vca", "post_vca", "sum"):
+                for d in (-12.0, 0.0, 12.0):
+                    new = v.render(position=pos, drive=d, asym=asym, kind=kind)[0]
+                    old = v.render(position=pos, drive=d, asym=asym, kind=kind,
+                                   defect="TANH_DIFFERENCE")[0]
+                    worst = max(worst, float(np.max(np.abs(new - old)) / np.max(np.abs(new))))
+    assert worst < 1e-12, worst
+
+
+def test_the_reported_rows_are_the_ones_the_cancelling_form_reported(monkeypatch):
+    """What a reader can quote: `sweep()`'s rows at the documented bias -- THD,
+    M re Ln, Mn re Ln and both rho, rounded as reported -- are identical
+    through either evaluation. `sweep()` takes no defect, so the old clipper
+    is put under it in place of the new one."""
+    drives = (-20.0, 0.0, 12.0)
+    new = v.sweep(asym=v.ASYM, drives=drives)
+    real = v.clip
+    monkeypatch.setattr(v, "clip", lambda x, d, a=v.ASYM, defect=None, **k: real(
+        x, d, a, defect="TANH_DIFFERENCE" if defect is None else defect, **k))
+    assert v.sweep(asym=v.ASYM, drives=drives) == new
+
+
 # ---------------------------------------------------------------------------
 # the correction to step 7, which is the larger half of the result
 # ---------------------------------------------------------------------------

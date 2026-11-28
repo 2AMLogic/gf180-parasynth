@@ -205,6 +205,15 @@ does not pass.
   drive-monotone     M-band energy rises monotonically with drive
   gain-blind         rho and the band ratios are invariant to a gain applied
                      after the level stage (blind by construction, verified)
+  clip-exact         `clip()` equals its own definition, (tanh(u+b) - tanh(b))
+                     / (1 - tanh(b)^2), in 80-digit decimal arithmetic, sample
+                     by sample, at asym 19 -- the largest integer inside the
+                     clipper's domain -- at every drive and at the crest the
+                     renders reach. Written as that difference, the clipper
+                     was roundoff end to end at 19 and wrong by 4e-5 at 12,
+                     and exact to 3e-16 at the documented 0.5, which is where
+                     every other property runs and why none of them saw it
+                     (#2147)
 
 WRONG-THEN-RIGHT RATE OF THIS MODULE: 4, every one caught by a control rather
 than by inspection, published here because that rate is how a reader calibrates
@@ -456,19 +465,53 @@ def clip_a2(drive, asym=ASYM, *, defect=None):
     return -math.tanh(b) * g
 
 
+def _gain(drive, r) -> float:
+    """The clipper's gain for `drive` dB relative to the RMS `r`: the one
+    expression `clip()` and its decimal reference both read."""
+    return 10.0 ** (drive / 20.0) / r
+
+
+def _biased_tanh(u, b):
+    """`[tanh(u + b) - tanh(b)] / (1 - tanh(b)^2)`: the clipper's output times
+    its gain, as `clip()` defines it.
+
+    Equal to sinh(u) cosh(b) / cosh(u + b) -- the tanh difference identity,
+    times cosh(b)^2 -- and evaluated through exp(-2|z|), so that each of the
+    three hyperbolic functions is a product of terms no larger than 1 and
+    nothing is a difference of two nearly equal numbers. Written as the
+    definition is, the numerator and the normaliser both approach 0 as |b|
+    grows and each keeps only the digits that survive its subtraction: at
+    asym 19, inside the domain, the output was roundoff end to end (#2147).
+    """
+    au, ab, aub = np.abs(u), abs(b), np.abs(u + b)
+    # |u| + |b| - |u + b| is 0 when u and b share a sign and 2 min(|u|, |b|)
+    # when they do not; written so the exponent is exact.
+    same = (np.asarray(u) >= 0) == (b >= 0)
+    scale = np.exp(np.where(same, 0.0, 2.0 * np.minimum(au, ab)))
+    return (np.sign(u) * scale * (-np.expm1(-2.0 * au)) * (1.0 + np.exp(-2.0 * ab))
+            / (2.0 * (1.0 + np.exp(-2.0 * aub))))
+
+
 def clip(x, drive, asym=ASYM, *, defect=None, rms=None):
     """§10's "asymmetric clipping", as a biased tanh normalised so that its
     linear term is the identity. `drive` is in dB relative to the signal's own
     RMS at this point, so the same number means the same thing at every
-    insertion position."""
+    insertion position.
+
+    Evaluated by `_biased_tanh` rather than as the tanh difference it is
+    defined as (see there). `defect="TANH_DIFFERENCE"` restores the
+    difference, as the control for `clip-exact`."""
     if drive is None or defect == "NO_NONLINEARITY":
         return np.asarray(x, dtype=np.float64)
     r = float(rms if rms is not None else np.sqrt(np.mean(np.asarray(x) ** 2)))
     if r <= 0:
         raise Refused("the signal at the clipper is silent")
     b = 0.0 if defect == "SYMMETRIC_NL" else asym
-    g = 10.0 ** (drive / 20.0) / r
-    return (np.tanh(g * np.asarray(x, dtype=np.float64) + b) - math.tanh(b)) / (g * (1 - math.tanh(b) ** 2))
+    x = np.asarray(x, dtype=np.float64)
+    g = _gain(drive, r)
+    if defect == "TANH_DIFFERENCE":
+        return (np.tanh(g * x + b) - math.tanh(b)) / (g * (1 - math.tanh(b) ** 2))
+    return _biased_tanh(g * x, b) / g
 
 
 def thd_db(drive, asym=ASYM, *, f0=1000.0, n=1 << 15, sr=SR):
@@ -494,8 +537,8 @@ def thd_db(drive, asym=ASYM, *, f0=1000.0, n=1 << 15, sr=SR):
 # ASYM_SWEEP 0.15-0.8) the clipper is exact to 3e-16 in whichever form it is
 # written, so a check there is blind to the cancelling form it was written in
 # until #2147 -- which every other property in this module runs through. 19 is
-# the largest integer inside the domain (|asym| from 19.07 is refused), where
-# that form's output is roundoff end to end.
+# the largest integer inside the domain (from |asym| 19.07, 1 - tanh(b)^2 is 0
+# in float64), where that form's output is roundoff end to end.
 KA_ASYM = 19.0
 # The renders put the clipper's argument at |g x| = 237 at +12 dB: the short
 # band's 20 ms tau concentrates its energy in a few ms while g is set by the
@@ -506,12 +549,6 @@ KA_CREST = 60.0
 KA_N_CLIP = 128
 # Sample-by-sample relative error allowed between `clip()` and its definition.
 CLIP_REL_ERR_MAX = 1e-12
-
-
-def _gain(drive, r) -> float:
-    """The clipper's gain for `drive` dB relative to the RMS `r`: the one
-    expression `clip()` and its decimal reference both read."""
-    return 10.0 ** (drive / 20.0) / r
 
 
 def _decimal_tanh(z: decimal.Decimal) -> decimal.Decimal:
@@ -550,7 +587,7 @@ def clip_rel_error(x, drive, asym, *, defect=None, rms=None) -> float:
         tb = _decimal_tanh(bias)
         norm = g * (1 - tb * tb)
         worst = 0.0
-        for xi, yi in zip(x.ravel(), got):
+        for xi, yi in zip(x.ravel(), got, strict=True):
             want = (_decimal_tanh(g * decimal.Decimal(float(xi)) + bias) - tb) / norm
             if not want:
                 if yi != 0.0:
@@ -657,9 +694,9 @@ def source_tilt(*, dur=3.6, seed=3, sr=SR) -> dict:
 # ---------------------------------------------------------------------------
 PROPERTIES = ("chain-exact", "linear-limit", "im-known-answer", "asym-load-bearing",
               "product-law", "tau-reads-back", "source-comb", "source-alias",
-              "drive-monotone", "gain-blind")
+              "drive-monotone", "gain-blind", "clip-exact")
 DEFECTS = ("NO_NONLINEARITY", "SYMMETRIC_NL", "SINGLE_OSC", "NO_HIGHPASS",
-           "SWAP_TAUS", "NO_LEVEL_STAGE")
+           "SWAP_TAUS", "NO_LEVEL_STAGE", "TANH_DIFFERENCE")
 BLIND_BY_CONSTRUCTION = ("POST_GAIN_2X", "SEED_PHASE")
 
 
@@ -976,6 +1013,20 @@ def _gain_blind(*, defect=None):
                abs((a["rho_M_-10"] or 0) - (b["rho_M_-10"] or 0)))
 
 
+def _clip_exact(*, defect=None):
+    """`clip-exact`: `clip()` against its definition in 80-digit decimal
+    arithmetic (`clip_rel_error`) at `KA_ASYM`, at every drive of the sweep,
+    at the unit sine's own crest and at `KA_CREST`. The largest error over all
+    of it, against `CLIP_REL_ERR_MAX`.
+
+    The only property run at a bias beyond `ASYM_SWEEP`. Every other one goes
+    through the clipper at the documented 0.5, where the tanh difference and
+    this evaluation agree to 3e-16, so `TANH_DIFFERENCE` leaves all ten of
+    them green and the matrix says so."""
+    return max(clip_rel_error(clip_input(crest), d, KA_ASYM, defect=defect, rms=math.sqrt(0.5))
+               for crest in (1.0, KA_CREST) for d in DRIVE_DB)
+
+
 # property -> (function, predicate on the clean value)
 _BOUNDS = {
     "chain-exact": (lambda **k: _chain_exact(tr.tone_poles(), **k), lambda v: v < 1e-6),
@@ -988,6 +1039,7 @@ _BOUNDS = {
     "source-alias": (_source_alias, lambda v: v < 0.30),
     "drive-monotone": (_drive_monotone, lambda v: v > 0.0),
     "gain-blind": (_gain_blind, lambda v: v < 1e-6),
+    "clip-exact": (_clip_exact, lambda v: v < CLIP_REL_ERR_MAX),
 }
 
 
