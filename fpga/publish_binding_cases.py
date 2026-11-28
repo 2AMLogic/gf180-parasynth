@@ -25,6 +25,11 @@ written into report.json) so that the ONLY defect is the one under test:
 Usage:
     publish_binding_cases.py --record PATH   run against the CURRENT
                              publisher, record one JSON line per case
+
+Exit contract (tools/exit_contract.py): 0 when every selected case ran,
+whether it published or was refused by the publisher; 2 (REFUSED, no record
+written) when the tree's XDC is one fpga/xdc_bindings.py refuses to bind --
+every case is built from that file, so none can run.
 """
 
 import hashlib
@@ -37,6 +42,12 @@ import sys
 HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parent
 FIXTURE = ROOT / "fpga/reports/arty/vivado-2025.1"
+_REFUSAL_TOOLS = str(ROOT / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+
+import exit_contract  # noqa: E402
+import refusal  # noqa: E402
 
 
 def sha(path):
@@ -259,18 +270,22 @@ def main(argv=None):
             only = next(it)
     import tempfile
     results = []
-    for name, builder in CASES:
-        if only and name != only:
-            continue
-        with tempfile.TemporaryDirectory(prefix="pub-binding-") as td:
-            res = run_case(name, builder, pathlib.Path(td))
-        results.append(res)
-        outcome = "PUBLISHED" if res["published"] else f"refused: {res.get('error')}"
-        print(f"{name:<32} {outcome}")
-    if record_path:
-        record_path.write_text(json.dumps(results, indent=2) + "\n")
-        print(f"recorded -> {record_path}")
-    return 0
+    try:
+        for name, builder in CASES:
+            if only and name != only:
+                continue
+            with tempfile.TemporaryDirectory(prefix="pub-binding-") as td:
+                res = run_case(name, builder, pathlib.Path(td))
+            results.append(res)
+            outcome = "PUBLISHED" if res["published"] else f"refused: {res.get('error')}"
+            print(f"{name:<32} {outcome}")
+        if record_path:
+            record_path.write_text(json.dumps(results, indent=2) + "\n")
+            print(f"recorded -> {record_path}")
+    except refusal.Refused as exc:
+        print(f"REFUSED: {exc}", file=sys.stderr)
+        return exit_contract.REFUSED
+    return exit_contract.PASS
 
 
 if __name__ == "__main__":
