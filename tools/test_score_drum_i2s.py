@@ -108,6 +108,55 @@ def test_refuses_a_transcript_with_no_stimulus_report():
             "deadbeef", "SD", FRAMES)
 
 
+@pytest.mark.parametrize("extra,offending", [
+    ("verify_synth_top: REFUSED: the drum solo did not reach: partial run", "REFUSED"),
+    ("run_all: NO-VERDICT (timeout)", "NO-VERDICT"),
+])
+def test_refuses_a_bare_refusal_or_a_no_verdict_next_to_a_pass(extra, offending):
+    """START RED: both used to pass. The gate refused `REFUSED --` and `FAIL --`
+    only, so a refusal spelled without the dashes, or a timeout, could score."""
+    with pytest.raises(score.Refused, match="not a clean PASS") as caught:
+        score.validate_transcript(_transcript(extra=extra), "deadbeef", "SD", FRAMES)
+    assert offending in str(caught.value)
+
+
+@pytest.mark.parametrize("extra", [
+    "verify_synth_top: REFUSED: the drum solo did not reach: partial run",
+    "run_all: NO-VERDICT (timeout)",
+])
+def test_main_refuses_a_bare_refusal_before_reading_the_window(
+        tmp_path, monkeypatch, capsys, extra):
+    """START RED, on the path that ships: a transcript that used to pass the
+    gate went on to the Fischer corpus and to a board row."""
+    def read(*_):
+        raise AssertionError("the scorer read the window described by a transcript "
+                             "it had to refuse")
+    monkeypatch.setattr(score, "load_window", read)
+    wav = tmp_path / "d02a-i2s.wav"
+    wav.write_bytes(b"never read: the transcript is refused first")
+    report = tmp_path / "report.txt"
+    report.write_text(_transcript(sha=hashlib.sha256(wav.read_bytes()).hexdigest(),
+                                  extra=extra))
+    out = tmp_path / "D02A.json"
+    assert score.main(["--case", "D02A", "--wav", str(wav), "--verification", str(report),
+                       "--out", str(out)]) == 2
+    assert "REFUSED -- the report is not a clean PASS" in capsys.readouterr().out
+    assert not out.exists()
+
+
+def test_the_committed_d02a_transcript_still_passes_with_its_records_digest():
+    """Real board output: the transcript behind the committed D02A row, which
+    has to clear the gate exactly as it cleared the hand-copied checks the
+    gate replaces."""
+    import json
+    root = pathlib.Path(score.ROOT)
+    record = json.loads((root / "docs/scorecard/results/D02A.json").read_text())
+    text = (root / "docs/scorecard/drum-d02a-i2s/verify-drum-solo-sd.log").read_text()
+    run = score.validate_transcript(text, record["diagnostics"]["decoded_i2s_sha256"],
+                                    "SD", FRAMES)
+    assert run["simulator"] == "verilator"
+
+
 # ---- the window itself ----------------------------------------------------
 
 def _wav(tmp_path: pathlib.Path, x, sr=48000) -> pathlib.Path:
@@ -151,6 +200,15 @@ def test_the_scored_record_binds_its_own_measurement_sources():
     root = pathlib.Path(score.ROOT)
     missing = [rel for rel in score.MEASUREMENT_SOURCES if not (root / rel).is_file()]
     assert missing == []
+
+
+def test_measurement_sources_hash_the_transcript_gate():
+    """Mirror of #1208: the module this scorer calls to validate transcripts
+    must be in its own hashed sources, derived from the import rather than a
+    literal so a future extraction cannot silently fall outside
+    `measurement_source_sha256`."""
+    helper = "tools/" + pathlib.Path(score.i2s_transcript.__file__).name
+    assert helper in score.MEASUREMENT_SOURCES
 
 
 def test_the_committed_record_is_an_integrated_rtl_record_bound_to_its_evidence():

@@ -148,7 +148,7 @@ def test_refuses_a_mutation_run(tmp_path):
         tmp_path, "mix",
         extra="verify_synth_top: selected legacy single-rate waveform; compile defines: "
               "INJECT_BUG_DRUM_BUS_STALE")
-    with pytest.raises(score.Refused, match="mutation run cannot provide sound evidence"):
+    with pytest.raises(score.Refused, match="mutation runs cannot provide sound evidence"):
         score.validate_part("E1A", "mix", text, paths["wav"], paths["schedule"])
 
 
@@ -198,6 +198,52 @@ def test_refuses_a_report_that_omits_the_simulator(tmp_path):
         score.validate_part("E1A", "mix", text.replace("simulator backend verilator",
                                                        "simulator backend magic"),
                             paths["wav"], paths["schedule"])
+
+
+@pytest.mark.parametrize("extra,offending", [
+    ("verify_synth_top: REFUSED: the ensemble part did not reach: partial run", "REFUSED"),
+    (f"verify_synth_top: FAIL -- of {CASE_FRAMES} decoded I2S periods: 12 differ "
+     "from the model", "FAIL --"),
+    ("score_ensemble_i2s: NO-VERDICT -- mix timed out after 5400s", "NO-VERDICT"),
+])
+def test_refuses_a_pass_next_to_a_forbidden_outcome(tmp_path, extra, offending):
+    """The strictest of the three contracts, and the one the shared gate was
+    written from (#1556): delegating to it must not have loosened it, and the
+    refusal still names the outcome it found, under the part's own prefix."""
+    paths, text, *_ = _part_files(tmp_path, "mix", extra=extra)
+    with pytest.raises(score.Refused, match="contains " + offending) as caught:
+        score.validate_part("E1A", "mix", text, paths["wav"], paths["schedule"])
+    assert str(caught.value).startswith("mix: ")
+
+
+@pytest.mark.parametrize("name,part", [
+    ("E1A-control-DRUM_BUS_STALE.txt", "mix"),
+    ("E1A-control-DRUM_BUS_STALE-stop-BD.txt", "stop:BD"),
+])
+def test_a_committed_control_report_is_refused_as_a_mutation_before_anything_else(name, part):
+    """Real board output. A caught control is also not a passing run, so which
+    reason it gets depends on what is asked first, and it has to be the
+    mutation: an operator told their injected run was merely incomplete has
+    been told something true and useless (#1556)."""
+    report = pathlib.Path(score.ROOT) / "docs/scorecard/ensemble-e1a/rtl" / name
+    absent = pathlib.Path("absent")
+    with pytest.raises(score.Refused,
+                       match=f"^{re.escape(part)}: mutation runs cannot provide sound evidence$"):
+        score.validate_part("E1A", part, report.read_text(), absent, absent)
+
+
+@pytest.mark.parametrize("part", score.parts_for("E1A"))
+def test_every_committed_part_report_clears_the_transcript_gate(part):
+    """Real board output. The decoded WAVs are not committed, so the binding
+    cannot be replayed here; everything asked of the REPORT can be: a
+    committed part report is either accepted or stopped by the missing sidecar,
+    never by the mutation check, the gate, the identity lines or the gains."""
+    paths = score.part_paths(score.ROOT / "docs/scorecard/ensemble-e1a/rtl", part)
+    try:
+        score.validate_part("E1A", part, paths["report"].read_text(), paths["wav"],
+                            paths["schedule"])
+    except score.Refused as exc:
+        assert "the decoded WAV or the schedule is missing" in str(exc), f"{part}: {exc}"
 
 
 def test_refuses_a_schedule_that_does_not_declare_the_i2s_delay(tmp_path):
@@ -449,3 +495,15 @@ def test_a_caught_control_report_from_the_board_binds_both_sidecars(name):
     assert f"negative control {score.CONTROL_INJECT} CAUGHT" in text
     assert re.search(r"^verify_synth_top: decoded I2S WAV sha256 [0-9a-f]{64}$", text, re.M)
     assert re.search(r"^verify_synth_top: ensemble schedule sha256 [0-9a-f]{64}$", text, re.M)
+
+
+def test_measurement_sources_hash_the_transcript_gate():
+    """Mirror of #1208: the module this scorer calls to validate transcripts
+    must be in its own hashed sources, derived from the import rather than a
+    literal so a future extraction cannot silently fall outside
+    `measurement_source_sha256`."""
+    helper = "tools/" + pathlib.Path(score.i2s_transcript.__file__).name
+    assert helper in score.MEASUREMENT_SOURCES
+    root = pathlib.Path(score.ROOT)
+    missing = [rel for rel in score.MEASUREMENT_SOURCES if not (root / rel).is_file()]
+    assert missing == []

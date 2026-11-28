@@ -48,6 +48,7 @@ sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
 import run_case  # noqa: E402
 import scorecard  # noqa: E402
+import i2s_transcript
 import refusal
 
 ENGINE = "integrated-rtl"
@@ -57,7 +58,8 @@ ANALYSIS_SCHEMA = "drum-i2s-score-v1"
 # The sources that decide what this number is. Hashed into the record so a
 # reader can tell a re-measurement from a changed measurement.
 MEASUREMENT_SOURCES = (
-    "tools/score_drum_i2s.py", "tools/run_case.py", "tools/scorecard.py",
+    "tools/score_drum_i2s.py", "tools/i2s_transcript.py",
+    "tools/run_case.py", "tools/scorecard.py",
     "model/drums_fx.py", "model/modal_fixed.py", "model/audio_measure.py",
     "model/synth_top_model.py", "rtl-sketch/verify_synth_top.py",
     "rtl-sketch/tb_top_bx.v", "rtl-sketch/synth_top.v", "rtl-sketch/spi_ctl.v",
@@ -95,16 +97,11 @@ def validate_transcript(text: str, wav_sha256: str, voice: str, frames: int) -> 
     It has to be a PASS of the whole-chip comparison, for THIS WAV, for THIS
     sound, at the case's own render length, with the controlled comparison
     against the fixed model bit-exact."""
-    if "INJECT_BUG_" in text:
-        raise Refused("mutation runs cannot provide chip evidence")
-    if "PASS --" not in text or "FAIL --" in text or "REFUSED --" in text:
-        raise Refused("the transcript is not a clean PASS of the whole-chip comparison")
+    simulator = i2s_transcript.validate_clean_pass(text, wav_sha256=wav_sha256, refuse=Refused)
     verified = (f"{voice} drum path verified from SPI pins through the production "
                 f"drum engine and I2S pins")
     if verified not in text:
         raise Refused(f"the transcript does not verify the {voice} drum path at the pins")
-    if f"decoded I2S WAV sha256 {wav_sha256}" not in text:
-        raise Refused("the transcript does not bind this decoded I2S WAV")
     solo = RE_SOLO.search(text)
     strike = RE_STRIKE.search(text)
     controlled = RE_CONTROLLED.search(text)
@@ -125,10 +122,6 @@ def validate_transcript(text: str, wav_sha256: str, voice: str, frames: int) -> 
                       f"same frame ({controlled.group('differing')} of {frames} samples differ, "
                       f"max {controlled.group('maxdiff')} LSB): that difference is the chip and "
                       f"is a defect report, not a board row")
-    simulator = next((name for name in ("verilator", "iverilog")
-                      if f"simulator backend {name}" in text), None)
-    if simulator is None:
-        raise Refused("the transcript omits the simulator backend")
     built = RE_BUILT.search(text)
     defines = RE_DEFINES.search(text)
     return {
