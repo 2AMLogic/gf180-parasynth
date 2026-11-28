@@ -6935,5 +6935,52 @@
   "gap_before": 0.2493
  },
  "commit": "e3c565ce138320c667f11092884b0cd5727eefa0",
- "sources_dirty": false
+ "sources_dirty": false,
+ "controls_pass_provenance": {
+  "note": "controls_pass above was written by the run that measured this file. That run's check() credited the FORWARD_INTEGRAL control's REFUSAL as a catch, so 5 of its 6 injected defects were live and edt-known had none. #1869 repaired that defect to answer a wrong time. The measurement in this file was NOT re-run: the repair changes only that defect's own branch of schroeder_times, which the clean measurement never enters (the clean path and the other five defects compare exactly equal to the module at the base below). The repaired control run is recorded under repaired_check so the file carries the evidence controls_pass stands on.",
+  "measured_with": {
+   "forward_integral": "REFUSED -- raised Refused('band holds no energy above its floor') on the first band properties() measures, and counted as caught",
+   "controls_live": "5 of 6",
+   "commit_resolves_on_origin": false
+  },
+  "repaired_check": {
+   "issue": 1869,
+   "base": "460284d66ec712752ae0bf032f3049b16941272e",
+   "command": "python3 tools/cymbal_low_tail.py --check",
+   "exit_code": 0,
+   "environment": "Python 3.12.3, numpy 2.5.5, scipy 1.18.1, linux",
+   "sources_sha256": {
+    "tools/cymbal_low_tail.py": "0a00faaf674233380b0c239643dbafe58558ce27d1d462ff7ab639288f4d714e",
+    "tools/cymbal_bands.py": "fdbede463e1190a1c3745e99feceec5c33d3f20572afcaa3a8539359397b7502",
+    "tools/run_case.py": "855f41be0f1bc07c77704a9e8fcba64a1575f7b0a085e8cffca393a8841d04ff",
+    "tools/exit_contract.py": "fd8b5e6707ad6ed68bee6bfe161ce5a2f7c5720594aa0cb42cf1c8d80486e25f",
+    "tools/refusal.py": "68b5ebbf556a889efded349a47991e3e888d00301359c4cbf7a798f27842a65b"
+   },
+   "stdout": [
+    "  clean measurement",
+    "    rho-tracks         PASS   1.2663",
+    "    rho-inverts        PASS   -0.1186",
+    "    skirt-blind        PASS   0.9961",
+    "    edt-known          PASS   1.0246",
+    "    depth-monotone     PASS   1.957",
+    "    refuse-truncated   PASS   None",
+    "    refuse-short-record PASS   record is 1.000 s after t=0, less than the 2",
+    "    floor-subtracted   PASS   1.0227",
+    "",
+    "  defect                    rho-tracks       rho-inverts       skirt-blind         edt-known    depth-monotone  refuse-truncated refuse-short-record  floor-subtracted",
+    "  FORWARD_INTEGRAL               blind             blind             MOVED             MOVED             MOVED             MOVED             blind             blind",
+    "  WIDE_M                         MOVED             MOVED             blind             blind             blind             blind             blind             blind",
+    "  SWAP_BANDS                     MOVED             MOVED             blind             blind             blind             blind             blind             MOVED",
+    "  NO_TRIM                        blind             blind             blind             blind             blind             MOVED             MOVED             MOVED",
+    "  NO_TRUNC_GUARD                 blind             blind             blind             blind             blind             MOVED             blind             blind",
+    "  NO_FLOOR_SUB                   blind             blind             blind             blind             blind             blind             blind             MOVED",
+    "  SCALE_2X                       blind             blind             blind             blind             blind             blind             blind             blind",
+    "",
+    "  6/6 injected defects turned at least one property red; 1 asserted blind and verified blind",
+    "  rejection M: 3450 Hz -24.6 dB 7100 Hz -91.3 dB 10320 Hz -125.8 dB",
+    "  rejection Mn: 3450 Hz -85.1 dB 7100 Hz -147.0 dB 10320 Hz -180.8 dB",
+    "  rejection Ln: 3450 Hz +0.0 dB 7100 Hz -108.7 dB 10320 Hz -151.7 dB"
+   ]
+  }
+ }
 }
