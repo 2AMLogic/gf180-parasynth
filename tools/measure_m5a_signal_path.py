@@ -158,7 +158,7 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     try:
         report = measure(args.cutoff, args.drive, blep=not args.disable_polyblep)
-    except refusal.Refused as exc:
+    except (refusal.Refused, am.InsufficientEvidence) as exc:
         print(f"REFUSED: {exc}")
         return REFUSED
     out = ROOT / args.out
