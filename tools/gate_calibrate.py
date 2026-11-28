@@ -374,6 +374,8 @@ def old_bar_context(tabs: dict, refs: pathlib.Path, ours: dict | None) -> dict:
     crosscheck does for the Boutique 808."""
     out = {}
     for s, t in tabs.items():
+        if not t["rows"]:
+            continue  # a diagnostic subset may include a sound with no takes to rank
         T = pg.Target(*pg.load_wav(refs / t["target"]), s, t["target"])
         b = pg.bar_for(s, refs, T)
         vs = [(pg.verdict(r["d"], b["bar"]), r["rel"]) for r in t["rows"]]
@@ -390,7 +392,7 @@ def old_bar_context(tabs: dict, refs: pathlib.Path, ours: dict | None) -> dict:
 
 def load_bars(cal: dict) -> dict:
     """sound -> bar, only where a bar exists AND was not refused."""
-    return {s: r["bar"] for s, r in cal["sounds"].items() if "bar" in r}
+    return {s: r["bar"] for s, r in cal["sounds"].items() if r.get("bar") is not None}
 
 
 # ---------------------------------------------------------------------------
@@ -497,6 +499,99 @@ def injected_outcome(qi: dict | None) -> tuple[bool | None, dict | None]:
     return {"QUALIFIED": True, "NOT QUALIFIED": False}.get(dec["status"]), dec
 
 
+DIAGNOSTIC_PREFIX = "DIAGNOSTIC (not authority): "
+SUBSET_LABEL = DIAGNOSTIC_PREFIX + "partial sound set, explicitly requested; NOT acceptance authority"
+
+
+def record_refusal(envelope: dict, *, allow_subset: bool = False) -> str | None:
+    """Why a loaded tables file may not be calibrated, or None if it may (#1296).
+    Checks three things: `"sounds"` equals pg.SOUNDS16, `tables` carries those
+    exact sixteen keys, and every sound's table carries at least one measured
+    row (a partial recordings cache yields empty `rows` for missing folders
+    while still populating all sixteen keys).
+
+    Non-empty rows alone cannot detect a truncated take list. The k rule also
+    checks each included sound against the file index in evidence_refusal.
+    The p rule can still calibrate on BD when the other sounds are truncated
+    to four rows each from the committed record."""
+    if "sounds" not in envelope and not allow_subset:
+        return 'REFUSED: the tables file declares no "sounds" set, so its coverage cannot be checked'
+    sounds = envelope.get("sounds", [])
+    if not isinstance(sounds, (list, tuple, set)) or not all(isinstance(s, str) for s in sounds):
+        return 'REFUSED: the tables file "sounds" field is not a list of sound names'
+    tables = envelope.get("tables")
+    if not isinstance(tables, dict):
+        return 'REFUSED: the tables file has no "tables" mapping'
+
+    want = set(pg.SOUNDS16)
+    declared, present = set(sounds), set(tables)
+    if not allow_subset and declared != want:
+        return f"REFUSED: partial record: declared sounds {sorted(declared)} are not all of the sixteen"
+    if not allow_subset and present != want:
+        return (f"REFUSED: the record declares all sixteen sounds but its tables hold {sorted(present)}"
+                f" (missing {sorted(want - present)}, extra {sorted(present - want)})")
+    empty = sorted(s for s, t in tables.items() if not (isinstance(t, dict)
+                                                        and isinstance(t.get("rows"), list)
+                                                        and (t["rows"] or allow_subset)))
+    if empty:
+        return (f"REFUSED: partial record: tables carry no measured rows for {empty}"
+                f" ({len(present) - len(empty)}/{len(present)} sounds populated)")
+    return None
+
+
+def refused_record(why: str) -> dict:
+    """A calibration result with no bars; carries both `k` and `p` so either rule's consumer reads None."""
+    return {"selection": None, "k": None, "p": None, "sounds": {}, "twins": {}, "diagnostic": None, "status": why}
+
+
+def calibrate_tables_record(envelope, rule, force, allow_subset):
+    why = record_refusal(envelope)
+    if why is None:
+        return rule(envelope["tables"], force)
+    if not allow_subset:
+        return refused_record(why)
+    # The opt-in relaxes coverage only. Malformed fields still refuse.
+    malformed = record_refusal(envelope, allow_subset=True)
+    if malformed:
+        return refused_record(malformed)
+    cal = rule(envelope["tables"], force)
+    cal["diagnostic"] = SUBSET_LABEL + (f" | {cal['diagnostic']}" if cal.get("diagnostic") else "")
+    return cal
+
+
+def calibrate_record(envelope: dict, force_k: int | None = None, allow_subset: bool = False) -> dict:
+    """Diagnostic subsets still require complete indexed evidence for each included sound."""
+    return calibrate_tables_record(envelope, calibrate, force_k, allow_subset)
+
+
+def label_decision(decision, diagnostic):
+    if diagnostic:
+        decision["status"] = DIAGNOSTIC_PREFIX + decision["status"]
+
+
+def control_report(corrupt, calibration, qualification):
+    qualified, decision = injected_outcome(qualification)
+    if decision is not None:
+        label_decision(decision, calibration["diagnostic"])
+    return {"corrupt": corrupt, "calibration_status": calibration["status"], "diagnostic": calibration["diagnostic"],
+            "qualified": qualified, "decision": decision}
+
+
+def write_report(args, envelope, cal, q, ours, decide):
+    control = cal.get("injected_control", {})
+    dec = decide(q, control.get("qualified")) if q else {"status": "REFUSED", "why": cal["status"]}
+    label_decision(dec, cal.get("diagnostic") or control.get("diagnostic"))
+    # Keep descriptive distances when coverage fails. A record refused before
+    # selection has no usable context and must still replace a stale decision.
+    cal["old_bar_context"] = (old_bar_context(envelope["tables"], args.refs, ours)
+                              if cal.get("selection") is not None else {})
+    res = {"calibration": cal, "qualification": q, "decision": dec, "provenance": pg.provenance(args)}
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text(json.dumps(pg._r(res), indent=1) + "\n")
+    print(json.dumps(dec, indent=1))
+    return decision_exit(dec)
+
+
 def decision_exit(dec) -> int:
     """Exit code for a decision: REFUSED -> exit_contract.REFUSED, else PASS.
 
@@ -506,7 +601,7 @@ def decision_exit(dec) -> int:
     NOT QUALIFIED keep exiting 0 -- mapping NOT QUALIFIED is a separate question.
     """
     status = str(dec.get("status", "REFUSED"))
-    status = status.removeprefix("DIAGNOSTIC (not authority): ")
+    status = status.removeprefix(DIAGNOSTIC_PREFIX)
     return exit_contract.REFUSED if status.startswith("REFUSED") else exit_contract.PASS
 
 
@@ -526,6 +621,8 @@ def main(argv=None) -> int:
     c.add_argument("--ours", type=pathlib.Path, default=None, help="dir of our rendered <SOUND>.wav (rank --wavs)")
     c.add_argument("--force-k", type=int, default=None,
                    help="DIAGNOSTIC: override the pre-registered k; the result is labelled not-authority")
+    c.add_argument("--allow-subset", action="store_true",
+                   help="DIAGNOSTIC: calibrate a partial sound set; the result is labelled not-authority")
     c.add_argument("--out", type=pathlib.Path, required=True)
     a = ap.parse_args(argv)
     if a.cmd == "measure":
@@ -534,36 +631,23 @@ def main(argv=None) -> int:
             res[s] = measure(s, a.refs, corrupt=a.corrupt)
             print(s, len(res[s]["rows"]), "takes,", len(res[s]["missing"]), "no-verdict", flush=True)
         a.out.parent.mkdir(parents=True, exist_ok=True)
-        a.out.write_text(json.dumps(pg._r({"corrupt": a.corrupt, "archive": ARCHIVE, "tables": res}), indent=1) + "\n")
+        a.out.write_text(json.dumps(pg._r({"corrupt": a.corrupt, "archive": ARCHIVE, "sounds": list(res), "tables": res}), indent=1) + "\n")
         return 0
-    tabs = json.loads(a.tables.read_text())["tables"]
-    cal = calibrate(tabs, a.force_k)
+    env = json.loads(a.tables.read_text())
+    cal = calibrate_record(env, a.force_k, a.allow_subset)
     ours = {}
     if a.ours:
         for s in pg.SOUNDS16:
             p = a.ours / f"{s}.wav"
             if p.exists():
                 ours[s] = pg.load_wav(p)
-    inj = None
     if a.corrupt_tables:
-        ci = calibrate(json.loads(a.corrupt_tables.read_text())["tables"], a.force_k)
+        cenv = json.loads(a.corrupt_tables.read_text())
+        ci = calibrate_record(cenv, a.force_k, a.allow_subset)
         qi = qualify(ci, a.refs, ours) if ci.get("k") else None
-        # A refusal is not a pass: if the corrupted corpus is refused by the same
-        # rule that refused the clean one, the control saw nothing (None, REFUSED).
-        inj, inj_dec = injected_outcome(qi)
-        cal["injected_control"] = {"corrupt": json.loads(a.corrupt_tables.read_text())["corrupt"],
-                                   "calibration_status": ci["status"], "qualified": inj,
-                                   "decision": inj_dec}
+        cal["injected_control"] = control_report(cenv["corrupt"], ci, qi)
     q = qualify(cal, a.refs, ours) if cal.get("k") else None
-    dec = decide(q, inj) if q else {"status": "REFUSED", "why": cal["status"]}
-    if q and cal.get("diagnostic"):
-        dec["status"] = f"DIAGNOSTIC (not authority): {dec['status']}"
-    cal["old_bar_context"] = old_bar_context(regroup(tabs), a.refs, ours)
-    res = {"calibration": cal, "qualification": q, "decision": dec, "provenance": pg.provenance(a)}
-    a.out.parent.mkdir(parents=True, exist_ok=True)
-    a.out.write_text(json.dumps(pg._r(res), indent=1) + "\n")
-    print(json.dumps(dec, indent=1))
-    return decision_exit(dec)
+    return write_report(a, env, cal, q, ours, decide)
 
 
 if __name__ == "__main__":

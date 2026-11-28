@@ -9,6 +9,7 @@ import sys
 import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import gate_between as gb  # noqa: E402
 import gate_calibrate as gc  # noqa: E402
 import perceptual_gate as pg  # noqa: E402
 from probes import gate_calibrate_missing_random as probe  # noqa: E402
@@ -322,6 +323,224 @@ def test_decide_does_not_count_an_unrun_control_as_a_pass():
     assert gc.decide(q, False)["status"] == "NOT QUALIFIED"       # a bar that misses seeds is not authority
 
 
+# ---- #1296: a partial record must not calibrate where the full corpus is refused
+
+def _envelope(sounds=None, keys=None):
+    """The committed 16-sound record, optionally cut down. `sounds` is the
+    declared set, `keys` the rows actually kept (defaults to the declared set)."""
+    import json
+    r = json.loads(TABLES.read_text())
+    keep = list(pg.SOUNDS16) if keys is None else keys
+    env = {"corrupt": r["corrupt"], "archive": r["archive"], "tables": {s: r["tables"][s] for s in keep}}
+    if sounds is not None:
+        env["sounds"] = sounds
+    return env
+
+
+def test_committed_record_declares_its_sounds():
+    import json
+    r = json.loads(TABLES.read_text())
+    assert set(r["sounds"]) == set(r["tables"]) == set(pg.SOUNDS16)
+
+
+def test_one_sound_record_is_refused_though_the_pure_function_calibrates_it():
+    """The #1296 observation: BD alone calibrates (k=3) where all 16 are refused."""
+    env = _envelope(sounds=["BD"], keys=["BD"])
+    assert gc.calibrate(env["tables"])["status"] == "CALIBRATED"   # the hole, in the pure function
+    cal = gc.calibrate_record(env)
+    assert cal["status"].startswith("REFUSED") and cal["k"] is None and cal["sounds"] == {}
+
+
+def test_five_sound_cymbal_subset_is_refused():
+    sub = ["CY", "BD", "SD", "LC", "MT"]
+    env = _envelope(sounds=sub, keys=sub)
+    assert gc.calibrate(env["tables"])["k"] is not None            # it would calibrate
+    assert gc.calibrate_record(env)["status"].startswith("REFUSED")
+
+
+def test_full_record_outcome_unchanged():
+    cal = gc.calibrate_record(_envelope(sounds=list(pg.SOUNDS16)))
+    assert cal["k"] is None and cal["status"].startswith("REFUSED: no k reaches")
+
+
+def test_record_without_sounds_or_empty_is_refused():
+    assert gc.calibrate_record(_envelope())["status"].startswith("REFUSED")
+    assert gc.calibrate_record({"tables": {}})["status"].startswith("REFUSED")
+    assert gc.calibrate_record({})["status"].startswith("REFUSED")
+
+
+def test_declared_set_is_compared_to_the_rows_not_to_itself():
+    """Rule-8 control (set level): the input that satisfies a check of `sounds`
+    alone (or of the table keys alone) while violating its intent."""
+    # claims all 16, carries one table key
+    lie = _envelope(sounds=list(pg.SOUNDS16), keys=["BD"])
+    assert gc.calibrate_record(lie)["status"].startswith("REFUSED")
+    # carries all 16 table keys, declares one
+    assert gc.calibrate_record(_envelope(sounds=["BD"]))["status"].startswith("REFUSED")
+    # 16 names, but not the right 16
+    other = _envelope(sounds=list(pg.SOUNDS16)[:-1] + ["XX"])
+    assert gc.calibrate_record(other)["status"].startswith("REFUSED")
+    # extra table key beyond the 16
+    extra = _envelope(sounds=list(pg.SOUNDS16))
+    extra["tables"]["XX"] = extra["tables"]["BD"]
+    assert gc.calibrate_record(extra)["status"].startswith("REFUSED")
+
+
+def _gut_rows(env, keep, clear_keys=True):
+    """Keep all 16 table keys, but empty `rows` (and `missing`) for sounds outside `keep`."""
+    import copy
+    out = copy.deepcopy(env)
+    for s in pg.SOUNDS16:
+        if s not in keep:
+            out["tables"][s]["rows"] = []
+            out["tables"][s]["missing"] = []
+            if clear_keys:
+                out["tables"][s]["keys"] = []
+    return out
+
+
+def test_empty_rows_for_other_sounds_is_refused():
+    """Rule-8 control (row level): declares all 16 and carries all 16 table keys,
+    but only a subset has measured rows (the shape `measure` writes against a
+    partial recordings cache). A key-set-only guard misses these empty rows."""
+    full = _envelope(sounds=list(pg.SOUNDS16))
+    bd_only = _gut_rows(full, {"BD"})
+    assert gc.choose_k(gc.regroup(bd_only["tables"]))["chosen"] == 3
+    cal = gc.calibrate_record(bd_only)
+    empty_rows = "REFUSED: partial record: tables carry no measured rows"
+    assert cal["status"].startswith(empty_rows)
+    assert cal["k"] is None and cal["sounds"] == {}
+
+    # Keeping the non-empty `keys` list while emptying `rows` must still be refused
+    bd_kept_keys = _gut_rows(full, {"BD"}, clear_keys=False)
+    assert gc.calibrate_record(bd_kept_keys)["status"].startswith(empty_rows)
+
+    # 5-sound CY subset with 11 sounds' rows emptied
+    cy5 = _gut_rows(full, {"CY", "BD", "SD", "LC", "MT"})
+    assert gc.choose_k(gc.regroup(cy5["tables"]))["chosen"] == 5
+    assert gc.calibrate_record(cy5)["status"].startswith(empty_rows)
+
+    # Missing `rows` field on a single sound is refused, not a crash
+    no_rows_key = _envelope(sounds=list(pg.SOUNDS16))
+    del no_rows_key["tables"]["RS"]["rows"]
+    assert gc.calibrate_record(no_rows_key)["status"].startswith(empty_rows)
+
+    # A diagnostic subset may omit sounds, but cannot bypass the per-take index check.
+    sub = gc.calibrate_record(bd_only, allow_subset=True)
+    assert sub["k"] is None and sub["status"].startswith("REFUSED: incomplete evidence")
+    assert sub["diagnostic"].startswith("DIAGNOSTIC (not authority)")
+
+
+def test_allow_subset_is_labelled_diagnostic():
+    env = _envelope(sounds=["BD"], keys=["BD"])
+    cal = gc.calibrate_record(env, allow_subset=True)
+    assert cal["k"] == 3 and cal["diagnostic"].startswith("DIAGNOSTIC (not authority)")
+
+
+@pytest.fixture(params=[(gc, ["calibrate"]), (gb, [])], ids=["k", "p"])
+def run_record_cli(request, tmp_path):
+    module, prefix = request.param
+    out = tmp_path / "result.json"
+
+    def run(clean, corrupt=None, allow_subset=False):
+        tables = tmp_path / "clean.json"
+        tables.write_text(json.dumps(clean))
+        args = [*prefix, "--refs", str(tmp_path), "--tables", str(tables), "--out", str(out)]
+        if corrupt is not None:
+            damaged = tmp_path / "corrupt.json"
+            damaged.write_text(json.dumps(corrupt))
+            args.extend(["--corrupt-tables", str(damaged)])
+        if allow_subset:
+            args.append("--allow-subset")
+        out.write_text(json.dumps({"decision": {"status": "QUALIFIED"}}))
+        rc = module.main(args)
+        return rc, json.loads(out.read_text())
+
+    return run
+
+
+@pytest.mark.parametrize("sounds", [["BD", None], [["BD"]]])
+@pytest.mark.parametrize("allow_subset", [False, True])
+def test_cli_refuses_malformed_sound_names(run_record_cli, sounds, allow_subset):
+    rc, report = run_record_cli(_envelope(sounds=sounds), allow_subset=allow_subset)
+    assert rc == exit_contract.REFUSED
+    assert report["decision"]["status"] == "REFUSED"
+    assert "list of sound names" in report["decision"]["why"]
+
+
+def test_cli_refuses_missing_tables(run_record_cli):
+    rc, report = run_record_cli({"sounds": list(pg.SOUNDS16)})
+    assert rc == exit_contract.REFUSED
+    assert report["decision"]["why"] == 'REFUSED: the tables file has no "tables" mapping'
+
+
+def test_empty_sound_table_replaces_stale_decision(run_record_cli, tmp_path):
+    env = _envelope(sounds=list(pg.SOUNDS16))
+    rs = env["tables"].pop("RS")
+    rs.update(rows=[], keys=[], missing=[])
+    env["tables"] = {"RS": rs, **env["tables"]}
+    # Supply a readable WAV so the old reporter reaches min([]) for RS.
+    target = tmp_path / rs["target"]
+    target.parent.mkdir(parents=True)
+    target.symlink_to(pg.ROOT / "docs/scorecard/drum-d02a-i2s/sd-solo-i2s.wav")
+
+    rc, report = run_record_cli(env)
+    assert rc == exit_contract.REFUSED
+    assert report["decision"]["status"] == "REFUSED"
+    assert "no measured rows for ['RS'] (15/16 sounds populated)" in report["decision"]["why"]
+    assert report["calibration"]["old_bar_context"] == {}
+
+
+@pytest.mark.parametrize("partial,allow_subset,status", [
+    (None, True, "QUALIFIED"),
+    ("corrupt", False, "REFUSED"),
+    ("corrupt", True, "DIAGNOSTIC (not authority): QUALIFIED"),
+    ("clean", True, "DIAGNOSTIC (not authority): QUALIFIED"),
+])
+def test_cli_decision_uses_both_records(run_record_cli, real, monkeypatch, partial, allow_subset, status):
+    subset = ["CY", "BD", "SD", "LC", "MT"]
+
+    def record(which):
+        sounds = subset if partial == which else list(pg.SOUNDS16)
+        tabs = _zero({s: real[s] for s in sounds})
+        if which == "corrupt":
+            for row in tabs["BD"]["rows"]:
+                row["d"]["spec"] = 1.0
+        return {"sounds": sounds, "tables": tabs, "corrupt": "darker" if which == "corrupt" else None}
+
+    def qualification(cal, refs, ours):
+        # Fixed audio outcomes. The real selectors carry the BD distance into its bar.
+        sounds = gc.load_bars(cal)
+        caught = int(sounds["BD"]["spec"] == real["BD"]["floor"]["spec"])
+        start_red = {s: "FAIL" for s in sounds}
+        start_red.update({s + "-silence": "REFUSED" for s in sounds})
+        return {"sounds_with_bar": list(sounds), "start_red": start_red,
+                "seeded_summary": {"n": 1, "caught": caught, "rate": caught},
+                "known_bad": {"shipped-cymbal": {"verdict": "FAIL"}, gb.CANDIDATE: {"verdict": "FAIL"}},
+                "clean": {s: "PASS" for s in sounds}, "validation": {"sounds": 1, "best_passes": 1}}
+
+    monkeypatch.setattr(gc, "qualify", qualification)
+    monkeypatch.setattr(gc, "old_bar_context", lambda *args: {})
+    rc, report = run_record_cli(record("clean"), record("corrupt"), allow_subset)
+    decision = report["decision"]
+    control = report["calibration"]["injected_control"]
+    assert decision["status"] == status
+    if status == "REFUSED":
+        assert rc == exit_contract.REFUSED
+        assert decision["unrun"] == ["Q5 corrupted corpus"]
+        assert control["qualified"] is None
+    else:
+        assert rc == exit_contract.PASS
+        assert decision["gates"]["Q5 corrupted corpus"]["ok"] is True
+        assert control["qualified"] is False
+        if partial == "corrupt":
+            assert control["diagnostic"].startswith("DIAGNOSTIC (not authority)")
+            assert control["decision"]["status"] == "DIAGNOSTIC (not authority): NOT QUALIFIED"
+        else:
+            assert not control.get("diagnostic")
+            assert control["decision"]["status"] == "NOT QUALIFIED"
+
+
 def test_random_missing_published_replay():
     record = json.loads(TABLES.with_name("missing-random-1317.json").read_text())
     hit = next(h for h in record["calibrated_hits"] if h["seed"] == 127)
@@ -435,18 +654,19 @@ def test_random_missing_requires_positive_trial_count(count, capsys):
 import exit_contract  # noqa: E402
 
 
-def _run_calibrate_main(tmp_path, tables, extra=()):
-    tp = tmp_path / "tables.json"
-    tp.write_text(json.dumps({"tables": tables}))
+def _run_calibrate_main(tmp_path):
     out = tmp_path / "out.json"
-    rc = gc.main(["calibrate", "--refs", str(tmp_path), "--tables", str(tp), "--out", str(out), *extra])
+    rc = gc.main(["calibrate", "--refs", str(tmp_path), "--tables", str(TABLES), "--out", str(out)])
     return rc, out
 
 
-def test_main_exits_refused_when_no_k_reaches_coverage(tmp_path, capsys):
-    """Real main(), real calibrate/decide: empty tables leave no k -> REFUSED decision."""
-    rc, out = _run_calibrate_main(tmp_path, {})
-    assert json.loads(capsys.readouterr().out)["status"] == "REFUSED"
+def test_main_exits_refused_when_no_k_reaches_coverage(tmp_path, monkeypatch, capsys):
+    """The complete committed tables reach selection and fail coverage."""
+    monkeypatch.setattr(gc, "old_bar_context", lambda *a, **k: {})
+    rc, out = _run_calibrate_main(tmp_path)
+    decision = json.loads(capsys.readouterr().out)
+    assert decision["status"] == "REFUSED"
+    assert decision["why"].startswith("REFUSED: no k ")
     assert json.loads(out.read_text())["decision"]["status"] == "REFUSED"   # artefact written first
     assert rc == exit_contract.REFUSED
 
@@ -461,8 +681,10 @@ def test_main_exits_refused_when_a_gate_is_unrun(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(gc, "calibrate", lambda tabs, force_k=None: {"k": 3, "status": "ok"})
     monkeypatch.setattr(gc, "qualify", lambda cal, refs, ours: q)
     monkeypatch.setattr(gc, "old_bar_context", lambda *a, **k: {})
-    rc, _ = _run_calibrate_main(tmp_path, {})
-    assert json.loads(capsys.readouterr().out)["status"] == "REFUSED"
+    rc, _ = _run_calibrate_main(tmp_path)
+    decision = json.loads(capsys.readouterr().out)
+    assert decision["status"] == "REFUSED"
+    assert "Q3 shipped cymbal" in decision["unrun"]
     assert rc == exit_contract.REFUSED
 
 
