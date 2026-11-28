@@ -140,6 +140,24 @@ def test_pulse_experiment_refuses_conflicting_gain(sandbox):
                          "measure a candidate the model does not build")
 
 
+@pytest.mark.parametrize("q15", [0, -1, 32768])
+def test_pulse_experiment_refuses_out_of_range_gain(sandbox, q15):
+    proc = run_cli(sandbox, "measure_mono_pulse_2x", "--case", "M5A",
+                   "--rect-gain-q15", str(q15), "--out", "result")
+    assert_refused(proc, f"rectangle gain {q15} outside Q0.15")
+    assert not (sandbox / "result").exists()
+
+
+@pytest.mark.parametrize("q15", [1, 32767])
+def test_pulse_experiment_in_range_gain_clears_the_range_guard(sandbox, q15):
+    # The Q0.15 endpoints clear the range guard and reach the model's own-gain
+    # refusal, which fires only after set_rect_gain has returned.
+    proc = run_cli(sandbox, "measure_mono_pulse_2x", "--case", "M5B",
+                   "--rect-gain-q15", str(q15), "--out", "result")
+    assert_refused(proc, "this tree defines its own rectangle gain; an override would "
+                         "measure a candidate the model does not build")
+
+
 @pytest.mark.parametrize(("damage", "reason"), [
     ("hash", "attack-context reference audio hash mismatch"),
     ("timeline", "attack-context reference MIDI timeline differs"),

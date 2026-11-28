@@ -44,7 +44,7 @@ RECT_GAIN_Q15 = getattr(vf, "_OS2_RECT_GAIN_Q15", vf._OS2_SUBSTEP_GAIN_Q15)
 def set_rect_gain(q15: int):
     global RECT_GAIN_Q15
     if not 0 < int(q15) <= 32767:
-        raise ValueError(f"rectangle gain {q15} outside Q0.15")
+        raise score.Refused(f"rectangle gain {q15} outside Q0.15")
     RECT_GAIN_Q15 = int(q15)
 
 
