@@ -62,13 +62,20 @@ def test_frozen_manifest_that_cannot_be_read_refuses_naming_it(tmp_path, monkeyp
 
 def test_model_wav_destination_that_cannot_be_written_refuses_naming_it(tmp_path):
     """#1939 row 3: the WAV write at the end of `measure` was outside every
-    try. A destination that cannot be created must be stated -- after the
-    whole render, since that is where the write is -- not left as the bare
+    try. Pass the committed M5B WAV as `candidate_wav` so the test reaches
+    the same `keep_audio` write block without a second full M5B synthesis
+    render in the `verify-fast` batch (#1730): a destination that cannot be
+    created is stated as `Refused` naming the path, not left as the bare
     FileExistsError it was on origin/main @ e2d1bae7."""
+    legacy = json.loads(
+        (score.ROOT / "docs/scorecard/mono-m5b-miniv3/legacy-score-v1.json").read_text())
     blocker = tmp_path / "blocker"
     blocker.write_text("a regular file where a directory is needed")
-    with pytest.raises(score.Refused, match=r"blocker[/\\]x\.wav"):
-        score.measure(case_id="M5B", output_path=blocker / "x.wav")
+    with pytest.raises(score.Refused,
+                       match=r"cannot write the M5B model WAV .*blocker[/\\]x\.wav") as raised:
+        score.measure(case_id="M5B", candidate_wav=score.ROOT / legacy["audio"],
+                      output_path=blocker / "x.wav")
+    assert isinstance(raised.value.__cause__, FileExistsError)
 
 
 def test_pitch_deviation_uses_cents_not_semitone_percent():
