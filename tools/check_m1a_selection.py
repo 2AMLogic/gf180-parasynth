@@ -107,7 +107,9 @@ def check(record: dict, candidate: dict, baseline: dict, manifest: dict) -> list
     """Every reason the record is not the selected candidate; [] when it is.
 
     REFUSES (`mf.Refused`) a record that lacks a key this function reads with
-    `[]` (#1604): that is a partial record, not a mismatch."""
+    `[]` (#1604): that is a partial record, not a mismatch. And one whose v3
+    event attack is not a finite number (#2081): a NaN `max()` would silently
+    drop is not a mismatch either."""
     for rec, keys, what in ((record, ("diagnostics", "audio", "metrics"), "the M1A board record"),
                             (candidate, ("patch", "sha256", "measurements", "metrics"),
                              "the -4 dB candidate record"),

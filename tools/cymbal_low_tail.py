@@ -164,6 +164,25 @@ renders read is the downward one: `rho-tracks` is a planted SLOWER low component
 its own skirt baseline). A suite with only the first would have had no control
 at all on the sign it is actually used to report.
 
+`FORWARD_INTEGRAL` must ANSWER WRONG, never refuse (#1869). It integrates
+from the strike instead of from the end, so its curve is the cumulative energy
+ARRIVED, rising to 0 dB, and the level crossing is read where that curve
+REACHES the depth: T(d) becomes the time by which a fraction 10^(d/10) of the
+energy has arrived, -(tau/2)ln(1-10^(d/10)) for one exponential -- 1/21.9 of
+the Schroeder time at -10 dB. That reddens `edt-known` on a NUMBER (0.052 of
+the planted time), which no defect had ever done. Until #1869 the defect
+normalised by `sch[0]`, the first sample rather than the total, and produced
+no measurement at all: it raised Refused where that sample sat below the
+floor and answered None at every depth where it sat above, and `check()`
+credited the refusal as a catch. Two readings were traced first and rejected.
+Normalised by its own total but still read as the first sample AT OR BELOW the
+depth, the rising curve answers 0.00 ms at every depth on every record, and
+`measure()` then dies on 0/0 computing rho. Integrated forward and read
+back-to-front, it crosses late and the end-margin guard refuses every depth:
+red through None, which is the refusal again. All four readings are re-run by
+`tools/probes/cymbal_low_tail_forward_trace.py`, which fails if any of them
+stops behaving this way.
+
 Wrong-then-right rate of this module: 5 of the numbers below were wrong before
 they were right, and the controls caught all five rather than inspection.
   1. `t_edt` said a Schroeder curve falls 2*8.686/tau dB/s, so every planted
@@ -212,6 +231,7 @@ import run_case as rc  # noqa: E402
 import cymbal_bands as cb  # noqa: E402
 from exit_contract import REFUSED  # noqa: E402  -- 2: the declared refusal status
 import refusal
+from finite_number import is_finite_number  # noqa: E402
 
 # FROZEN before this module was used to judge anything (#400 acceptance 1).
 LOW_BANDS = {"M": (891.0, 2828.0), "Mn": (891.0, 1782.0)}
@@ -282,17 +302,19 @@ def schroeder_times(x, sr, depths=DEPTHS, *, defect=None) -> dict:
         raise Refused("band is silent")
     q = p - (0.0 if defect == "NO_FLOOR_SUB" else floor)
     q = np.maximum(q, 0.0)
-    sch = np.cumsum(q[::-1])[::-1] if defect != "FORWARD_INTEGRAL" else np.cumsum(q)
-    if sch[0] <= 0:
+    fwd = defect == "FORWARD_INTEGRAL"
+    sch = np.cumsum(q) if fwd else np.cumsum(q[::-1])[::-1]
+    ref = float(sch[-1] if fwd else sch[0])     # the band's total energy, whichever end it lands at
+    if ref <= 0:
         raise Refused("band holds no energy above its floor")
-    c = 10 * np.log10(np.maximum(sch / sch[0], 1e-30))
+    c = 10 * np.log10(np.maximum(sch / ref, 1e-30))
     t = np.arange(len(c)) / sr
     lvl_end = 10 * math.log10(max(float(np.mean(env[-sm:])), 1e-30) / pk)
     floor_db = 10 * math.log10(max(floor, 1e-30) / pk)
     out = {"floor_db_re_peak": round(floor_db, 2), "times_ms": {}, "refused": {}, "margin_db": {}}
     for d in depths:
         key = f"{d:.0f}"
-        i = np.nonzero(c <= d)[0]
+        i = np.nonzero(c >= d)[0] if fwd else np.nonzero(c <= d)[0]
         if not len(i):
             out["times_ms"][key] = None
             out["refused"][key] = f"the energy curve never reaches {d:.0f} dB"
@@ -877,7 +899,13 @@ def summarise(res: dict) -> dict:
     REFUSES a JSON whose `controls_pass` is not true. The tool that wrote the
     file already refuses in that case, so this is the second gate on the same
     precondition -- deliberately, because the JSON is what a reader picks up
-    later, by which time the console output is gone."""
+    later, by which time the console output is gone.
+
+    REFUSES also a rho that is not a finite number (#2081). `min()` and
+    `max()` drop a NaN that is not the first setting and keep one that is, so
+    `argmin` / `argmax` would name another 808 and the median would come back
+    NaN, in a row that still prints. `None` is not that: it is a depth the 808
+    refused, and the setting stays out of the row."""
     if not res.get("controls_pass"):
         raise Refused("this result file's own controls did not pass; it may not be summarised")
     sb = res["skirt_baseline"]
@@ -887,8 +915,15 @@ def summarise(res: dict) -> dict:
         rows = {}
         for band in ("M", "Mn"):
             for depth in ("-5", "-10"):
-                v = {k: m["rho"][band][depth] for k, m in answered.items()
-                     if m["rho"][band][depth] is not None}
+                v = {}
+                for k, m in answered.items():
+                    x = m["rho"][band][depth]
+                    if x is None:
+                        continue
+                    if not is_finite_number(x):
+                        raise Refused(f"window {wname}: 808 {k}'s rho_{band}({depth}) is {x!r}, "
+                                      "which is not a finite number; the file may not be summarised")
+                    v[k] = x
                 if not v:
                     continue
                 b = sb[f"{band}_{depth}"]

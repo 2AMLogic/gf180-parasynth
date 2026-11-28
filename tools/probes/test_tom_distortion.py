@@ -763,3 +763,98 @@ def test_prereg_validated_domain_matches_frozen_snr():
     m = re.search(r"harmonic >= (\d+(?:\.\d+)?) dB analytic SNR", domain)
     assert m, f"validated_domain no longer states the harmonic analytic-SNR floor: {domain!r}"
     assert float(m.group(1)) == td.frozen_constants()["SNR_REQ_DB"]
+
+
+# ---- #1774: a record the operator names that cannot be READ is REFUSED, never a traceback ----
+# `judge <record>` reads a file the OPERATOR names on the command line. The reader was
+# `json.loads(path.read_text())`, so one that could not be read -- a path that does not
+# exist, truncated JSON, bytes that are not UTF-8 -- exited 1 by traceback: FAIL, "the
+# comparison ran and disagreed" (tools/exit_contract.py), which this tool's own docstring
+# calls "completed and negative", where its declared refusal is exit 2 and nothing was
+# judged. The refusal tests run the real CLI as a subprocess, nothing stubbed. The
+# injected-bug control drives `main()` in process, because a monkeypatch cannot reach a
+# subprocess, and the last control calls the loader itself. None of these needs the corpus.
+REPO = pathlib.Path(__file__).resolve().parents[2]
+#: Each way a user-supplied file can fail to be read, with the exception the shipped
+#: reader died with: #1774's table, plus its test plan's two edge cases (an empty file;
+#: a directory where a file was named).
+RAW_READ_RAISES = {"missing": FileNotFoundError,
+                   "truncated": json.JSONDecodeError,
+                   "not-utf8": (UnicodeDecodeError, json.JSONDecodeError),  # locale-dependent: Latin-1 decodes ff fe, then JSON fails
+                   "empty": json.JSONDecodeError,
+                   "directory": IsADirectoryError}
+
+
+def _unreadable(tmp_path, kind) -> pathlib.Path:
+    """A path that cannot be read, for `kind`: #1774's own bytes for the three it
+    names. The path carries the kind, so a failure prints which one it was."""
+    p = tmp_path / kind / "record.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    if kind == "truncated":
+        p.write_text('{"rows": [1, 2')
+    elif kind == "not-utf8":
+        p.write_bytes(b"\xff\xfe" + bytes(range(256)) * 4)
+    elif kind == "empty":
+        p.write_text("")
+    elif kind == "directory":
+        p.mkdir()
+    return p
+
+
+def _judge_cli(record: pathlib.Path, out: pathlib.Path) -> subprocess.CompletedProcess:
+    """The real CLI as an operator runs it: a fresh interpreter, the file on disk."""
+    return subprocess.run([sys.executable, str(REPO / "tools" / "probes" / "tom_distortion.py"),
+                           "judge", str(record), "--out", str(out)],
+                          cwd=REPO, capture_output=True, text=True, errors="replace")
+
+
+@pytest.mark.parametrize("kind", list(RAW_READ_RAISES))
+def test_judge_refuses_a_record_that_cannot_be_read(tmp_path, kind):
+    rec, out = _unreadable(tmp_path, kind), tmp_path / "judge.json"
+    r = _judge_cli(rec, out)
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert "REFUSED" in r.stdout and str(rec) in r.stdout, r.stdout
+    assert "Traceback" not in r.stderr, r.stderr
+    assert not out.exists()
+
+
+def test_judge_still_judges_a_record_that_can_be_read(tmp_path):
+    """The guard's other side (verification rule 8): a record that can be read is judged,
+    not refused -- the same synthetic record `test_cli_judge_on_a_record` judges in
+    process. Without it the refusals above would pass against a reader that refuses
+    everything."""
+    rec, out = tmp_path / "record.json", tmp_path / "judge.json"
+    rec.write_text(json.dumps(td.synthetic_record(prereg=td.load_prereg()), default=str))
+    r = _judge_cli(rec, out)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert json.loads(out.read_text())["verdict"] == "NO CANDIDATE"
+
+
+@pytest.mark.parametrize("kind", list(RAW_READ_RAISES))
+def test_without_the_loader_judge_is_the_shipped_defect(tmp_path, monkeypatch, kind):
+    """Injected-bug control (#1774 AC 6), committed rather than described: the fix is
+    `load_record`, so reverted to the bare read it replaces, each input above is exit 1
+    by traceback again -- through `main()`, with the very exception #1774's table names
+    -- and nothing is written."""
+    monkeypatch.setattr(td, "load_record", lambda path, what: json.loads(path.read_text()))
+    out = tmp_path / "judge.json"
+    with pytest.raises(RAW_READ_RAISES[kind]):
+        td.main(["judge", str(_unreadable(tmp_path, kind)), "--out", str(out)])
+    assert not out.exists()
+
+
+def test_the_loader_refuses_only_what_it_names(tmp_path, monkeypatch):
+    """#1774 AC 7: the catch is `manifest.Refused` and `OSError`, never `Exception`. An
+    exception that is neither -- an implementation error inside the reader -- is an
+    execution error: it leaves `load_record` as itself rather than being relabelled a
+    refusal, which is the inverse defect. Called on the loader directly, so it fails only
+    for that reason; whether the CLI reads THROUGH the loader is the refusal tests' to
+    assert."""
+    rec = tmp_path / "record.json"
+    rec.write_text("{}")
+
+    def boom(path, what):
+        raise TypeError("an implementation error inside the reader, not a refusal")
+    monkeypatch.setattr(td.mf, "load_json_refused", boom)
+    with pytest.raises(TypeError, match="not a refusal"):
+        td.load_record(rec, "the judge record")

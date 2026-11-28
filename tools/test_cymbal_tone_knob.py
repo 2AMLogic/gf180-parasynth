@@ -289,6 +289,9 @@ def test_each_asserted_blindness_is_verified_blind(defect, blind):
     got = tk.properties(meas=(None if defect in tk.CORPUS_DEFECTS else m), defect=defect)
     if clean[blind]["ok"] is None:
         pytest.skip(f"{blind} is not decidable without the corpus")
+    if got[blind]["ok"] is None:
+        pytest.skip(f"{blind} REFUSED under {defect} ({got[blind].get('refused')}): "
+                    "a refusal is evidence in neither direction")
     assert got[blind]["ok"] == clean[blind]["ok"], (defect, blind,
                                                     clean[blind]["value"], got[blind]["value"])
 
@@ -297,8 +300,172 @@ def test_each_asserted_blindness_is_verified_blind(defect, blind):
 def test_the_globally_blind_control_moves_nothing(blind):
     clean, got = tk.properties(), tk.properties(defect=blind)
     moved = [n for n in tk.PROPERTIES
-             if clean[n]["ok"] is not None and got[n]["ok"] != clean[n]["ok"]]
+             if clean[n]["ok"] is not None and got[n]["ok"] is not None
+             and got[n]["ok"] != clean[n]["ok"]]
     assert not moved, (blind, moved)
+
+
+RAIL = "RAIL_SWAP_HT2_HT3"
+
+
+def _properties_from(table):
+    """A `properties()` stand-in answering from `{defect: {property: ok}}`, the
+    clean run under the `None` key. Every property a row leaves out is decided
+    and passing, so each planted `ok` is the only thing that differs."""
+    def properties(*, refs=None, meas=None, defect=None):
+        out = {}
+        for n in tk.PROPERTIES:
+            ok = table.get(defect, {}).get(n, True)
+            out[n] = {"value": None, "bound": "synthetic", "ok": ok,
+                      "refused": "planted refusal" if ok is None else None}
+        return out
+    return properties
+
+
+def _gate_on(monkeypatch, table, *, blind_to=(), by_construction=()):
+    """`check()` over a synthetic matrix and nothing else: the `RAIL` row with
+    `blind_to` asserted blind to it, then the `by_construction` controls."""
+    monkeypatch.setattr(tk, "DEFECTS", (RAIL,) if blind_to else ())
+    monkeypatch.setattr(tk, "CORPUS_DEFECTS", ())
+    monkeypatch.setattr(tk, "BLIND_PAIRS", {RAIL: tuple(blind_to)})
+    monkeypatch.setattr(tk, "BLIND_BY_CONSTRUCTION", tuple(by_construction))
+    monkeypatch.setattr(tk, "properties", _properties_from(table))
+    return tk.check()
+
+
+def _blind_to_row(lines, prop):
+    [row] = [ln.strip() for ln in lines if ln.strip().startswith(f"blind-to {prop}:")]
+    return row
+
+
+def _control_row(lines, control):
+    [row] = [ln for ln in lines if ln.startswith(control)]
+    return row
+
+
+@pytest.mark.parametrize("got_ok, gate_ok, verdict", [
+    (None, True, "NO VERDICT (refused under the defect)"),
+    (False, False, "MOVED -- the blindness claim is wrong"),
+    (True, True, "verified blind"),
+], ids=["refused-under-defect", "flipped-to-False", "untouched"])
+def test_a_blind_to_property_that_refuses_under_the_defect_is_NO_VERDICT(
+        monkeypatch, got_ok, gate_ok, verdict):
+    """The defect turns `tone-exact` red, so it is caught whatever the blind row
+    says. Red-first at origin/main 474bd2ff for `refused-under-defect`: `None ==
+    True` printed MOVED and failed the gate on a refusal nobody measured.
+    `flipped-to-False` is the half that has to keep failing."""
+    ok, lines = _gate_on(monkeypatch,
+                         {RAIL: {"tone-exact": False, "alpha-law-1s": got_ok}},
+                         blind_to=("alpha-law-1s", "alpha-law-strike"))
+    assert _blind_to_row(lines, "alpha-law-1s") == f"blind-to alpha-law-1s: {verdict}"
+    assert _blind_to_row(lines, "alpha-law-strike") == "blind-to alpha-law-strike: verified blind"
+    assert ok is gate_ok
+
+
+@pytest.mark.parametrize("got_ok", [None, False, True], ids=["refused", "flipped", "untouched"])
+def test_a_blind_to_property_undecided_on_the_clean_run_is_NO_VERDICT_whatever_the_defect_did(
+        monkeypatch, got_ok):
+    """Clean `None` outranks everything: a property the clean run could not
+    decide cannot be moved by a defect, in either direction."""
+    ok, lines = _gate_on(monkeypatch,
+                         {None: {"alpha-law-1s": None},
+                          RAIL: {"tone-exact": False, "alpha-law-1s": got_ok}},
+                         blind_to=("alpha-law-1s",))
+    assert _blind_to_row(lines, "alpha-law-1s") == "blind-to alpha-law-1s: NO VERDICT (not decidable here)"
+    assert ok is True
+
+
+def test_a_blind_to_property_that_fails_clean_and_refuses_under_the_defect_is_NO_VERDICT(
+        monkeypatch):
+    """Got `None` with clean `False`: the clean FAIL fails the gate on its own,
+    and the blind row must not add a MOVED that was never measured. Red-first at
+    origin/main 474bd2ff: `None == False` printed MOVED."""
+    ok, lines = _gate_on(monkeypatch,
+                         {None: {"alpha-law-1s": False},
+                          RAIL: {"tone-exact": False, "alpha-law-1s": None}},
+                         blind_to=("alpha-law-1s",))
+    assert _blind_to_row(lines, "alpha-law-1s") == "blind-to alpha-law-1s: NO VERDICT (refused under the defect)"
+    assert not [ln for ln in lines if "MOVED" in ln], lines
+    assert ok is False
+
+
+def test_a_refusal_beside_a_genuine_move_still_fails_the_gate(monkeypatch):
+    """One blind-to property refuses, its sibling flips True -> False: the first
+    is NO VERDICT, the second is MOVED, and the gate fails on the second."""
+    ok, lines = _gate_on(monkeypatch,
+                         {RAIL: {"tone-exact": False, "alpha-law-1s": None,
+                                 "alpha-law-strike": False}},
+                         blind_to=("alpha-law-1s", "alpha-law-strike"))
+    assert _blind_to_row(lines, "alpha-law-1s") == "blind-to alpha-law-1s: NO VERDICT (refused under the defect)"
+    assert _blind_to_row(lines, "alpha-law-strike") == (
+        "blind-to alpha-law-strike: MOVED -- the blindness claim is wrong")
+    assert ok is False
+
+
+@pytest.mark.parametrize("got_ok, gate_ok, verdict", [
+    (None, True, "verified blind   [NO VERDICT, refused under the control: alpha-law-1s]"),
+    (False, False, "MOVED ['alpha-law-1s']"),
+    (True, True, "verified blind"),
+], ids=["refused-under-control", "flipped-to-False", "untouched"])
+def test_a_blind_by_construction_control_reports_a_refusal_as_NO_VERDICT(
+        monkeypatch, got_ok, gate_ok, verdict):
+    """Red-first at origin/main 474bd2ff for `refused-under-control`: `None !=
+    True` put the refused property in MOVED and failed the gate.
+    `flipped-to-False` is the half that has to keep failing."""
+    ok, lines = _gate_on(monkeypatch, {"SOURCE_FLAT": {"alpha-law-1s": got_ok}},
+                         by_construction=("SOURCE_FLAT",))
+    assert _control_row(lines, "SOURCE_FLAT") == (
+        f"{'SOURCE_FLAT':26s} blind by construction -- {verdict}")
+    assert ok is gate_ok
+
+
+def test_a_refusal_beside_a_genuine_move_in_a_blind_control_still_fails_the_gate(monkeypatch):
+    ok, lines = _gate_on(monkeypatch,
+                         {"SOURCE_FLAT": {"alpha-law-1s": None, "alpha-law-strike": False}},
+                         by_construction=("SOURCE_FLAT",))
+    assert _control_row(lines, "SOURCE_FLAT") == (
+        f"{'SOURCE_FLAT':26s} blind by construction -- MOVED ['alpha-law-strike']"
+        "   [NO VERDICT, refused under the control: alpha-law-1s]")
+    assert ok is False
+
+
+def test_a_property_undecided_on_both_runs_is_not_blamed_on_the_blind_control(monkeypatch):
+    """The no-corpus shape: both windowed alpha-laws are `None` clean AND under
+    `SOURCE_FLAT`. That is `not decidable here`, not a refusal the control
+    caused, so the row must not accuse it."""
+    ok, lines = _gate_on(monkeypatch,
+                         {None: {"alpha-law-strike": None, "alpha-law-tail": None},
+                          "SOURCE_FLAT": {"alpha-law-strike": None, "alpha-law-tail": None}},
+                         by_construction=("SOURCE_FLAT",))
+    assert _control_row(lines, "SOURCE_FLAT") == (
+        f"{'SOURCE_FLAT':26s} blind by construction -- verified blind")
+    assert ok is True
+
+
+def test_the_blindness_twin_skips_a_refusal_under_the_defect_and_still_fails_on_a_move(
+        monkeypatch):
+    """The twin driven by a stand-in, since no defect on this tree refuses a
+    blind-to property. Red-first at origin/main 474bd2ff: the refusal reached
+    `None == True` and raised AssertionError instead of skipping."""
+    monkeypatch.setattr(tk, "properties", _properties_from(
+        {RAIL: {"tone-exact": False, "alpha-law-1s": None, "alpha-law-strike": False}}))
+    monkeypatch.setitem(globals(), "_maybe_measured", lambda: "synthetic")
+    with pytest.raises(pytest.skip.Exception, match=f"REFUSED under {RAIL}"):
+        test_each_asserted_blindness_is_verified_blind(RAIL, "alpha-law-1s")
+    with pytest.raises(AssertionError, match="alpha-law-strike"):
+        test_each_asserted_blindness_is_verified_blind(RAIL, "alpha-law-strike")
+
+
+def test_the_blind_control_twin_ignores_a_refusal_and_still_fails_on_a_move(monkeypatch):
+    """Red-first at origin/main 474bd2ff: a lone refusal landed in `moved` and
+    failed the twin."""
+    monkeypatch.setattr(tk, "properties", _properties_from(
+        {"SOURCE_FLAT": {"alpha-law-1s": None, "alpha-law-strike": False}}))
+    with pytest.raises(AssertionError, match="alpha-law-strike"):
+        test_the_globally_blind_control_moves_nothing("SOURCE_FLAT")
+    monkeypatch.setattr(tk, "properties", _properties_from(
+        {"SOURCE_FLAT": {"alpha-law-1s": None}}))
+    test_the_globally_blind_control_moves_nothing("SOURCE_FLAT")
 
 
 def test_the_source_tilt_is_blind_and_by_how_much():

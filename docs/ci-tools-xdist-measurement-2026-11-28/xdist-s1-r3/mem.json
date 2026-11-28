@@ -1,0 +1,9 @@
+{
+ "peak_tree_rss_mb": 1193,
+ "peak_at_s": 1290.7,
+ "samples": 5078,
+ "interval_s": 0.5,
+ "max_processes": 6,
+ "wall_s": 2577.2,
+ "exit": 0
+}

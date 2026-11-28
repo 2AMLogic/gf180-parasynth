@@ -47,6 +47,109 @@ def test_event_deviation_refuses_structure_changes():
     assert sel.event_deviation({"a": "x"}, {"a": "y"}) is None
 
 
+# ---- a non-finite attack reading in the v3 event list is REFUSED before
+# max() drops it (#2081). On the v3 path `check` names "its own worst event"
+# by the largest |model - reference| over the board record's
+# `diagnostics.events[*].attack_10_90_ms.{model,reference}`. A NaN compares
+# with nothing, so a NaN that is not the first pair is never the greatest:
+# another event was named, and with a NaN at event 1 the tool printed MATCH
+# (exit 0) for a record carrying a reading nobody can read.
+WORST_EVENT = "record attack reading is not its own worst event"
+NOT_A_FINITE_NUMBER = "the M1A board record carries a value that is not a finite number: "
+EVENT_ATTACKS = [  # (event index, side, a finite value that moves the worst pair)
+    pytest.param(0, "model", 20.0, id="event0-model"),
+    pytest.param(0, "reference", -9.0, id="event0-reference"),
+    pytest.param(1, "model", 20.0, id="event1-model"),
+    pytest.param(1, "reference", -9.0, id="event1-reference"),
+    pytest.param(2, "model", 8.0, id="event2-model"),
+    pytest.param(2, "reference", 5.0, id="event2-reference"),
+]
+# where one non-finite value goes. The committed record's worst pair is event
+# 2; event 1 is neither first nor worst, the position that printed MATCH.
+EVENT_POSITIONS = [
+    pytest.param((1, "model"), id="non-first"),
+    pytest.param((1, "reference"), id="non-first-reference"),
+    pytest.param((2, "model"), id="non-first-worst"),
+    pytest.param((2, "reference"), id="non-first-worst-reference"),
+    pytest.param((0, "model"), id="first"),
+    pytest.param((0, "reference"), id="first-reference"),
+]
+
+
+def _event(index, side):
+    return f"diagnostics.events[{index}].attack_10_90_ms.{side}"
+
+
+def _record_with(replacements):
+    """The committed inputs with the board record's event attacks replaced:
+    `{(event index, side): value}`."""
+    record, candidate, baseline, manifest = _inputs()
+    for (index, side), value in replacements.items():
+        record["diagnostics"]["events"][index]["attack_10_90_ms"][side] = value
+    return record, candidate, baseline, manifest
+
+
+def _answer(replacements):
+    """`check` on that record: its `mf.Refused` message, or else the problems
+    it returned -- [] being MATCH."""
+    try:
+        return sel.check(*_record_with(replacements))
+    except sel.mf.Refused as exc:
+        return str(exc)
+
+
+@pytest.mark.parametrize("index, side, finite", EVENT_ATTACKS)
+def test_the_worst_event_cross_check_reads_each_event_attack(index, side, finite):
+    """The witness for the refusals below, green before and after the repair: a
+    FINITE value in that key moves the worst pair and the cross-check answers,
+    so the key is one `max()` reads."""
+    assert WORST_EVENT in _answer({(index, side): finite})
+
+
+@pytest.mark.parametrize("position", EVENT_POSITIONS)
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), -float("inf")], ids=["nan", "inf", "-inf"])
+def test_a_non_finite_event_attack_is_refused_naming_the_field(position, bad):
+    """NaN, +inf and -inf in ONE event attack of the board record: REFUSED
+    (`mf.Refused`), naming the record and the field, at every position -- the
+    builtin keeps a FIRST NaN and drops any other, and both must refuse. Red
+    before the repair: `_answer` returned [] (MATCH) at event 1 and a mismatch
+    everywhere else; neither is a refusal."""
+    assert _answer({position: bad}) == NOT_A_FINITE_NUMBER + f"{_event(*position)} = {bad!r}"
+
+
+@pytest.mark.parametrize("value", [True, None, "9.95"], ids=["bool", "null", "string"])
+def test_an_event_attack_that_is_not_a_number_at_all_is_refused(value):
+    """`is_finite_number` is the one definition (#718): a flag, `null` and a
+    numeric string are not readings either. The old code read the flag as 1.0
+    and printed MATCH; the other two were a traceback (exit 1), which the exit
+    contract reads as a mismatch."""
+    assert _answer({(1, "model"): value}) == NOT_A_FINITE_NUMBER + f"{_event(1, 'model')} = {value!r}"
+
+
+@pytest.mark.parametrize("replacements, named", [
+    pytest.param({(1, "model"): float("nan")}, "diagnostics.events[1].attack_10_90_ms.model = nan",
+                 id="non-first"),
+    pytest.param({(0, "model"): float("nan"), (0, "reference"): float("nan")},
+                 "diagnostics.events[0].attack_10_90_ms.model = nan, "
+                 "diagnostics.events[0].attack_10_90_ms.reference = nan", id="first-both-sides"),
+])
+def test_main_refuses_a_record_on_disk_whose_event_attack_is_nan(tmp_path, capsys, replacements,
+                                                                 named):
+    """Through the tool's own reader: `json.dumps` writes a bare NaN,
+    `load_json_refused` reads it back, and the answer is REFUSED (2) and
+    nothing else. Before the repair both records printed MATCH and exited 0:
+    at the first pair the builtin returns the NaN, both comparisons against it
+    are False, and "its own worst event" passed."""
+    record, _, _, _ = _record_with(replacements)
+    path = tmp_path / "M1A.json"
+    path.write_text(json.dumps(record))
+    assert path.read_text().count("NaN") == len(replacements)
+    code = sel.main(["--record", str(path)])
+    out = capsys.readouterr().out
+    assert code == 2, out
+    assert out.splitlines() == ["REFUSED: " + NOT_A_FINITE_NUMBER + named], out
+
+
 # ---- a record missing a key the check reads with [] is REFUSED, not a
 # traceback (#1604). One control per key: each deletes ONE key from the
 # committed record and runs the tool's own main().
