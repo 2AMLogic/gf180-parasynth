@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Reproduce the frozen model-context measurements without rendering a voice."""
+"""Reproduce the frozen model-context measurements without rendering a voice.
+
+A report that cannot be read -- not a JSON object, or without any key `verify()`
+reads with `[]` -- is REFUSED (exit 2) through `main()`, where it exited 1 by
+`KeyError`, which reads as a measured disagreement. The frozen reference report
+it re-checks is refused the same way (#1604, #1622).
+"""
 from __future__ import annotations
 
 import argparse
@@ -14,7 +20,9 @@ import numpy as np
 from scipy.io import wavfile
 
 import compare_mono_attack_context as producer
+import manifest as mf
 import refusal
+from exit_contract import REFUSED
 
 
 # audio_measure.py is hash-pinned as analysis basis, but this verifier reaches
@@ -78,6 +86,10 @@ def verify(report_path: Path) -> dict:
     lead = producer.lead
     report = json.loads(report_path.read_text())
     reference_path = root / "docs/scorecard/mono-attack-context/report.json"
+    mf.require_keys(report, ("reference_report_sha256", "envelope_calibration_manifest_sha256",
+                             "source_sha256", "rows", "engine_configuration", "pulse_oscillator_2x",
+                             "history_effect_ms"),
+                    f"the model attack-context report at {report_path}", refused=Refused)
     assert ref.sha256(reference_path) == report["reference_report_sha256"], "reference report changed"
     assert ref.sha256(lead.MANIFEST) == report["envelope_calibration_manifest_sha256"], "calibration changed"
     require_reachable(report.get("source_commit"), root)
@@ -101,6 +113,8 @@ def verify(report_path: Path) -> dict:
             changed_sources.append(name)
             assert name not in analysis_sources, f"analysis basis changed: {name}; use the recorded checkout"
     reference = json.loads(reference_path.read_text())
+    mf.require_keys(reference, ("renders", "summary"),
+                    f"the reference attack-context report at {reference_path}", refused=Refused)
     for row in reference["renders"]:
         assert ref.sha256(reference_path.parent / row["wav"]) == row["sha256"], "reference audio changed"
         assert row["events"] == list(producer.context.CONDITIONS[row["condition"]]), "reference events changed"
@@ -154,8 +168,20 @@ def verify(report_path: Path) -> dict:
             "history_contrasts": len(contrasts)}
 
 
-if __name__ == "__main__":
+def main(argv=None) -> int:
+    """A reproduction is exit 0. A record that cannot be read, or a
+    `source_commit` that is not reachable, is REFUSED (exit 2) -- the class
+    exists for it -- rather than a traceback, which `run_all` renders as FAIL."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("report", type=Path, nargs="?", default=producer.ROOT /
                         "docs/scorecard/mono-attack-context/model/report.json")
-    print(json.dumps(verify(parser.parse_args().report), indent=2))
+    try:
+        print(json.dumps(verify(parser.parse_args(argv).report), indent=2))
+    except Refused as exc:
+        print(f"REFUSED: {exc}")
+        return REFUSED
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

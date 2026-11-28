@@ -161,3 +161,86 @@ def test_guard_defeated_goes_red(tmp_path, monkeypatch):
 
 def test_refused_is_an_assertion_error():
     assert issubclass(verifier.Refused, AssertionError)
+
+
+# ---- a report that cannot be read is REFUSED (exit 2) through main(), not a
+# KeyError traceback (exit 1) (#1604, #1622). One control per key verify()
+# reads with [], through the tool's own main().
+REPORT_KEYS = ("reference_report_sha256", "envelope_calibration_manifest_sha256", "source_sha256",
+               "rows", "engine_configuration", "pulse_oscillator_2x", "history_effect_ms")
+REFERENCE_KEYS = ("renders", "summary")
+FROZEN = verifier.producer.ROOT / "docs/scorecard/mono-attack-context/report.json"
+
+
+def _committed_report():
+    return json.loads(REPORT.read_text())
+
+
+def _model_report(tmp_path, record):
+    """`record` -- the committed model report, a doctored one, or a JSON value
+    that is not an object at all -- in scratch, its WAVs symlinked. `record` is
+    positional on purpose: a `None` default here would read a JSON `null`
+    control as "the committed report" and run the control on the wrong input."""
+    if isinstance(record, dict):
+        for row in record.get("rows") or []:
+            audio = Path(row["audio"]).name
+            (tmp_path / audio).symlink_to(REPORT.parent / audio)
+    out = tmp_path / "report.json"
+    out.write_text(json.dumps(record))
+    return out
+
+
+def _main(capsys, argv):
+    rc = verifier.main(argv)
+    return rc, capsys.readouterr().out
+
+
+def test_main_reproduces_the_committed_report(capsys):
+    """The guard must be satisfiable against the report that ships, and main()
+    must render a reproduction as exit 0."""
+    rc, printed = _main(capsys, [str(REPORT)])
+    assert rc == 0 and '"state": "reproduced"' in printed and "REFUSED" not in printed
+
+
+@pytest.mark.parametrize("key", REPORT_KEYS)
+def test_a_model_report_without_a_key_is_refused(tmp_path, capsys, key):
+    record = _committed_report()
+    del record[key]
+    rc, printed = _main(capsys, [str(_model_report(tmp_path, record))])
+    assert rc == 2 and "REFUSED" in printed and repr(key) in printed
+
+
+def test_a_model_report_with_a_null_key_is_refused(tmp_path, capsys):
+    rc, printed = _main(capsys, [str(_model_report(tmp_path, {**_committed_report(), "rows": None}))])
+    assert rc == 2 and "REFUSED" in printed and "'rows'" in printed and "null" in printed
+
+
+@pytest.mark.parametrize("record, why", [({}, "'reference_report_sha256'"), ([], "not a JSON object"),
+                                         (None, "not a JSON object")])
+def test_a_model_report_that_is_not_an_object_is_refused(tmp_path, capsys, record, why):
+    rc, printed = _main(capsys, [str(_model_report(tmp_path, record))])
+    assert rc == 2 and "REFUSED" in printed and why in printed
+
+
+def _serve_frozen_reference(tmp_path, monkeypatch, reference):
+    """Read a doctored frozen reference report in place of the committed one --
+    at the committed path, which verify() resolves itself -- and return the
+    digest the model report must then carry as `reference_report_sha256`."""
+    served = tmp_path / "reference.json"
+    served.write_text(json.dumps(reference))
+    real_read, real_sha = Path.read_text, verifier.producer.context.ref.sha256
+    monkeypatch.setattr(Path, "read_text", lambda path, *a, **k:
+                        real_read(served, *a, **k) if path == FROZEN else real_read(path, *a, **k))
+    monkeypatch.setattr(verifier.producer.context.ref, "sha256", lambda path:
+                        real_sha(served) if path == FROZEN else real_sha(path))
+    return real_sha(served)
+
+
+@pytest.mark.parametrize("key", REFERENCE_KEYS)
+def test_a_frozen_reference_without_a_key_is_refused(tmp_path, monkeypatch, capsys, key):
+    reference = json.loads(FROZEN.read_text())
+    del reference[key]
+    digest = _serve_frozen_reference(tmp_path, monkeypatch, reference)
+    out = _model_report(tmp_path, {**_committed_report(), "reference_report_sha256": digest})
+    rc, printed = _main(capsys, [str(out)])
+    assert rc == 2 and "REFUSED" in printed and repr(key) in printed

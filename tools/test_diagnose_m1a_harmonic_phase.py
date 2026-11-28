@@ -166,3 +166,34 @@ def test_injected_defect_ratio_only_attribution_fails_the_changing_fundamental_c
         k: ("within tolerance" if abs(v - errors["h1"]) <= tol else "partial")
         for k, v in errors.items() if k != "h1"})
     assert not d.synthetic_control()["changing fundamental"]["ok"]
+
+
+# ---- a record the diagnosis reads with [] and cannot read is REFUSED (exit 2),
+# not a KeyError traceback (exit 1) (#1604, #1622). One control per key
+# (`diagnostics`), through the tool's own main().
+def _diagnose(monkeypatch, tmp_path, capsys, record):
+    path = tmp_path / "M1A.json"
+    path.write_text(json.dumps(record))
+    monkeypatch.setattr(d, "RECORD", path)
+    monkeypatch.setattr(d, "OUT", tmp_path / "out")
+    monkeypatch.setattr(d.sys, "argv", ["diagnose_m1a_harmonic_phase.py"])
+    rc = d.main()
+    return rc, capsys.readouterr().out
+
+
+def test_an_m1a_record_without_diagnostics_is_refused(monkeypatch, tmp_path, capsys):
+    """Through main(): the diagnosis REFUSES a record it cannot read, where it
+    exited 1 by KeyError after its reproduction renders, and writes nothing."""
+    record = json.loads(d.RECORD.read_text())
+    del record["diagnostics"]
+    rc, printed = _diagnose(monkeypatch, tmp_path, capsys, record)
+    assert rc == 2 and "REFUSED" in printed and "'diagnostics'" in printed
+    assert not (tmp_path / "out").exists()
+
+
+@pytest.mark.parametrize("record, why", [({}, "'diagnostics'"), ([], "not a JSON object"),
+                                         (None, "not a JSON object")])
+def test_an_m1a_record_that_is_not_an_object_is_refused(monkeypatch, tmp_path, capsys, record, why):
+    rc, printed = _diagnose(monkeypatch, tmp_path, capsys, record)
+    assert rc == 2 and "REFUSED" in printed and why in printed
+    assert not (tmp_path / "out").exists()

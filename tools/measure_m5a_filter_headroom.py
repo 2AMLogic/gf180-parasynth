@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Measure reconstructed 2x interpolation headroom on both M5A pulse widths."""
+"""Measure reconstructed 2x interpolation headroom on both M5A pulse widths.
+
+A frozen manifest that cannot be read -- not a JSON object, or without
+`audio` -- is REFUSED (exit 2) before any render, where run() exited 1 by
+`KeyError` at its first line (#1604, #1622).
+"""
 from __future__ import annotations
 
 import argparse
@@ -16,6 +21,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
 import mono_m5a_score as m5a
+import manifest as mf
 import refusal
 from exit_contract import REFUSED
 import voice_fx as vf
@@ -120,9 +126,11 @@ def _recompare_report(path: pathlib.Path) -> dict:
 def run(out_dir: pathlib.Path, reuse_offline_report: pathlib.Path | None = None,
         reuse_causal_report: pathlib.Path | None = None) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
+    ref = json.loads(m5a.MANIFEST.read_text())
+    mf.require_keys(ref, "audio", f"the frozen M5A manifest at {m5a.MANIFEST}", refused=m5a.Refused)
     rows = {"pulse29": {}, "pulse479": {}}
     reused_sources = {}
-    reference_sha256 = json.loads(m5a.MANIFEST.read_text())["audio"]["sha256"]
+    reference_sha256 = ref["audio"]["sha256"]
 
     def load_reuse(path, labels):
         previous = json.loads(path.read_text())
@@ -179,7 +187,6 @@ def run(out_dir: pathlib.Path, reuse_offline_report: pathlib.Path | None = None,
         dirty = _source_dirty()
     except (OSError, subprocess.CalledProcessError):
         commit, dirty = "unknown", True
-    ref = json.loads(m5a.MANIFEST.read_text())
     return {
         "experiment": "M5A reconstructed 2x input interpolation headroom",
         "schema": "m5a-filter-headroom-v1",

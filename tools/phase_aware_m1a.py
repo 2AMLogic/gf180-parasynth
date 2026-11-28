@@ -18,6 +18,11 @@ is judged where the relative oscillator phase psi is EQUAL on both sides:
 
 Every precondition REFUSES (exit 2) rather than reports. Exit 0 means the rules
 ran to a verdict, whatever that verdict is.
+
+That includes a record that cannot be read: the M1A record without
+`diagnostics`, the #219 phase-cycle report without `capture_sha256`,
+`summaries` or `reference`, and #218's diagnosis without `renders` are REFUSED
+before the render that would have consumed them (#1604, #1622).
 """
 from __future__ import annotations
 
@@ -32,6 +37,7 @@ import analyse_m1a_phase_cycle as ap
 import diagnose_m1a_harmonic_phase as d
 import measure_m1a_drive as dx
 import mono_m1a_score as bass
+import manifest as mf
 import refusal
 import run_all
 from finite_number import is_finite_number
@@ -383,7 +389,10 @@ def main():
             raise Refused(f"known-answer control failed: {[k for k, v in control.items() if not v['ok']]}")
         manifest, reference = bass.load_reference()
         record = json.loads(RECORD.read_text())
+        mf.require_keys(record, "diagnostics", f"the M1A record at {RECORD}", refused=Refused)
         phase = json.loads(PHASE_REPORT.read_text())
+        mf.require_keys(phase, ("capture_sha256", "summaries", "reference"),
+                        f"the phase-cycle report at {PHASE_REPORT}", refused=Refused)
         if bass.sha(ap.CAPTURE / "capture.json") != phase["capture_sha256"]:
             raise Refused("phase-cycle report does not describe the committed capture")
         ref_summary = phase["summaries"]["pooled"]
@@ -423,6 +432,8 @@ def main():
         if choice is not None:
             _, _, ref_rows = reference_confirmation()
             diag = json.loads(DIAG_REPORT.read_text())
+            mf.require_keys(diag, "renders", f"the harmonic-diagnosis report at {DIAG_REPORT}",
+                            refused=Refused)
             base_rows = matched_render(BASELINE, base_patch["vol"], ref_rows)
             for i, r in enumerate(base_rows):
                 if r["pcm_sha256"] != diag["renders"][f"matched event {i}"]["pcm_sha256"]:

@@ -2,6 +2,10 @@
 """Rescore the EXISTING M1A attack-sweep renders (10, 4, 5 ms) under
 m1a-envelope-score-v3. No render: each WAV must hash to the SHA-256 its sweep
 point recorded, or this REFUSES. Writes attack-qualification/rescore.json.
+
+A sweep point that cannot be read -- not a JSON object, or without `audio` or
+`sha256` -- is REFUSED rather than read by `KeyError` (#1604, #1622).
+
 Exit 0 done, 2 refused."""
 from __future__ import annotations
 
@@ -15,6 +19,7 @@ from scipy.io import wavfile
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 import mono_m1a_score as bass                                       # noqa: E402
+import manifest as mf                                                # noqa: E402
 import sweep_m1a_attack as sweep                                    # noqa: E402
 
 SETTINGS_MS = (10.0, 4.0, 5.0)
@@ -26,7 +31,9 @@ def main():
         out = {"schema": "m1a-attack-rescore-v1", "analysis_version": bass.ANALYSIS_VERSION,
                "domain": bass.qualified_attack_domain(), "settings": []}
         for ms in SETTINGS_MS:
-            point = json.loads((sweep.OUT / f"{sweep.point_name(ms)}.json").read_text())
+            path = sweep.OUT / f"{sweep.point_name(ms)}.json"
+            point = json.loads(path.read_text())
+            mf.require_keys(point, ("audio", "sha256"), f"the sweep point at {path}", refused=bass.Refused)
             wav = ROOT / point["audio"]
             if not wav.exists() or bass.sha(wav) != point["sha256"]:
                 raise bass.Refused(f"{wav.name} missing or not bit-identical to its recorded hash")
