@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import os
 import pathlib
-import shutil
 import subprocess
 import sys
 
@@ -90,19 +89,12 @@ def refuse(why: str) -> int:
 
 def main() -> int:
     py = VENV / "bin" / "python"
-    if not py.exists():
-        # Create the venv first and run bootstrap UNDER it. trial_env compares
-        # realpath() of the two interpreters, and a venv's python resolves to the
-        # system python, so run from outside it audits the wrong site-packages
-        # and refuses a venv it has just populated.
-        mk = (["uv", "venv", "--python", "3.12", str(VENV)] if shutil.which("uv")
-              else ["python3.12", "-m", "venv", str(VENV)])
-        if subprocess.run(mk, cwd=ROOT).returncode != 0 or not py.exists():
-            return refuse(f"could not create a Python 3.12 venv ({' '.join(mk)})")
-    r = subprocess.run([str(py), str(ROOT / "tools" / "trial_env.py"),
+    r = subprocess.run([sys.executable, str(ROOT / "tools" / "trial_env.py"),
                         "bootstrap", "--venv", str(VENV)], cwd=ROOT)
     if r.returncode != 0:
         return refuse("tools/trial_env.py bootstrap did not satisfy spec/trial-environment.json")
+    if not py.exists():
+        return refuse("bootstrap reported success but the item9 venv has no python")
     if not (PINNED_BIN / "iverilog").exists():
         return refuse(f"bootstrap reported success but the pinned iverilog is absent")
     env = dict(os.environ, PATH=f"{PINNED_BIN}{os.pathsep}{os.environ['PATH']}")
