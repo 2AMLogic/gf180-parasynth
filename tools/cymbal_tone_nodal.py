@@ -33,6 +33,11 @@ address. `Refused` is not a failed check: it is the tool declining to answer.
   --check    the gate: named properties, and a properties x defects matrix
   --json P   write the evidence record
 
+Exit status: 0 the run answered; 1 `--check` failed; 3 REFUSED, the status
+this file already used. When no realisation can be chosen the record still
+carries `"chosen": {"refused": ...}` and the report still ends on
+`REFUSED: ...`, and the run exits 3, not 0 (#1767). A failed `--check` stays 1.
+
 No recording is read. This is transfer-function arithmetic against the nodal
 network and two committed digitised artifacts, which is exactly why the render
 in `tools/cymbal_tone_render.py` still has to be run.
@@ -657,6 +662,20 @@ def check(cfg=None) -> tuple[bool, list[str]]:
 # ---------------------------------------------------------------------------
 # reporting
 # ---------------------------------------------------------------------------
+def realisation(cfg=None) -> tuple[dict, dict | None, str | None]:
+    """`(chosen, budget, refusal)`: the realisation `cfg` selects and what it
+    costs, or -- when `chosen` or `budget` declines it -- the in-band
+    `{"refused": reason}` marker, None and the reason. The one place that
+    refusal is caught, so `report()`, `record()` and `main` cannot disagree
+    about whether a realisation was chosen."""
+    cfg = cfg if cfg is not None else config()
+    try:
+        ch = chosen(cfg)
+        return ch, budget(ch), None
+    except Refused as exc:
+        return {"refused": str(exc)}, None, str(exc)
+
+
 def report(cfg=None) -> list[str]:
     cfg = cfg if cfg is not None else config()
     out = [f"anchor TONE {ANCHOR} (alpha {alpha_of(ANCHOR, cfg):.4f}); "
@@ -669,10 +688,9 @@ def report(cfg=None) -> list[str]:
                    f"{r['worst_fig9_db']:12.2f} {r['worst_nodal_db']:10.2f}"
                    + ("   <-- OUTSIDE BOUND" if r["worst_nodal_db_raw"] > SHAPE_BOUND_DB else ""))
     out.append("")
-    try:
-        ch = chosen(cfg)
-    except Refused as exc:
-        out.append(f"REFUSED: {exc}")
+    ch, bud, why = realisation(cfg)
+    if why is not None:
+        out.append(f"REFUSED: {why}")
         return out
     out.append("the chosen realisation (poles from the network's own pole set, fixed at the anchor):")
     out.append(f"  {'band':6s} {'poles (Hz)':22s} {'zeros':>5s} {'new':>4s} {'worst':>7s}  per-TONE")
@@ -681,7 +699,6 @@ def report(cfg=None) -> list[str]:
         out.append(f"  {b:6s} {str(v['poles']):22s} {v['dc_zeros']:5d} {v['new_sections']:4d} "
                    f"{v['worst_db']:7.2f}  " + " ".join(f"{c}:{v['per_tone_db'][c]:.2f}" for c in CODES))
     out.append("")
-    bud = budget(ch)
     out.append(f"budget: {cc.N_MODES} -> {bud['modes']} modes, {cc.N_PATH} -> {bud['paths']} paths, "
                f"N_NUMS {bud['nums']}; bank pads to {bud['bank_pad']}")
     out.append(f"        mode {bud['last_mode']} is the last; its num register is "
@@ -702,11 +719,7 @@ def report(cfg=None) -> list[str]:
 def record(cfg=None) -> dict:
     cfg = cfg if cfg is not None else config()
     ok, lines = check(cfg)
-    try:
-        ch = chosen(cfg)
-        bud = budget(ch)
-    except Refused as exc:
-        ch, bud = {"refused": str(exc)}, None
+    ch, bud, _ = realisation(cfg)
     return {"anchor": ANCHOR, "codes": list(CODES),
             "alpha": {c: round(alpha_of(c, cfg), 6) for c in CODES},
             "bounds": {"shape_db": SHAPE_BOUND_DB, "cross_db": CROSS_BOUND_DB,
@@ -741,6 +754,15 @@ def main(argv=None) -> int:
     except Refused as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
         return 3
+    # (#1767) A refusal that `report()`/`record()` wrote in band still has to
+    # reach the exit status: a batch runner reads that and nothing else, so
+    # exit 0 here rendered a run that chose nothing as PASS. Everything above
+    # is printed and written first; a red gate (1) is the stronger statement.
+    if rc_ == 0:
+        why = realisation()[2]
+        if why is not None:
+            print(f"REFUSED: {why}", file=sys.stderr)
+            return 3
     return rc_
 
 
