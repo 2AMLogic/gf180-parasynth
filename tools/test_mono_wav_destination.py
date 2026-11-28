@@ -182,7 +182,7 @@ def board(monkeypatch, tmp_path):
         monkeypatch.setattr(rc, "BASE_STATE", rc.BASE_STATE)
         monkeypatch.setattr(rc, "base_check",
                             lambda allow_stale=False: {"checked": False, "why": "a test double"})
-        monkeypatch.setattr(bass, "qualify_envelope_basis", lambda: {
+        monkeypatch.setattr(bass, "qualify_envelope_basis", lambda report=None: {
             "note": "a test double: the estimator's known-answer suite did not run"})
         yield places
     finally:

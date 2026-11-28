@@ -1,4 +1,6 @@
+import hashlib
 import json
+from pathlib import Path
 import numpy as np
 import pytest
 from scipy.io import wavfile
@@ -293,3 +295,108 @@ def test_qualification_refuses_a_stale_attack_suite(monkeypatch):
     monkeypatch.setattr(bass, "sha", lambda p: "0" * 64 if str(p).endswith("attack_fit_v3.py") else real(p))
     with pytest.raises(bass.Refused, match="stale"):
         bass.qualify_envelope_basis()
+
+
+# --- qualification.json: ONE buffer for the gate, the record and its digest --
+# run() opened the report to gate the attack (twice: the release basis and
+# compare_audio each re-read it) and once more to hash it for provenance, so
+# the published digest named whatever sat at the path LAST, not the bytes whose
+# v3.domain gated the metric (#1677; the manifest's shape in #1603).
+
+QUALIFICATION_INPUT = "attack-qualification/qualification.json"
+
+
+def _replace_on_first_open(monkeypatch, target, replacement, *, requested=None):
+    """An open handle keeps A while the next reader of the same path gets B."""
+    real_open = Path.open
+    requested = target if requested is None else requested
+
+    def open_then_replace(path, *args, **kwargs):
+        if path != requested:
+            return real_open(path, *args, **kwargs)
+        handle = real_open(target, *args, **kwargs)
+        if replacement.exists():
+            replacement.replace(target)
+        return handle
+
+    monkeypatch.setattr(Path, "open", open_then_replace)
+
+
+def _serve_in_place_of(monkeypatch, requested, source):
+    """Every open of `requested` reads `source` instead; nothing is swapped."""
+    real_open = Path.open
+    monkeypatch.setattr(Path, "open",
+                        lambda path, *args, **kwargs: real_open(source if path == requested else path,
+                                                                 *args, **kwargs))
+
+
+def _run_without_render(monkeypatch):
+    """run() over the complete reporting path, minus the render and WAV write."""
+    pcm = np.asarray(signal() * 32768, dtype=np.int16)
+    monkeypatch.setattr(bass.lead.vf, "render_mono_fx", lambda *args: pcm)
+    case = next(c for c in run_case.load_cases() if c["case_id"] == "M1A")
+    return bass.run(case, keep_audio=False)
+
+
+def test_scorecard_binds_parsed_qualification_after_replacement(tmp_path, monkeypatch):
+    """qualification.json is replaced the moment run() has opened it. The
+    published digest must be of the bytes that were PARSED: on the unfixed
+    scorer it came from a later open and named the replacement, while the
+    record's own qualification summary was built from the first read."""
+    raw = (bass.QUALIFICATION / "qualification.json").read_bytes()
+    original = json.loads(raw)
+    target = tmp_path / "qualification.json"
+    target.write_bytes(raw)
+    # Still a valid report (same domain, same bound), so the unfixed scorer's
+    # later reads do not refuse: the digest is the only thing that can differ.
+    replaced = {**original, "v3": {**original["v3"],
+                                   "search_boundary_hits": original["v3"]["search_boundary_hits"] + 1}}
+    other = json.dumps(replaced).encode()
+    replacement = tmp_path / "replacement.json"
+    replacement.write_bytes(other)
+    assert hashlib.sha256(other).hexdigest() != hashlib.sha256(raw).hexdigest()
+    # Redirect only the report; the suite and its hashed sources stay real.
+    _replace_on_first_open(monkeypatch, target, replacement,
+                           requested=bass.QUALIFICATION / "qualification.json")
+
+    record = _run_without_render(monkeypatch)
+    # the swap fired: the path serves B now
+    assert not replacement.exists()
+    assert target.read_bytes() == other
+    # the record was built from A ...
+    attack = record["diagnostics"]["qualification"]["attack"]
+    assert attack["search_boundary_hits"] == original["v3"]["search_boundary_hits"]
+    # ... and names A's bytes, independently hashed here
+    assert record["provenance"]["inputs"][QUALIFICATION_INPUT] == "sha256:" + hashlib.sha256(raw).hexdigest()
+
+
+def test_qualification_accepts_utf8_bom_and_digests_the_bom_bytes(tmp_path, monkeypatch):
+    """read_text() + json.loads(str) refused a UTF-8 BOM that json.loads(bytes)
+    accepts; the digest is of the bytes as they sit on disk, BOM included."""
+    raw = (bass.QUALIFICATION / "qualification.json").read_bytes()
+    bom = b"\xef\xbb\xbf" + raw
+    served = tmp_path / "qualification.json"
+    served.write_bytes(bom)
+    _serve_in_place_of(monkeypatch, bass.QUALIFICATION / "qualification.json", served)
+
+    record = _run_without_render(monkeypatch)
+    attack = record["diagnostics"]["qualification"]["attack"]
+    assert attack["search_boundary_hits"] == json.loads(raw)["v3"]["search_boundary_hits"]
+    assert record["provenance"]["inputs"][QUALIFICATION_INPUT] == "sha256:" + hashlib.sha256(bom).hexdigest()
+
+
+def test_run_opens_the_qualification_report_once_as_bytes(monkeypatch):
+    """One buffer serves the release basis, the attack gate and the provenance
+    digest: none of them reopens the path, and the one open is a byte read."""
+    report = bass.QUALIFICATION / "qualification.json"
+    opened = []
+    real_open = Path.open
+
+    def counting(path, *args, **kwargs):
+        if path == report:
+            opened.append(kwargs.get("mode", args[0] if args else "r"))
+        return real_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", counting)
+    _run_without_render(monkeypatch)
+    assert opened == ["rb"]
