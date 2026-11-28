@@ -82,6 +82,13 @@ PRECONDITIONS, ASSERTED AT THE POINT OF USE, REFUSED WHEN UNMET:
     committed record. A conclusion quoted against a number that has since
     moved is the "correct instrument in a wrong state" failure this repository
     keeps meeting.
+  * the gate's CLEAN run. `check()` evaluates the committed read before any
+    injected defect, and that one call decides whether any control runs at
+    all. If it REFUSES, no control was evaluated, so the outcome is neither
+    green nor a control's FAIL: `--check` prints a REFUSED row naming the
+    reason and exits REFUSED, and `--json` writes no record (#2056 -- it was
+    a traceback and exit 1). The injected-defect loop books its own refusals
+    the same way (#1819); the blindness loop has no handler yet (#1842).
 
 THE COLLECTOR SUPPLY (#432, step 12), AND THE HYPOTHESIS IT REFUTES. Step 11
 left one per-band freedom open: the three envelope generators' peak collector
@@ -161,6 +168,7 @@ if str(ROOT / "tools") not in sys.path:
     sys.path.insert(0, str(ROOT / "tools"))
 
 import cymbal_candidate as cc  # noqa: E402
+import exit_contract
 import refusal
 from exit_contract import REFUSED  # noqa: E402  -- 2: the declared refusal status
 
@@ -1316,12 +1324,54 @@ def targets_gap_short(cfg=None) -> float:
     return float(balance_targets()["gap_db"]["short"])
 
 
-def check(cfg_defect=None, *, targets=None) -> tuple[bool, list[str]]:
-    """Run every property, then every injected defect. Green needs both."""
-    lines, ok = [], True
+# The name `check()` books a refusal of the CLEAN run under: not a defect,
+# because nothing was injected -- the apparatus itself refused.
+CLEAN_RUN = "clean run"
+
+
+def clean_run_refusal(refused) -> str | None:
+    """Why the CLEAN run refused, when `check()` stopped on it; else None.
+
+    A clean-run refusal is always `refused[0]` and always alone, because
+    `check()` returns the moment it happens, before any injected-defect
+    control runs. Every other entry names a defect, and `config()` refuses any
+    name outside `DEFECTS`, so none can read as this one.
+    """
+    first = refused[0] if refused else ""
+    prefix = f"{CLEAN_RUN}: "
+    return first[len(prefix):] if first.startswith(prefix) else None
+
+
+def check(cfg_defect=None, *, targets=None) -> tuple[bool, list[str], list[str]]:
+    """Run every property, then every injected defect. Returns `(ok, lines,
+    refused)`.
+
+    `ok` is the MEASURED verdict: False as soon as one property fails, one
+    injected defect turns nothing red, or one asserted-blind property moves.
+    A defect whose evaluation REFUSES is none of those -- nothing was measured
+    for it -- so it does not touch `ok`. It is printed `REFUSED  <defect>:
+    <reason>` and returned in `refused`. The gate is green only when `ok` AND
+    `refused` is empty: `ok` alone says "nothing failed", never "every control
+    ran" (#1819 -- folded into `red`, a refusal printed PASS and made the gate
+    green over a control that had not run).
+
+    `refused` covers the clean run and the injected-defect loop. A clean run
+    that REFUSES ends the gate there -- no injected-defect control is
+    evaluated, so none is caught and nothing failed -- and comes back as
+    `refused == [f"{CLEAN_RUN}: <reason>"]` beside its REFUSED row, with `ok`
+    untouched (#2056: it left this function as a traceback, and the shell read
+    exit 1, the status of a comparison that ran and disagreed). The blindness
+    loop below still calls `properties` with no handler, so a `Refused` from
+    one of ITS defects leaves this function as a traceback (#1842).
+    """
+    lines, ok, refused = [], True, []
     targets = targets if targets is not None else balance_targets()
 
-    base = properties(config(), targets)
+    try:
+        base = properties(config(), targets)
+    except Refused as exc:
+        lines.append(f"  REFUSED  {CLEAN_RUN}: {exc}")
+        return ok, lines, [f"{CLEAN_RUN}: {exc}"]
     for name, p in base.items():
         lines.append(f"  {'PASS' if p['ok'] else 'FAIL'}  {name}: {p['what']}")
         ok = ok and bool(p["ok"])
@@ -1331,8 +1381,10 @@ def check(cfg_defect=None, *, targets=None) -> tuple[bool, list[str]]:
         try:
             got = properties(config(d), targets)
             red = sorted(n for n, p in got.items() if not p["ok"])
-        except Refused as exc:                            # pragma: no cover
-            red = [f"REFUSED: {exc}"]
+        except Refused as exc:
+            refused.append(f"{d}: {exc}")
+            lines.append(f"  REFUSED  {d}: {exc}")
+            continue
         lines.append(f"  {'PASS' if red else 'FAIL'}  {d}: turns red {red or 'NOTHING'}")
         ok = ok and bool(red)
 
@@ -1344,7 +1396,7 @@ def check(cfg_defect=None, *, targets=None) -> tuple[bool, list[str]]:
                      + (f" -- but moved {moved}" if moved else ""))
         ok = ok and not moved
 
-    return ok, lines
+    return ok, lines, refused
 
 
 # Properties that MUST NOT move under a given defect. A property that moves
@@ -1388,9 +1440,15 @@ BLIND = {
 
 
 def record(cfg=None) -> dict:
+    """The evidence record behind `vca-drive.json`. When the clean run
+    REFUSED nothing was measured, so there is nothing to record: the gate
+    alone comes back, saying so (#2056)."""
     cfg = cfg if cfg is not None else config()
     targets = balance_targets()
-    ok, lines = check(targets=targets)
+    ok, lines, refused = check(targets=targets)
+    gate = {"ok": ok and not refused, "refused": refused, "lines": lines}
+    if clean_run_refusal(refused) is not None:
+        return {"tool": "tools/cymbal_vca_drive.py", "gate": gate}
     peaks = {w: dict(zip(("f_hz", "gain_db"), bandpass_peak(w, cfg))) for w in ("low", "high")}
     commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT,
                             capture_output=True, text=True).stdout.strip() or None
@@ -1417,7 +1475,7 @@ def record(cfg=None) -> dict:
         "properties": properties(cfg, targets),
         "defects": list(DEFECTS),
         "envelope": envelope_record(cfg),
-        "gate": {"ok": ok, "lines": lines},
+        "gate": gate,
     }
 
 
@@ -1589,14 +1647,34 @@ def main(argv=None) -> int:
 
     rc = 0
     if args.check:
-        ok, lines = check(targets=targets)
+        ok, lines, refused = check(targets=targets)
         print("\n".join(lines))
-        print("GATE: " + ("green" if ok else "RED"))
-        rc = 0 if ok else 1
+        clean = clean_run_refusal(refused)
+        if not ok:
+            rc, verdict = exit_contract.FAIL, "RED"
+        elif clean is not None:
+            rc = REFUSED
+            verdict = (f"REFUSED -- the clean run refused ({clean}), so no "
+                       f"injected-defect control was evaluated and this is not a "
+                       f"green gate (exit {rc})")
+        elif refused:
+            rc = exit_contract.REFUSED_ALTERNATE
+            verdict = (f"REFUSED -- {len(refused)} injected-defect control(s) refused, "
+                       f"so nothing was measured for them and this is not a green "
+                       f"gate (exit {rc})")
+        else:
+            rc, verdict = exit_contract.PASS, "green"
+        print(f"GATE: {verdict}")
 
     if args.json is not None:
+        rec = record()
+        clean = clean_run_refusal(rec["gate"]["refused"])
+        if clean is not None:
+            print(f"REFUSED: {CLEAN_RUN}: {clean} -- nothing was measured, "
+                  f"so no record was written to {args.json}")
+            return REFUSED
         args.json.parent.mkdir(parents=True, exist_ok=True)
-        args.json.write_text(json.dumps(record(), indent=2, sort_keys=True) + "\n")
+        args.json.write_text(json.dumps(rec, indent=2, sort_keys=True) + "\n")
         print(f"wrote {args.json}")
 
     if args.json_supply is not None:
