@@ -226,3 +226,60 @@ def test_the_committed_record_is_an_integrated_rtl_record_bound_to_its_evidence(
             == record["diagnostics"]["decoded_i2s_sha256"])
     integration = record["diagnostics"]["integration"]
     assert integration["fixed_model_at_realised_strike"]["identical"] is True
+
+
+# ---- one capture in the file, not two (#1562) -------------------------------
+
+TWO_RUNS = ("ambiguous transcript: it holds 2 simulator backend declarations, "
+            "2 PASS verdicts, 2 decoded I2S WAV digests, and one run prints one of each")
+WITHOUT_A_BACKEND = ("ambiguous transcript: it holds 2 PASS verdicts, "
+                     "2 decoded I2S WAV digests, and one run prints one of each")
+_SHA_A, _SHA_B = "a" * 64, "b" * 64
+
+
+def _second_run(**kwargs):
+    """A clean run that strikes in frame 783, not 782."""
+    transcript = _transcript(**kwargs).replace("782", "783")
+    assert "struck in frame 783" in transcript
+    return transcript
+
+
+def _without_backend(transcript):
+    stripped = transcript.replace("verify_synth_top: simulator backend verilator\n", "")
+    assert stripped != transcript
+    return stripped
+
+
+def test_two_clean_runs_in_one_transcript_are_refused_rather_than_paired():
+    """START RED (#1562). Offered the second run's WAV, the transcript used to
+    yield the FIRST run's strike frame."""
+    a = _transcript(sha=_SHA_A)
+    b = _second_run(sha=_SHA_B)
+    assert score.validate_transcript(a, _SHA_A, "SD", FRAMES)["strike_frame"] == 782
+    assert score.validate_transcript(b, _SHA_B, "SD", FRAMES)["strike_frame"] == 783
+    other = b.replace("simulator backend verilator", "simulator backend iverilog")
+    for second, reason in ((b, TWO_RUNS), (other, TWO_RUNS),
+                           (_without_backend(b), WITHOUT_A_BACKEND)):
+        with pytest.raises(score.Refused) as caught:
+            score.validate_transcript(a + second, _SHA_B, "SD", FRAMES)
+        assert str(caught.value) == reason
+
+
+def test_main_refuses_a_two_run_transcript_before_reading_the_window(
+        tmp_path, monkeypatch, capsys):
+    """START RED (#1562), on the path that ships: this transcript used to pass
+    the gate, and the window it then read was scored as the first run's."""
+    def read(*_):
+        raise AssertionError("the scorer read the window described by a transcript "
+                             "it had to refuse")
+    monkeypatch.setattr(score, "load_window", read)
+    wav = tmp_path / "d02a-i2s.wav"
+    wav.write_bytes(b"never read: the transcript is refused first")
+    report = tmp_path / "report.txt"
+    report.write_text(_transcript(sha=_SHA_A) + _second_run(
+        sha=hashlib.sha256(wav.read_bytes()).hexdigest()))
+    out = tmp_path / "D02A.json"
+    assert score.main(["--case", "D02A", "--wav", str(wav), "--verification", str(report),
+                       "--out", str(out)]) == 2
+    assert "REFUSED -- ambiguous transcript" in capsys.readouterr().out
+    assert not out.exists()
