@@ -245,16 +245,21 @@ REFUSE_MAIN = ("import sys\nimport uart_host as uh\n"
                "uh.main = _refused\n")
 
 PREPARE_ARMS = """\
+import numpy as np
 import run_case as rc
 y, sr = rc.render_drum_solo("LT")
-print("render_drum_solo('LT') ->", y.shape, "first sample", float(y[0]), "peak", round(float(abs(y).max()), 6))
+onset = int(np.argmax(np.abs(y) > rc.ONSET_FRAC * np.abs(y).max()))
+print("render_drum_solo('LT') ->", y.shape, "first sample", float(y[0]), "peak", round(float(np.abs(y).max()), 6),
+      "onset index", onset, "(its lead is", onset, "samples of digital silence)")
 rc.prepare(y, sr)
 print("prepare(render) returned")
+rc.prepare(y[onset - 1:], sr)
+print("prepare(render minus all but one sample of lead) returned: that sample is still below the onset threshold")
 try:
-    rc.prepare(y[rc.DRUM_SOLO_HIT_FRAME:], sr)
+    rc.prepare(y[onset:], sr)
     print("NO RAISE")
 except Exception as e:
-    print("prepare(render minus its lead) raised %s.%s -- %s" % (type(e).__module__, type(e).__name__, str(e)[:90]))
+    print("prepare(render from its onset) raised %s.%s -- %s" % (type(e).__module__, type(e).__name__, str(e)[:90]))
 """
 
 SOLO_ARMS = """\
@@ -403,18 +408,20 @@ TRACES += [
     dict(id=f"{HH5}:532", site=f"{HH5}:532", callee="run_case.prepare", wrap=["run_case.prepare"],
          working=lambda ws: hh5(ws), refusing=None, share={"working": "hh5-working"},
          boundary=[lambda ws: script(ws, "hh5-render-arms", """\
+import numpy as np
 import run_case as rc
 import hh_probe5 as hh
 x, _info = hh.render(hh.dx.kit_with_sounds("CY"), 2.0, "2pole")
 y = x / 32768.0
-print("hh_probe5.render(CY) first sample", float(y[0]), "peak", round(float(abs(y).max()), 6))
+onset = int(np.argmax(np.abs(y) > rc.ONSET_FRAC * np.abs(y).max()))
+print("hh_probe5.render(CY) first sample", float(y[0]), "peak", round(float(np.abs(y).max()), 6), "onset index", onset)
 rc.prepare(y, hh.SR)
 print("prepare(our CY render) returned")
 try:
-    rc.prepare(y[2400:], hh.SR)
+    rc.prepare(y[onset:], hh.SR)
     print("NO RAISE")
 except Exception as e:
-    print("prepare(render minus its lead) raised %s.%s -- %s" % (type(e).__module__, type(e).__name__, str(e)[:80]))
+    print("prepare(render from its onset) raised %s.%s -- %s" % (type(e).__module__, type(e).__name__, str(e)[:80]))
 """, TOOLS_PATH + [str(ROOT / "tools/probes/hihat")])],
          invariant="the argument is the probe's own integer-model CY render, " + RENDERS.split(": ", 1)[1]),
 ]
@@ -445,9 +452,10 @@ TRACES += [
          working=lambda ws: ({"unresolved": "the frozen reference audio is not restored in this tree "
                                            "(python tools/refprofile_restore.py)"}
                              if not (ROOT / "refprofile/cache").is_dir() else
-                             run("tools/f1_rtl_filter_path.py", ["--frames", "2000", "--json", str(ws / "curve.json")])),
+                             run("tools/f1_rtl_filter_path.py", ["--json", str(ws / "curve.json")],
+                                 note="--frames below the first analysis window is itself refused, after :449 ran")),
          refusing=[lambda ws: needs(tree(ws), lambda root: run(
-             "tools/f1_rtl_filter_path.py", ["--frames", "2000", "--json", str(ws / "curve.json")], root=root,
+             "tools/f1_rtl_filter_path.py", ["--json", str(ws / "curve.json")], root=root,
              expect="escape: a fresh checkout has no frozen reference audio, and refprofile.Refused is "
                     "a sibling of the local handler"))]),
     dict(id="tools/measure_pulse2x_headroom.py:191", site="tools/measure_pulse2x_headroom.py:191",
@@ -470,8 +478,9 @@ except Exception as e:
     dict(id="tools/performance_suite.py:629", site="tools/performance_suite.py:629",
          callee="mono_artifact_probe.make_voice", wrap=["mono_artifact_probe.make_voice"],
          working=lambda ws: run("tools/performance_suite.py",
-                                ["--backend", "model", "--phrase", "dense_drums", "--out", str(ws / "suite.json")],
-                                timeout=2400),
+                                ["--backend", "model", "--phrase", "bass", "--out", str(ws / "suite.json")],
+                                timeout=3000, note="the shortest phrase that has notes: dense_drums has none, "
+                                                   "so model_render never makes a voice for it"),
          refusing=None,
          boundary=[lambda ws: run("tools/performance_suite.py", ["--backend", "model", "--engine", "r2"],
                                   expect="REFUSED, exit 2: --engine selects the synthtop backend only"),
@@ -628,19 +637,23 @@ TRACES += [
          boundary=[lambda ws: script(ws, "plan-show-arms", """\
 import synth_top_model as stm
 import uart_host as uh
-gate_off = lambda f: ("event", f, 0, 0, stm.A_GATE_OFF, 0)
 gate_on = ("write", 0, 0, stm.A_GATE_ON, 0)
-print("plan_show([gate-on write, one scheduled gate-off]) ->", len(uh.plan_show([gate_on, gate_off(5000)])), "rows")
-for name, cmds in (("two gate-offs", [gate_on, gate_off(5000), gate_off(6000)]),
-                   ("no gate-on write", [gate_off(5000)])):
+off = ("gate-off", 0, 0, stm.A_GATE_OFF, 0)
+def show(name, cmds, **kw):
     try:
-        uh.plan_show(cmds)
-        print("NO RAISE")
+        print("plan_show(%s%s) -> %d rows" % (name, kw or "", len(uh.plan_show(cmds, **kw))))
     except Exception as e:
-        print("plan_show(%s) raised %s.%s -- %s" % (name, type(e).__module__, type(e).__name__, str(e)[:80]))
+        print("plan_show(%s%s) raised %s.%s -- %s" % (name, kw or "", type(e).__module__, type(e).__name__, str(e)[:80]))
+show("gate-on write, no marker: what wrapper_capture passes", [gate_on])
+show("gate-on write, one marker, hold 2000", [gate_on, off], hold_frames=2000)
+show("one marker, hold 0", [gate_on, off])
+show("two markers", [gate_on, off, off], hold_frames=2000)
+show("a marker with no gate-on write", [off], hold_frames=2000)
+show("a write after the marker", [gate_on, off, ("write", 0, 0, stm.A_VOL, 5)], hold_frames=2000)
 """, FPGA_PATH)],
          invariant="wrapper_capture plans each case's writes as frame-0 live writes and device events "
-                   "one packet apart: no scheduled gate-off, no hold_frames"),
+                   "one packet apart: no `gate-off` marker command and no hold_frames, and every "
+                   "refusing arm of plan_show needs one of the two"),
     dict(id="fpga/release/r1_candidate.py:279", site="fpga/release/r1_candidate.py:279",
          callee="release_manifest._capture", wrap=["release_manifest._capture"],
          working=r1c_check,

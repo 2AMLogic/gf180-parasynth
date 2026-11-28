@@ -208,6 +208,12 @@ def _line_role(frame) -> dict:
     if tree is None:
         return other
 
+    def first_line(fn) -> int:
+        # a code object starts on its first DECORATOR line; its ast node on
+        # `def` (measured on CPython 3.12: a generator whose `finally` ran
+        # while a refusal unwound through its `with` read as "no clause")
+        return min([fn.lineno] + [d.lineno for d in getattr(fn, "decorator_list", [])])
+
     def owner(node) -> ast.AST | None:
         best = None
         for n in ast.walk(tree):
@@ -221,7 +227,7 @@ def _line_role(frame) -> dict:
         own = owner(node)
         if own is None:
             return code.co_name == "<module>"
-        return own.lineno == code.co_firstlineno
+        return first_line(own) == code.co_firstlineno
 
     line = frame.f_lineno
     handler, finally_hit = None, False
@@ -266,13 +272,13 @@ class _Traced:
         except BaseException as exc:
             rec["outcome"], rec["raised"] = "raised", _exc(exc)
             if _is_refusal(exc) and "NO_FOLLOW" not in self._inject:
-                _follow(exc, frame, self._inject)
+                _follow(exc, frame, self._inject, self.callee)
             raise
         rec["outcome"], rec["returned"] = "returned", _brief(out, 1)
         return out
 
 
-def _follow(exc: BaseException, caller, inject: frozenset) -> None:
+def _follow(exc: BaseException, caller, inject: frozenset, callee: str) -> None:
     """Tag `exc` and watch the frames it is about to unwind through. Each of
     them is suspended on a call into the callee, so its next event says what
     it did: a clause it tested and did not match (`tested`), one it entered
@@ -287,7 +293,7 @@ def _follow(exc: BaseException, caller, inject: frozenset) -> None:
     while f is not None and f.f_code.co_filename != str(HERE):
         stack.append(f)
         f = f.f_back
-    ev = {"raised": _exc(exc), "stack": [_where(fr) for fr in stack],
+    ev = {"callee": callee, "raised": _exc(exc), "stack": [_where(fr) for fr in stack],
           "propagated_out": [], "handlers": [], "tested": [], "finally": [],
           "with_unwind": [], "left_entry": False}
     _LOG["follows"].append(ev)
@@ -296,17 +302,19 @@ def _follow(exc: BaseException, caller, inject: frozenset) -> None:
     pending: dict[int, dict] = {}       # frame -> the clause it is testing
 
     def entered(frame, clause: dict) -> None:
-        ev["handlers"].append({**clause, "role": "except"})
+        ev["handlers"].append({**clause, "role": "except", "in_tree": not clause["file"].startswith("/")})
         receiving.discard(id(frame))
         pending.pop(id(frame), None)
 
     def tested(fid: int) -> None:
         clause = pending.pop(fid, None)
         if clause is not None:
-            ev["tested"].append({**clause, "role": "except"})
+            ev["tested"].append({**clause, "role": "except", "in_tree": not clause["file"].startswith("/")})
 
     def local(fr, event, arg):
         fid = id(fr)
+        if fr.f_code.co_filename == str(HERE):      # the tracer's own frames
+            return None
         if event == "exception":
             if getattr(arg[1], TAG, None) is token:
                 clause = pending.get(fid)
@@ -353,6 +361,7 @@ def _follow(exc: BaseException, caller, inject: frozenset) -> None:
                     else:
                         tested(fid)
                         entered(fr, {**_where(fr), "clause": None})
+            return local
             return local
         elif event == "return" and fid in receiving:
             clause = pending.get(fid)
@@ -584,15 +593,18 @@ def _mine(call: dict, site: str, callee: str) -> bool:
 
 
 def classify(rec: dict) -> str:
-    """ESCAPED, HANDLED, NOT-RAISED or UNRESOLVED for one run, from what the
-    child observed -- never from what was expected. A refusal raised at the
-    site that was not followed is UNRESOLVED: "not raised" would contradict
-    the record's own `calls`."""
+    """ESCAPED, HANDLED, RETURNED, NOT-REACHED or UNRESOLVED for one run, from
+    what the child observed -- never from what was expected. A refusal raised
+    at the site that was not followed is UNRESOLVED: "returned" would
+    contradict the record's own `calls`."""
     if rec.get("unresolved"):
         return UNRESOLVED
+    calls = rec.get("calls", ())
     follows = rec.get("follows", [])
+    if not calls:
+        return NOT_REACHED
     if not follows:
-        if any(c.get("raised") for c in rec.get("calls", ())):
+        if any(c.get("raised") for c in calls):
             return UNRESOLVED
         return RETURNED
     last = follows[-1]
@@ -613,8 +625,8 @@ def view(rec: dict, site: str, callee: str) -> dict:
     if rec.get("unresolved"):
         return {**out, "verdict": UNRESOLVED, "calls": [], "follows": [], "site_executed": []}
     out["calls"] = [c for c in rec["calls"] if _mine(c, site, callee)]
-    out["follows"] = [f for f in rec["follows"]
-                      if f["stack"][0]["fn"] and _hit({"callee": callee, "caller": f["stack"][0]}, [site])]
+    out["follows"] = [f for f in rec["follows"] if _mine({"callee": f.get("callee"), "caller": f["stack"][0]},
+                                                       site, callee)]
     out["site_executed"] = [site] if out["calls"] else []
     if out["follows"]:
         out["verdict"] = classify({**rec, "follows": out["follows"]})
