@@ -738,7 +738,7 @@ def main(argv=None) -> int:
         if a.json:
             a.json.parent.mkdir(parents=True, exist_ok=True)
             a.json.write_text(json.dumps(record(), indent=1, default=json_leaf) + "\n")
-    except Refused as exc:
+    except refusal.Refused as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
         return 3
     return rc_
