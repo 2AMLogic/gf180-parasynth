@@ -906,7 +906,13 @@ def summarise(res: dict) -> dict:
     a NaN compares with nothing: a NaN baseline top had every 808 FAIL to clear
     it, so the row printed 0/10 where the scorecard quotes 10/10, and a NaN in
     any of the other four printed as `nan` in its column -- exit 0 either way.
-    `None` is not that: it is a depth that record refused, and it stays."""
+    `None` is not that: it is a depth that record refused, and it stays.
+
+    REFUSES also a rho that is not a finite number (#2081). `min()` and
+    `max()` drop a NaN that is not the first setting and keep one that is, so
+    `argmin` / `argmax` would name another 808 and the median would come back
+    NaN, in a row that still prints. `None` is not that: it is a depth the 808
+    refused, and the setting stays out of the row."""
     if not res.get("controls_pass"):
         raise Refused("this result file's own controls did not pass; it may not be summarised")
     sb = res["skirt_baseline"]
@@ -916,8 +922,15 @@ def summarise(res: dict) -> dict:
         rows = {}
         for band in ("M", "Mn"):
             for depth in ("-5", "-10"):
-                v = {k: m["rho"][band][depth] for k, m in answered.items()
-                     if m["rho"][band][depth] is not None}
+                v = {}
+                for k, m in answered.items():
+                    x = m["rho"][band][depth]
+                    if x is None:
+                        continue
+                    if not is_finite_number(x):
+                        raise Refused(f"window {wname}: 808 {k}'s rho_{band}({depth}) is {x!r}, "
+                                      "which is not a finite number; the file may not be summarised")
+                    v[k] = x
                 if not v:
                     continue
                 b = sb[f"{band}_{depth}"]

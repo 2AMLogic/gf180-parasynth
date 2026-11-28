@@ -1,0 +1,6 @@
+the by-directory collection of commit 7a3455a6, three places; line 1-3: the count line (elapsed time differs); line 4-5: sha256 of everything above it
+runner, xdist-n1-r1: 6678 tests collected in 3.59s
+runner, xdist-s1-r3: 6678 tests collected in 3.29s
+another machine, git archive 7a3455a6 + pytest --collect-only: 6678 tests collected in 12.17s
+runner sha256: 903944b654f6c0cea29ef8962f94faaff50841597d8a8705f5baf4eef9e9ce24  collect.txt without its blank line and count line
+other-machine sha256: 903944b654f6c0cea29ef8962f94faaff50841597d8a8705f5baf4eef9e9ce24  (same bytes)
