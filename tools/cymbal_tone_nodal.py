@@ -377,7 +377,7 @@ def choose(band, cfg, *, anchor=ANCHOR) -> dict:
         if best is None or key < best[0]:
             best = (key, {"band": band, "poles": [round(p, 1) for p in poles],
                           "dc_zeros": dcz, **cost,
-                          "worst_db": round(worst, 3),
+                          "worst_db": round(worst, 3), "worst_db_raw": worst,
                           "per_tone_db": {c: round(errs[c], 3) for c in CODES}})
     if best is None:
         raise Refused(f"{band}: no enumerated realisation at all ({rejected} rejected)")
@@ -393,6 +393,12 @@ def choose(band, cfg, *, anchor=ANCHOR) -> dict:
 def chosen(cfg=None) -> dict:
     cfg = cfg if cfg is not None else config()
     return {b: choose(b, cfg) for b in BANDS}
+
+
+def chosen_record(ch: dict) -> dict:
+    """The chosen sections as published in both the nodal and render records."""
+    return {band: {k: v for k, v in row.items() if k != "worst_db_raw"}
+            for band, row in ch.items()}
 
 
 def rev3_realisation(band, cfg) -> dict:
@@ -567,7 +573,7 @@ def properties(cfg=None) -> dict:
     gain, detail = 0.0, {}
     if ch is not None:
         for b, v in ch.items():
-            fixed = max(v["per_tone_db"].values())
+            fixed = v["worst_db_raw"]
             track = max(shape_error_db(b, alpha_of(c, cfg), _tracked(b, v, c, cfg),
                                        v["dc_zeros"], cfg) for c in CODES)
             detail[b] = {"fixed_db": round(fixed, 3), "tracking_db": round(track, 3)}
@@ -583,6 +589,8 @@ def properties(cfg=None) -> dict:
                                 "what": "every mode the realisation needs has a writable register set"}
 
     # 8/9. TONE is load-bearing, and the band it mainly attenuates moves monotonically.
+    # The candidate programs this three-decimal gain table. Its quantisation
+    # is part of the knob law whose span is being tested.
     g = tone_gain_db(cfg)
     spans = {b: max(g[c][b] for c in CODES) - min(g[c][b] for c in CODES) for b in BANDS}
     out["tone-load-bearing"] = {"value_db": round(max(spans.values()), 3),
@@ -705,6 +713,7 @@ def record(cfg=None) -> dict:
     try:
         ch = chosen(cfg)
         bud = budget(ch)
+        ch = chosen_record(ch)
     except Refused as exc:
         ch, bud = {"refused": str(exc)}, None
     return {"anchor": ANCHOR, "codes": list(CODES),

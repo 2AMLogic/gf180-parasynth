@@ -260,6 +260,54 @@ def test_the_decay_band_keeps_the_empty_realisation_and_costs_nothing():
     assert ch["decay"]["worst_db"] < tn.SHAPE_BOUND_DB
 
 
+@pytest.mark.parametrize("fixed, passes", [(1.25, True), (1.2504, False)])
+def test_one_register_set_uses_the_chosen_fixed_error(monkeypatch, fixed, passes):
+    cfg = tn.config()
+    low = tn.choose("low", cfg)
+    fixed_poles = tuple(low["poles"])
+    tracked_poles = tn._tracked("low", low, "10", cfg)
+    assert fixed_poles != tracked_poles
+    original = tn.shape_error_db
+
+    def shape_error(band, alpha, poles, dc_zeros, cfg, **kwargs):
+        if band == "low" and alpha == tn.alpha_of("10", cfg) and dc_zeros == low["dc_zeros"]:
+            if poles == fixed_poles:
+                return fixed
+            if poles == tracked_poles:
+                return 1.0
+        return original(band, alpha, poles, dc_zeros, cfg, **kwargs)
+
+    monkeypatch.setattr(tn, "shape_error_db", shape_error)
+    prop = tn.properties(cfg)["one-register-set"]
+    assert prop["per_band"]["low"] == {"fixed_db": 1.250, "tracking_db": 1.000}
+    assert prop["value_db"] == 0.250
+    assert prop["ok"] is passes
+
+
+@pytest.mark.parametrize("analog_span, programmed_span, passes", [
+    (5.9994, 5.999, False), (5.9996, 6.000, True), (6.0, 6.000, True),
+])
+def test_tone_load_bearing_measures_the_programmed_gain_law(
+        monkeypatch, analog_span, programmed_span, passes):
+    cfg = tn.config()
+    original = tn.nodal_db
+
+    def nodal(band, hz, alpha, cfg):
+        if len(hz) == 1:  # band level at its calibration centre
+            gain = analog_span if band == "short" and alpha == tn.alpha_of("10", cfg) else 0.0
+            return np.array([gain])
+        return original(band, hz, alpha, cfg)
+
+    monkeypatch.setattr(tn, "nodal_db", nodal)
+    gains = tn.tone_gain_db(cfg)
+    assert gains["10"]["short"] == programmed_span
+    monkeypatch.setattr(cc, "TONE_GAIN_DB", gains)
+    assert cc.tone_gains("10")["short"] == 10**(programmed_span / 20)
+    prop = tn.properties(cfg)["tone-load-bearing"]
+    assert prop["value_db"] == programmed_span
+    assert prop["ok"] is passes
+
+
 def test_choose_refuses_when_nothing_the_bank_can_hold_clears_the_bound():
     """Dropping the LEVEL stage from the target leaves a shape no admissible
     realisation reaches -- the refusal path, exercised."""

@@ -9,6 +9,7 @@ was "a verdict function that reported a match from two rows twelve dB apart".
 """
 from __future__ import annotations
 
+import json
 import math
 import pathlib
 import sys
@@ -120,6 +121,7 @@ def test_the_precondition_gate_passes_on_the_current_tree():
     got = tre.assert_realisation_is_the_validated_one()
     assert got["check_ok"]
     assert got["budget"]["addressable"]
+    assert all("worst_db_raw" not in row for row in got["chosen"].values())
 
 
 def test_the_precondition_gate_refuses_a_model_that_drifted(monkeypatch):
@@ -231,6 +233,102 @@ def test_the_verdict_reports_every_one_of_the_25_settings():
     n_dev = sum(1 for c in v["columns"].values() for s in c["split"].values()
                 if s == "development")
     assert n_dev == len(cb.DEVELOPMENT) == 9
+
+
+def _bands(hml=-1.0, h_ms=500.0, ln_ms=500.0):
+    return {"H_minus_L_db": hml, "H": {"edt10_ms": h_ms}, "Ln": {"edt10_ms": ln_ms}}
+
+
+def _measured_edt(ms, sr):
+    # Place the last large sample immediately before the desired crossing.
+    # The second pulse leaves less than a tenth of the energy in the tail.
+    crossing = round(ms * sr / 1000)
+    signal = np.zeros(crossing + sr // 4)
+    signal[crossing - 1] = 1.0
+    signal[crossing + 100] = 0.2
+    measured = cb.band_decay(signal, sr)["edt10_ms"]
+    assert measured == ms
+    return measured
+
+
+def _boundary_verdict(monkeypatch, tmp_path, candidate, reference):
+    # Plant measurements before either producer anchors or rounds. Only the
+    # intersection of TONE 10 and DECAY 25 can miss the tracking bounds.
+    anchor = _bands()
+    ref_anchor = _bands(hml=-2.0)
+    other_column = _bands(hml=candidate["H_minus_L_db"], h_ms=600.0)
+    fischer = {}
+    for dec in tre.CODES:
+        for tone in tre.CODES:
+            row = reference if dec == "25" else other_column
+            fischer[f"CY{tone}{dec}"] = row if tone == "10" else ref_anchor
+    path = tmp_path / "fischer.json"
+    path.write_text(json.dumps(fischer))
+    refs = tre.fischer_curves(path)
+
+    monkeypatch.setattr(tre, "kit_at", lambda levels, code: (code, {}))
+    monkeypatch.setattr(tre, "render_r4", lambda code: (code, 48000))
+    monkeypatch.setattr(rc, "prepare", lambda code, sr, *, side: code)
+    monkeypatch.setattr(cb, "measure", lambda code, sr: candidate if code == "10" else anchor)
+    ours = tre.measure_render({})
+    return ours, tre.verdict(ours, refs)
+
+
+@pytest.mark.parametrize("input_db, measured_db, delta, passes", [
+    (3.0014, 3.001, 3.000, True), (3.0016, 3.002, 3.001, False),
+])
+def test_h_minus_l_boundary_on_the_frozen_measurement_grid(
+        monkeypatch, tmp_path, input_db, measured_db, delta, passes):
+    # Give the actual instrument known H and L energies at its filter outputs.
+    # H-L and the anchor differences are all on the 0.001 dB grid.
+    def measure_hml(db):
+        def band_signal(y, sr, lo, hi):
+            gain_db = {cb.TOTAL: 0, cb.BANDS["H"]: db - 10}.get((lo, hi), -10)
+            return np.array([10**(gain_db / 20)])
+        with monkeypatch.context() as patch:
+            patch.setattr(cb, "_bp", band_signal)
+            patch.setattr(cb, "band_decay", lambda x, sr: {"edt10_ms": 500.0})
+            return cb.measure([1.0], 48000)
+
+    candidate, reference = measure_hml(input_db), measure_hml(-0.999)
+    assert candidate["H_minus_L_db"] == measured_db
+    assert reference["H_minus_L_db"] == -0.999
+    ours, verdict = _boundary_verdict(monkeypatch, tmp_path, candidate, reference)
+    assert ours["h_minus_l_anchored_db"]["10"] == round(measured_db + 1, 3)
+    col = verdict["columns"]["25"]
+    assert col["h_minus_l_anchored_delta_db"]["10"] == delta
+    assert col["h_minus_l_ok"] is passes
+    assert all(v["h_minus_l_ok"] for d, v in verdict["columns"].items() if d != "25")
+    assert verdict["properties"]["h-minus-l-tracks-808"]["ok"] is passes
+
+
+@pytest.mark.parametrize("candidate_ms, fischer_ms, passes", [
+    (525.0, 350.0, True),      # exactly +50%, including after division by the anchors
+    (750.02, 500.0, False),    # candidate ratio rounds to 1.5000
+    (750.0, 499.98, False),    # reference ratio rounds to 1.0000
+    (825.10, 550.05, False),   # even the exact ratios give an error displayed as 0.5000
+])
+def test_h_edt10_boundary_before_both_ratio_roundings(
+        monkeypatch, tmp_path, candidate_ms, fischer_ms, passes):
+    candidate = _bands(h_ms=_measured_edt(candidate_ms, 48000))
+    reference = _bands(h_ms=_measured_edt(fischer_ms, 44100))
+    _, verdict = _boundary_verdict(monkeypatch, tmp_path, candidate, reference)
+    col = verdict["columns"]["25"]
+    assert col["h_edt10_ok"] is passes
+    assert all(v["h_edt10_ok"] for d, v in verdict["columns"].items() if d != "25")
+    assert verdict["properties"]["h-edt-tracks-808"]["ok"] is passes
+
+
+@pytest.mark.parametrize("ms, displayed, passes", [
+    (750.0, 1.5, True), (750.02, 1.5, False), (250.0, 0.5, True), (249.98, 0.5, False),
+])
+def test_ln_edt10_invariance_boundary_before_ratio_rounding(monkeypatch, tmp_path, ms,
+                                                           displayed, passes):
+    candidate = _bands(ln_ms=_measured_edt(ms, 48000))
+    ours, verdict = _boundary_verdict(monkeypatch, tmp_path, candidate, _bands())
+    prop = verdict["properties"]["ln-edt-tone-invariant"]
+    assert ours["ln_edt10_ratio"]["10"] == prop["value"]["10"] == displayed
+    assert prop["ok"] is passes
 
 
 def test_the_bounds_are_step_9s_bounds_unchanged():
@@ -396,6 +494,21 @@ def test_every_recorded_property_flag_is_a_real_boolean():
         assert isinstance(col["h_minus_l_ok"], bool) and isinstance(col["h_edt10_ok"], bool)
     assert isinstance(d["preservation"]["ok"], bool)
     assert isinstance(d["superposition"]["ok"], bool)
+
+
+def test_replaying_the_recorded_milliseconds_preserves_the_candidate_verdict():
+    record = json.loads(RECORD.read_text())
+    got = tre.verdict(record["render"], record["fischer"])
+    saved = record["verdict"]
+    assert got["properties"] == saved["properties"]
+    for dec, col in got["columns"].items():
+        for key in ("h_minus_l_anchored_delta_db", "h_minus_l_worst_db",
+                    "h_minus_l_ok", "h_edt10_ok"):
+            assert col[key] == saved["columns"][dec][key]
+    # CY1050: 142.98/147.25 against the recorded Fischer ratio. Premature
+    # rounding gave 0.4665. Both the row and its maximum display four places.
+    assert got["columns"]["50"]["h_edt10_ratio_rel_err"]["10"] == 0.4666
+    assert got["columns"]["50"]["h_edt10_worst_rel"] == 0.4666
 
 
 def test_the_verdicts_flags_are_booleans_before_they_are_serialised():
