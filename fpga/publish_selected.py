@@ -7,6 +7,7 @@ import hashlib
 import json
 import math
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -25,6 +26,23 @@ class Refused(refusal.Refused, ValueError):
     and no verdict exists, which a traceback at exit 1 misreports as a FAIL."""
 
 
+def _recorded_commit(value, field):
+    """A commit as the build report records it: `git rev-parse HEAD` output
+    (build_selected.py), so 40 lowercase hex and nothing else. The report comes
+    from a downloaded artifact the operator fetched (fpga/SELECTED.md) and the
+    value is interpolated into `git show`'s object position, where unvalidated
+    it is whatever git reads there (#2082; measured on git 2.43.0): a leading
+    `--` is an option -- `--output=<path>` creates or truncates <path> and then
+    fails -- and an empty value is the index. A string that cannot start with
+    `-` cannot be an option, so no `--` placement arises. Not a Refused: the
+    --historical sites turn one into a NO-VERDICT publication for a commit the
+    clone merely lacks, and a report that names no commit is a defect of the
+    artifact, as #2025 filed a name git cannot parse."""
+    if not (isinstance(value, str) and re.fullmatch(r"[0-9a-f]{40}", value)):
+        raise ValueError(f"artifact records {field} that is not a full object name: {value!r}")
+    return value
+
+
 def _commit_absent(commit):
     """Is `commit` a full object name this clone does not hold? `git cat-file
     -e -- <name>` answers in three statuses, not two (measured, git 2.43): 0,
@@ -38,12 +56,14 @@ def _commit_absent(commit):
 
 
 def _git_show(commit, name):
-    """`git show <commit>:<name>` from this checkout. A commit the clone does
-    not hold is a precondition that was not met (#2025): REFUSED, naming the
-    commit, which is what the operator has to fetch. Any other failure is a
-    defect and leaves as the CalledProcessError git raised: the handler asks
-    git, it does not guess. The publisher runs by hand in whatever checkout
-    the operator has (fpga/SELECTED.md)."""
+    """`git show <commit>:<name>` from this checkout, `commit` being a full
+    object name -- decided where it left the report (#2082), so git cannot
+    read it as an option. A commit the clone does not hold is a precondition
+    that was not met (#2025): REFUSED, naming the commit, which is what the
+    operator has to fetch. Any other failure is a defect and leaves as the
+    CalledProcessError git raised: the handler asks git, it does not guess.
+    The publisher runs by hand in whatever checkout the operator has
+    (fpga/SELECTED.md)."""
     command = ["git", "show", f"{commit}:{name}"]
     try:
         return subprocess.check_output(command, cwd=ROOT, stderr=subprocess.PIPE)
@@ -105,7 +125,7 @@ def publish(artifact: Path, output: Path, workflow_url: str, *, historical=False
     expected_config = {"OSC2X": 1, "FILTER2X": 1, "pulse_duty_percent": 47.90}
     if report["configuration"] != expected_config or report["device"] != "85k":
         raise ValueError("artifact is not the selected 85F baseline")
-    commit = report["source_commit"]
+    commit = _recorded_commit(report["source_commit"], "source_commit")
     changed_sources = []
     for name, digest in report["source_sha256"].items():
         saved = _git_show(commit, name)
@@ -140,12 +160,13 @@ def publish(artifact: Path, output: Path, workflow_url: str, *, historical=False
         except Refused as exc:
             simulation, sim_refusal = None, str(exc)
         if sim_refusal is None:
+            simulated_at = _recorded_commit(simulation['commit'], "simulation_evidence.commit")
             if hashlib.sha256(transcript).hexdigest() != simulation["sha256"]:
                 raise ValueError("historical simulation transcript differs")
             for name, digest in inputs.items():
                 if name.startswith("rtl-sketch/"):
                     try:
-                        simulated = _git_show(simulation['commit'], name)
+                        simulated = _git_show(simulated_at, name)
                     except Refused as exc:
                         simulation, sim_refusal = None, str(exc)
                         break
