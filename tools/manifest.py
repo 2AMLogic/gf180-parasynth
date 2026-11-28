@@ -256,6 +256,15 @@ def require_keys(record, required, what: str, *, refused: Callable[[str], Except
     `KeyError` this function exists to replace. A `null` is reported as
     null, never also as a wrong type.
 
+    What is NOT checked is the TYPE of a key the caller does not name in
+    `kinds` (#1639, closed for named keys by #1679). Presence and non-`null`
+    are all that is asserted for such a key, so `{"takes": 5}` with no
+    `kinds={"takes": dict}` passes here and fails in the reader, where
+    `record["takes"].items()` is an `AttributeError` -- a traceback and exit 1.
+    Each caller alone knows the type it dereferences, so the caller must
+    name it; a reader that dereferences a key and omits `kinds` for it
+    keeps that gap.
+
     Names every offending key, not only the first (as `validate_measurement`
     does), so a record is not regenerated once per key. A bare string in
     `required` is one key, not an iterable of characters.

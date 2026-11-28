@@ -59,6 +59,64 @@ def test_refuses_damaged_per_note_foldback(scored_records, side, excess):
         compare.compare_records(baseline, candidate)
 
 
+_EVENT_NUMBERS = (("pitch_cents_from_midi", "model_minus_reference"),
+                  ("envelope_ms", "attack_model"), ("envelope_ms", "attack_reference"),
+                  ("envelope_ms", "release_model"), ("envelope_ms", "release_reference"),
+                  ("gain_dbfs", "model"), ("gain_dbfs", "reference"))
+
+
+@pytest.mark.parametrize("side", ["baseline", "candidate"])
+@pytest.mark.parametrize("section,key", _EVENT_NUMBERS)
+@pytest.mark.parametrize("integer", [10**400, -(10**400)],
+                         ids=["beyond-float", "beyond-float-negative"])
+def test_refuses_per_note_numbers_beyond_float_range(scored_records, side, section, key, integer):
+    """#1669: `float()` raises OverflowError on a JSON integer beyond float
+    range. The handler around these numbers did not list it, so it left as a
+    traceback -- exit 1, which tools/exit_contract.py defines as FAIL -- where
+    the foldback excess above already REFUSES the same input. The second
+    wording is the shared record gate's (#1638), so this control outlives a
+    rebase onto it."""
+    baseline, candidate = scored_records
+    record = baseline if side == "baseline" else candidate
+    record["diagnostics"]["events"][0][section][key] = integer
+    with pytest.raises(m5a.Refused,
+                       match=rf"{side}:saw/84 (?:lacks complete per-note|.*must be finite)"):
+        compare.compare_records(baseline, candidate)
+
+
+def test_a_per_note_integer_within_float_range_is_still_compared(scored_records):
+    """The other half: a repair that refused every large number would pass
+    the test above as easily."""
+    baseline, candidate = scored_records
+    candidate["diagnostics"]["events"][0]["pitch_cents_from_midi"]["model_minus_reference"] = 10**300
+    comparison = compare.compare_records(baseline, candidate)["comparison"]
+    assert [row["property"] for row in comparison["lost_per_note_passes"]] == ["Pitch"]
+
+
+@pytest.mark.parametrize("section,key", [
+    ("pitch_cents_from_midi", "model_minus_reference"),
+    ("envelope_ms", "attack_model"),
+    ("gain_dbfs", "model"),
+])
+def test_cli_refuses_a_per_note_integer_beyond_float_range_with_exit_2(
+        scored_records, tmp_path, section, key):
+    """Through the shipped command: REFUSED is exit 2 and writes no report."""
+    baseline, candidate = scored_records
+    candidate["diagnostics"]["events"][0][section][key] = 10**400
+    baseline_path, candidate_path = tmp_path / "baseline.json", tmp_path / "candidate.json"
+    baseline_path.write_text(json.dumps(baseline))
+    candidate_path.write_text(json.dumps(candidate))
+    report = tmp_path / "delta.json"
+    done = subprocess.run(
+        [sys.executable, str(compare.ROOT / "tools" / "compare_m5a_i2s_candidate.py"),
+         str(baseline_path), str(candidate_path), "--out", str(report)],
+        capture_output=True, text=True)
+    assert done.returncode == 2, done.stderr
+    assert "Traceback" not in done.stderr
+    assert "REFUSED" in done.stdout
+    assert not report.exists()
+
+
 @pytest.mark.parametrize("side", ["baseline", "candidate"])
 @pytest.mark.parametrize("token", ["-1e-400", "0.0", "-0.0", "-0e-400"])
 def test_foldback_at_zero_from_json(scored_records, tmp_path, side, token):

@@ -61,12 +61,27 @@ def simulation_evidence():
     commit = stamp.group(1)
     files = sources()[1:] + sorted((ROOT / "rtl-sketch").glob("*.hex"))
     for path in files:
-        old = subprocess.check_output(["git", "show", f"{commit}:{path.relative_to(ROOT)}"], cwd=ROOT)
+        old = subprocess.check_output(["git", "show", f"{commit}:{path.relative_to(ROOT)}"],
+                                      cwd=ROOT, stderr=subprocess.PIPE)
         if old != path.read_bytes():
             raise RuntimeError(f"{path.name} differs from recorded simulation {commit}")
     return {"commit": commit, "transcript": str(transcript.relative_to(ROOT)),
             "sha256": expected, "core_files_and_roms_identical": True,
             "scope": "reused complete-phrase SPI-to-I2S core simulation; FPGA wrapper is not covered"}
+
+
+def child_failure(exc: BaseException) -> str:
+    """The reason for a child that failed: what str() says -- the command and
+    its status, or the timeout -- and then what the child said on stderr, which
+    str() leaves out and which is where git says why. stderr is bytes when the
+    call had no text=True and None when it was not captured. Anything that is
+    not a failed child reads as str() has always rendered it."""
+    if not isinstance(exc, (subprocess.CalledProcessError, subprocess.TimeoutExpired)):
+        return str(exc)
+    said = exc.stderr
+    if isinstance(said, bytes):
+        said = said.decode(errors="replace")
+    return f"{exc}" + (f"\n{said.strip()[:2000]}" if said and said.strip() else "")
 
 
 def run_stage(command, cwd, log, artifact):
@@ -114,7 +129,7 @@ def main(argv=None):
     directory.mkdir(parents=True, exist_ok=True)
     source_files = sources()
     report = {"configuration": {"OSC2X": 1, "FILTER2X": 1, "pulse_duty_percent": 47.90},
-              "source_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
+              "source_commit": None,
               "source_sha256": {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in source_files},
               "device": args.device, "package": "CABGA381",
               "stages": {}, "bitstream_built": False, "hardware_playback_tested": False}
@@ -124,12 +139,15 @@ def main(argv=None):
         report_path.write_text(json.dumps(report, indent=2) + "\n")
 
     try:
+        report["source_commit"] = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, stderr=subprocess.PIPE).strip()
         report["simulation_evidence"] = simulation_evidence()
         report["yosys_version"] = subprocess.check_output(["yosys", "-V"], text=True).strip()
         if args.from_synthesis:
             report["stages"]["synthesis"] = reuse_synthesis(args.from_synthesis, report)
     except (OSError, subprocess.CalledProcessError, RuntimeError) as exc:
-        report.update(state="REFUSED", reason=str(exc)); save(); print(report["reason"]); return 2
+        report.update(state="REFUSED", reason=child_failure(exc))
+        save(); print(report["reason"]); return 2
     quoted_sources = " ".join(f'"{p}"' for p in source_files)
     synth = ("read_verilog -defer " + " ".join(f"-D{d}" for d in DEFINES) + " " + quoted_sources
              + f'; synth_ecp5 -top ulx3s_top -json "{directory / "ecp5.json"}"; stat -top ulx3s_top')

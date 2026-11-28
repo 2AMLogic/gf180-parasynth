@@ -1,15 +1,43 @@
+import subprocess
 import sys
 import hashlib
 import json
 import pathlib
 import re
-import subprocess
 import pytest
 
 import build_selected as build
 
 COMMITTED = pathlib.Path(__file__).resolve().parents[1] / "docs/scorecard/results/M5A.json"
 VERIFIED = "M5A path verified from SPI pins through the production voice and I2S pins"
+
+
+def _raising(exc):
+    def raiser(*_args, **_kwargs):
+        raise exc
+    return raiser
+
+
+def _git_that_fails(said, failing):
+    """check_output replacement: the git command `failing` fails; `git rev-parse
+    HEAD` answers if it is not that one; any other child (yosys, nextpnr) is one
+    this test did not expect. A failing git answers as the call makes it --
+    stderr is attached to the exception only when the call captured it, and
+    otherwise goes to this process's stderr, as an inherited one would. Returns
+    the replacement and the log of (command, keywords) it saw."""
+    calls = []
+
+    def check_output(cmd, **kwargs):
+        assert cmd[0] == "git" and cmd[1:] in (failing, ["rev-parse", "HEAD"]), \
+            f"unexpected child {cmd}"
+        calls.append((cmd[1:], kwargs))
+        if cmd[1:] != failing:
+            return "deadbeef\n"
+        captured = kwargs.get("stderr") == subprocess.PIPE
+        if not captured and said:
+            sys.stderr.write(said.decode() if isinstance(said, bytes) else said)
+        raise subprocess.CalledProcessError(128, cmd, stderr=said if captured else None)
+    return check_output, calls
 
 
 def test_nonzero_tool_with_stale_artifact_cannot_pass(tmp_path):
@@ -54,6 +82,67 @@ def test_resume_requires_exact_sources_configuration_and_netlist(tmp_path):
     with pytest.raises(RuntimeError, match="netlist"):
         build.reuse_synthesis(report, prior)
 
+
+# ------------------------------------------- a git that fails (#1690) ----
+_Said = ["fatal: not a git repository", b"fatal: not a git repository", None]
+
+
+@pytest.mark.parametrize("said", _Said, ids=["str", "bytes", "nothing"])
+def test_git_failure_at_the_source_commit_is_refused(tmp_path, monkeypatch, capsys, said):
+    """`git rev-parse HEAD` ran in the report literal, outside main()'s handler,
+    so a git that failed left main() as a CalledProcessError traceback at exit 1
+    and wrote no report: an earlier BUILT report in --out stayed on disk. It is
+    a precondition that was not met -- the commit cannot be read -- so REFUSED,
+    exit 2, the earlier record replaced. The call captures stderr with
+    text=True, so git's own reason is a str on the exception; with nothing
+    captured there is nothing to carry."""
+    report_path = tmp_path / "report.json"
+    report_path.write_text(json.dumps({"state": "BUILT", "bitstream_built": True}))
+    check_output, calls = _git_that_fails(said, ["rev-parse", "HEAD"])
+    monkeypatch.setattr(build.subprocess, "check_output", check_output)
+    assert build.main(["--out", str(tmp_path)]) == 2
+    assert [c for c, _ in calls] == [["rev-parse", "HEAD"]]
+    assert (calls[0][1].get("text"), calls[0][1].get("stderr")) == (True, subprocess.PIPE)
+    report = json.loads(report_path.read_text())
+    assert report["state"] == "REFUSED"
+    assert "git', 'rev-parse', 'HEAD" in report["reason"]
+    assert ("fatal: not a git repository" in report["reason"]) == (said is not None)
+    assert capsys.readouterr().out.strip() == report["reason"]
+    assert report["bitstream_built"] is False and report["stages"] == {}
+    assert [p.name for p in tmp_path.iterdir()] == ["report.json"]
+
+
+def test_git_failure_under_the_handler_is_refused_with_what_git_said(tmp_path, monkeypatch):
+    """The row's fix moves the rev-parse call under the existing handler, so
+    what that handler does with a failed git is pinned on the call that was
+    already under it: simulation_evidence()'s `git show`, run for real on a
+    stored-simulation record built for the test. REFUSED, and the reason carries
+    git's stderr -- bytes, because the call has no text=True -- which str() of
+    the exception leaves out."""
+    text = _committed_transcript()
+    stamp = _stamp(text)
+    _stored_simulation(monkeypatch, tmp_path, text)
+    failing = ["show", f"{stamp}:rtl-sketch/synth_top.v"]
+    check_output, calls = _git_that_fails(b"fatal: bad object " + stamp.encode(), failing)
+    monkeypatch.setattr(build.subprocess, "check_output", check_output)
+    assert build.main(["--out", str(tmp_path / "out")]) == 2
+    assert [c for c, _ in calls] == [["rev-parse", "HEAD"], failing]
+    assert calls[1][1] == {"cwd": tmp_path, "stderr": subprocess.PIPE}
+    report = json.loads((tmp_path / "out" / "report.json").read_text())
+    assert report["state"] == "REFUSED"
+    assert report["source_commit"] == "deadbeef"
+    assert f"git', 'show', '{stamp}:rtl-sketch/synth_top.v" in report["reason"]
+    assert report["reason"].endswith("fatal: bad object " + stamp)
+    assert [p.name for p in (tmp_path / "out").iterdir()] == ["report.json"]
+
+
+def test_an_execution_error_at_the_source_commit_is_not_refused(tmp_path, monkeypatch):
+    """The handler is not widened to do this: an exception it does not name is
+    an execution error and leaves main() as it arrived (tools/refusal.py)."""
+    monkeypatch.setattr(build.subprocess, "check_output", _raising(TypeError("genuine bug")))
+    with pytest.raises(TypeError, match="genuine bug"):
+        build.main(["--out", str(tmp_path)])
+    assert not (tmp_path / "report.json").exists()
 
 # ---- simulation_evidence(): one transcript gate, a checked build stamp -------
 

@@ -9,6 +9,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
+import json                                              # noqa: E402
 import subprocess                                          # noqa: E402
 
 import pytest                                              # noqa: E402
@@ -74,3 +75,54 @@ def test_the_model_as_shipped_before_329_is_caught(tmp_path):
         pytest.skip("the pre-#329 model commit is not in this clone (shallow checkout)")
     assert vle.main(["--model-only", "--control", "model-revolution",
                      "--json", str(tmp_path / "c.json")]) == 0
+
+
+# -------------------------------- a simulation that never finishes (#1690) ----
+class _NoSimulator:
+    """subprocess.run replacement for the RTL half: git and iverilog answer, and
+    the child named by `hangs` never finishes, which is TimeoutExpired with
+    nothing captured. Every call is recorded with its deadline."""
+
+    def __init__(self, hangs):
+        self.hangs, self.calls = hangs, []
+
+    def __call__(self, cmd, **kwargs):
+        self.calls.append((list(cmd), kwargs.get("timeout")))
+        if self.hangs(cmd):
+            raise subprocess.TimeoutExpired(cmd, kwargs.get("timeout"))
+        out = "deadbeef\n" if cmd[0] == "git" else ""
+        return subprocess.CompletedProcess(cmd, 0, stdout=out, stderr="")
+
+
+def test_a_hung_vvp_is_refused_and_replaces_the_earlier_record(tmp_path, monkeypatch, capsys):
+    """The vvp run has a 3600 s deadline. A simulation that failed was already
+    NO VERDICT; one that hung left main() as a TimeoutExpired traceback, so the
+    record on disk stayed the earlier run's. A hang measured no more than a
+    failure did: NO VERDICT (REFUSED, exit 2) and the record replaced."""
+    record = tmp_path / "v.json"
+    assert vle.main(["--model-only", "--json", str(record)]) == 0
+    assert json.loads(record.read_text())["verdict"] == "PASS"
+    child = _NoSimulator(hangs=lambda cmd: cmd[0] == "vvp")
+    monkeypatch.setattr(vle.subprocess, "run", child)
+    assert vle.main(["--json", str(record), "--scenario", "boundary"]) == 2
+    assert [deadline for cmd, deadline in child.calls if cmd[0] == "vvp"] == [3600]
+    after = json.loads(record.read_text())
+    assert after["verdict"] == "NO VERDICT"
+    assert after["rtl"]["boundary"]["verdict"] == "NO VERDICT"
+    why = after["rtl"]["boundary"]["why"]
+    assert "vvp" in why and "3600" in why
+    out = capsys.readouterr().out
+    assert f"late-events RTL[boundary]: NO VERDICT -- {why}" in out
+    assert out.rstrip().endswith("late-events: NO VERDICT")
+
+
+def test_a_timeout_outside_the_vvp_call_is_not_refused(tmp_path, monkeypatch):
+    """The handler sits on the vvp call, which is the row. A TimeoutExpired from
+    anywhere else -- iverilog, which runs with no deadline -- must leave main()
+    as it arrived, so the hang test is green because of that handler and not a
+    wider catch."""
+    child = _NoSimulator(hangs=lambda cmd: cmd[0] == "iverilog")
+    monkeypatch.setattr(vle.subprocess, "run", child)
+    with pytest.raises(subprocess.TimeoutExpired):
+        vle.main(["--json", str(tmp_path / "v.json"), "--scenario", "boundary"])
+    assert not (tmp_path / "v.json").exists()

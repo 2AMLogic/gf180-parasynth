@@ -72,7 +72,8 @@ def publish(artifact: Path, output: Path, workflow_url: str, *, historical=False
     commit = report["source_commit"]
     changed_sources = []
     for name, digest in report["source_sha256"].items():
-        saved = subprocess.check_output(["git", "show", f"{commit}:{name}"], cwd=ROOT)
+        saved = subprocess.check_output(["git", "show", f"{commit}:{name}"], cwd=ROOT,
+                                        stderr=subprocess.PIPE)
         if hashlib.sha256(saved).hexdigest() != digest:
             raise ValueError(f"build source differs: {name}")
         if not (ROOT / name).is_file() or sha256(ROOT / name) != digest:
@@ -84,23 +85,32 @@ def publish(artifact: Path, output: Path, workflow_url: str, *, historical=False
     inputs = dict(report["source_sha256"])
     for path in [ROOT / "fpga/boards/ulx3s.lpf", *sorted((ROOT / "rtl-sketch").glob("*.hex"))]:
         name = str(path.relative_to(ROOT))
-        saved = subprocess.check_output(["git", "show", f"{commit}:{name}"], cwd=ROOT)
+        saved = subprocess.check_output(["git", "show", f"{commit}:{name}"], cwd=ROOT,
+                                        stderr=subprocess.PIPE)
         if path.read_bytes() != saved and not historical:
             raise ValueError(f"build input differs: {name}")
         inputs[name] = hashlib.sha256(saved).hexdigest()
+    sim_refusal = None
     if historical:
         simulation = report["simulation_evidence"]
-        transcript = subprocess.check_output(["git", "show", f"{commit}:{simulation['transcript']}"], cwd=ROOT)
+        transcript = subprocess.check_output(
+            ["git", "show", f"{commit}:{simulation['transcript']}"],
+            cwd=ROOT, stderr=subprocess.PIPE)
         if hashlib.sha256(transcript).hexdigest() != simulation["sha256"]:
             raise ValueError("historical simulation transcript differs")
         for name, digest in inputs.items():
             if name.startswith("rtl-sketch/"):
-                simulated = subprocess.check_output(["git", "show", f"{simulation['commit']}:{name}"], cwd=ROOT)
+                simulated = subprocess.check_output(
+                    ["git", "show", f"{simulation['commit']}:{name}"],
+                    cwd=ROOT, stderr=subprocess.PIPE)
                 if hashlib.sha256(simulated).hexdigest() != digest:
                     raise ValueError(f"historical core differs from simulation: {name}")
     else:
-        simulation = build_selected.simulation_evidence()
-    if simulation != report["simulation_evidence"]:
+        try:
+            simulation = build_selected.simulation_evidence()
+        except RuntimeError as exc:
+            simulation, sim_refusal = None, str(exc)
+    if sim_refusal is None and simulation != report["simulation_evidence"]:
         raise ValueError("core simulation binding differs")
     original_hashes = {p.name: sha256(p) for p in build.iterdir() if p.is_file()}
     for stage in report["stages"].values():
@@ -116,6 +126,8 @@ def publish(artifact: Path, output: Path, workflow_url: str, *, historical=False
                "current_checkout_differences": changed_sources,
                "state": "NO-VERDICT", "bitstream_qualified": False}
     try:
+        if sim_refusal is not None:
+            raise ValueError(sim_refusal)
         if report["state"] != "BUILT" or not report["bitstream_built"]:
             raise ValueError(f"build did not finish successfully: {report['state']}")
         if set(report["stages"]) != {"synthesis", "place_route", "bitstream"}:
@@ -130,7 +142,7 @@ def publish(artifact: Path, output: Path, workflow_url: str, *, historical=False
                        bitstream_sha256=sha256(build / "ecp5.bit"))
     except (ValueError, FileNotFoundError, KeyError) as exc:
         summary["reason"] = str(exc)
-        if report["state"] == "FAIL":
+        if report["state"] == "FAIL" and sim_refusal is None:
             summary["state"] = "FAIL"
     output.mkdir(parents=True, exist_ok=True)
     for name in ("report.json", "timing.json", "ecp5.bit"):
@@ -153,6 +165,10 @@ if __name__ == "__main__":
     parser.add_argument("--historical", action="store_true",
                         help="verify the recorded source commit; do not claim the current checkout was built")
     args = parser.parse_args()
-    result = publish(args.artifact, args.out, args.workflow_url, historical=args.historical)
+    try:
+        result = publish(args.artifact, args.out, args.workflow_url, historical=args.historical)
+    except subprocess.CalledProcessError as exc:
+        print(f"REFUSED: {build_selected.child_failure(exc)}", file=sys.stderr)
+        raise SystemExit(2)
     print(json.dumps(result, indent=2))
     raise SystemExit(0 if result["bitstream_qualified"] else 2)
