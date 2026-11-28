@@ -177,6 +177,23 @@ def harmonic_summary(model, reference, f0_model, f0_reference, sr, *, context=""
         max(measured))
 
 
+def _harmonic_signature(x, f0: float, *, context: str) -> dict:
+    """`am.harmonic_signature(x, SR, f0=f0, kmax=12)` with the estimator's own
+    refusal made this module's.
+
+    `audio_measure.InsufficientEvidence` subclasses AssertionError, not
+    `refusal.Refused`, so un-translated it leaves `measure` as a traceback in
+    every caller: on a window of fewer than 12 periods, which `refine_f0`
+    passes, and on a stage that holds no signal, which `_stage_diagnostics`
+    does not check. Only that class is translated (with `NonFiniteAudio`,
+    its subclass); a plain AssertionError is an execution error and still
+    propagates (#1972)."""
+    try:
+        return am.harmonic_signature(x, SR, f0=f0, kmax=12)
+    except am.InsufficientEvidence as exc:
+        raise Refused(f"{context} harmonic_signature refused: {exc}") from exc
+
+
 def _load_i2s_candidate(path, required_samples: int):
     """Load only a complete mono signed-int16 I2S phrase at the target rate."""
     from scipy.io import wavfile
@@ -216,7 +233,7 @@ def _stage_diagnostics(trace, output, start: int, stop: int, f0: float) -> dict:
     result = {}
     for name, samples in inputs.items():
         x = samples[start:stop]
-        signature = am.harmonic_signature(x, SR, f0=f0, kmax=12)
+        signature = _harmonic_signature(x, f0, context=f"{name} stage")
         alias = am.foldback_alias_db(x, f0, SR)
         if not alias.ok:
             raise Refused(f"{name} stage foldback estimator refused: {alias.reason}")
@@ -461,8 +478,8 @@ def measure(*, pulse_shape=M5A_PULSE_WAVE, voice_factory=None,
             model_cents = _cents_error(eo.value, f0)
             reference_cents = _cents_error(er.value, f0)
             observed["Pitch"].append((model_cents - reference_cents, 0.0))
-            so = am.harmonic_signature(xo, SR, f0=eo.value, kmax=12)
-            sr_ = am.harmonic_signature(xr, SR, f0=er.value, kmax=12)
+            so = _harmonic_signature(xo, eo.value, context=f"{wave} MIDI {note} model")
+            sr_ = _harmonic_signature(xr, er.value, context=f"{wave} MIDI {note} reference")
             harmonic = harmonic_summary(so, sr_, eo.value, er.value, SR,
                                         context=f"{wave} MIDI {note}")
             harmonic_diffs = {key: value for key, value in harmonic.errors.items()

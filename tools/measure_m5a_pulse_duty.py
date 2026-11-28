@@ -137,7 +137,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         report = measure(args.shapes)
-    except refusal.Refused as exc:
+    except (refusal.Refused, am.InsufficientEvidence) as exc:
         print(f"REFUSED: {exc}")
         return REFUSED
     path = ROOT / args.out

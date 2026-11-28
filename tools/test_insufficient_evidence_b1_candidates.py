@@ -89,7 +89,7 @@ that tree, as they must: the replays, the AssertionError controls, the clean
 runs and the unreachable pins are claims about behaviour the repair must
 leave alone.
 
-WRONG-THEN-RIGHT (5, all in this file's apparatus, each caught because a run
+WRONG-THEN-RIGHT (6, all in this file's apparatus, each caught because a run
 disagreed with what reading had predicted):
 
   1. `--out` under pytest's tmp_path: both M5A CLIs print their report line
@@ -115,9 +115,16 @@ disagreed with what reading had predicted):
   5. A staticmethod replaced under monkeypatch is called with all four
      positional arguments; the stub took `(clip_id, profile)` and the row
      failed with TypeError before its first assertion.
+  6. With the repair in, the caller row asserted that the tool's last line
+     STARTS WITH `REFUSED`. That is the two probes' prefix;
+     `measure_m5a_saw_cutoff.py` writes `measure_m5a_saw_cutoff: REFUSED --`.
+     One tool's convention, generalised -- #1763's own wrong-then-right 1,
+     in the neighbouring file. The row now asserts the intent: the last line
+     IS the refusal, reason included, whatever prefixes it.
 
 The red-first run was therefore made three times before it was clean: 12 red
-(6 the defect, 6 this file), 7 red (6, 1), then 6.
+(6 the defect, 6 this file), 7 red (6, 1), then 6; and the first green run
+came back 21 of 22 on item 6.
 """
 from __future__ import annotations
 
@@ -309,7 +316,8 @@ def repo_out():
 
 
 def _tree() -> str:
-    return subprocess.run(["git", "-C", str(ROOT), "status", "--porcelain", "--untracked-files=all"],
+    return subprocess.run(["git", "--no-optional-locks", "-C", str(ROOT), "status",
+                           "--porcelain", "--untracked-files=all"],
                           capture_output=True, text=True, timeout=120, check=True).stdout
 
 
@@ -346,14 +354,16 @@ def test_a_short_gate_reference_is_refused_with_the_estimators_reason(name, scri
                                                                       tmp_path, repo_out):
     """Every CLI that reaches `harmonic_signature` on a short window -- the two
     that call it directly, and one caller of the library -- exits
-    `exit_contract.REFUSED`, carries the estimator's own reason on the REFUSED
-    line, and prints nothing after it."""
+    `exit_contract.REFUSED`, ends with the estimator's own reason on its own
+    refusal line (each tool prefixes it its own way), and prints nothing
+    after it."""
     p = _run(_cli(script, _seam("short_gate", tmp_path), *argv), tmp_path)
     out = p.stdout + p.stderr
     assert p.returncode == exit_contract.REFUSED, (p.returncode, out[-600:])
     assert line in out, out[-600:]
     assert "Traceback" not in out and "audio_measure.InsufficientEvidence" not in out, out[-600:]
-    assert p.stdout.splitlines()[-1].startswith("REFUSED"), "nothing may follow the refusal: " + p.stdout[-400:]
+    last = p.stdout.splitlines()[-1]
+    assert last.startswith(line), "nothing may follow the refusal: " + p.stdout[-400:]
 
 
 LIBRARY = (
