@@ -459,6 +459,6 @@ def test_the_refusal_status_is_read_from_the_contract_not_retyped():
     tree = ast.parse(inspect.getsource(ri.main)).body[0]
     imported = {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)}
     assert "exit_contract" in imported, imported
-    literal_returns = [n.value for n in ast.walk(tree)
+    literal_returns = [n.value.value for n in ast.walk(tree)
                        if isinstance(n, ast.Return) and isinstance(n.value, ast.Constant)]
     assert literal_returns == [0], literal_returns
