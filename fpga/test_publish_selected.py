@@ -176,16 +176,16 @@ def _recorded(name):
     return path.read_bytes() if path.is_file() else f"built {name}\n".encode()
 
 
-def _artifact(tmp_path, *, with_simulation=False):
+def _artifact(tmp_path, *, with_simulation=False, commit=COMMIT):
     """The least a publication reads before its first `git show`: the build
     report, the selected configuration on the 85k with true source digests,
     beside the pinned toolchain record. `with_simulation` adds what only the
-    --historical path reads."""
+    --historical path reads. `commit` is what the report records as built."""
     build, pinned = tmp_path / "build", tmp_path / "oss-cad-pinned"
     build.mkdir()
     pinned.mkdir()
     report = {"configuration": {"OSC2X": 1, "FILTER2X": 1, "pulse_duty_percent": 47.90},
-              "source_commit": COMMIT, "device": "85k", "package": "CABGA381",
+              "source_commit": commit, "device": "85k", "package": "CABGA381",
               "source_sha256": {TOP: hashlib.sha256(_recorded(TOP)).hexdigest()}}
     if with_simulation:
         report["simulation_evidence"] = {
@@ -241,37 +241,38 @@ def _cli(monkeypatch, artifact, out, *flags):
 
 
 _SITES = [
-    pytest.param(False, lambda commit, name: name == TOP,
-                 id="source-75"),
-    pytest.param(False, lambda commit, name: name == LPF,
-                 id="build-input-87"),
-    pytest.param(True, lambda commit, name: name == SIM_TRANSCRIPT,
-                 id="transcript-93"),
-    pytest.param(True, lambda commit, name: commit == SIM_COMMIT and name.startswith("rtl-sketch/"),
-                 id="simulated-core-98"),
+    pytest.param(lambda commit, name: name == TOP, id="source-75"),
+    pytest.param(lambda commit, name: name == LPF, id="build-input-88"),
 ]
 
 
-@pytest.mark.parametrize("historical, fail", _SITES)
+@pytest.mark.parametrize("fail", _SITES)
 def test_a_recorded_commit_git_cannot_show_is_refused(
-        tmp_path, monkeypatch, capsys, historical, fail):
-    """publish()'s four `git show` calls had no handler for the class a failed
-    git raises, so a commit the clone does not hold left the CLI as a traceback
-    at exit 1. The recorded commit being readable is a precondition, so REFUSED,
-    exit 2: the command and git's own reason on stderr, nothing published. The
-    publisher runs by hand on a downloaded artifact (fpga/SELECTED.md), in
-    whatever checkout the operator has. The calls capture stderr (bytes: no
-    text=True), or git's reason would reach the terminal beside the REFUSED
-    line instead of inside it."""
-    artifact = _artifact(tmp_path, with_simulation=historical)
+        tmp_path, monkeypatch, capsys, fail):
+    """publish()'s `git show` calls had no handler for the class a failed git
+    raises, so a commit the clone does not hold left the CLI as a traceback at
+    exit 1. The recorded commit being readable is a precondition, so REFUSED,
+    exit 2 (#1690), nothing published. The publisher runs by hand on a
+    downloaded artifact (fpga/SELECTED.md), in whatever checkout the operator
+    has. The calls capture stderr (bytes: no text=True), or git's reason would
+    reach the terminal beside the REFUSED line instead of inside it.
+
+    These two sites run before a publication summary exists, so #2025 keeps
+    REFUSED-with-nothing-written for them -- the artifact's integrity is
+    unverified until every recorded source has been read at its commit -- and
+    makes the line name the commit, which is what the operator has to fetch.
+    git itself says the clone does not hold it (`_commit_absent` runs the real
+    git here); the patch only fails the show. The two --historical sites,
+    where the summary is reachable, are below."""
+    artifact = _artifact(tmp_path)
     out = tmp_path / "publication"
     check_output, calls = _git_show(fail)
     monkeypatch.setattr(subprocess, "check_output", check_output)
-    assert _cli(monkeypatch, artifact, out, *(["--historical"] if historical else [])) == 2
+    assert _cli(monkeypatch, artifact, out) == 2
     assert calls and all(kwargs.get("stderr") == subprocess.PIPE for _, kwargs in calls)
     printed = capsys.readouterr()
     assert printed.out == ""
-    assert printed.err.startswith("REFUSED: Command '['git', 'show', '")
+    assert printed.err.startswith(f"REFUSED: recorded commit {COMMIT} is not in this clone")
     assert "fatal: invalid object name" in printed.err
     assert "Traceback" not in printed.err
     assert not out.exists()
@@ -291,3 +292,208 @@ def test_an_execution_error_in_publish_is_not_masked_as_a_refusal(tmp_path, monk
     with pytest.raises(TypeError, match="genuine bug"):
         runpy.run_path(publish_selected.__file__, run_name="__main__")
     assert not out.exists()
+
+
+# ------------- a commit the clone does not hold, at every `git show` (#2025) --
+ABSENT_COMMIT, MALFORMED_COMMIT = "3" * 40, "not-a-commit"
+real_check_output = subprocess.check_output
+
+
+def _report_path(artifact):
+    return artifact / "fpga-selected-85k" / "report.json"
+
+
+def _rewrite(artifact, edit):
+    """Rewrite the artifact's build report through `edit(report)`."""
+    path = _report_path(artifact)
+    report = json.loads(path.read_text())
+    edit(report)
+    path.write_text(json.dumps(report))
+
+
+def test_the_clone_lacks_probe_reads_gits_own_three_answers():
+    """`git cat-file -e -- <name>` decides whether a failed `git show` is a
+    precondition the checkout did not meet, and its statuses are three, not
+    two: 0 the object is here; 1 a full object name that is not -- a shallow
+    or single-branch checkout; 128 not a name git will parse at all. Measured
+    on git 2.43 before the handler was written. A handler that read every
+    failure as 1 would tell an operator to fetch history for a malformed
+    record (#2025's rule-8 input)."""
+    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    assert publish_selected._commit_absent(head) is False
+    assert publish_selected._commit_absent(head[:7]) is False
+    assert publish_selected._commit_absent(ABSENT_COMMIT) is True
+    for malformed in (MALFORMED_COMMIT, "", "abc", head + "0"):
+        assert publish_selected._commit_absent(malformed) is False, repr(malformed)
+
+
+@pytest.mark.parametrize("report_state", ["BUILT", "FAIL"])
+def test_a_historical_simulation_commit_the_clone_lacks_is_a_no_verdict_publication(
+        tmp_path, monkeypatch, capsys, report_state):
+    """Under --historical the summary is reachable when a `git show` fails, so
+    a commit the clone does not hold must not throw the build's reports away
+    (#2025): the publication is NO-VERDICT with the commit as its reason, the
+    build's report and timing kept beside it, exit 2. A failed build stays
+    NO-VERDICT for the same reason the refused stored simulation does (#1631):
+    the reason is about the checkout, and a FAIL beside it would read as the
+    build failing because of it. The simulation commit is the one that can be
+    absent while the source commit is present (#1676); real git decides."""
+    artifact, _ = built_artifact(tmp_path, state=report_state)
+    _rewrite(artifact, lambda report: report["simulation_evidence"].update(commit=ABSENT_COMMIT))
+    out = tmp_path / "publication"
+    assert _cli(monkeypatch, artifact, out, "--historical") == 2
+    summary = json.loads((out / "publication.json").read_text())
+    assert summary["state"] == "NO-VERDICT"
+    assert summary["reason"].startswith(f"recorded commit {ABSENT_COMMIT} is not in this clone")
+    assert summary["simulation_evidence"] is None
+    assert summary["bitstream_qualified"] is False
+    assert json.loads((out / "report.json").read_text())["state"] == report_state
+    assert all((out / name).is_file() for name in ("timing.json", "toolchain.json"))
+    printed = capsys.readouterr()
+    assert printed.err == ""
+    assert json.loads(printed.out) == summary
+
+
+@pytest.mark.parametrize("historical, edit", [
+    pytest.param(False, lambda r: r["source_sha256"].update({"rtl-sketch/no_such_file.v": "0" * 64}),
+                 id="source-path-that-is-not-at-the-commit"),
+    pytest.param(True, lambda r: r["simulation_evidence"].update(transcript="docs/no_such_transcript.txt"),
+                 id="transcript-path-that-is-not-at-the-commit"),
+    pytest.param(True, lambda r: r["simulation_evidence"].update(commit=MALFORMED_COMMIT),
+                 id="simulation-commit-that-is-not-a-name"),
+])
+def test_a_git_show_that_fails_for_a_commit_the_clone_holds_surfaces_as_the_defect_it_is(
+        tmp_path, historical, edit):
+    """Rule 8: the handler tells a missing commit from a defect by asking git
+    whether the clone holds the commit, so a show that fails while git says it
+    does -- a path the record names that is not at that commit, a commit that
+    is not a name -- leaves publish() as the CalledProcessError git raised,
+    not as a refusal, and nothing is written. Real git throughout. The core
+    sources under --historical cannot get here with real git (they were read
+    at the source commit first); the probe below covers them."""
+    artifact, _ = built_artifact(tmp_path)
+    _rewrite(artifact, edit)
+    out = tmp_path / "publication"
+    with pytest.raises(subprocess.CalledProcessError) as failed:
+        publish_selected.publish(artifact, out, WORKFLOW, historical=historical)
+    assert not isinstance(failed.value, publish_selected.Refused)
+    assert not out.exists()
+
+
+def test_a_malformed_source_commit_is_not_diagnosed_as_a_missing_one(tmp_path, monkeypatch, capsys):
+    """A `source_commit` that is not a name fails every `git show`, as a
+    commit the clone lacks does; git's cat-file tells them apart (128, not 1),
+    so the handler leaves it alone. At the CLI that is #1690's backstop --
+    REFUSED at exit 2 with git's own reason and nothing written: a refusal of
+    the artifact, which names a thing git cannot resolve, not a diagnosis of
+    the checkout. An operator told to fetch `not-a-commit` would be sent
+    after nothing."""
+    artifact = _artifact(tmp_path, commit=MALFORMED_COMMIT)
+    out = tmp_path / "publication"
+    with pytest.raises(subprocess.CalledProcessError) as failed:
+        publish_selected.publish(artifact, out, WORKFLOW)
+    assert not isinstance(failed.value, publish_selected.Refused)
+    assert _cli(monkeypatch, artifact, out) == 2
+    printed = capsys.readouterr()
+    assert "is not in this clone" not in printed.err
+    assert "invalid object name" in printed.err
+    assert "Traceback" not in printed.err
+    assert not out.exists()
+
+
+class _NthGitShowFails:
+    """check_output replacement: every `git show` answers what real git
+    answers for it, except the nth, which fails as git does for an object the
+    clone does not hold. n=None fails none and only counts. This is the probe
+    the reviewing session drove `publish()` with (issue #2025), with one thing
+    added: it left real git to say whether the clone holds the commit, and
+    real git holds the fixture's, so a handler that is correct reads each of
+    its failures as a defect. The tests that use it say which it is."""
+    answers = {}
+
+    def __init__(self, n=None):
+        self.n, self.seen = n, 0
+
+    def __call__(self, cmd, *args, **kwargs):
+        if not (isinstance(cmd, (list, tuple)) and list(cmd[:2]) == ["git", "show"]):
+            return real_check_output(cmd, *args, **kwargs)
+        self.seen += 1
+        if self.seen == self.n:
+            raise subprocess.CalledProcessError(128, list(cmd), stderr=b"fatal: invalid object name\n")
+        if tuple(cmd) not in self.answers:
+            self.answers[tuple(cmd)] = real_check_output(cmd, *args, **kwargs)
+        return self.answers[tuple(cmd)]
+
+
+def _children(tmp_path, monkeypatch, historical):
+    """The built artifact, and how many `git show` children publish() itself
+    issues on this path: counted, not assumed. The stored simulation answers
+    from the record; its own children are the callee's (#1945), not
+    publish()'s, and a red first run counted one of them."""
+    artifact, evidence = built_artifact(tmp_path)
+    monkeypatch.setattr(build_selected, "simulation_evidence", lambda: evidence)
+    counter = _NthGitShowFails()
+    monkeypatch.setattr(subprocess, "check_output", counter)
+    publish_selected.publish(artifact, tmp_path / "counted", WORKFLOW, historical=historical)
+    return artifact, counter.seen
+
+
+def _probe(artifact, out, historical):
+    """(what publish() raised, or None; the summary it returned, or None)."""
+    try:
+        return None, publish_selected.publish(artifact, out, WORKFLOW, historical=historical)
+    except Exception as exc:
+        return exc, None
+
+
+@pytest.mark.parametrize("historical", [False, True])
+def test_every_git_show_child_whose_commit_the_clone_lacks_refuses(tmp_path, monkeypatch, historical):
+    """Every `git show` publish() issues, one at a time, failing as git does
+    when the clone does not hold the commit, with git saying so: never a
+    CalledProcessError out of publish() again. Which refusal depends on the
+    site, not the path: the sites before a summary exists -- each recorded
+    source, then the LPF and each ROM -- are REFUSED with nothing written on
+    both paths; the --historical sites after them -- the transcript, then the
+    simulation commit's copy of each core source and ROM -- are a NO-VERDICT
+    publication that keeps the build's reports. The children are counted, not
+    taken from the fixture, and the count is checked against what the tree
+    says publish() must read. A fifth `git show` site moves the count."""
+    artifact, total = _children(tmp_path, monkeypatch, historical)
+    sources, roms = len(build_selected.sources()), len(list((ROOT / "rtl-sketch").glob("*.hex")))
+    early = sources + 1 + roms
+    assert total == early + (sources + roms if historical else 0)
+    head = json.loads(_report_path(artifact).read_text())["source_commit"]
+    monkeypatch.setattr(publish_selected, "_commit_absent", lambda commit: True)
+    table = []
+    for n in range(1, total + 1):
+        out = tmp_path / f"publication-{n}"
+        monkeypatch.setattr(subprocess, "check_output", _NthGitShowFails(n))
+        raised, summary = _probe(artifact, out, historical)
+        if n <= early:
+            table.append((n, type(raised).__name__, head in str(raised), out.exists()))
+        else:
+            table.append((n, summary["state"] if summary else type(raised).__name__,
+                          head in (summary or {}).get("reason", ""), (out / "report.json").is_file()))
+    assert all(row[1:] == ("Refused", True, False) for row in table if row[0] <= early), table
+    assert all(row[1:] == ("NO-VERDICT", True, True) for row in table if row[0] > early), table
+
+
+@pytest.mark.parametrize("historical", [False, True])
+def test_a_failed_git_show_for_a_commit_the_clone_holds_surfaces_at_every_child(
+        tmp_path, monkeypatch, historical):
+    """The same children, failing the same way, with git saying the clone
+    does hold the commit: a defect, at every child on both paths. It must
+    leave publish() as the CalledProcessError git raised -- not a Refused at
+    the early sites, not a NO-VERDICT publication under --historical -- and
+    write nothing. This is the control for the handler: one that filed every
+    failure as a missing commit turns this red, and so does one that catches
+    the defect at the --historical sites."""
+    artifact, total = _children(tmp_path, monkeypatch, historical)
+    monkeypatch.setattr(publish_selected, "_commit_absent", lambda commit: False)
+    table = []
+    for n in range(1, total + 1):
+        out = tmp_path / f"publication-{n}"
+        monkeypatch.setattr(subprocess, "check_output", _NthGitShowFails(n))
+        raised, _summary = _probe(artifact, out, historical)
+        table.append((n, type(raised).__name__, out.exists()))
+    assert all(row[1:] == ("CalledProcessError", False) for row in table), table
