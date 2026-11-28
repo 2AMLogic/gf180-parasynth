@@ -36,6 +36,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "model"), str(ROOT / "tools")]
 import mono_artifact_probe as mp  # noqa: E402
 import measure_m5_operating_level as ol  # noqa: E402
+import refusal  # noqa: E402
+from exit_contract import REFUSED  # noqa: E402
 
 BASE, CAND = 0.75, 0.35
 NOTES = (42, 54, 66, 78, 90, 102, 114)
@@ -48,8 +50,10 @@ def point(drive, vol, note, cut, q):
     with ol.engine_ctx("pulse2x"):
         r = mp.measure_point("pulse2x", note, mp.held_patch(waves=("saw",) * 3, drive=drive, vol=vol,
                                                              cutoff=(cut, cut), q=q))
-    o = r["stages"]["output"]
-    h = r["stages"]["ladder_out"]["harmonics_rel_h1_db"]
+    where = f"confirm_m5_saw_drive.point: drive {drive}, note {note}, cutoff {cut}, q {q}"
+    o = mp.require_measured(r, "output", ("unwanted_rel_db", "unwanted_dbfs", "upper_wanted_rel_db",
+                                          "intended_dbfs"), where)
+    h = mp.require_measured(r, "ladder_out", ("harmonics_rel_h1_db",), where)["harmonics_rel_h1_db"]
     f0 = r["f0_hz"]
     ks = [k for k in range(2, 7) if f"h{k}" in h and k * f0 < 20000]
     deficit = (sum(h[f"h{k}"] + 20 * math.log10(k) for k in ks) / len(ks)) if ks else None
@@ -75,7 +79,7 @@ def judge(b: dict, c: dict) -> list:
     return why
 
 
-def main(argv=None) -> int:
+def _run(argv) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--out", type=pathlib.Path, required=True)
     a = ap.parse_args(argv)
@@ -106,6 +110,14 @@ def main(argv=None) -> int:
     a.out.write_text(json.dumps(res, indent=1) + "\n")
     print(f"{len(rows) - len(fails)}/{len(rows)} fresh points pass; confirmed={res['confirmed']}; wrote {a.out}")
     return 0 if res["confirmed"] else 1
+
+
+def main(argv=None) -> int:
+    try:
+        return _run(argv)
+    except refusal.Refused as exc:
+        print(f"REFUSED: {exc}")
+        return REFUSED
 
 
 if __name__ == "__main__":
