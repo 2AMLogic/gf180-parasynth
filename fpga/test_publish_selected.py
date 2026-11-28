@@ -5,6 +5,7 @@ import hashlib
 import json
 import math
 from pathlib import Path
+import re
 import runpy
 import subprocess
 import sys
@@ -176,17 +177,18 @@ def _recorded(name):
     return path.read_bytes() if path.is_file() else f"built {name}\n".encode()
 
 
-def _artifact(tmp_path, *, with_simulation=False, commit=COMMIT):
+def _artifact(tmp_path, *, with_simulation=False, commit=COMMIT, source=TOP):
     """The least a publication reads before its first `git show`: the build
     report, the selected configuration on the 85k with true source digests,
     beside the pinned toolchain record. `with_simulation` adds what only the
-    --historical path reads. `commit` is what the report records as built."""
+    --historical path reads. `commit` is what the report records as built and
+    `source` the one path it records a digest for."""
     build, pinned = tmp_path / "build", tmp_path / "oss-cad-pinned"
     build.mkdir()
     pinned.mkdir()
     report = {"configuration": {"OSC2X": 1, "FILTER2X": 1, "pulse_duty_percent": 47.90},
               "source_commit": commit, "device": "85k", "package": "CABGA381",
-              "source_sha256": {TOP: hashlib.sha256(_recorded(TOP)).hexdigest()}}
+              "source_sha256": {source: hashlib.sha256(_recorded(source)).hexdigest()}}
     if with_simulation:
         report["simulation_evidence"] = {
             "commit": SIM_COMMIT, "transcript": SIM_TRANSCRIPT,
@@ -359,18 +361,17 @@ def test_a_historical_simulation_commit_the_clone_lacks_is_a_no_verdict_publicat
                  id="source-path-that-is-not-at-the-commit"),
     pytest.param(True, lambda r: r["simulation_evidence"].update(transcript="docs/no_such_transcript.txt"),
                  id="transcript-path-that-is-not-at-the-commit"),
-    pytest.param(True, lambda r: r["simulation_evidence"].update(commit=MALFORMED_COMMIT),
-                 id="simulation-commit-that-is-not-a-name"),
 ])
 def test_a_git_show_that_fails_for_a_commit_the_clone_holds_surfaces_as_the_defect_it_is(
         tmp_path, historical, edit):
     """Rule 8: the handler tells a missing commit from a defect by asking git
     whether the clone holds the commit, so a show that fails while git says it
-    does -- a path the record names that is not at that commit, a commit that
-    is not a name -- leaves publish() as the CalledProcessError git raised,
-    not as a refusal, and nothing is written. Real git throughout. The core
-    sources under --historical cannot get here with real git (they were read
-    at the source commit first); the probe below covers them."""
+    does -- a path the record names that is not at that commit -- leaves
+    publish() as the CalledProcessError git raised, not as a refusal, and
+    nothing is written. Real git throughout. The core sources under
+    --historical cannot get here with real git (they were read at the source
+    commit first); the probe below covers them. A commit that is not a name
+    no longer reaches git at all: #2082 decides it first, below."""
     artifact, _ = built_artifact(tmp_path)
     _rewrite(artifact, edit)
     out = tmp_path / "publication"
@@ -380,24 +381,26 @@ def test_a_git_show_that_fails_for_a_commit_the_clone_holds_surfaces_as_the_defe
     assert not out.exists()
 
 
-def test_a_malformed_source_commit_is_not_diagnosed_as_a_missing_one(tmp_path, monkeypatch, capsys):
-    """A `source_commit` that is not a name fails every `git show`, as a
-    commit the clone lacks does; git's cat-file tells them apart (128, not 1),
-    so the handler leaves it alone. At the CLI that is #1690's backstop --
-    REFUSED at exit 2 with git's own reason and nothing written: a refusal of
-    the artifact, which names a thing git cannot resolve, not a diagnosis of
-    the checkout. An operator told to fetch `not-a-commit` would be sent
-    after nothing."""
+def test_a_malformed_source_commit_is_rejected_before_git_and_not_diagnosed_as_a_missing_one(tmp_path, monkeypatch, capsys):
+    """A `source_commit` that is not a name was left for git to reject, and
+    #1690's backstop rendered git's 128 as REFUSED at exit 2. #2082 decides it
+    before git is asked, so there is nothing of git's left to render: the
+    ValueError leaves the CLI as it arrived, the path every malformed-report
+    check beside it takes (a real invocation prints a traceback at exit 1).
+    What must not come back is the diagnosis: a Refused saying the clone lacks
+    it would send an operator to fetch `not-a-commit`. No child is started."""
     artifact = _artifact(tmp_path, commit=MALFORMED_COMMIT)
     out = tmp_path / "publication"
-    with pytest.raises(subprocess.CalledProcessError) as failed:
+    spawned = _children_spawned(monkeypatch)
+    with pytest.raises(ValueError, match="not a full object name") as failed:
         publish_selected.publish(artifact, out, WORKFLOW)
     assert not isinstance(failed.value, publish_selected.Refused)
-    assert _cli(monkeypatch, artifact, out) == 2
-    printed = capsys.readouterr()
-    assert "is not in this clone" not in printed.err
-    assert "invalid object name" in printed.err
-    assert "Traceback" not in printed.err
+    _argv(monkeypatch, artifact, out)
+    with pytest.raises(ValueError, match="not a full object name") as stopped:
+        runpy.run_path(publish_selected.__file__, run_name="__main__")
+    assert not isinstance(stopped.value, publish_selected.Refused)
+    assert spawned == []
+    assert capsys.readouterr().err == ""
     assert not out.exists()
 
 
@@ -497,3 +500,132 @@ def test_a_failed_git_show_for_a_commit_the_clone_holds_surfaces_at_every_child(
         raised, _summary = _probe(artifact, out, historical)
         table.append((n, type(raised).__name__, out.exists()))
     assert all(row[1:] == ("CalledProcessError", False) for row in table), table
+
+
+# ------ a recorded commit that is not a full object name, before git sees it (#2082) --
+#: What is not `git rev-parse HEAD` output, which is all build_selected.py records:
+#: what git reads as an option, what it reads as another object (an empty name is
+#: the index -- `git show :<path>`, measured), what only looks like a sha, and what
+#: is not a string at all.
+NOT_A_COMMIT = [
+    pytest.param("--help", id="option"),
+    pytest.param("abc", id="not-hex"),
+    pytest.param("", id="empty"),
+    pytest.param("1" * 39, id="39-hex"),
+    pytest.param("1" * 41, id="41-hex"),
+    pytest.param("A" * 40, id="uppercase"),
+    pytest.param("1" * 40 + "\n", id="trailing-newline"),
+    pytest.param(" " + "1" * 40, id="leading-space"),
+    pytest.param(None, id="none"),
+    pytest.param(7, id="number"),
+    pytest.param(["1" * 40], id="list"),
+]
+
+
+def _children_spawned(monkeypatch):
+    """Every child process publish() starts, as argv, in order, each still run
+    for real. Both of the module's calls go through `subprocess.Popen`, so a
+    call is counted whichever API made it."""
+    spawned = []
+    real = subprocess.Popen
+
+    def popen(cmd, *args, **kwargs):
+        spawned.append(cmd if isinstance(cmd, str) else [str(part) for part in cmd])
+        return real(cmd, *args, **kwargs)
+    monkeypatch.setattr(subprocess, "Popen", popen)
+    return spawned
+
+
+def _shown(spawned):
+    """The object argument of every `git show` child in `spawned`."""
+    return [cmd[2] for cmd in spawned if cmd[:2] == ["git", "show"]]
+
+
+def _defect(raised):
+    """How a name that is not an object name leaves publish(): a ValueError,
+    as #2025 filed it, and not the Refused the --historical sites turn into a
+    NO-VERDICT publication."""
+    return isinstance(raised, ValueError) and not isinstance(raised, publish_selected.Refused)
+
+
+def test_a_recorded_commit_git_reads_as_an_option_never_reaches_git(tmp_path, monkeypatch):
+    """The bug as it shipped, kept as the control (rules 5 and 8): the report's
+    `source_commit` went into `git show`'s object position as it came out of
+    the downloaded artifact, so a value beginning with `--` was an option. With
+    a recorded source path appended it reaches git as `--output=<dir>/probe:x`
+    -- `x` is a key of the same report's `source_sha256` -- and git opens that
+    file for writing before anything else, so it is created, or truncated where
+    it already exists, and git then fails at 128 (measured on git 2.43.0 before
+    the guard was written: 15 bytes became 0). That failure went to #1690's
+    backstop as REFUSED at exit 2, with no word that a file had been touched.
+    Real git throughout -- the recorder only watches, so on the unfixed code it
+    is git itself that writes the file. Rejected before any child starts;
+    nothing published."""
+    probe = tmp_path / "probe"
+    artifact = _artifact(tmp_path, commit=f"--output={probe}", source="x")
+    out = tmp_path / "publication"
+    spawned = _children_spawned(monkeypatch)
+    raised, _summary = _probe(artifact, out, False)
+    assert not (tmp_path / "probe:x").exists(), spawned
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["build", "oss-cad-pinned"], spawned
+    assert spawned == []
+    assert _defect(raised) and "source_commit" in str(raised) and f"--output={probe}" in str(raised)
+
+
+@pytest.mark.parametrize("commit", NOT_A_COMMIT)
+def test_a_source_commit_that_is_not_a_full_object_name_is_rejected_before_any_git(tmp_path, monkeypatch, commit):
+    """The recorded value is `git rev-parse HEAD` output (build_selected.py):
+    40 lowercase hex and nothing else, so a string that cannot start with `-`
+    cannot be an option and there is no `--` placement to get right. Anything
+    else is a defect of the artifact, not a precondition of this checkout,
+    which is #2025's classification of a name git cannot parse -- now decided
+    without asking git. No child is started, so nothing is written anywhere."""
+    artifact = _artifact(tmp_path, commit=commit)
+    out = tmp_path / "publication"
+    spawned = _children_spawned(monkeypatch)
+    raised, _summary = _probe(artifact, out, False)
+    assert spawned == [], repr(commit)
+    assert _defect(raised) and "source_commit" in str(raised), repr(commit)
+    assert not out.exists()
+
+
+def test_an_empty_source_commit_does_not_publish_the_checkout_against_itself(tmp_path, monkeypatch):
+    """The other thing an unvalidated commit lets git read: `git show ":<path>"`
+    names the index. Measured on the unfixed code with this complete artifact:
+    an empty `source_commit` read every recorded source from the checkout, every
+    digest agreed with itself, and the publication went through as
+    BUILT-TIMING-PASS with `source_commit` empty on the summary and the
+    bitstream qualified -- the check that binds the bitstream to a commit had
+    compared the checkout with itself. Real git throughout."""
+    artifact, evidence = built_artifact(tmp_path)
+    _rewrite(artifact, lambda report: report.update(source_commit=""))
+    monkeypatch.setattr(build_selected, "simulation_evidence", lambda: evidence)
+    out = tmp_path / "publication"
+    raised, summary = _probe(artifact, out, False)
+    assert summary is None and _defect(raised), (summary or {}).get("state")
+    assert not out.exists()
+
+
+@pytest.mark.parametrize("commit", NOT_A_COMMIT)
+def test_a_historical_simulation_commit_that_is_not_a_full_object_name_is_rejected_before_git(tmp_path, monkeypatch, commit):
+    """The same value space at the simulation commit, read only under
+    --historical, after the source commit's own reads: every `git show` that
+    ran named a full object name, nothing is written, and what leaves
+    publish() is the defect, from the site that would have used it. The
+    recorder cannot be empty here, and the file the rule-8 input names cannot
+    be written from this site -- every path shown at this commit is under
+    `rtl-sketch/`, so git is asked for `<value>:rtl-sketch/<name>`, in a
+    directory that does not exist (measured) -- so what goes red on the
+    unfixed code is that git was handed an option. Not a Refused: the
+    --historical handler records a commit the clone merely lacks as NO-VERDICT
+    and keeps the build's reports (#2025), and an artifact that names no commit
+    is not that."""
+    artifact, _ = built_artifact(tmp_path)
+    _rewrite(artifact, lambda report: report["simulation_evidence"].update(commit=commit))
+    out = tmp_path / "publication"
+    spawned = _children_spawned(monkeypatch)
+    raised, _summary = _probe(artifact, out, True)
+    shown = _shown(spawned)
+    assert shown and all(re.fullmatch(r"[0-9a-f]{40}", spec.partition(":")[0]) for spec in shown), (repr(commit), spawned)
+    assert _defect(raised) and "simulation_evidence.commit" in str(raised), repr(commit)
+    assert not out.exists()
