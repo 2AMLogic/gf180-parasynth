@@ -518,6 +518,17 @@ def stage_controls(cuts, resonances, ring_cuts, ring_res) -> dict:
 # ===========================================================================
 def compare(quick: bool = False, names=None) -> dict:
     names = list(lc.SHIPPABLE) if names is None else list(names)
+    # `shipped` is the baseline every score is a difference against --
+    # _verdict reads it before any other candidate -- so a list without it
+    # has no verdict. Refuse here, ahead of the apparatus check and the
+    # stages: from the CLI this was minutes of measurement and then
+    # `KeyError: 'shipped'` (#1975). Not added to the list silently: that
+    # would change what ran.
+    if "shipped" not in names:
+        raise Refused(
+            f"'shipped' must be among the candidates (got {names!r}): every "
+            "matches/bigger score is a difference against the shipped ladder, "
+            "and the verdict is read off that baseline.")
     cuts = LINEAR_CUTS_QUICK if quick else LINEAR_CUTS
     ring_cuts = RING_CUTS_QUICK if quick else RING_CUTS
     ring_res = RING_RES_QUICK if quick else RING_RES
@@ -658,7 +669,9 @@ def main(argv=None) -> int:
     ap.add_argument("--quick", action="store_true",
                     help="two cutoffs and two resonances instead of four and three")
     ap.add_argument("--only", nargs="*", default=None,
-                    help=f"candidates to run (default {' '.join(lc.SHIPPABLE)})")
+                    help=f"candidates to run (default {' '.join(lc.SHIPPABLE)}); "
+                         "must name shipped, which every score is a "
+                         "difference against")
     ap.add_argument("--json", metavar="PATH", help="write the full report here")
     a = ap.parse_args(argv)
     try:
