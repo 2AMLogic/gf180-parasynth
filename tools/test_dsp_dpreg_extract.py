@@ -6,6 +6,10 @@ to the shipped drc.rpt. Every command the tool issues is recorded. Remote and
 local runs must issue the same steps with the same scripts and inputs, reach the
 same result, and fail at the same step with the same exit status when any step
 fails. Only the transport argv may differ (ssh/scp vs bash/cp).
+
+The fake launches nothing, so it cannot see what a host without ssh or scp
+does (#1741). Those cases run the real `sh()` with PATH holding only what each
+case names.
 """
 import hashlib
 import importlib.util
@@ -157,3 +161,166 @@ def test_a_drc_flagging_one_instance_twice_refuses_before_any_tcl_is_staged(
     assert not any("vivado" in s or "dsp_dpreg_extract.tcl" in s
                    for s in issued)
     assert not (ev / "dsp_dpreg_extract.tcl").exists()
+
+
+REAL_SH = dx.sh
+LOCAL_TOOLS = ("bash", "cp", "sha256sum", "awk", "mkdir", "tee", "grep",
+               "cat", "rm", "tail")
+
+
+@pytest.fixture
+def real_box(tmp_path):
+    """A box this host runs the scripts of for real: a checkpoint to hash
+    (only ever hashed; nothing here reaches Vivado), its true digest, the
+    shipped drc.rpt and an empty session directory."""
+    root = tmp_path / "box"
+    root.mkdir()
+    dcp = root / "routed.dcp"
+    dcp.write_bytes(b"hashed by the staging and recheck scripts, never opened\n")
+    drc = root / "drc.rpt"
+    shutil.copyfile(PUB / "drc.rpt", drc)
+    return {"dcp": str(dcp), "sha": _sha(dcp.read_bytes()), "drc": str(drc),
+            "remote": root / "dsp-review"}
+
+
+def _only_on_path(monkeypatch, tmp_path, *tools):
+    """A PATH holding symlinks to exactly `tools`, and nothing else."""
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    for t in tools:
+        if not shutil.which(t):
+            pytest.skip(f"this host has no {t}: the real local route cannot be run here")
+        (bindir / t).symlink_to(shutil.which(t))
+    monkeypatch.setenv("PATH", str(bindir))
+    return bindir
+
+
+def _stub(bindir, name, log, body=""):
+    """An executable `name` that appends its last argument to `log`, then
+    runs `body`."""
+    p = bindir / name
+    p.write_text(f"""\
+#!{sys.executable}
+import sys
+open({str(log)!r}, "a").write(sys.argv[-1] + "\\n")
+{body}
+""")
+    p.chmod(0o755)
+    return p
+
+
+def _run_real(monkeypatch, capfd, box, ev, where):
+    monkeypatch.setattr(dx, "sh", REAL_SH)
+    rc = dx.main(["--box", where, "--dcp", box["dcp"], "--dcp-sha256", box["sha"],
+                  "--drc-rpt", box["drc"], "--remote-dir", str(box["remote"]),
+                  "--evidence", str(ev)])
+    out, err = capfd.readouterr()
+    return rc, out, err
+
+
+def _issued(out):
+    return [l for l in out.splitlines() if l.startswith("+ ")]
+
+
+@pytest.mark.parametrize("broken, reason",
+                         [("absent", "No such file or directory"),
+                          ("not-executable", "Permission denied")])
+@pytest.mark.parametrize("where, missing, issued",
+                         [("example.invalid", "ssh", "+ ssh example.invalid bash -s"),
+                          (dx.LOCAL, "bash", "+ bash -c bash -s")],
+                         ids=["remote", "local"])
+def test_a_transport_executable_that_cannot_run_is_refused_not_a_traceback(
+        monkeypatch, tmp_path, capfd, broken, reason, where, missing, issued):
+    """START RED (#1741): against 3309dd59 every case raised out of main()
+    (FileNotFoundError, or PermissionError for a file with no execute bit).
+    PATH is otherwise empty, so the executable the route names first is the
+    one that cannot run."""
+    bindir = _only_on_path(monkeypatch, tmp_path)
+    if broken == "not-executable":
+        (bindir / missing).write_text("#!/bin/sh\necho must not run\n")
+    monkeypatch.setattr(dx, "sh", REAL_SH)
+    rc = dx.main(["--box", where, "--dcp", "/example/routed.dcp",
+                  "--dcp-sha256", "0" * 64, "--drc-rpt", "/example/drc.rpt",
+                  "--evidence", str(tmp_path / "ev")])
+    out, err = capfd.readouterr()
+    assert rc == 1
+    assert _issued(out) == [issued]
+    assert out.splitlines()[-2:] == [
+        f"REFUSED: cannot run {missing}: {reason}",
+        "REFUSED: box preconditions failed"]
+    assert err == ""
+
+
+@pytest.mark.parametrize("where, copy_tool", [("vbox", "scp"), (dx.LOCAL, "cp")])
+def test_a_missing_copy_tool_is_refused_after_the_shell_ran(
+        monkeypatch, tmp_path, capfd, real_box, where, copy_tool):
+    """START RED (#1741): the shell runs -- a stub ssh, or the real bash over
+    `real_box` -- so the run stages the box, fetches drc.rpt and meets the
+    copy tool at the Tcl push."""
+    if where == dx.LOCAL:
+        _only_on_path(monkeypatch, tmp_path, *(t for t in LOCAL_TOOLS if t != copy_tool))
+    else:
+        log = tmp_path / "ssh.log"
+        bindir = _only_on_path(monkeypatch, tmp_path)
+        _stub(bindir, "ssh", log,
+              'if sys.argv[-1].startswith("cat "):\n'
+              f'    sys.stdout.write(open({real_box["drc"]!r}).read())\n')
+    ev = tmp_path / "ev"
+    rc, out, err = _run_real(monkeypatch, capfd, real_box, ev, where)
+    assert rc == 1
+    assert len(_issued(out)) == 3 and _issued(out)[-1].startswith(f"+ {copy_tool} ")
+    assert out.splitlines()[-2:] == [
+        f"REFUSED: cannot run {copy_tool}: No such file or directory",
+        "REFUSED: could not stage Tcl"]
+    assert err == ""
+    assert not (real_box["remote"] / "dsp_dpreg_extract.tcl").exists()
+    if where != dx.LOCAL:
+        assert log.read_text().splitlines() == ["bash -s", f"cat {real_box['drc']}"]
+
+
+def test_the_local_route_is_unchanged_without_the_remote_tools_on_path(
+        monkeypatch, tmp_path, capfd, real_box):
+    """`--box local` names only bash and cp: with ssh and scp absent the real
+    `sh()` carries the run to Vivado, which refuses here as on any host
+    without it, exactly as it does with stub ssh/scp installed -- and those
+    are never invoked. Green on 3309dd59 by design: it pins what the guard
+    must not change."""
+    bindir = _only_on_path(monkeypatch, tmp_path, *LOCAL_TOOLS)
+    rc, out, err = _run_real(monkeypatch, capfd, real_box, tmp_path / "ev-1", dx.LOCAL)
+    log = tmp_path / "remote-tools.log"
+    for name in ("ssh", "scp"):
+        _stub(bindir, name, log, "sys.exit(99)")
+    rc2, out2, err2 = _run_real(monkeypatch, capfd, real_box, tmp_path / "ev-2", dx.LOCAL)
+
+    def norm(s):
+        return s.replace(str(tmp_path / "ev-1"), "EV").replace(str(tmp_path / "ev-2"), "EV")
+
+    assert (rc2, norm(out2), norm(err2)) == (rc, norm(out), norm(err))
+    assert rc == 1 and "REFUSED: vivado batch failed" in out
+    assert "cannot run" not in out
+    assert {l.split()[1] for l in _issued(out)} == {"bash", "cp"}
+    assert (real_box["remote"] / "dsp_dpreg_extract.tcl").is_file()
+    assert (real_box["remote"] / "routed_dcp.sha256").read_text().split()[0] == real_box["sha"]
+    assert not log.exists()
+
+
+@pytest.mark.parametrize("kw", [{}, {"capture_output": True}, {"input": "set -eu\n"}],
+                         ids=["plain", "capture_output", "input"])
+@pytest.mark.parametrize("argv", [dx.on_box("vbox", "bash -s"),
+                                  dx.to_box("vbox", "t.tcl", "/r/t.tcl"),
+                                  dx.from_box("vbox", "/r/x", "x")],
+                         ids=["on_box", "to_box", "from_box"])
+def test_sh_answers_a_failed_command_for_a_missing_executable(
+        monkeypatch, tmp_path, capfd, argv, kw):
+    """Every argv the remote route builds, in every shape main() calls it.
+    The pull is a `from_box` scp that main() only reaches once an earlier scp
+    succeeded, so it is exercised here. START RED (#1741): 3309dd59 raises."""
+    _only_on_path(monkeypatch, tmp_path)
+    r = dx.sh(argv, **kw)
+    out, err = capfd.readouterr()
+    assert r.args == argv and r.returncode == 127
+    assert r.stdout == r.stderr == ""
+    assert out.splitlines() == [
+        "+ " + " ".join(argv),
+        f"REFUSED: cannot run {argv[0]}: No such file or directory"]
+    assert err == ""
