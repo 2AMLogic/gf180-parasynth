@@ -581,7 +581,7 @@ def test_confirm_cannot_be_repeated_by_changing_the_output_path(tmp_path, monkey
     reads = []
     monkeypatch.setattr(tp, "measure_rows", lambda refs, pr, split: reads.append(split) or {})
     fit = tmp_path / "fit.json"
-    fit.write_text(json.dumps({"status": "FITTED"}))
+    fit.write_text(json.dumps(tp.fit(_dev(30.0, 34.0, 0.5, 0.6), PRE)))
     out1, out2 = tmp_path / "confirm-1.json", tmp_path / "confirm-2.json"
     assert tp.main(["confirm", "--refs", str(tmp_path), "--fit", str(fit), "--out", str(out1)]) == 0
     assert tp.main(["confirm", "--refs", str(tmp_path), "--fit", str(fit), "--out", str(out2)]) == 2, \
@@ -698,3 +698,124 @@ def test_a_fit_record_without_rows_is_refused(monkeypatch, tmp_path, capsys):
 def test_a_fit_record_with_null_rows_is_refused(monkeypatch, tmp_path, capsys):
     code, out, written = _fit(monkeypatch, tmp_path, capsys, {"rows": None})
     assert code == 2 and "'rows'" in out and not written.exists()
+
+
+# ---- confirm's fit record is REFUSED before the once-only claim (#1748) ----
+#: the other end of #1604's hand-off: the record `fit` WRITES, read back by
+#: `confirm`. The base record is the real writer's output, so every incomplete
+#: one below is a record `fit` could have written minus one key.
+FITTED = tp.fit(_dev(30.0, 34.0, 0.5, 0.6), PRE)
+#: every key `judge_confirmation` subscripts on a FITTED record. NOT
+#: `median_ln_tau_ratio`: `fit` writes null there as a VALUE (too few taus).
+FITTED_KEYS = ("median_d_cents", "magnitude_proposal", "tau_proposal")
+
+
+def _confirm(monkeypatch, tmp_path, record):
+    """`main(["confirm", ...])` over a fit record under tmp_path. The claim,
+    the preregistration and the reserved rows are the test's, so no claim can
+    land next to the real preregistration; `provenance` is answered rather than
+    exercised (as `_fit` does). The reserved rows come back usable and MEASURED
+    with both taus identified, so a FITTED record that gets past the guard runs
+    into every key `judge_confirmation` subscripts -- the reads that
+    tracebacked AFTER the claim. Returns the exit status, whether the claim
+    file exists, whether --out was written, and the reserved reads."""
+    prereg = tmp_path / "prereg.json"
+    prereg.write_text(json.dumps(PRE) + "\n")
+    monkeypatch.setattr(tp, "PREREG", prereg)
+    monkeypatch.setattr(tp, "load_prereg", lambda path=None: json.loads(json.dumps(PRE)))
+    monkeypatch.setattr(tp, "provenance", lambda refs: {"commit": "stub"})
+    monkeypatch.setattr(tp, "close_provenance", lambda prov: prov)
+    reads = []
+    rows = {c: _row(c, "confirmation", 30.0, 0.5) for c in CONF}
+    monkeypatch.setattr(tp, "measure_rows",
+                        lambda refs, pr, split: reads.append(split) or json.loads(json.dumps(rows)))
+    fit, out = tmp_path / "fit.json", tmp_path / "confirm.json"
+    fit.write_text(json.dumps(record))
+    code = tp.main(["confirm", "--refs", str(tmp_path), "--fit", str(fit), "--out", str(out)])
+    return code, tp.confirm_claim_path().exists(), out.exists(), reads
+
+
+def test_the_fitted_fixture_is_what_fit_writes():
+    """What the tests below lean on: the base record is FITTED, carries every
+    guarded key, and alone reaches each one -- with the fixture's rows the
+    magnitude AND the relaxation branch run (a guard keyed on a branch that
+    never executes here would be untested)."""
+    assert FITTED["status"] == "FITTED" and all(k in FITTED for k in FITTED_KEYS)
+    conf = {c: _row(c, "confirmation", 30.0, 0.5) for c in CONF}
+    j = tp.judge_confirmation(conf, FITTED, PRE)
+    assert j["magnitude"]["proposal"] == FITTED["magnitude_proposal"]
+    assert j["relaxation"]["proposal"] == FITTED["tau_proposal"]
+
+
+@pytest.mark.parametrize("record", [[], 5, "x", None], ids=["list", "int", "str", "null"])
+def test_confirm_refuses_a_fit_record_that_is_not_a_json_object(monkeypatch, tmp_path, capsys, record):
+    """#1748's own inputs. `.get` on each is an AttributeError out of `main`:
+    exit 1 by traceback, where this tool's declared refusal is 2."""
+    code, claim, written, reads = _confirm(monkeypatch, tmp_path, record)
+    assert code == 2 and "REFUSED" in capsys.readouterr().out
+    assert not claim and not written and reads == []
+
+
+@pytest.mark.parametrize("defect", ["absent", "null"])
+@pytest.mark.parametrize("key", FITTED_KEYS)
+def test_confirm_refuses_an_incomplete_fitted_record_before_the_claim(monkeypatch, tmp_path, capsys, key, defect):
+    """A FITTED record missing -- or carrying null for -- a key
+    `judge_confirmation` subscripts. REFUSED before `claim_reserved_evaluation`:
+    the once-only reserved evaluation is not spent on a record that cannot be
+    judged. The claim file is the point: assert it, not just the exit status."""
+    record = {k: v for k, v in FITTED.items() if k != key} if defect == "absent" else {**FITTED, key: None}
+    code, claim, written, reads = _confirm(monkeypatch, tmp_path, record)
+    out = capsys.readouterr().out
+    assert code == 2 and "REFUSED" in out and repr(key) in out, out
+    assert not claim, f"the reserved evaluation was spent on a FITTED record with {key} {defect}"
+    assert not written and reads == []
+
+
+def test_confirm_still_claims_and_judges_a_complete_fitted_record(monkeypatch, tmp_path):
+    """The guard's other side (verification rule 8): a record `fit` wrote is
+    not refused. The claim is taken, the reserved rows are read exactly once
+    and the record is written -- an over-eager guard looks exactly like a
+    working one unless the legitimate record is run through it."""
+    code, claim, written, reads = _confirm(monkeypatch, tmp_path, FITTED)
+    assert code == 0 and claim and written, (code, claim, written)
+    assert reads == ["confirmation"]
+    rec = json.loads((tmp_path / "confirm.json").read_text())
+    assert rec["reserved_rows_read"] is True
+    assert rec["judgement"]["magnitude"]["verdict"] == "CONFIRMED"
+
+
+@pytest.mark.parametrize("record", [
+    {"status": "REFUSED", "reason": "not-identifiable: test"},
+    {"status": None},   # a null status IS the no-fit branch
+    {},                 # and so is an absent one: status is read, not required
+], ids=["REFUSED", "null-status", "no-status"])
+def test_confirm_a_record_that_is_not_fitted_reads_and_claims_nothing(monkeypatch, tmp_path, record):
+    """Unchanged by the guard (#1748 AC 3). `status` is deliberately read with
+    `.get()` rather than listed in `require_keys`, which refuses a null: were
+    it required, these two records would exit 2 where today they are the
+    rule's own REFUSED judgement, exit 0, nothing reserved touched."""
+    code, claim, written, reads = _confirm(monkeypatch, tmp_path, record)
+    assert code == 0 and written and not claim and reads == [], (code, claim, written, reads)
+    rec = json.loads((tmp_path / "confirm.json").read_text())
+    assert rec["reserved_rows_read"] is False
+    assert all(r["class"] == "NOT-READ" for r in rec["rows"].values())
+    for q in ("magnitude", "relaxation"):
+        assert rec["judgement"][q] == {"verdict": "REFUSED", "reason": "no development fit"}
+
+
+@pytest.mark.parametrize("record,exc,claim", [
+    ([], AttributeError, False),
+    ({k: v for k, v in FITTED.items() if k != "median_d_cents"}, KeyError, True),
+    ({k: v for k, v in FITTED.items() if k != "magnitude_proposal"}, KeyError, True),
+    ({k: v for k, v in FITTED.items() if k != "tau_proposal"}, KeyError, True),
+], ids=["non-object", "minus-median", "minus-magnitude", "minus-tau"])
+def test_without_the_guard_confirm_is_the_shipped_defect(monkeypatch, tmp_path, record, exc, claim):
+    """Injected-bug control (#1748 AC 4), committed rather than described: the
+    guard is `mf.require_keys`, so with it doing nothing the tests above go red
+    for their stated reasons -- the non-object record tracebacks at `.get`, and
+    each incomplete FITTED record SPENDS the once-only claim and then
+    tracebacks in `judge_confirmation`."""
+    monkeypatch.setattr(tp.mf, "require_keys", lambda record, required, what, *, refused: None)
+    with pytest.raises(exc):
+        _confirm(monkeypatch, tmp_path, record)
+    assert tp.confirm_claim_path().exists() is claim
