@@ -121,6 +121,8 @@ def test_the_peak_is_the_sum_across_a_tree_not_its_largest_process():
     r = wrap(sys.executable, "-c", parent, interval="0.02")
     assert r.returncode == 0, r.stderr[-500:]
     got = peak_mb(r.stderr)
+    n, wall = samples_and_wall(r.stderr)
+    print(f"[obs] scenario=tree interval=0.02 samples={n} wall={wall} peak={got}")
     assert got >= 290, (got, r.stderr)
     assert got <= 400, (got, r.stderr)
 
@@ -164,6 +166,8 @@ def test_the_json_record_carries_the_number_and_the_sample_count(tmp_path):
              interval="0.05", out=str(out))
     assert r.returncode == 0, r.stderr
     rec = json.loads(out.read_text())
+    print(f"[obs] scenario=record interval={rec['interval_s']} samples={rec['samples']} "
+          f"wall={rec['wall_s']} peak={rec['peak_tree_rss_mb']}")
     assert rec["peak_tree_rss_mb"] == peak_mb(r.stderr)
     assert rec["samples"] >= 8, rec
     assert rec["interval_s"] == 0.05
