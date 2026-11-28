@@ -1055,8 +1055,14 @@ def write_clip(path: pathlib.Path, y: np.ndarray, sr: int = SR) -> None:
 
 
 def read_clip_file(path: pathlib.Path) -> tuple[np.ndarray, int]:
+    """The bytes at `path` as (mono float64, sr). REFUSES a path that is not
+    a readable WAV file (#1861) -- a hash says the bytes are the profile's,
+    not that they are audio."""
     from scipy.io import wavfile
-    sr, y = wavfile.read(str(path))
+    try:
+        sr, y = wavfile.read(str(path))
+    except (OSError, ValueError) as exc:
+        raise Refused(f"{path}: unreadable WAV ({exc})") from exc
     y = np.asarray(y, dtype=np.float64)
     if y.ndim > 1:
         y = y.mean(axis=1)

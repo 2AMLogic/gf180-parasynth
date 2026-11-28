@@ -597,6 +597,19 @@ def _other_two_prose(bc: dict) -> list[str]:
     ]
 
 
+def _read_corpus_wav(path: pathlib.Path) -> tuple[int, np.ndarray]:
+    """One corpus WAV as `(sr, mono float64)`, or `refusal.Refused` (#1861):
+    `defect_5` read the corpus with a bare `wavfile.read`, so a git-lfs
+    pointer escaped `main()`'s refusal boundary as an exit-1 traceback."""
+    from scipy.io import wavfile
+    try:
+        sr, y = wavfile.read(str(path))
+    except (OSError, ValueError) as exc:
+        raise refusal.Refused(f"{path}: unreadable WAV ({exc})") from exc
+    y = np.asarray(y, float)
+    return sr, (y.mean(1) if y.ndim > 1 else y)
+
+
 def defect_5():
     print("\n" + "=" * 78)
     print("5. #139 -- appending zeros turned a refusal into an accepted wrong answer")
@@ -657,10 +670,7 @@ def defect_5():
                         ("cl8/CL.WAV", REFS / "cl8" / "CL.WAV")):
         if not path.exists():
             continue
-        from scipy.io import wavfile
-        sr, y = wavfile.read(str(path))
-        y = np.asarray(y, float)
-        y = y.mean(1) if y.ndim > 1 else y
+        sr, y = _read_corpus_wav(path)
         y = y / max(float(np.abs(y).max()), 1e-30)
         real = "REAL " + label
         bc[real] = (_step_outlier(y, sr), _tail_residual(y, sr))
@@ -669,13 +679,10 @@ def defect_5():
     print("\n   THE FLOOR, MEASURED AGAINST THE CORPUS IT HAS TO CLEAR. `SOUNDING_")
     print("   FLOOR` is -180 dB of a record's own peak. What a REAL tail sits at:")
     import itertools
-    from scipy.io import wavfile
     rows = []
     for path in itertools.chain.from_iterable(
             sorted(d.glob("*.WAV")) for d in sorted(REFS.iterdir()) if d.is_dir()):
-        sr2, y = wavfile.read(str(path))
-        y = np.asarray(y, float)
-        y = y.mean(1) if y.ndim > 1 else y
+        sr2, y = _read_corpus_wav(path)
         pk = float(np.abs(y).max())
         if pk <= 0:
             continue
@@ -888,7 +895,10 @@ def main() -> int:
     # exit-1 traceback, which `verdict_exit_code` renders exactly like a
     # failed invariant (#1183, `run_case.*` family). The boundary catches only
     # `refusal.Refused` and maps it to the probe's own refused exit (2); a
-    # scipy ValueError on an unreadable corpus file still exits 1.
+    # scipy ValueError on an unreadable corpus file still exits 1 where the
+    # read is not wrapped as a refusal -- `defect_1` through
+    # `run_case.load_reference` (#1860). `defect_5`'s own corpus reads refuse
+    # (#1861, `_read_corpus_wav`).
     try:
         defect_1(voices)
         defect_2()
