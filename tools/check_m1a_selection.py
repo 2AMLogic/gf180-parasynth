@@ -187,7 +187,11 @@ def main(argv=None) -> int:
     except (OSError, ValueError, bass.Refused, mf.Refused) as exc:
         print(f"REFUSED: {exc}")
         return 2
-    problems = check(record, candidate, baseline, manifest)
+    try:
+        problems = check(record, candidate, baseline, manifest)
+    except bass.Refused as exc:
+        print(f"REFUSED: {exc}")
+        return 2
     for p in problems:
         print("MISMATCH:", p)
     if problems:
