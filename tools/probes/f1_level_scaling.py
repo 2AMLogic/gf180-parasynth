@@ -28,7 +28,11 @@ Either failing is REFUSED (exit 2), not a result.
                                the baseline's. Must refuse: the recorded words
                                are not the predicted ones.
 
-Exit: 0 measured, 1 a check failed, 2 refused.
+Exit: 0 measured, 1 a check failed, 2 refused. A check that RAN and disagreed
+is 1: a capture that is present and is not what its manifest says
+(`f1_level_capture.Differs`), or Surge takes that are not bit-identical. 2 is
+for everything that left nothing to compare, a capture the archive cannot
+deliver included.
 """
 from __future__ import annotations
 
@@ -77,6 +81,12 @@ BASE_VPU = 0.13
 
 class Refused(refusal.Refused, RuntimeError):
     pass
+
+
+class Differs(Refused):
+    """A check that RAN and disagreed, so it is a result (exit 1), not a
+    missing precondition: here, two takes of one condition that are not
+    bit-identical."""
 
 
 def base_vpu_asserted() -> float:
@@ -230,7 +240,7 @@ def surge_side(manifest) -> dict:
         for cond in list(CASES.values()) + [OPEN]:
             k1, k2 = cap.clip_key(cond, amp, 1), cap.clip_key(cond, amp, 2)
             if manifest["clips"][k1]["sha256"] != manifest["clips"][k2]["sha256"]:
-                raise Refused(f"Surge takes differ for {cond} at {amp}; take-to-take spread "
+                raise Differs(f"Surge takes differ for {cond} at {amp}; take-to-take spread "
                               f"must be measured before a single take is used")
         fo, go = cap.capture_curve(OPEN, amp, 1, manifest)
         yo, mo = cap.load_capture(OPEN, amp, 1, manifest)
@@ -455,6 +465,9 @@ def main(argv=None) -> int:
         jobs_in = [(n, s, amp, a.inject) for n, s in CANDIDATES.items() for amp in AMPS]
         with cf.ProcessPoolExecutor(max_workers=a.workers) as ex:
             jobs = list(ex.map(run_job, jobs_in))
+    except (cap.Differs, Differs) as e:
+        print(f"FAIL     {e}")
+        return 1
     except refusal.Refused as e:
         print(f"REFUSED  {e}")
         return 2

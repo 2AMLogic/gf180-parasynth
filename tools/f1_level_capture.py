@@ -44,8 +44,10 @@ Octave: the stimulus enters through the Audio In oscillator, so no oscillator
 pitch/range setting is in the path; the held MIDI note only opens the gate.
 
 Exit: 0 verified, 1 a clip is present and is not what the manifest says,
-2 refused (a clip the archive does not hold: nothing was compared). A run with
-both is 1 -- a measured disagreement outranks a refusal.
+2 refused (nothing was compared: a clip the manifest does not name, one the
+archive cannot deliver, an archive that cannot be opened, a manifest that
+names no clip). A run with both 1 and 2 is 1 -- a measured disagreement
+outranks a refusal.
 """
 from __future__ import annotations
 
@@ -58,6 +60,7 @@ import pathlib
 import subprocess
 import sys
 import zipfile
+import zlib
 
 import numpy as np
 
@@ -94,9 +97,25 @@ class Refused(refusal.Refused, Exception):
 
 
 class Unbindable(Refused):
-    """A precondition of ONE capture: the manifest does not name it, or the
-    archive does not hold the member it names. No comparison ran, so `verify`
-    counts it REFUSED; a capture that is present and disagrees is FAIL."""
+    """A precondition of ONE capture: the manifest does not name it, the
+    archive does not hold the member it names, or the archive cannot be opened
+    or cannot deliver that member. No comparison ran, so `verify` counts it
+    REFUSED; a capture that is present and disagrees is FAIL."""
+
+
+class Differs(Refused):
+    """A capture that is PRESENT, was read, and is not what the manifest says:
+    its bytes hash to something else, or its sample rate or length is not the
+    recorded one. A comparison ran and disagreed, so it is a result -- `verify`
+    counts it FAIL -- not a missing precondition."""
+
+
+#: What `zipfile` raises when the archive, as a container, fails: it is not a
+#: zip, is empty or is truncated (`BadZipFile` at the open), it cannot be
+#: opened at all (`OSError`), a member's CRC or framing is wrong
+#: (`BadZipFile` at the read) or its deflate stream is broken (`zlib.error`).
+#: In each case the bytes were not handed over, so no hash was compared.
+ARCHIVE_ERRORS = (zipfile.BadZipFile, OSError, zlib.error)
 
 
 def amp_tag(amp: float) -> str:
@@ -328,17 +347,34 @@ def capture(work: pathlib.Path) -> dict:
 # ---------------------------------------------------------------------------
 # reading: no plugin; every read hash-checked
 # ---------------------------------------------------------------------------
+def _shown(p: pathlib.Path) -> str:
+    """`p` relative to the tree, or as it is when it lies outside it: a
+    refusal's message must not be able to raise."""
+    try:
+        return str(p.relative_to(ROOT))
+    except ValueError:
+        return str(p)
+
+
 def load_manifest() -> dict:
     if not MANIFEST.exists() or not ARCHIVE.exists():
-        raise Refused(f"no level captures at {MANIFEST.relative_to(ROOT)}")
-    return json.loads(MANIFEST.read_text())
+        raise Refused(f"no level captures at {_shown(MANIFEST)}")
+    m = json.loads(MANIFEST.read_text())
+    clips = m.get("clips")
+    if not isinstance(clips, dict) or not clips:
+        raise Refused(f"the manifest at {_shown(MANIFEST)} names no clip: "
+                      f"nothing was compared")
+    return m
 
 
 def load_capture(cond: str, amp: float, take: int, manifest: dict | None = None,
                  inject: str = "") -> tuple[np.ndarray, dict]:
-    """(audio, clip meta). REFUSES if the archived bytes do not hash to the
-    manifest's sha256 (`inject='TAMPERED'` moves the expected hash, for the
-    control)."""
+    """(audio, clip meta). `Unbindable` when nothing could be compared: the
+    manifest does not name the clip, or the archive cannot be opened or cannot
+    deliver its member. `Differs` when a comparison ran and disagreed: the
+    archived bytes do not hash to the manifest's sha256 (`inject='TAMPERED'`
+    moves the expected hash, for the control), or the clip's sample rate or
+    length is not the recorded one."""
     m = manifest or load_manifest()
     key = clip_key(cond, amp, take)
     if key not in m["clips"]:
@@ -347,17 +383,23 @@ def load_capture(cond: str, amp: float, take: int, manifest: dict | None = None,
     want = meta["sha256"]
     if inject == "TAMPERED":
         want = ("0" if want[0] != "0" else "1") + want[1:]
-    with zipfile.ZipFile(ARCHIVE) as z:
+    try:
+        z = zipfile.ZipFile(ARCHIVE)
+    except ARCHIVE_ERRORS as e:
+        raise Unbindable(f"{ARCHIVE.name} cannot be opened as the capture archive: {e}")
+    with z:
         try:
             b = z.read(meta["archive_member"])
         except KeyError:
             raise Unbindable(f"{key}: {meta['archive_member']} is absent from the archive")
+        except ARCHIVE_ERRORS as e:
+            raise Unbindable(f"{key}: the archive could not deliver {meta['archive_member']}: {e}")
     if _sha(b) != want:
-        raise Refused(f"{key} hashes {_sha(b)[:16]}, the manifest says {want[:16]}")
+        raise Differs(f"{key} hashes {_sha(b)[:16]}, the manifest says {want[:16]}")
     from scipy.io import wavfile
     sr, y = wavfile.read(io.BytesIO(b))
     if sr != rp.SR or len(y) != meta["frames"]:
-        raise Refused(f"{key}: sr {sr} / {len(y)} frames, manifest says {rp.SR} / {meta['frames']}")
+        raise Differs(f"{key}: sr {sr} / {len(y)} frames, manifest says {rp.SR} / {meta['frames']}")
     return np.asarray(y, dtype=np.float64), meta
 
 
