@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
 import mono_m5a_score as m5a
 import refusal
+import repo_output_path
 from exit_contract import REFUSED
 import voice_fx as vf
 import measure_m5a_filter_oversample as experiment
@@ -332,13 +333,13 @@ def main(argv=None) -> int:
     parser.add_argument("--recompare-report", type=pathlib.Path,
                         help="recompute acceptance decisions from a complete saved measurement without rerendering")
     args = parser.parse_args(argv)
-    if args.recompare_report is not None:
-        out, option = args.recompare_report, "--recompare-report"
-    else:
-        out, option = ROOT / args.out, "--out"
+    raw, option = ((args.recompare_report, "--recompare-report")
+                   if args.recompare_report is not None else (args.out, "--out"))
+    out = repo_output_path.confine(raw, ROOT)
+    if out is None:
+        print(f"REFUSED: {option} output must remain inside the repository, not {raw}")
+        return REFUSED
     try:
-        if not out.resolve().is_relative_to(ROOT.resolve()):
-            raise m5a.Refused(f"{option} output must remain inside the repository, not {out}")
         if args.recompare_report is not None:
             report = _recompare_report(out)
         else:

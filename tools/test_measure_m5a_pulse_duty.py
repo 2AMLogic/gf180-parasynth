@@ -1,9 +1,36 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 import measure_m5a_pulse_duty as probe
 import refusal
+
+_STUB_REPORT = {"source_commit": "stub", "runs": []}
+
+
+def _output_tree(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (repo / "link").symlink_to(outside)
+    monkeypatch.setattr(probe, "ROOT", repo.resolve())
+    return outside
+
+
+def _escape(outside, case):
+    return {"absolute": str(outside / "report.json"),
+            "dotdot": "../report.json",
+            "symlink": "link/report.json"}[case]
+
+
+def _stub_measurement(monkeypatch):
+    calls = []
+    monkeypatch.setattr(probe, "measure",
+                        lambda *args, **kwargs: calls.append(args) or _STUB_REPORT)
+    return calls
 
 
 def test_pulse_probe_refuses_unknown_or_duplicate_shapes():
@@ -34,3 +61,64 @@ def test_pulse_summary_refuses_fewer_than_two_comparable_partials(f0):
 def test_pulse_cli_argument_error_is_not_masked_as_a_refusal():
     with pytest.raises(ValueError, match="unique members"):
         probe.main(["--shapes", "square", "square", "--out", "build/never-written.json"])
+
+
+@pytest.mark.parametrize("case", ["absolute", "dotdot", "symlink"])
+def test_out_that_leaves_the_repository_is_refused_before_measuring(tmp_path, monkeypatch, capsys, case):
+    outside = _output_tree(tmp_path, monkeypatch)
+    calls = _stub_measurement(monkeypatch)
+    assert probe.main(["--out", _escape(outside, case)]) == 2
+    assert "REFUSED" in capsys.readouterr().out
+    assert calls == []
+    assert not list(tmp_path.rglob("report.json"))
+
+
+def test_in_repo_out_is_written_and_named_relative_to_the_repository(tmp_path, monkeypatch, capsys):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    monkeypatch.setattr(probe, "ROOT", repo.resolve())
+    calls = _stub_measurement(monkeypatch)
+    assert probe.main(["--out", "docs/report.json"]) == 0
+    assert len(calls) == 1
+    assert json.loads((repo / "docs" / "report.json").read_text()) == _STUB_REPORT
+    assert json.loads(capsys.readouterr().out)["report"] == "docs/report.json"
+
+
+def test_in_repo_out_named_through_a_symlink_from_outside_is_written_in_repo(tmp_path, monkeypatch, capsys):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    monkeypatch.setattr(probe, "ROOT", repo.resolve())
+    _stub_measurement(monkeypatch)
+    alias = tmp_path / "alias"
+    alias.symlink_to(repo)
+    assert probe.main(["--out", str(alias / "docs" / "report.json")]) == 0
+    assert (repo / "docs" / "report.json").is_file()
+    assert json.loads(capsys.readouterr().out)["report"] == "docs/report.json"
+
+
+def test_out_symlink_to_in_repo_file_replaces_the_link_not_its_target(tmp_path, monkeypatch, capsys):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    monkeypatch.setattr(probe, "ROOT", repo.resolve())
+    _stub_measurement(monkeypatch)
+    baseline = repo / "baseline.json"
+    baseline.write_text("ORIGINAL")
+    (repo / "latest.json").symlink_to(baseline)
+    assert probe.main(["--out", "latest.json"]) == 0
+    latest = repo / "latest.json"
+    assert not latest.is_symlink()
+    assert json.loads(latest.read_text()) == _STUB_REPORT
+    assert baseline.read_text() == "ORIGINAL"
+    assert json.loads(capsys.readouterr().out)["report"] == "latest.json"
+
+
+def test_out_symlink_leaf_pointing_outside_is_refused(tmp_path, monkeypatch, capsys):
+    outside = _output_tree(tmp_path, monkeypatch)
+    repo = tmp_path / "repo"
+    (outside / "target.json").write_text("ORIGINAL")
+    (repo / "leaf.json").symlink_to(outside / "target.json")
+    calls = _stub_measurement(monkeypatch)
+    assert probe.main(["--out", "leaf.json"]) == 2
+    assert "REFUSED" in capsys.readouterr().out
+    assert calls == []
+    assert (outside / "target.json").read_text() == "ORIGINAL"

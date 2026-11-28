@@ -21,6 +21,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 import audio_measure as am
 import mono_m5a_score as m5a
 import refusal
+import repo_output_path
 from exit_contract import REFUSED
 import voice_fx as vf
 
@@ -156,12 +157,15 @@ def main(argv=None) -> int:
                     help="controlled oscillator challenger: use the naive saw before the same 2x decimator")
     ap.add_argument("--out", default="build/scorecard/m5a-signal-path.json")
     args = ap.parse_args(argv)
+    out = repo_output_path.confine(args.out, ROOT)
+    if out is None:
+        print("measure_m5a_signal_path: REFUSED -- output must stay inside the repository")
+        return 2
     try:
         report = measure(args.cutoff, args.drive, blep=not args.disable_polyblep)
     except refusal.Refused as exc:
         print(f"REFUSED: {exc}")
         return REFUSED
-    out = ROOT / args.out
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps({"report": str(out.relative_to(ROOT)),

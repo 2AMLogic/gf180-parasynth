@@ -65,6 +65,7 @@ import audio_measure as am                                          # noqa: E402
 import dsp                                                          # noqa: E402
 import voice_fx as vf                                               # noqa: E402
 import refusal
+import repo_output_path
 
 SR = dsp.SR
 # A3 .. A7: four octaves, so the pitch dependence is a trend and not two points.
@@ -255,6 +256,12 @@ def main(argv=None) -> int:
             for p in missing:
                 print(f"  {p}", file=sys.stderr)
             return 3
+    out = None
+    if args.out:
+        out = repo_output_path.confine(args.out, ROOT)
+        if out is None:
+            print("REFUSED: --out must stay inside the repository", file=sys.stderr)
+            return 3
     try:
         report = measure(args.note, min_headroom=args.min_headroom, seconds=args.seconds)
     except Refused as e:
@@ -262,7 +269,6 @@ def main(argv=None) -> int:
         return 3
     print(render_table(report))
     if args.out:
-        out = ROOT / args.out
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps(report, indent=2) + "\n")
         print(f"\n  report: {out.relative_to(ROOT)}")

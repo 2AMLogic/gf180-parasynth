@@ -25,6 +25,7 @@ sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
 import mono_m5a_score as m5a
 import refusal
+import repo_output_path
 from exit_contract import REFUSED
 import voice_fx as vf
 import fixed
@@ -335,12 +336,15 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", default="build/scorecard/m5a-filter-rate-v1.json")
     args = parser.parse_args(argv)
+    out = repo_output_path.confine(args.out, ROOT)
+    if out is None:
+        print("measure_m5a_filter_oversample: REFUSED -- output must stay inside the repository")
+        return REFUSED
     try:
         report = run(ROOT / "build/scorecard/m5a-filter-rate-audio")
     except refusal.Refused as exc:
         print(f"REFUSED: {exc}")
         return REFUSED
-    out = ROOT / args.out
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps({"report": str(out.relative_to(ROOT)),

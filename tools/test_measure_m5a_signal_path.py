@@ -1,10 +1,37 @@
 from __future__ import annotations
 
+import json
+
 import numpy as np
 import pytest
 
 import measure_m5a_signal_path as probe
 import refusal
+
+_STUB_REPORT = {"source_commit": "stub", "runs": []}
+
+
+def _output_tree(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (repo / "link").symlink_to(outside)
+    monkeypatch.setattr(probe, "ROOT", repo.resolve())
+    return outside
+
+
+def _escape(outside, case):
+    return {"absolute": str(outside / "report.json"),
+            "dotdot": "../report.json",
+            "symlink": "link/report.json"}[case]
+
+
+def _stub_measurement(monkeypatch):
+    calls = []
+    monkeypatch.setattr(probe, "measure",
+                        lambda *args, **kwargs: calls.append(args) or _STUB_REPORT)
+    return calls
 
 
 def test_q15_trace_conversion_uses_one_full_scale_for_every_stage():
@@ -71,3 +98,37 @@ def test_polyblep_off_is_an_executed_distinct_oscillator_challenger():
                old["stages"]["oscillator"]["harmonic_error_db_model_minus_reference"]
         assert "excess_alias_db" in got["stages"]["output"]
         assert "output_gain_error_db" in got
+
+
+@pytest.mark.parametrize("case", ["absolute", "dotdot", "symlink"])
+def test_out_that_leaves_the_repository_is_refused_before_measuring(tmp_path, monkeypatch, capsys, case):
+    outside = _output_tree(tmp_path, monkeypatch)
+    calls = _stub_measurement(monkeypatch)
+    assert probe.main(["--out", _escape(outside, case)]) == 2
+    assert "REFUSED" in capsys.readouterr().out
+    assert calls == []
+    assert not list(tmp_path.rglob("report.json"))
+
+
+def test_in_repo_out_is_written_and_named_relative_to_the_repository(tmp_path, monkeypatch, capsys):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    monkeypatch.setattr(probe, "ROOT", repo.resolve())
+    calls = _stub_measurement(monkeypatch)
+    assert probe.main(["--out", "build/verification/report.json"]) == 0
+    assert len(calls) == 1
+    written = repo / "build" / "verification" / "report.json"
+    assert json.loads(written.read_text()) == _STUB_REPORT
+    assert json.loads(capsys.readouterr().out)["report"] == "build/verification/report.json"
+
+
+def test_in_repo_out_named_through_a_symlink_from_outside_is_written_in_repo(tmp_path, monkeypatch, capsys):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    monkeypatch.setattr(probe, "ROOT", repo.resolve())
+    _stub_measurement(monkeypatch)
+    alias = tmp_path / "alias"
+    alias.symlink_to(repo)
+    assert probe.main(["--out", str(alias / "build" / "report.json")]) == 0
+    assert (repo / "build" / "report.json").is_file()
+    assert json.loads(capsys.readouterr().out)["report"] == "build/report.json"

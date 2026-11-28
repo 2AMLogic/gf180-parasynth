@@ -22,6 +22,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 import audio_measure as am
 import mono_m5a_score as m5a
 import refusal
+import repo_output_path
 from exit_contract import REFUSED
 import run_all
 import voice_fx as vf
@@ -135,12 +136,18 @@ def main(argv=None):
     parser.add_argument("--shapes", nargs="+", choices=SHAPES, default=list(SHAPES))
     parser.add_argument("--out", default="docs/scorecard/mono-m5a-miniv3/pulse-duty-v1.json")
     args = parser.parse_args(argv)
+    # write_json replaces the directory entry it is given, so validate that
+    # entry (resolved parent + leaf name) as well as where the leaf points.
+    # A leaf symlink is therefore replaced, never followed.
+    path = repo_output_path.confine(args.out, ROOT, replace_leaf=True)
+    if path is None:
+        print("measure_m5a_pulse_duty: REFUSED -- output must stay inside the repository")
+        return 2
     try:
         report = measure(args.shapes)
     except refusal.Refused as exc:
         print(f"REFUSED: {exc}")
         return REFUSED
-    path = ROOT / args.out
     write_json(path, report)
     print(json.dumps({"report": str(path.relative_to(ROOT)),
                       "source_commit": report["source_commit"],
