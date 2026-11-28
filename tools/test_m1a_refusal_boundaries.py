@@ -221,3 +221,47 @@ def test_regen_m1a_units_preserves_exit_1_numeric_and_hash_gates(
     assert regen.main() == 1
     assert "reanalysed audio hash differs" in capsys.readouterr().err
     assert record_copy.read_bytes() == original_bytes
+
+
+# ---------------------------------------------------------------------------
+# #1685: `--control` runs `synthetic_control()` before main's try, and
+# `diagnose_m1a_harmonic_phase.project` inside it has no handler on that path.
+# ---------------------------------------------------------------------------
+def _control_flag(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["analyse_m1a_phase_cycle.py", "--control"])
+
+
+def test_control_flag_a_project_refusal_exits_refused_2(monkeypatch, capsys):
+    import diagnose_m1a_harmonic_phase as dh
+    import analyse_m1a_phase_cycle as ap
+
+    def refusing(*a, **k):
+        raise dh.Refused("<control> project refused under --control")
+    monkeypatch.setattr(dh, "project", refusing)
+    _control_flag(monkeypatch)
+    code = ap.main()
+    out = capsys.readouterr().out
+    assert code == exit_contract.REFUSED, (code, out[-400:])
+    assert "REFUSED" in out and "<control> project refused under --control" in out, out[-400:]
+
+
+def test_control_flag_control_an_unrelated_project_error_still_propagates(monkeypatch, capsys):
+    import diagnose_m1a_harmonic_phase as dh
+    import analyse_m1a_phase_cycle as ap
+
+    def broken(*a, **k):
+        raise ValueError("<control> the phase is not a number")
+    monkeypatch.setattr(dh, "project", broken)
+    _control_flag(monkeypatch)
+    with pytest.raises(ValueError, match="the phase is not a number"):
+        ap.main()
+    assert "REFUSED" not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("ok, code", [(True, 0), (False, 1)])
+def test_control_flag_keeps_its_own_exit_codes(monkeypatch, capsys, ok, code):
+    """The repair wraps the call and must not move the flag's own verdicts."""
+    import analyse_m1a_phase_cycle as ap
+    monkeypatch.setattr(ap, "synthetic_control", lambda: {"a": {"ok": ok}})
+    _control_flag(monkeypatch)
+    assert ap.main() == code

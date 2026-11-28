@@ -402,7 +402,11 @@ def plot(ref_windows, model_windows, path):
 
 def main():
     if "--control" in sys.argv:
-        control = synthetic_control()
+        try:
+            control = synthetic_control()
+        except refusal.Refused as exc:
+            print(f"REFUSED: {exc}")
+            return 2
         print(json.dumps(control, indent=1))
         return 0 if all(v["ok"] for v in control.values()) else 1
     try:

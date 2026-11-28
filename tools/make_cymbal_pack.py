@@ -61,7 +61,11 @@ def main(argv=None):
     except refusal.Refused as e:
         print(f"REFUSED: {e}", file=sys.stderr)
         return REFUSED
-    ship, _ = rc.render_drum_solo("CY")
+    try:
+        ship, _ = rc.render_drum_solo("CY")
+    except refusal.Refused as e:
+        print(f"REFUSED: {e}", file=sys.stderr)
+        return REFUSED
     cand, _ = cc.render(ev.kit_with_levels(cal["amps"]), "CY")
     a.out.mkdir(parents=True, exist_ok=True)
     clips = {"808": _trim(ref), "shipped": _trim(ship), "candidate": _trim(cand)}

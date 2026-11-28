@@ -191,7 +191,11 @@ def main(argv=None) -> int:
         a.out.write_text(json.dumps(res, indent=1) + "\n")
         return 0
     if a.explain is not None:
-        res = {v: explain(v) for v in (a.explain or ["LT", "MT", "MC", "HC"])}
+        try:
+            res = {v: explain(v) for v in (a.explain or ["LT", "MT", "MC", "HC"])}
+        except refusal.Refused as e:
+            print(f"REFUSED: {e}")
+            return 2
         print(json.dumps(res, indent=1))
         a.out.parent.mkdir(parents=True, exist_ok=True)
         a.out.write_text(json.dumps(res, indent=1) + "\n")

@@ -48,6 +48,7 @@ import sys
 
 import numpy as np
 from scipy.io import wavfile
+import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
@@ -138,3 +139,29 @@ def test_unreadable_reference_is_an_execution_error_not_a_refusal(tmp_path):
     assert p.returncode == 1, (p.returncode, p.stdout[-200:], p.stderr[-400:])
     assert "Traceback" in p.stderr, p.stderr[-400:]
     assert "REFUSED" not in p.stdout, "a scipy ValueError must not be relabelled a refusal"
+
+
+# ---------------------------------------------------------------------------
+# #1685: `--explain` calls `explain(v)` before main's guard, and `run_case.prepare`
+# inside it has no handler on that path. In-process, so the callee is the only
+# thing stubbed and the printed reason can be read back.
+# ---------------------------------------------------------------------------
+def test_explain_a_prepare_refusal_exits_refused_2_no_report(tmp_path, monkeypatch, capsys):
+    def refusing(*a, **k):
+        raise rc.Refused("<control> prepare refused under --explain")
+    monkeypatch.setattr(rc, "prepare", refusing)
+    out = tmp_path / "explain.json"
+    code = ptn.main(["--out", str(out), "--explain", "LT"])
+    assert code == exit_contract.REFUSED, (code, capsys.readouterr().out[-400:])
+    text = capsys.readouterr().out
+    assert "REFUSED" in text and "<control> prepare refused under --explain" in text, text[-400:]
+    assert not out.exists(), "a refused run must not write its report"
+
+
+def test_explain_control_an_unrelated_prepare_error_still_propagates(tmp_path, monkeypatch, capsys):
+    def broken(*a, **k):
+        raise ValueError("<control> the decay fit is not a number")
+    monkeypatch.setattr(rc, "prepare", broken)
+    with pytest.raises(ValueError, match="the decay fit is not a number"):
+        ptn.main(["--out", str(tmp_path / "explain.json"), "--explain", "LT"])
+    assert "REFUSED" not in capsys.readouterr().out

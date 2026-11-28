@@ -262,3 +262,41 @@ def test_a_non_refusal_error_is_not_relabelled_refused(modname, first_called, tm
         ValueError("an implementation error, not a precondition")))
     with pytest.raises(ValueError, match="an implementation error"):
         mod.main(argv)
+
+
+# ---------------------------------------------------------------------------
+# #1685: `rc.render_drum_solo("CY")` sat after both of main's tries, so a
+# refusal from the fixed-model render left `main` uncaught. The corpus here is
+# NOT silent, so the precondition above it passes and only the callee refuses.
+# ---------------------------------------------------------------------------
+def test_make_cymbal_pack_refuses_when_the_fixed_model_render_refuses(tmp_path, capsys, monkeypatch):
+    import make_cymbal_pack as mp
+
+    monkeypatch.setattr(mp.ev, "calibrate", lambda: {"amps": {}})
+
+    def refusing(sound, *a, **k):
+        raise mp.rc.Refused("<control> the fixed-model CY render refused")
+    monkeypatch.setattr(mp.rc, "render_drum_solo", refusing)
+    refs = _refs_dir(tmp_path, _write_onset_cut, "CY5025.WAV")
+    pack = tmp_path / "pack"
+    rc_ = mp.main(["--refs", str(refs), "--out", str(pack)])
+    assert rc_ == exit_contract.REFUSED
+    err = capsys.readouterr().err
+    assert "REFUSED:" in err and "<control> the fixed-model CY render refused" in err, err
+    assert not pack.exists(), "a refused run must not write the pack"
+
+
+def test_make_cymbal_pack_control_an_unrelated_render_error_still_propagates(tmp_path, capsys, monkeypatch):
+    """The input that defeats the wrong repair: `except Exception` relabels an
+    implementation error REFUSED, and this is the control that goes red."""
+    import make_cymbal_pack as mp
+
+    monkeypatch.setattr(mp.ev, "calibrate", lambda: {"amps": {}})
+    refs = _refs_dir(tmp_path, _write_onset_cut, "CY5025.WAV")
+
+    def broken(sound, *a, **k):
+        raise ValueError("<control> the render grid is not a number")
+    monkeypatch.setattr(mp.rc, "render_drum_solo", broken)
+    with pytest.raises(ValueError, match="the render grid is not a number"):
+        mp.main(["--refs", str(refs), "--out", str(tmp_path / "pack")])
+    assert "REFUSED" not in capsys.readouterr().err

@@ -611,7 +611,11 @@ def main(argv=None) -> int:
     ap.add_argument("--jobs", type=int, default=min(8, os.cpu_count() or 1))
     ap.add_argument("--known-answer-only", action="store_true")
     a = ap.parse_args(argv)
-    ka = known_answer()
+    try:
+        ka = known_answer()
+    except refusal.Refused as e:
+        print(f"REFUSED: {e}")
+        return 2
     print(f"known answer: {'PASS' if ka['ok'] else 'FAIL'} "
           f"({len(ka['cases'])} signals, {sum(len(r['mutants']) for r in ka['cases'])} mutant runs)")
     if a.known_answer_only:
