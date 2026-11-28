@@ -45,6 +45,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 import manifest as mf                                                # noqa: E402
 import measure_mono_m1a_reference as m1a  # noqa: E402
+import refusal  # noqa: E402
 
 ref = m1a.ref
 am = ref.am
@@ -257,17 +258,46 @@ def _git(*args):
     return subprocess.check_output(["git", *args], cwd=ROOT, text=True).strip()
 
 
+def _read_frozen_wav(path):
+    """A frozen reference WAV, or a refusal that names it: scipy answers a
+    file it cannot parse with ValueError, which is not a refusal class, and a
+    damaged tracked record is an unmet precondition, not a FAIL (#1985)."""
+    try:
+        return wavfile.read(path)
+    except ValueError as exc:
+        raise Refused(f"frozen reference {path.name} is not a readable WAV: {exc}") from exc
+
+
+def _render(*args, **kwargs):
+    """`m1a.render`, with the rig's own refusal stated as one.
+
+    `MiniV3Rig.__init__` refuses a changed plugin with RuntimeError --
+    `_qualify_pins` ("unchanged contract: RuntimeError on mismatch") and
+    `check_names` ("parameter indices moved"), model/reference_rigs.py -- and
+    `m1a.render` builds the rig directly, without `_render_segment`'s
+    `except Exception -> Refused`. That is the one place this capture meets a
+    RuntimeError that is a refusal, so it is converted here and `main`'s
+    handler carries no RuntimeError: one raised anywhere else in the capture
+    is an execution error (#1985)."""
+    try:
+        return m1a.render(*args, **kwargs)
+    except ref.Refused:
+        raise
+    except RuntimeError as exc:
+        raise Refused(f"Mini V3 apparatus refused: {exc}") from exc
+
+
 def reproduce_frozen(manifest):
     """Precondition 2: the frozen phrase and both isolated controls, bit-exact."""
     rows = []
-    audio, _ = m1a.render()
+    audio, _ = _render()
     for r in manifest["renders"]:
-        rate, frozen = wavfile.read(FROZEN / r["file"])
+        rate, frozen = _read_frozen_wav(FROZEN / r["file"])
         same = rate == ref.SR and np.array_equal(np.asarray(audio, dtype=np.float32), frozen)
         rows.append({"file": r["file"], "bit_exact": bool(same)})
     for label, overrides in (("osc1_open", CONDITIONS["osc1_open"]), ("osc2_open", CONDITIONS["osc2_open"])):
-        audio, _ = m1a.render(overrides)
-        rate, frozen = wavfile.read(FROZEN / manifest["controls"][label]["file"])
+        audio, _ = _render(overrides)
+        rate, frozen = _read_frozen_wav(FROZEN / manifest["controls"][label]["file"])
         same = rate == ref.SR and np.array_equal(np.asarray(audio, dtype=np.float32), frozen)
         rows.append({"file": manifest["controls"][label]["file"], "bit_exact": bool(same)})
     bad = [r["file"] for r in rows if not r["bit_exact"]]
@@ -282,7 +312,7 @@ def main():
         dirty = _git("status", "--porcelain", "--", *TOOL_FILES)
         if dirty:
             raise Refused("commit the capture instrument before capturing:\n" + dirty)
-        manifest = json.loads((FROZEN / "manifest.json").read_text())
+        manifest = mf.load_json_refused(FROZEN / "manifest.json", "the frozen manifest")
         mf.require_keys(manifest, ("sample_rate_hz", "block_size_samples", "identity"),
                         f"the frozen manifest at {FROZEN / 'manifest.json'}", refused=Refused)
         if manifest["sample_rate_hz"] != ref.SR or manifest["block_size_samples"] != ref.BLOCK:
@@ -302,7 +332,7 @@ def main():
             audio_by = {}
             rows = {}
             for condition, overrides in CONDITIONS.items():
-                audio, apparatus = m1a.render(overrides, events_for(on_s), seconds_for(on_s))
+                audio, apparatus = _render(overrides, events_for(on_s), seconds_for(on_s))
                 got = {k: tuple(v) for k, v in apparatus["settings"].items()}
                 want = expected_settings(manifest, condition)
                 if got != want:
@@ -349,7 +379,18 @@ def main():
         (OUT / "refused.json").unlink(missing_ok=True)
         print("CAPTURED")
         return 0
-    except (ref.Refused, OSError, ValueError, RuntimeError) as exc:
+    except (refusal.Refused, OSError) as exc:
+        # refusal.Refused is the base class: a refusal raised by any module on
+        # this path -- this file's, the render module's, manifest's -- is
+        # caught here. OSError is kept for one reason: the frozen record, the
+        # plugin bundle and the instrument files are read by path inside this
+        # block, and a missing one is a missing precondition. Nothing else is
+        # caught (#1985): a ValueError or RuntimeError from a bug in the
+        # capture is an execution error. The ones that ARE refusals -- a rig
+        # that will not build, a frozen record that will not parse -- are
+        # converted where they arise (_render, _read_frozen_wav,
+        # mf.load_json_refused). Residual: a failed write under OUT also
+        # arrives here as an OSError.
         (OUT / "refused.json").write_text(json.dumps({"state": "REFUSED", "reason": str(exc)}, indent=1) + "\n")
         print(f"REFUSED: {exc}")
         return 2
