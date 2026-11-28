@@ -180,6 +180,7 @@ import drum_verify as dv                                             # noqa: E40
 import holdout                                                       # noqa: E402
 import i2s_transcript                                                # noqa: E402
 import refprofile as rp                                              # noqa: E402
+import refusal                                                       # noqa: E402
 import mono_m5a_score as mono_m5a                                    # noqa: E402
 import provenance                                                    # noqa: E402
 import partial_trajectory as PT                                      # noqa: E402
@@ -4355,14 +4356,23 @@ def _measure_case(case: dict, refdir: pathlib.Path, inject: str = "",
         base["note"] = "REFUSED: this runner has no plan for this case."
         base["metrics"] = {m: invalid_metric("", "no measurement plan") for m in required}
         return base
-    except (Refused, rp.Refused, mono_m5a.Refused) as e:
+    except refusal.Refused as e:
+        # Any module's refusal, by class (tools/refusal.py): the tuple this
+        # replaced named three families, and a fourth fell to the guard below.
         base["note"] = f"REFUSED: {e}"
         base["metrics"] = {m: invalid_metric("", str(e)) for m in required}
         if inject:
             base["INJECTED_CONTROL"] = inject
         return base
-    except Exception as e:                       # pragma: no cover - guard
-        base["note"] = f"REFUSED: {type(e).__name__}: {e}"
+    except Exception as e:
+        # An unexpected exception is an EXECUTION ERROR (plan090,
+        # tools/refusal.py), never a refusal: a bug in a case's measurement
+        # must not read as a missing precondition. The handler stays total --
+        # one case's crash must not abandon the cases after it, and the record
+        # carries the traceback -- but files the error under its own label.
+        # The board still reads it as no verdict, since the metrics are
+        # invalid, and `main()` still exits 2: nothing was measured (#1777).
+        base["note"] = f"EXECUTION ERROR: {type(e).__name__}: {e}"
         base["traceback"] = traceback.format_exc(limit=6)
         base["metrics"] = {m: invalid_metric("", f"{type(e).__name__}: {e}")
                            for m in required}
