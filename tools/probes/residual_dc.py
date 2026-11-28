@@ -2,7 +2,7 @@
 """Residual drum DC coupling: which non-cymbal voices carry a defect? (#152)
 
     python3 tools/probes/residual_dc.py --declared      the limits + frozen conditions
-    python3 tools/probes/residual_dc.py --controls      MOVED/BLIND: properties x defects
+    python3 tools/probes/residual_dc.py --controls      MOVED/BLIND matrix: properties x defects (REFUSED cell: exit 2)
     python3 tools/probes/residual_dc.py --reference     what an external recording can say
     python3 tools/probes/residual_dc.py --screen  [--condition dev|confirm] [--voices A,B] [--rows-out F.json]
     python3 tools/probes/residual_dc.py --verdict DEV.json CONFIRM.json   per-subject ending (subject_verdict)
@@ -69,6 +69,7 @@ sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
 
 from finite_number import is_finite_number  # noqa: E402
+import exit_contract  # noqa: E402
 import run_case as rc  # noqa: E402
 _REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
 if _REFUSAL_TOOLS not in sys.path:
@@ -504,28 +505,106 @@ PROPERTIES = (
 )
 
 
-def controls_matrix():
-    """{defect name: {property: MOVED|BLIND}} plus the clean row. MOVED = the
-    property turned red under the defect (the control did its job)."""
-    rows = {"(clean)": {n: ("ok" if f(REAL) else "RED") for n, f in PROPERTIES}}
-    for M in MUTANTS:
-        est = M()
-        row = {}
-        for n, f in PROPERTIES:
-            try:
-                ok = f(est)
-            except Refused:
-                ok = False
-            row[n] = "blind" if ok else "MOVED"
-        rows[M.name] = row
+class Cell(str):
+    """One cell of a controls matrix: "ok" | "RED" | "blind" | "MOVED" | "REFUSED".
+    A str, so it compares, prints and serialises as the bare word; a REFUSED cell
+    also carries `reason`, because a refusal here names its reason."""
+
+    __slots__ = ("reason",)
+
+    def __new__(cls, word, reason=""):
+        c = super().__new__(cls, word)
+        c.reason = reason
+        return c
+
+
+def _reason(v):
+    return getattr(v, "reason", "")
+
+
+def _cell(f, est, clean=False):
+    """One cell: the property `f` run against the estimator `est`.
+
+    clean row    "ok" | "RED"        the real apparatus holds | fails the property
+    defect row   "blind" | "MOVED"   holds under the defect | turned red under it
+    either       "REFUSED"           `f` raised `Refused`: under this estimator the
+                                     apparatus did not answer, so nothing was measured
+
+    A refusal is neither MOVED nor blind (#1785). REFUSED is no evidence
+    (`tools/exit_contract.py`) and MOVED asserts a measurement that did not
+    happen. WHAT THIS CANNOT SEE: a refusal `classify` hands back as its REFUSED
+    *label* never raises, so a property comparing that label reads as measured.
+    That path is live in one cell on the shipped tree, is pinned by
+    `test_the_one_refusal_still_rendered_moved_is_the_pinned_label_path`,
+    and is tracked as #1811."""
+    try:
+        ok = bool(f(est))
+    except Refused as e:
+        return Cell("REFUSED", str(e))
+    return Cell(("ok" if clean else "blind") if ok else ("RED" if clean else "MOVED"))
+
+
+def _matrix(properties, mutants, real):
+    """The clean row, then one row per injected defect, every cell from `_cell`.
+    Both apparatuses' matrices are built here: the refusal fold used to be the
+    same five lines pasted into each."""
+    rows = {"(clean)": {n: _cell(f, real, clean=True) for n, f in properties}}
+    for M in mutants:
+        rows[M.name] = {n: _cell(f, M()) for n, f in properties}
     return rows
 
 
+def controls_matrix():
+    """{defect name: {property: cell}} plus the clean row, for the class
+    estimator. MOVED = the property turned red under the defect, by measurement;
+    a REFUSED cell is the estimator refusing to answer and is never a detection."""
+    return _matrix(PROPERTIES, MUTANTS, REAL)
+
+
 def print_matrix(rows):
-    names = [n for n, _ in PROPERTIES]
-    print("%-40s" % "defect \\ property" + " ".join("%-20s" % n for n in names))
+    names = list(next(iter(rows.values())))
+    width = max(40, max(len(d) for d in rows) + 1)
+    print("%-*s" % (width, "defect \\ property") + " ".join("%-20s" % n for n in names))
     for d, r in rows.items():
-        print("%-40s" % d + " ".join("%-20s" % r[n] for n in names))
+        print("%-*s" % (width, d) + " ".join("%-20s" % r[n] for n in names))
+    for d, r in rows.items():
+        for n in names:
+            if r[n] == "REFUSED":
+                print(f"REFUSED  {d} / {n}: measured nothing ({_reason(r[n])}); not MOVED, not blind")
+
+
+def controls_status(rows):
+    """(exit status, lines) for a controls matrix, by `tools/exit_contract`:
+
+        FAIL      the real apparatus turns a property RED, or an injected defect was
+                  ANSWERED by every property and moved none
+        REFUSED   any cell is REFUSED and nothing measured failed
+        PASS      every defect moved by a measured cell and the clean row is ok
+
+    FAIL outranks REFUSED. FAIL is a result and REFUSED the absence of one;
+    `tools/run_all.py` reports REFUSED as NO-VERDICT, and a measured failure must
+    never reach a runner under that name. A REFUSED cell is not a MOVED: a defect
+    whose cells only refused or were blind has not been shown caught, and has not
+    been shown blind either -- no verdict on it, which is exit 2 and not 1.
+    Whether a refusing property should COUNT as a catch is #1566's question and
+    is not decided here.
+
+    NOT WIRED to any exit for the floor matrix, on purpose: its shipped state
+    holds one by-design REFUSED cell (`WrongGain` / `window-shared` -- the
+    identity guard refuses the wrong-gain row before any window exists), so it
+    would stand at REFUSED for good."""
+    clean = rows["(clean)"]
+    red = [n for n, v in clean.items() if v == "RED"]
+    bad = [d for d, r in rows.items() if d != "(clean)"
+           and "MOVED" not in r.values() and "REFUSED" not in r.values()]
+    refused = [(d, n, _reason(v)) for d, r in rows.items() for n, v in r.items() if v == "REFUSED"]
+    lines = [f"FAIL  the real apparatus fails {', '.join(red)}"] if red else []
+    lines += [f"FAIL  {d}: answered by every property and moved none" for d in bad]
+    lines += [f"REFUSED  {d} / {n}: measured nothing ({why}); not MOVED, not blind"
+              for d, n, why in refused]
+    if red or bad:
+        return exit_contract.FAIL, lines
+    return (exit_contract.REFUSED if refused else exit_contract.PASS), lines
 
 
 # ===========================================================================
@@ -1412,11 +1491,16 @@ def p_identity_guard_fires(est):
     is REFUSED on the identity guard, not measured. The probe under test is
     composed with the wrong-gain mutant, so a stubbed identity
     (`IdentityAlwaysOk`) is caught here: the doctored accumulator sails
-    through and the property reads an OK row where only a refusal may be."""
+    through and the property reads an OK row where only a refusal may be.
+    A row refused BEFORE the guard is reached (the window, a render) says
+    nothing about the guard: Refused, not a measured False (#1785)."""
     base = type(est)
     doctored = (est if base is WrongGain
                 else type("_Doctored", (WrongGain, base), {})())
     row = _floor_row_probe(doctored)
+    if row["status"] == "REFUSED" and "identity" not in row["reason"]:
+        raise Refused(f"the doctored row was refused before the identity guard was reached: "
+                      f"{row['reason']}")
     return row["status"] == "REFUSED" and "identity" in row["reason"]
 
 
@@ -1446,12 +1530,20 @@ def p_clip_counts(est):
     return bool(np.all(f[[0, 1, 2, 3]] == x[[0, 1, 2, 3]]))
 
 
+def _measured_row(est):
+    """The full row path under `est` as a row a property may READ. One the
+    apparatus REFUSED is not: raised as `Refused` with the row's own reason, so
+    the controls matrix records REFUSED and never MOVED (#1785)."""
+    row = _floor_row_probe(est)
+    if row["status"] != "OK":
+        raise Refused(row["reason"])
+    return row
+
+
 def p_window_shared(est):
     """The row's window is the baseline's onset window, once (an independent
     onset measures a different population and must be caught)."""
-    row = _floor_row_probe(est)
-    if row["status"] != "OK":
-        return False
+    row = _measured_row(est)
     _, out, _ = render_bus("CH", 0, **CONDITIONS["dev"])
     i0 = onset_index(out)
     return row["window"] == [i0, i0 + int(round(ANALYSIS_S * 48000.0))]
@@ -1469,20 +1561,9 @@ FLOOR_PROPERTIES = (
 
 
 def floor_controls_matrix():
-    """{defect: {property: MOVED|BLIND}} for the output-floor apparatus, plus
-    the clean row. Same contract as `controls_matrix`."""
-    rows = {"(clean)": {n: ("ok" if f(REAL_FLOOR) else "RED") for n, f in FLOOR_PROPERTIES}}
-    for M in FLOOR_MUTANTS:
-        est = M()
-        row = {}
-        for n, f in FLOOR_PROPERTIES:
-            try:
-                ok = f(est)
-            except Refused:
-                ok = False
-            row[n] = "blind" if ok else "MOVED"
-        rows[M.name] = row
-    return rows
+    """{defect: {property: cell}} for the output-floor apparatus, plus the clean
+    row. Same contract as `controls_matrix`: a REFUSED cell is never a MOVED."""
+    return _matrix(FLOOR_PROPERTIES, FLOOR_MUTANTS, REAL_FLOOR)
 
 
 ORACLE_FIXTURES = (
@@ -1943,8 +2024,10 @@ def main(argv=None):
     if a.controls:
         rows = controls_matrix()
         print_matrix(rows)
-        bad = [d for d, r in rows.items() if d != "(clean)" and "MOVED" not in r.values()]
-        return 1 if bad or any(v == "RED" for v in rows["(clean)"].values()) else 0
+        status, why = controls_status(rows)
+        for w in why:
+            print(w)
+        return status
     if a.reference:
         g = reference_gate()
         print(json.dumps(g, indent=1))

@@ -702,16 +702,267 @@ class _NoIntervention(R.FloorProbe):
         return self.floor(acc)
 
 
-def test_start_red_the_no_intervention_stub_fails_the_property_set():
-    stub = _NoIntervention()
+def _start_red_control(stub):
+    """Start red through the reporting path: the apparatus with NO intervention
+    must FAIL the property set, by MEASUREMENT. A property that REFUSED has not
+    failed -- the loop used to read `except Refused` as one more failed property."""
     assert not R.p_oracle_fixture_floor(stub)          # the intended failed assertion
-    ok = {}
-    for n, f in R.FLOOR_PROPERTIES:
-        try:
-            ok[n] = bool(f(stub))
-        except R.Refused:
-            ok[n] = False
-    assert not all(ok.values()), ok
+    cells = {n: R._cell(f, stub) for n, f in R.FLOOR_PROPERTIES}
+    assert cells["oracle-fixture"] == "MOVED", cells   # measured, never a refusal
+    assert "REFUSED" not in cells.values(), cells
+
+
+def test_start_red_the_no_intervention_stub_fails_the_property_set():
+    _start_red_control(_NoIntervention())
+
+
+# ==== #1785: a property that REFUSES under a defect is REFUSED, never MOVED ========
+# `tools/exit_contract.py`: REFUSED (2) means a precondition was not met and
+# nothing was measured. Both matrices used to fold `except Refused` into
+# `ok = False`, and False into MOVED -- "the property turned red under the
+# defect" -- so an estimator that would not answer was credited as a detection.
+# Three doors by which a refusal reaches a cell:
+#
+#   raised   the property calls the estimator directly and it raises
+#   status   the row path answers REFUSED and a property that READS the row
+#            turned `status != "OK"` into False        (output-floor apparatus)
+#   label    `classify` catches the raise and answers its REFUSED *label*; a
+#            property comparing that label returns a plain False
+#
+# The first two are repaired here. The third is indistinguishable from a
+# measurement by `_cell`; it is live in one cell and pinned near the end of
+# this block.
+DIRECT = ("lead-silence", "tail-pad")       # the properties that call est.stats themselves
+
+
+def _old_fold(f, est):
+    """The five lines both matrices ran before #1785, kept as the start-red:
+    the refusal became False and False became MOVED."""
+    try:
+        ok = f(est)
+    except R.Refused:
+        ok = False
+    return "blind" if ok else "MOVED"
+
+
+class _RefusingEstimator(R.Estimator):
+    """Will not answer on the direct path (`est.stats` raises)."""
+
+    name = "estimator that refuses (stub)"
+
+    def stats(self, x, sr, fc):
+        raise R.Refused("stub: the estimator refuses")
+
+
+class _RefusingWindow(R.FloorProbe):
+    """No row gets past the window, so a property that READS a row has nothing
+    to read. The hand fixtures still measure."""
+
+    name = "floor probe whose window refuses (stub)"
+
+    def window(self, i0, n_avail):
+        raise R.Refused("stub: the window refuses")
+
+
+class _RefusesEverywhere(R.FloorProbe):
+    name = "floor probe that refuses everywhere (stub)"
+
+    def floor(self, acc):
+        raise R.Refused("stub: floor refuses")
+
+    def exact(self, acc):
+        raise R.Refused("stub: exact refuses")
+
+    window = _RefusingWindow.window
+
+
+class _NoInterventionRefusingWindow(_NoIntervention):
+    """The start-red control's own adversary: the hand fixtures still MEASURE
+    exact := floor, and every row REFUSES at the window."""
+
+    name = "no-intervention stub whose window refuses"
+
+    window = _RefusingWindow.window
+
+
+@pytest.mark.parametrize("name", DIRECT)
+def test_a_property_the_estimator_refuses_to_is_a_refused_cell_not_moved(monkeypatch, name):
+    """The `raised` door. The row's OTHER non-blind cells read MOVED through the
+    label door, which is not repaired here (the pin at the end of this block)."""
+    monkeypatch.setattr(R, "MUTANTS", (_RefusingEstimator,))
+    row = R.controls_matrix()[_RefusingEstimator.name]
+    assert row[name] == "REFUSED", row
+    assert _old_fold(dict(R.PROPERTIES)[name], _RefusingEstimator()) == "MOVED"      # what the matrix said
+
+
+def test_controls_exits_2_not_0_when_a_defect_is_caught_by_refusals_alone(monkeypatch, capsys):
+    """The headline, end to end: `--controls` used to exit 0 for a stub whose
+    properties REFUSE, every refusal read as a detection."""
+    monkeypatch.setattr(R, "PROPERTIES", tuple(p for p in R.PROPERTIES if p[0] in DIRECT))
+    monkeypatch.setattr(R, "MUTANTS", (_RefusingEstimator,))
+    assert R.main(["--controls"]) == 2
+    out = capsys.readouterr().out
+    row = next(ln for ln in out.splitlines() if ln.startswith(_RefusingEstimator.name))
+    assert row.count("REFUSED") == 2 and "MOVED" not in row, out
+    assert "stub: the estimator refuses" in out, out         # legible: the cell names its reason
+
+
+_N1, _N2 = [n for n, _ in R.PROPERTIES[:2]]
+_REST = [n for n, _ in R.PROPERTIES[2:]]
+
+
+def _rows(clean, *defects):
+    """A hand-built matrix over every property: the first two carry `cells`, the
+    rest are untouched (ok on the clean row, blind under a defect). All nine
+    names, so that the tree before #1785 prints it too and the start-red is
+    about the exit alone."""
+    def row(cells, filler):
+        return dict(zip((_N1, _N2), cells), **{n: filler for n in _REST})
+
+    out = {"(clean)": row(clean, "ok")}
+    for name, cells in defects:
+        out[name] = row(cells, "blind")
+    return out
+
+
+@pytest.mark.parametrize("rows,status", [
+    (_rows(("ok", "ok"), ("d", ("REFUSED", "blind"))), 2),            # caught by nothing, not measured blind
+    (_rows(("ok", "ok"), ("d", ("MOVED", "REFUSED"))), 2),            # caught, but the matrix has a hole
+    (_rows(("ok", "ok"), ("d", ("REFUSED", "REFUSED"))), 2),          # every property refuses for one defect
+    (_rows(("REFUSED", "ok"), ("d", ("MOVED", "blind"))), 2),         # the clean row itself refused
+    (_rows(("ok", "ok"), ("d", ("blind", "blind"))), 1),              # answered by all, moved none: measured
+    (_rows(("ok", "ok"), ("d", ("REFUSED", "blind")), ("unseen", ("blind", "blind"))), 1),
+    (_rows(("RED", "ok"), ("d", ("REFUSED", "blind"))), 1),           # a measured FAIL outranks a REFUSED
+    (_rows(("RED", "REFUSED"), ("d", ("MOVED", "blind"))), 1),
+    (_rows(("ok", "ok"), ("d", ("MOVED", "blind"))), 0),
+], ids=["refused-only", "moved-and-refused", "all-refuse", "clean-refused", "measured-blind",
+        "refused-beside-measured-blind", "red-outranks-refused", "clean-red-and-refused", "pass"])
+def test_controls_exit_precedence_fail_then_refused_then_pass(monkeypatch, rows, status):
+    """`tools/exit_contract.py`: FAIL (1) is a result and REFUSED (2) the absence
+    of one, and tools/run_all.py reports 2 as NO-VERDICT -- so a measured failure
+    must never be handed to a runner under that name. A REFUSED cell is never a
+    MOVED: a defect whose cells only refused or were blind is no verdict on it
+    (2), not a measured failure (1)."""
+    monkeypatch.setattr(R, "controls_matrix", lambda: rows)
+    assert R.main(["--controls"]) == status
+
+
+def test_a_floor_property_the_probe_refuses_to_is_a_refused_cell_not_moved(monkeypatch):
+    monkeypatch.setattr(R, "FLOOR_MUTANTS", (_RefusesEverywhere,))
+    props = dict(R.FLOOR_PROPERTIES)
+    want = {n: ("blind" if n == "no-bias-possible" else "REFUSED") for n in props}     # it never consults the probe
+    assert R.floor_controls_matrix()[_RefusesEverywhere.name] == want
+    old = {n: _old_fold(f, _RefusesEverywhere()) for n, f in props.items()}
+    assert old == {n: ("blind" if n == "no-bias-possible" else "MOVED") for n in props}, old   # what it said
+
+
+def test_a_property_that_reads_a_refused_row_is_refused_not_moved(monkeypatch):
+    """The `status` door. Under this stub the hand fixtures still measure, so the
+    only cells that are not blind are the two properties that READ a row."""
+    monkeypatch.setattr(R, "FLOOR_MUTANTS", (_RefusingWindow,))
+    row = R.floor_controls_matrix()[_RefusingWindow.name]
+    assert row["window-shared"] == "REFUSED" and row["identity-guard-fires"] == "REFUSED", row
+    assert "MOVED" not in row.values() and row["oracle-fixture"] == "blind", row
+
+
+def test_the_wrong_gain_window_shared_cell_was_a_refusal_credited_as_a_detection():
+    """Live on the tree as shipped, and after #1785 the only REFUSED cell in
+    either shipped matrix: the wrong-gain row is REFUSED by the identity guard
+    before any window exists, so `window-shared` never measured one -- and read
+    MOVED. The defect is still caught, by a MEASURED cell. By design that cell
+    can never be measured under this mutant, so the floor matrix stands at
+    `controls_status` REFUSED; no CLI exit reads it, and wiring one would be a
+    gate that cannot pass."""
+    rows = R.floor_controls_matrix()
+    assert [(d, n) for d, r in rows.items() for n, v in r.items() if v == "REFUSED"] == [
+        (R.WrongGain.name, "window-shared")], rows
+    row = rows[R.WrongGain.name]
+    assert "identity FAILED" in row["window-shared"].reason, row
+    assert row["production-identity"] == "MOVED", row
+    assert R.controls_status(rows)[0] == 2
+
+
+def test_the_floor_matrix_can_be_printed(capsys):
+    """`print_matrix` read its columns off PROPERTIES, so the floor matrix -- the
+    one holding a REFUSED cell on the shipped tree -- raised KeyError."""
+    R.print_matrix(R.floor_controls_matrix())
+    lines = capsys.readouterr().out.splitlines()
+    row = next(ln for ln in lines if ln.startswith(R.WrongGain.name))
+    assert "window-shared" in lines[0] and "REFUSED" in row, lines
+    assert any(ln.startswith("REFUSED") and R.WrongGain.name in ln for ln in lines), lines
+
+
+def test_the_floor_report_carries_refused_cells_through_unchanged(tmp_path, monkeypatch):
+    """A downstream reader of `controls=` must not see a refusal as MOVED: the
+    cell survives `_jsonable` and JSON as the bare word."""
+    monkeypatch.setattr(R, "FLOOR_MUTANTS", R.FLOOR_MUTANTS + (_RefusingWindow,))
+    dev = _frec("dev", [_frow("CH"), _frow("RS", diff_sum=0)])
+    con = _frec("confirm", [_frow("CH"), _frow("RS", diff_sum=0)])
+    out = tmp_path / "report.json"
+    assert R.main(["--floor-verdict", *_write(tmp_path, dev, con), "--rows-out", str(out)]) == 0
+    ctl = json.loads(out.read_text())["controls"]
+    assert ctl[_RefusingWindow.name]["window-shared"] == "REFUSED"
+    assert ctl[R.WrongGain.name]["window-shared"] == "REFUSED"
+    assert all(type(v) is str for r in ctl.values() for v in r.values())
+
+
+def test_the_start_red_control_fails_loudly_when_a_property_refuses():
+    """Rule 8: the control's own adversary. `_NoIntervention` passes it. The same
+    stub with a window that refuses passed the OLD control too, its two refusals
+    counted among the failed properties (the pass did not rest on them: the
+    oracle's measured False was already one). A stub that RAISES everywhere
+    never passed it -- line one runs the oracle property first and errors."""
+    _start_red_control(_NoIntervention())
+    old = {n: _old_fold(f, _NoInterventionRefusingWindow()) for n, f in R.FLOOR_PROPERTIES}
+    assert old["window-shared"] == "MOVED" and old["identity-guard-fires"] == "MOVED", old    # what it said
+    with pytest.raises(AssertionError) as e:
+        _start_red_control(_NoInterventionRefusingWindow())
+    assert "REFUSED" in str(e.value), e.value
+
+
+def test_controls_on_the_shipped_tree_exits_0():
+    """`--controls` on the tree as shipped: exit 0, and no cell of the class
+    matrix REFUSED. That PASS still rests on one refusal read as a MOVED -- the
+    label-door cell pinned just below, `fixed 48 kHz bin map`'s only catch."""
+    assert R.main(["--controls"]) == 0
+    rows = R.controls_matrix()
+    assert not [(d, n) for d, r in rows.items() for n, v in r.items() if v == "REFUSED"]
+
+
+def _label_refusal_cells(monkeypatch):
+    """(defect, property) cells where `classify` answered REFUSED and the property
+    returned False: the matrix says MOVED for a refusal that never raised."""
+    real, seen, cur = R.classify, [], {"est": None, "prop": None}
+
+    def spy(x, sr, fc, est=R.REAL):
+        label, detail = real(x, sr, fc, est)
+        if label == "REFUSED":
+            seen.append((cur["est"], cur["prop"]))
+        return label, detail
+
+    monkeypatch.setattr(R, "classify", spy)
+    out = []
+    for M in R.MUTANTS:
+        for n, f in R.PROPERTIES:
+            cur["est"], cur["prop"], seen[:] = M.name, n, []
+            if not f(M()) and seen:
+                out.append((M.name, n))
+    return out
+
+
+def test_the_one_refusal_still_rendered_moved_is_the_pinned_label_path(monkeypatch):
+    """WHAT #1785 DOES NOT REPAIR, measured and pinned (verification-rules rule
+    8, form 2). A refusal through the `label` door returns a plain False, which
+    `_cell` can only read as a measurement. On the shipped tree that is exactly
+    one cell, and it is that defect's ONLY non-blind cell: `fixed 48 kHz bin map`
+    is credited as caught through a refusal ('only 0.40 s after the onset, 2.00 s
+    declared'). Relabelling it REFUSED leaves the defect caught by nothing,
+    which is #1566's question (does a refusing control count as caught?) and
+    needs a property that catches it by MEASUREMENT (at 96 kHz the defect
+    leaves the class alone and halves the window: `stats["n"]` 96 000 against
+    192 000). Tracked as #1811. A second such cell is this issue's defect
+    arriving by the other door: the pin goes red so it is seen."""
+    assert _label_refusal_cells(monkeypatch) == [("fixed 48 kHz bin map", "sample-rate")]
 
 
 # -- the oracle: hand table (every class the issue names) + an independent sweep ----
