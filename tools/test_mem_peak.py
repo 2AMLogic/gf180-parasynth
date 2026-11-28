@@ -125,14 +125,26 @@ def test_the_peak_is_the_sum_across_a_tree_not_its_largest_process():
     assert got <= 400, (got, r.stderr)
 
 
+def samples_and_wall(stderr: str) -> tuple[int, float]:
+    line = [l for l in stderr.splitlines() if l.startswith("[mem] peak")][0]
+    return int(line.split("samples ")[1].split()[0]), float(line.split("wall ")[1].rstrip("s"))
+
+
 def test_samples_scale_with_the_child_lifetime_and_do_not_spin():
-    """0.5 s at a 0.05 s interval is about ten samples. Too few and the sampler
-    slept through the run; many more and it is a busy loop stealing a core from
-    the very thing it measures."""
-    r = wrap(sys.executable, "-c", "import time; time.sleep(0.5)", interval="0.05")
-    n = int([l for l in r.stderr.splitlines() if l.startswith("[mem] peak")][0]
-            .split("samples ")[1].split()[0])
-    assert 8 <= n <= 20, (n, r.stderr)
+    """Sampling is periodic, and the proof is a RATIO, not a count: a child
+    three times as long must draw about three times the samples, in whatever
+    load the two share. The first form of this control pinned 8..20 samples
+    for half a second and failed with 7 under `pytest tools/ -n 8` on a
+    4-vCPU runner (docs/ci-tools-xdist-measurement-2026-11-28.md): a
+    wall-clock bound calibrated on an idle host, which is the defect class
+    that document records."""
+    short = wrap(sys.executable, "-c", "import time; time.sleep(0.6)", interval="0.05")
+    long = wrap(sys.executable, "-c", "import time; time.sleep(1.8)", interval="0.05")
+    n_s, _ = samples_and_wall(short.stderr)
+    n_l, w_l = samples_and_wall(long.stderr)
+    assert n_s >= 3, (n_s, short.stderr)                 # some sampling happened
+    assert n_l >= 2 * n_s, (n_s, n_l, long.stderr)       # and it tracks the lifetime
+    assert n_l <= 1.25 * (w_l / 0.05), (n_l, long.stderr)  # but is not a busy loop
 
 
 def test_a_peak_between_two_samples_is_not_claimed():
@@ -141,8 +153,7 @@ def test_a_peak_between_two_samples_is_not_claimed():
     its sample count rather than through a number that looks measured."""
     r = wrap(sys.executable, "-c", TOUCH_150MB + "import time; time.sleep(0.03)",
              interval="2")
-    n = int([l for l in r.stderr.splitlines() if l.startswith("[mem] peak")][0]
-            .split("samples ")[1].split()[0])
+    n, _ = samples_and_wall(r.stderr)
     assert n <= 2, (n, r.stderr)
 
 
