@@ -136,9 +136,55 @@ def test_a_malformed_receipt_is_refused_not_skipped(tmp_path, capsys, fake):
 
 
 def test_a_receipt_missing_required_fields_is_refused_not_skipped(tmp_path, capsys, fake):
+    # Until #1623 this was `with pytest.raises(KeyError)`: exit 1 by traceback,
+    # which reads as FAIL ("the comparison ran and disagreed") where
+    # tools/exit_contract.py says an unmet precondition is exit 2.
     put(tmp_path / "runs", "T-LIVE-MIDI/a", {"trial": {"id": "T-LIVE-MIDI"}})
-    with pytest.raises(KeyError):
-        h.main(["--runs", str(tmp_path / "runs"), "--to", str(tmp_path / "out")])
+    rc = h.main(["--runs", str(tmp_path / "runs"), "--to", str(tmp_path / "out")])
+    out = capsys.readouterr().out
+    assert rc == 2 and "REFUSED" in out
+    assert "'identities'" in out and "'controls'" in out      # every missing key, not only the first
+    # and no summary was written that omits the broken run
+    assert not (tmp_path / "out" / "summary.json").exists()
+
+
+# ---- one control per key the harvester reads with [] (#1604, #1623): each
+# deletes ONE key from a complete receipt and runs the tool's own main().
+@pytest.mark.parametrize("key", ["trial", "identities", "verdict", "verdict_reasons",
+                                 "execution", "children", "controls"])
+def test_a_receipt_missing_a_key_the_harvester_reads_is_refused(tmp_path, capsys, fake, key):
+    rec = receipt()
+    del rec[key]
+    put(tmp_path / "runs", "T-DEADLINE/sim", rec)
+    rc = h.main(["--runs", str(tmp_path / "runs"), "--to", str(tmp_path / "out")])
+    out = capsys.readouterr().out
+    assert rc == 2 and "REFUSED" in out and f"'{key}'" in out
+    assert not (tmp_path / "out" / "summary.json").exists()
+
+
+@pytest.mark.parametrize("key", ["trial", "identities", "verdict", "verdict_reasons",
+                                 "execution", "children", "controls"])
+def test_a_receipt_with_null_for_a_key_the_harvester_reads_is_refused(tmp_path, capsys, fake, key):
+    # `None` where a table is read is the same traceback as no key
+    rec = receipt()
+    rec[key] = None
+    put(tmp_path / "runs", "T-DEADLINE/sim", rec)
+    rc = h.main(["--runs", str(tmp_path / "runs"), "--to", str(tmp_path / "out")])
+    out = capsys.readouterr().out
+    assert rc == 2 and "REFUSED" in out and f"'{key}'" in out
+
+
+def test_the_shipped_receipts_carry_every_key_the_harvester_reads():
+    """The guard above must be satisfiable against the record that ships."""
+    import tarfile
+    with tarfile.open(ROOT / "fpga/reports/r1-candidate/receipts.tgz") as tf:
+        shipped = [json.load(tf.extractfile(m)) for m in tf.getmembers()
+                   if m.name.endswith("receipt.json")]
+    assert shipped
+    for rec in shipped:
+        for key in ("trial", "identities", "verdict", "verdict_reasons", "execution",
+                    "children", "controls"):
+            assert rec.get(key) is not None, key
 
 
 def _assert_missing(row):

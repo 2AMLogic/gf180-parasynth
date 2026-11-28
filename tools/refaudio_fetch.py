@@ -42,7 +42,9 @@ class Refused(refusal.Refused, Exception):
 
 
 def known_archives() -> set[str]:
-    cat = json.loads((REFAUDIO / "catalog.json").read_text(encoding="utf-8"))
+    path = REFAUDIO / "catalog.json"
+    cat = json.loads(path.read_text(encoding="utf-8"))
+    refusal.require_keys(cat, "packs", f"the reference-audio catalog at {path}", refused=Refused)
     return {p["archive"] for p in cat["packs"]}
 
 

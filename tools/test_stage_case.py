@@ -535,6 +535,23 @@ def test_the_cli_refuses_a_tampered_render_with_code_two(tmp_path, capsys):
         "exit 2 with no REFUSED line is a refusal nobody reading the log can act on")
 
 
+@pytest.mark.parametrize("key", ["wav_path", "wav_sha256"])
+def test_the_cli_refuses_a_render_manifest_missing_a_key_with_code_two(tmp_path, capsys, key):
+    """A render manifest that parses but lacks a key `manifest.load_render()`
+    reads with [] (#1623): exit 2 with the key named, where it was a `KeyError`
+    traceback and exit 1. The render and the reader are real."""
+    assert sc.main(["render", "--root", str(tmp_path)]) == 0
+    rid = json.loads(capsys.readouterr().out)["render_id"]
+    path = tmp_path / "runs" / rid / "manifest.json"
+    rec = json.loads(path.read_text())
+    del rec[key]
+    path.write_text(json.dumps(rec))
+    assert sc.main(["analyse", "--root", str(tmp_path), "--render", rid]) == 2
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and f"'{key}'" in out
+    assert not list((tmp_path / "jobs").rglob("analysis.json"))     # nothing was measured
+
+
 def test_the_cli_lists_the_analysers_variants_injections_and_retention(capsys):
     assert sc.main(["list"]) == 0
     out = capsys.readouterr().out

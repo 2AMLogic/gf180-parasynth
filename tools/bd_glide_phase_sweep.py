@@ -21,6 +21,9 @@ Each reading is either a finite float or the string "REFUSED: <reason>"; this
 file never turns a refusal into a number.  The Judge's scratch sweep
 (/tmp/judge601/phase_sweep.py, Q in {2.3, 5.2, 22.3, 63, 84}) is the basis;
 this version sweeps the record's own knobs on a 0.5 Hz pitch grid plus an edge scan.
+
+A frozen record that cannot be read -- not a JSON object, or without
+`conditions` -- is REFUSED (exit 2) before any cell is computed (#1604, #1623).
 """
 from __future__ import annotations
 
@@ -35,6 +38,13 @@ HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import pitch_trajectory as pt                     # noqa: E402
 import bd_pitch_predeclaration as bp              # noqa: E402  (ast reader only)
+import manifest as mf                             # noqa: E402
+import refusal                                    # noqa: E402
+
+
+class Refused(refusal.Refused, Exception):
+    """A record that cannot be read is not a result (#1604, #1623)."""
+
 
 F_REF = 52.0
 RATES = (48000, 44100)
@@ -54,6 +64,7 @@ def record_knobs() -> tuple:
     """Every DECAY knob a condition in the frozen record uses, development and
     untouched, read from the record."""
     rec = json.loads(bp.RECORD.read_text())
+    mf.require_keys(rec, "conditions", f"the frozen BD pitch record at {bp.RECORD}", refused=Refused)
     conds = rec["conditions"]["development"] + rec["conditions"]["untouched"]
     return tuple(sorted({float(c["model"]["decay_knob"]) for c in conds}))
 
@@ -138,15 +149,19 @@ def range_report(rows: list, floor: float = pt.GLIDE_FLOOR_CENTS) -> dict:
 
 def main(argv=None) -> int:
     argv = sys.argv[1:] if argv is None else argv
-    if argv[:1] == ["range"]:
-        jobs = int(argv[argv.index("--jobs") + 1]) if "--jobs" in argv else 2
-        print(json.dumps(range_report(range_sweep(jobs)), indent=1))
-        return 0
-    for name, rows in (("record knobs", sweep()), ("edge scan", edge_sweep())):
-        w = worst(rows)
-        print(f"{name}: {len(rows)} cells, {sum(r['refused'] for r in rows)} refused; " +
-              (f"worst phase_only {w['phase_only']:.2f} cents at {w['sr']} Hz, knob {w['knob']}, "
-               f"f0 {w['f0']}" if w else "no measurable cell"))
+    try:
+        if argv[:1] == ["range"]:
+            jobs = int(argv[argv.index("--jobs") + 1]) if "--jobs" in argv else 2
+            print(json.dumps(range_report(range_sweep(jobs)), indent=1))
+            return 0
+        for name, rows in (("record knobs", sweep()), ("edge scan", edge_sweep())):
+            w = worst(rows)
+            print(f"{name}: {len(rows)} cells, {sum(r['refused'] for r in rows)} refused; " +
+                  (f"worst phase_only {w['phase_only']:.2f} cents at {w['sr']} Hz, knob {w['knob']}, "
+                   f"f0 {w['f0']}" if w else "no measurable cell"))
+    except Refused as exc:
+        print(f"REFUSED: {exc}")
+        return 2
     return 0
 
 

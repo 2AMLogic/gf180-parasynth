@@ -92,6 +92,7 @@ _REFUSAL_TOOLS = str(Path(__file__).resolve().parents[2] / "tools")
 if _REFUSAL_TOOLS not in sys.path:
     sys.path.append(_REFUSAL_TOOLS)
 import refusal  # noqa: E402
+import manifest as mf  # noqa: E402
 
 PLAN = ROOT / "docs" / "sensitivity" / "rate-tol-rel-plan.json"
 PLAN_BY_UNIT = ROOT / "docs" / "sensitivity" / "rate-tol-rel-by-unit-plan.json"
@@ -151,6 +152,7 @@ def load_plan(allow_dirty: bool = False, path: Path | None = None) -> dict:
     if not path.exists():
         raise Refused(f"no plan at {_rel(path)}; state the grid first")
     plan = json.loads(path.read_text())
+    mf.require_keys(plan, "grid", f"the sweep plan at {path}", refused=Refused)
     if plan.get("schema") != "sensitivity-plan-v1":
         raise Refused(f"{path.name}: schema is {plan.get('schema')!r}")
     grid = [float(v) for v in plan["grid"]]

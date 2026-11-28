@@ -244,3 +244,32 @@ def test_an_incomplete_index_row_is_an_error_naming_the_field_not_a_size(lib, ro
     (lib / "index" / "pack_a.tsv").write_text(f"path\tbytes\n{row}\n", encoding="utf-8")
     with pytest.raises(ValueError, match=f"missing {field}"):
         rf.indexed_sizes(ARCHIVE)
+
+
+# ---- a catalog missing the key known_archives() reads with [] is REFUSED
+# (exit 2), not a traceback (#1604, #1623), through the tool's own main().
+def test_the_committed_catalog_lists_packs():
+    """The guard must be satisfiable against the catalog that ships."""
+    assert "808-from-mars.zip" in rf.known_archives()
+
+
+def test_a_catalog_without_packs_is_refused(lib, capsys):
+    (lib / "catalog.json").write_text("{}")
+    assert rf.main([ARCHIVE, MEMBER]) == rf.REFUSED
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "'packs'" in out
+
+
+def test_a_catalog_with_null_packs_is_refused(lib, capsys):
+    (lib / "catalog.json").write_text(json.dumps({"packs": None}))
+    assert rf.main([ARCHIVE, MEMBER]) == rf.REFUSED
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "'packs'" in out
+
+
+@pytest.mark.parametrize("catalog, why", [([], "not a JSON object"), (None, "not a JSON object")])
+def test_a_catalog_that_is_not_an_object_is_refused(lib, capsys, catalog, why):
+    (lib / "catalog.json").write_text(json.dumps(catalog))
+    assert rf.main([ARCHIVE, MEMBER]) == rf.REFUSED
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and why in out

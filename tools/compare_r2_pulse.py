@@ -27,6 +27,10 @@ properties it cannot support, and is counted as such, never dropped.
 Mandatory passes: the M5A/M5B case properties (the acceptance tests the
 candidate is scored on) are reported separately by the caller; this tool
 counts probe conditions only.
+
+A sweep record that cannot be read -- not a JSON object, or without `rows` --
+is REFUSED (exit 2) before any point is paired, and no comparison is written
+(#1604, #1623).
 """
 from __future__ import annotations
 
@@ -39,9 +43,15 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 import mono_artifact_probe as mp  # noqa: E402
+import manifest as mf              # noqa: E402
+import refusal                     # noqa: E402
 
 BAND = mp.MOVE_DB
 PROPS = (("unwanted_dbfs", +1), ("unwanted_rel_db", +1), ("upper_wanted_rel_db", -1))
+
+
+class Refused(refusal.Refused, Exception):
+    """A sweep record that cannot be read is not a comparison (#1604, #1623)."""
 
 
 def _load(paths):
@@ -50,6 +60,7 @@ def _load(paths):
         op = gzip.open if str(p).endswith(".gz") else open
         with op(p, "rt") as fh:
             d = json.load(fh)
+        mf.require_keys(d, "rows", f"the sweep record at {p}", refused=Refused)
         rows += d["rows"]
         for k in ("pulse2x_rect_gain_q15", "pulse2x_rect_mix_comp", "pulse2x_rect_drive_comp", "provenance"):
             meta.setdefault(k, d.get(k))
@@ -122,7 +133,11 @@ def main(argv=None):
     ap.add_argument("records", nargs="+")
     ap.add_argument("--out", type=pathlib.Path, required=True)
     a = ap.parse_args(argv)
-    rows, meta = _load(a.records)
+    try:
+        rows, meta = _load(a.records)
+    except Refused as exc:
+        print(f"REFUSED: {exc}")
+        return 2
     recs, counts = compare(rows)
     dev = [r for r in recs if r.get("development")]
     unt = [r for r in recs if not r.get("development")]

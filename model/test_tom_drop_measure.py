@@ -352,3 +352,29 @@ def test_absent_congas_are_required_only_by_the_congas_flag(root, tmp_path, monk
     res = json.loads((tmp_path / "all.json").read_text(encoding="utf-8"))
     assert sorted(res["voices"]) == ["HC", "HT", "LC", "LT", "MC", "MT"]
     assert res["voices"]["HC"]["B"]["n_ok"] == 11 and "C" not in res["voices"]["HC"]
+
+
+def test_provenance_still_reads_the_committed_catalog():
+    """The guard below must be satisfiable against the catalog that ships."""
+    prov = tm.provenance()
+    assert prov["archive"] == "808-from-mars.zip" and len(prov["archive_sha256"]) == 64
+
+
+@pytest.mark.parametrize("catalog, why", [({}, "'packs'"), ({"packs": None}, "'packs'"),
+                                          ([], "not a JSON object"), (None, "not a JSON object")])
+def test_the_cli_refuses_a_catalog_that_cannot_be_read(tmp_path, monkeypatch, capsys, catalog, why):
+    """`provenance()` read `cat["packs"]` with [] and `main()` had no handler
+    for its refusal: exit 1 by traceback, FAIL, where tools/exit_contract.py
+    says an unmet precondition is exit 2 (#1604, #1623). Through the CLI, with
+    the inventory answered (it has its own tests above)."""
+    monkeypatch.setattr(tm, "require_inventory", lambda groups: None)
+    monkeypatch.setattr(tm.P, "measure",
+                        lambda *a, **k: pytest.fail("a take was measured over a partial catalog"))
+    (tmp_path / "refaudio").mkdir()
+    (tmp_path / "refaudio" / "catalog.json").write_text(json.dumps(catalog), encoding="utf-8")
+    monkeypatch.setattr(tm, "REPO", tmp_path)
+    out = tmp_path / "result.json"
+    assert tm.main(["--json", str(out)]) == 2
+    text = capsys.readouterr().out
+    assert "REFUSED" in text and why in text
+    assert not out.exists()

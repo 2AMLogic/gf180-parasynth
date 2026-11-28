@@ -161,6 +161,7 @@ if str(ROOT / "tools") not in sys.path:
     sys.path.insert(0, str(ROOT / "tools"))
 
 import cymbal_candidate as cc  # noqa: E402
+import exit_contract  # noqa: E402
 import refusal
 from exit_contract import REFUSED  # noqa: E402  -- 2: the declared refusal status
 
@@ -214,6 +215,13 @@ SN_CROPS = {
 
 class Refused(refusal.Refused, Exception):
     """A precondition failed. REFUSED is a verdict, distinct from a value."""
+
+
+class PartialRecord(Refused):
+    """The balance artifact parses but cannot be read: not a JSON object, or a
+    required key absent or null (#1623). Exits 2 (`exit_contract.REFUSED`, in
+    NO_EVIDENCE), so a batch caller reads NO-VERDICT rather than a failed
+    comparison. A drifted or absent artifact exits the same status (#1789)."""
 
 
 class SourceUnavailable(Refused):
@@ -1081,8 +1089,9 @@ def vca_term_db(cfg=None) -> dict:
 def balance_targets(path=None) -> dict:
     """The gap figures this module is judged against, re-read and pinned.
 
-    REFUSES if `../balance/balance.json` is absent or if its two gap figures
-    have moved from the committed record. The headline here is a comparison
+    REFUSES if `../balance/balance.json` is absent, is not a JSON object or
+    lacks `gap_db` or `centre_hz` (#1623), or if its two gap figures have
+    moved from the committed record. The headline here is a comparison
     against those numbers; quoting it against a number that has since drifted
     is exactly the failure this repository keeps meeting.
     """
@@ -1091,6 +1100,8 @@ def balance_targets(path=None) -> dict:
         raise Refused(f"{path} is absent; the gap this module is judged "
                       "against is #396's, not one chosen here")
     rec = json.loads(path.read_text())
+    refusal.require_keys(rec, ("gap_db", "centre_hz"), f"the balance artifact at {path}",
+                         refused=PartialRecord)
     want = {"decay": 10.13, "short": 39.79}
     got = {b: float(rec["gap_db"][b]["gap_db"]) for b in want}
     drift = {b: round(got[b] - want[b], 3) for b in want if abs(got[b] - want[b]) > 0.005}
@@ -1530,6 +1541,9 @@ def main(argv=None) -> int:
 
     try:
         targets = balance_targets()
+    except PartialRecord as exc:
+        print(f"REFUSED: {exc}")
+        return exit_contract.REFUSED
     except Refused as exc:
         print(f"REFUSED: {exc}")
         return REFUSED                # was 1: a refusal, not a result (#1789)

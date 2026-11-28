@@ -28,7 +28,9 @@ release   this branch (the stale controls exist here):
 
 Writes <out>/summary.json and exits 1 if any receipt is invalid or any
 verdict is not the expected one. The summary reports; the receipts are the
-evidence (`python tools/trial.py check-all <out>`).
+evidence (`python tools/trial.py check-all <out>`). A receipt that cannot be
+read -- not a JSON object, or without a key `check()` reads with `[]` -- is
+REFUSED (exit 2) and no summary is written (#1604, #1623).
 """
 from __future__ import annotations
 
@@ -38,6 +40,14 @@ import pathlib
 import subprocess
 import sys
 import tempfile
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import refusal  # noqa: E402
+
+
+class Refused(refusal.Refused, Exception):
+    """A receipt that cannot be read is not a result (#1604, #1623)."""
+
 
 LANDED = {
     "play-sim": (["T-PLAY-DIGITAL", "--mode", "sim"], "PASS"),
@@ -89,6 +99,8 @@ def check(tree: pathlib.Path, py: str, receipt: str | None) -> dict:
     r = subprocess.run([py, str(tree / "tools/trial.py"), "check-receipt", receipt],
                        cwd=tree, capture_output=True, text=True)
     rec = json.loads(pathlib.Path(receipt).read_text())
+    refusal.require_keys(rec, ("verdict", "execution", "verdict_reasons", "controls", "identities"),
+                    f"the trial receipt at {receipt}", refused=Refused)
     return {"valid": r.returncode == 0, "check": r.stdout.strip().splitlines()[-3:],
             "verdict": rec["verdict"], "execution": rec["execution"]["status"],
             "reasons": rec["verdict_reasons"][:4],
@@ -162,9 +174,14 @@ def main(argv=None) -> int:
     out.mkdir(parents=True, exist_ok=True)
     summary = {"phase": a.phase, "tree": str(tree), "head": git(tree, "rev-parse", "HEAD"),
                "origin_main": git(tree, "rev-parse", "origin/main")}
-    summary["runs"] = run_batch(tree, py, out, LANDED if a.phase == "landed" else RELEASE)
-    if a.phase == "release":
-        summary["fixtures"] = isolated_fixtures(tree, py, out)
+    try:
+        summary["runs"] = run_batch(tree, py, out, LANDED if a.phase == "landed" else RELEASE)
+        if a.phase == "release":
+            summary["fixtures"] = isolated_fixtures(tree, py, out)
+    except Refused as exc:
+        # a partial receipt is not a verdict; no summary is written over it
+        print(f"REFUSED: {exc}")
+        return 2
     bad = []
     for group in ("runs", "fixtures"):
         for name, r in summary.get(group, {}).items():

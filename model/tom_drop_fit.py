@@ -69,6 +69,7 @@ _REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[1] / "tools")
 if _REFUSAL_TOOLS not in sys.path:
     sys.path.append(_REFUSAL_TOOLS)
 import refusal  # noqa: E402
+import manifest as mf  # noqa: E402
 
 HERE = pathlib.Path(__file__).resolve().parent
 REPO = HERE.parent
@@ -85,11 +86,14 @@ class Refused(refusal.Refused, Exception):
     """A precondition is not met; nothing was attempted."""
 
 
-def load_rows(path: pathlib.Path = RESULTS) -> tuple[list[dict], dict]:
-    """Every usable per-file row, with the tuning index parsed out of the name."""
+def load_rows(path: pathlib.Path | None = None) -> tuple[list[dict], dict]:
+    """Every usable per-file row, with the tuning index parsed out of the name.
+    `path` defaults to the committed results, read at call time."""
+    path = RESULTS if path is None else path
     if not path.exists():
         raise Refused(f"{path} is missing: this fit has no measurement to fit to")
     doc = json.loads(path.read_text(encoding="utf-8"))
+    mf.require_keys(doc, "voices", f"the pitch-drop measurement at {path}", refused=Refused)
     rows = []
     for v in TOMS + CONGAS:
         for acc in "ABC":

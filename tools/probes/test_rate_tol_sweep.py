@@ -338,3 +338,31 @@ def test_the_artefact_the_record_cites_parses_and_holds_the_whole_grid():
     for name in ("rate_tol_rel_cost_by_unit", "rate_tol_rel_shipped_panel",
                  "rate_tol_rel_cyclecorr_margin"):
         assert tables.get(name), f"{name} is missing from the artefact"
+
+
+# ---- a plan missing the key load_plan() reads with [] is REFUSED (exit 2),
+# not a traceback (#1604, #1623), through the tool's own main(). The refusal
+# precedes the measurement, so the sweep never starts.
+def _main_over(tmp_path, monkeypatch, capsys, plan):
+    p = tmp_path / "plan.json"
+    p.write_text(json.dumps(plan))
+    monkeypatch.setattr(S, "PLAN", p)
+    monkeypatch.setattr(S, "measure", lambda *a, **k: pytest.fail("a partial plan was measured"))
+    rc = S.main(["--allow-dirty-plan"])
+    return rc, capsys.readouterr().err
+
+
+def test_a_plan_without_grid_is_refused(tmp_path, monkeypatch, capsys):
+    rc, err = _main_over(tmp_path, monkeypatch, capsys, {"schema": "sensitivity-plan-v1"})
+    assert rc == 2 and "REFUSED" in err and "'grid'" in err
+
+
+def test_a_plan_with_null_grid_is_refused(tmp_path, monkeypatch, capsys):
+    rc, err = _main_over(tmp_path, monkeypatch, capsys,
+                         {"schema": "sensitivity-plan-v1", "grid": None})
+    assert rc == 2 and "REFUSED" in err and "'grid'" in err
+
+
+def test_a_plan_that_is_a_json_list_is_refused_not_an_attribute_error(tmp_path, monkeypatch, capsys):
+    rc, err = _main_over(tmp_path, monkeypatch, capsys, [1, 2, 3])
+    assert rc == 2 and "REFUSED" in err and "not a JSON object" in err

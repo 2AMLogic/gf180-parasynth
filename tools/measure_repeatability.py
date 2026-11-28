@@ -88,6 +88,7 @@ import run_case as rc                                             # noqa: E402
 import promoted_bands as pb                                       # noqa: E402
 import promoted_measures as pm                                    # noqa: E402
 import refusal
+import manifest as mf                                             # noqa: E402
 from refaudio_local import inventory_path_mode
 
 MEASURED, FALSE, REFUSED = 0, 1, 2
@@ -1343,6 +1344,8 @@ def loop_compare(take: dict, results_path: pathlib.Path | None = None) -> dict:
     -- the same statistic, so the ratio compares like with like."""
     path = results_path or (REPO / "docs" / "bd-repeatability-results.json")
     res = json.loads(path.read_text(encoding="utf-8"))
+    mf.require_keys(res, ("session_to_session", "verdicts", "self_test"),
+                    f"the committed repeatability results at {path}", refused=Refused)
     floors = res["session_to_session"]["metrics"]
     tols = {r["metric"]: r["tolerance"] for r in res["verdicts"]["rows"]}
     noise = res["self_test"]["editing_noise"]

@@ -1,4 +1,5 @@
 """Controls for tools/envelope_history_337.py (rule 2, rule 8, start-red)."""
+import json
 import math
 import sys
 from pathlib import Path
@@ -113,3 +114,39 @@ def test_hash_mismatch_refuses(tmp_path):
     (tmp_path / rep["renders"][0]["wav"]).write_bytes(b"x" + (tmp_path / rep["renders"][0]["wav"]).read_bytes())
     with pytest.raises(eh.Refused):
         eh.measure(tmp_path)
+
+
+# ---- a report missing the key measure() reads with [] is REFUSED, not a
+# traceback (#1604, #1623), through the tool's own main(). One control per key.
+def _main_over(monkeypatch, tmp_path, capsys, report):
+    (tmp_path / "report.json").write_text(json.dumps(report))
+    monkeypatch.setattr(eh, "SRC", tmp_path)
+    rc = eh.main([])
+    return rc, capsys.readouterr().out
+
+
+def test_the_shipped_report_lists_its_renders():
+    """The guard must be satisfiable against the report that ships."""
+    assert json.loads((eh.SRC / "report.json").read_text())["renders"]
+
+
+def test_a_report_without_renders_is_refused(monkeypatch, tmp_path, capsys):
+    report = json.loads((eh.SRC / "report.json").read_text())
+    del report["renders"]
+    rc, out = _main_over(monkeypatch, tmp_path, capsys, report)
+    assert rc == 2 and "REFUSED" in out and "'renders'" in out
+    assert "VERDICT" not in out                     # nothing was reported as data
+
+
+def test_a_report_with_null_renders_is_refused(monkeypatch, tmp_path, capsys):
+    report = json.loads((eh.SRC / "report.json").read_text())
+    report["renders"] = None
+    rc, out = _main_over(monkeypatch, tmp_path, capsys, report)
+    assert rc == 2 and "REFUSED" in out and "'renders'" in out
+
+
+@pytest.mark.parametrize("report, why", [({}, "'renders'"), ([], "not a JSON object"),
+                                         (None, "not a JSON object")])
+def test_a_report_that_is_not_an_object_is_refused(monkeypatch, tmp_path, capsys, report, why):
+    rc, out = _main_over(monkeypatch, tmp_path, capsys, report)
+    assert rc == 2 and "REFUSED" in out and why in out

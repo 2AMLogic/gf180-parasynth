@@ -429,3 +429,41 @@ def test_the_conga_check_fires_when_the_conga_is_given_the_toms_tuning_slope():
 def test_the_conga_re_examination_refuses_a_voice_it_has_no_files_for():
     with pytest.raises(D.Refused):
         D.conga_cell_errors(voices=("XX",))
+
+
+# ------------------------------------------------- the fit's own input ----
+# A measurement missing the key load_rows() reads with [] is REFUSED (exit 2),
+# not a traceback (#1604, #1623), through the tool's own main(). One control
+# per key: the key is deleted from a copy of the committed measurement.
+def _fit_main_over(tmp_path, monkeypatch, capsys, record):
+    p = tmp_path / "results.json"
+    p.write_text(json.dumps(record), encoding="utf-8")
+    monkeypatch.setattr(F, "RESULTS", p)
+    rc = F.main([])
+    return rc, capsys.readouterr().err
+
+
+def test_the_committed_measurement_carries_the_voices_the_fit_reads():
+    """The guard must be satisfiable against the measurement that ships."""
+    assert json.loads(F.RESULTS.read_text(encoding="utf-8"))["voices"]
+
+
+def test_a_measurement_without_voices_is_refused(tmp_path, monkeypatch, capsys):
+    rec = json.loads(F.RESULTS.read_text(encoding="utf-8"))
+    del rec["voices"]
+    rc, err = _fit_main_over(tmp_path, monkeypatch, capsys, rec)
+    assert rc == 2 and "REFUSED" in err and "'voices'" in err
+
+
+def test_a_measurement_with_null_voices_is_refused(tmp_path, monkeypatch, capsys):
+    rec = json.loads(F.RESULTS.read_text(encoding="utf-8"))
+    rec["voices"] = None
+    rc, err = _fit_main_over(tmp_path, monkeypatch, capsys, rec)
+    assert rc == 2 and "REFUSED" in err and "'voices'" in err
+
+
+@pytest.mark.parametrize("record, why", [({}, "'voices'"), ([], "not a JSON object"),
+                                         (None, "not a JSON object")])
+def test_a_measurement_that_is_not_an_object_is_refused(tmp_path, monkeypatch, capsys, record, why):
+    rc, err = _fit_main_over(tmp_path, monkeypatch, capsys, record)
+    assert rc == 2 and "REFUSED" in err and why in err

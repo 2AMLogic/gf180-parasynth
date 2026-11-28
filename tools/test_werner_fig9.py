@@ -15,6 +15,7 @@ carry more of the weight than Figure 4's do. They do three things:
 
 from __future__ import annotations
 
+import json
 import math
 import pathlib
 import sys
@@ -352,3 +353,39 @@ def test_control_two_axes_boxes_where_three_are_needed_is_refused():
              ((10.0, 50.0), (90.0, 80.0))]
     with pytest.raises(w9.Refused):
         w9._plot_boxes(rects)
+
+
+# ---- an artifact missing a key from_artifact() reads with [] is REFUSED
+# (exit 3, this tool's declared refusal status), not a traceback (#1604,
+# #1623). One control per key through the tool's own main(); the refusal
+# precedes the gate, so nothing is gated.
+def _main_over(tmp_path, capsys, blob):
+    p = tmp_path / "werner-fig9.json"
+    p.write_text(json.dumps(blob))
+    rc = w9.main(["--artifact", str(p)])
+    got = capsys.readouterr()
+    assert "GATE:" not in got.out
+    return rc, got.err
+
+
+@pytest.mark.parametrize("key", ["bands", "meta"])
+def test_an_artifact_missing_a_key_is_refused_by_name(tmp_path, capsys, key):
+    blob = json.loads(w9.ARTIFACT.read_text())
+    del blob[key]
+    rc, err = _main_over(tmp_path, capsys, blob)
+    assert rc == 3 and "REFUSED" in err and f"'{key}'" in err
+
+
+@pytest.mark.parametrize("key", ["bands", "meta"])
+def test_an_artifact_with_null_for_a_key_is_refused_by_name(tmp_path, capsys, key):
+    blob = json.loads(w9.ARTIFACT.read_text())
+    blob[key] = None
+    rc, err = _main_over(tmp_path, capsys, blob)
+    assert rc == 3 and "REFUSED" in err and f"'{key}'" in err
+
+
+@pytest.mark.parametrize("blob, why", [({}, "'bands'"), ([], "not a JSON object"),
+                                       (None, "not a JSON object")])
+def test_an_artifact_that_carries_no_bands_at_all_is_refused(tmp_path, capsys, blob, why):
+    rc, err = _main_over(tmp_path, capsys, blob)
+    assert rc == 3 and "REFUSED" in err and why in err

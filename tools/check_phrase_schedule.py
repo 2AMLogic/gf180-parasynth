@@ -9,6 +9,9 @@ compares the frame each GATE_ON / GATE_OFF was APPLIED at the pins (the
 bench's own write log, `top_wrs_*.txt`: applied frame, flag, section,
 address, data, predicted frame) with the musical schedule the frozen manifest
 states, both relative to the phrase's first applied write.
+
+A manifest that cannot be read -- not a JSON object, or without `timeline` --
+is REFUSED (exit 2) before any write log is opened (#1604, #1623).
 """
 from __future__ import annotations
 
@@ -16,9 +19,17 @@ import argparse
 import glob
 import json
 import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import refusal  # noqa: E402
 
 A_GATE_ON, A_GATE_OFF = 0x20, 0x21
 SR = 48_000
+
+
+class Refused(refusal.Refused, Exception):
+    """A manifest that cannot be read is not a schedule (#1604, #1623)."""
 
 
 def applied(outdir: pathlib.Path):
@@ -35,6 +46,7 @@ def applied(outdir: pathlib.Path):
 
 def intended(manifest: pathlib.Path):
     m = json.loads(manifest.read_text())
+    refusal.require_keys(m, "timeline", f"the phrase manifest at {manifest}", refused=Refused)
     cursor, on, off = 0.0, [], []
     for seg in m["timeline"]["segments"]:
         for ev in seg["midi_events"]:
@@ -51,7 +63,11 @@ def main(argv=None):
     ap.add_argument("runs", nargs="+", help="label=outdir")
     ap.add_argument("--out", type=pathlib.Path, default=None)
     a = ap.parse_args(argv)
-    ion, ioff = intended(a.manifest)
+    try:
+        ion, ioff = intended(a.manifest)
+    except Refused as exc:
+        print(f"REFUSED: {exc}")
+        return 2
     res = {}
     for spec in a.runs:
         label, d = spec.split("=", 1)

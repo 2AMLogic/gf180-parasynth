@@ -143,6 +143,29 @@ def test_refuses_a_bound_schedule_selecting_no_audio(tmp_path, periods, monkeypa
     assert "REFUSED -- mix: no case frames" in capsys.readouterr().out
 
 
+# ---- a bound schedule missing the key validate_part() reads with [] is
+# REFUSED (exit 2), not a traceback (#1604, #1623), through the tool's own
+# main(); the RTL run is stood in for exactly as the control above stands in.
+def test_a_bound_schedule_without_case_frames_is_refused(tmp_path, monkeypatch, capsys):
+    schedule = _schedule("mix")
+    del schedule["case_frames"]
+    paths, report, *_ = _part_files(tmp_path, "mix", schedule=schedule)
+    with pytest.raises(score.Refused, match="'case_frames'"):
+        score.validate_part("E1A", "mix", report, paths["wav"], paths["schedule"])
+    monkeypatch.setattr(score, "ROOT", tmp_path)
+    monkeypatch.setattr(score, "run_part",
+                        lambda case, part, outdir, **kw: {"part": part, "status": 0})
+    assert score.main(["--outdir", str(tmp_path), "--jobs", "1"]) == 2
+    out = capsys.readouterr().out
+    assert "REFUSED -- mix:" in out and "'case_frames'" in out
+
+
+def test_a_bound_schedule_with_null_case_frames_is_refused(tmp_path, monkeypatch, capsys):
+    paths, report, *_ = _part_files(tmp_path, "mix", schedule=_schedule("mix", case_frames=None))
+    with pytest.raises(score.Refused, match="'case_frames'"):
+        score.validate_part("E1A", "mix", report, paths["wav"], paths["schedule"])
+
+
 def test_refuses_a_mutation_run(tmp_path):
     paths, text, *_ = _part_files(
         tmp_path, "mix",
@@ -753,3 +776,14 @@ def test_measurement_sources_hash_the_transcript_gate():
     root = pathlib.Path(score.ROOT)
     missing = [rel for rel in score.MEASUREMENT_SOURCES if not (root / rel).is_file()]
     assert missing == []
+
+
+def test_a_bound_schedule_that_is_a_json_list_is_refused_not_an_attribute_error(tmp_path):
+    """A list parses; `.get()` on it was an AttributeError before the guard moved
+    ahead of the first read (#1623 review)."""
+    paths, _, wav_sha, _ = _part_files(tmp_path, "mix")
+    paths["schedule"].write_text(json.dumps([1, 2, 3]))
+    schedule_sha = hashlib.sha256(paths["schedule"].read_bytes()).hexdigest()
+    report = _report(part="mix", wav_sha=wav_sha, schedule_sha=schedule_sha, periods=CASE_FRAMES)
+    with pytest.raises(score.Refused, match="not a JSON object"):
+        score.validate_part("E1A", "mix", report, paths["wav"], paths["schedule"])

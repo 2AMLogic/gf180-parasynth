@@ -343,6 +343,46 @@ def test_balance_targets_accepts_the_committed_record():
     assert t["gap_db"]["decay"] == pytest.approx(10.13, abs=0.005)
 
 
+# ---- a balance artifact missing a key balance_targets() reads with [] is
+# REFUSED, not a traceback (#1604, #1623). One control per key: each deletes
+# ONE key from the committed record and runs the tool's own main().
+#
+# A PARTIAL balance artifact exits 2 (exit_contract.REFUSED, in NO_EVIDENCE) so
+# a batch caller reads NO-VERDICT. So does an absent or drifted one since #1789
+# retired the legacy exit 1 that tools/refusal_exit_census.py used to pin (#804).
+@pytest.mark.parametrize("key", ["gap_db", "centre_hz"])
+def test_a_balance_artifact_missing_a_key_is_refused_by_name(tmp_path, monkeypatch, capsys, key):
+    rec = json.loads(vd.BALANCE_ARTIFACT.read_text())
+    del rec[key]
+    p = tmp_path / "balance.json"
+    p.write_text(json.dumps(rec))
+    monkeypatch.setattr(vd, "BALANCE_ARTIFACT", p)
+    assert vd.main([]) == 2
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and f"'{key}'" in out
+
+
+@pytest.mark.parametrize("key", ["gap_db", "centre_hz"])
+def test_a_balance_artifact_with_null_for_a_key_is_refused_by_name(tmp_path, monkeypatch, capsys, key):
+    rec = json.loads(vd.BALANCE_ARTIFACT.read_text())
+    rec[key] = None
+    p = tmp_path / "balance.json"
+    p.write_text(json.dumps(rec))
+    monkeypatch.setattr(vd, "BALANCE_ARTIFACT", p)
+    assert vd.main([]) == 2
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and f"'{key}'" in out
+
+
+def test_an_empty_balance_artifact_is_refused_by_name(tmp_path, monkeypatch, capsys):
+    p = tmp_path / "balance.json"
+    p.write_text("{}")
+    monkeypatch.setattr(vd, "BALANCE_ARTIFACT", p)
+    assert vd.main([]) == 2
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "'gap_db'" in out and "'centre_hz'" in out
+
+
 def test_the_pinned_scan_is_the_one_the_vr4_read_used():
     """Two modules reading the same page of the same document must not be able
     to drift onto different printings of it."""
@@ -757,3 +797,20 @@ def test_the_supply_record_round_trips(tmp_path):
     assert peaks["short"]["collector_peak_v"] == pytest.approx(12.79, abs=0.05)
     assert peaks["low"]["collector_peak_v"] == pytest.approx(4.94, abs=0.10)
     assert peaks["decay"]["collector_peak_v"] == pytest.approx(3.97, abs=0.10)
+
+
+def test_a_partial_balance_artifact_exit_is_declared_no_evidence(tmp_path, monkeypatch, capsys):
+    import exit_contract
+    p = tmp_path / "balance.json"
+    p.write_text("{}")
+    monkeypatch.setattr(vd, "BALANCE_ARTIFACT", p)
+    assert vd.main(["--check"]) in exit_contract.NO_EVIDENCE
+
+
+def test_a_drifted_balance_artifact_exits_refused_not_fail(tmp_path, monkeypatch, capsys):
+    rec = json.loads(vd.BALANCE_ARTIFACT.read_text())
+    rec["gap_db"]["decay"]["gap_db"] += 1.0
+    p = tmp_path / "balance.json"
+    p.write_text(json.dumps(rec))
+    monkeypatch.setattr(vd, "BALANCE_ARTIFACT", p)
+    assert vd.main([]) == REFUSED

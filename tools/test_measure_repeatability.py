@@ -15,7 +15,9 @@ import os
 import pathlib
 import re
 import shutil
+import subprocess
 import sys
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -739,6 +741,28 @@ def test_loop_compare_reads_the_committed_floors():
     assert out["Pitch trajectory"]["session_floor"] == pytest.approx(1.3852)
     assert out["Pitch trajectory"]["take_over_session"] == pytest.approx(0.001, abs=1e-3)
     assert out["decay"] == {"refused": "no loop yielded 3 readable strikes"}
+
+
+# ---- a results record missing a key loop_compare reads with [] is REFUSED,
+# not a traceback (#1604, #1623). One control per key: each deletes ONE key
+# from the committed record and runs the tool's own main(). The corpus work
+# (controls, audit, measure) is answered, not exercised: it has its own tests.
+@pytest.mark.parametrize("key", ["session_to_session", "verdicts", "self_test"])
+def test_the_loops_cli_refuses_a_results_record_missing_a_key(tmp_path, monkeypatch, capsys, key):
+    rec = json.loads((mr.REPO / "docs" / "bd-repeatability-results.json").read_text(encoding="utf-8"))
+    del rec[key]
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "bd-repeatability-results.json").write_text(json.dumps(rec), encoding="utf-8")
+    monkeypatch.setattr(mr, "REPO", tmp_path)          # git is stubbed with it
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: SimpleNamespace(stdout="", returncode=0))
+    monkeypatch.setattr(mr, "loop_controls", lambda report=print: (True, {}))
+    monkeypatch.setattr(mr, "loop_audit", lambda report=print, files=None: ({"x": ([], 44100)}, {}))
+    monkeypatch.setattr(mr, "loop_measure", lambda admitted, report=print: {"metrics": {}})
+    out = tmp_path / "result.json"
+    assert mr.main(["--loops", "--json", str(out)]) == 2
+    text = capsys.readouterr().out
+    assert "REFUSED" in text and f"'{key}'" in text
+    assert not out.exists()                            # --json is not written over a refusal
 
 
 def _conditioned(monkeypatch, exc):

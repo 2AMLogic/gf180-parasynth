@@ -38,6 +38,12 @@ sys.path[:0] = [str(ROOT / "tools"), str(ROOT / "fpga" / "release"), str(ROOT / 
                 str(ROOT / "model")]
 import trial                                              # noqa: E402
 import r1_candidate as r1c                                # noqa: E402
+import refusal                                            # noqa: E402
+
+
+class Refused(refusal.Refused, Exception):
+    """A receipt that cannot be read is not a result (#1604, #1623)."""
+
 
 RTL_LEVEL = "RTL simulation, Arty wrapper at its UART pins (digital production path; no image)"
 SPI_LEVEL = "RTL simulation, synth_top at its SPI pins"
@@ -128,6 +134,8 @@ def harvest(runs: Path, to: Path) -> dict:
     heads = set()
     for rp in receipts:
         rec = json.loads(rp.read_text())
+        refusal.require_keys(rec, ("trial", "identities", "verdict", "verdict_reasons", "execution",
+                              "children", "controls"), f"the trial receipt at {rp}", refused=Refused)
         chk = subprocess.run([sys.executable, str(ROOT / "tools/trial.py"), "check-receipt",
                               str(rp)], cwd=ROOT, capture_output=True, text=True)
         t, mode = rec["trial"]["id"], rec["trial"]["mode"]
@@ -189,7 +197,11 @@ def main(argv=None) -> int:
     ap.add_argument("--runs", type=Path, required=True)
     ap.add_argument("--to", type=Path, default=ROOT / "fpga/reports/r1-candidate")
     a = ap.parse_args(argv)
-    s = harvest(a.runs.expanduser(), a.to)
+    try:
+        s = harvest(a.runs.expanduser(), a.to)
+    except Refused as exc:
+        print(f"REFUSED: {exc}")
+        return 2
     for r in s["runs"]:
         print(f"{r['name']:<42} {r['verdict']:<11} receipt_valid={r['receipt_valid']} "
               f"controls={r['controls']}")

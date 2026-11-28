@@ -1,5 +1,6 @@
 """Known answers for tools/gate_between.py (#379, rule v2). Fast: no audio is read."""
 import copy
+import json
 import pathlib
 import sys
 
@@ -252,3 +253,44 @@ def test_main_exits_refused_when_a_gate_is_unrun(tmp_path, monkeypatch, capsys):
     rc, _ = _run_between_main(tmp_path)
     assert gb.decide(q, False)["status"] == "REFUSED"
     assert rc == exit_contract.REFUSED
+
+
+# ---- `table` on a record missing the key main() reads with [] is REFUSED
+# (exit 2), not a traceback (#1604, #1623), through the tool's own main().
+_CTX = {"A": {"old_bar": "WEAK", "n_takes": 4, "mars_takes_passing_old_bar": 0,
+              "mars_best": {"worst_ratio": 2.0, "worst_feature": "spec"},
+              "ours": {"worst_ratio": 4.0, "worst_feature": "decay"}},
+        "C": {"old_bar": "x", "n_takes": 4, "mars_takes_passing_old_bar": 0,
+              "mars_best": {"worst_ratio": 1.0, "worst_feature": "spec"}}}
+
+
+def _table(tmp_path, capsys, record):
+    p = tmp_path / "gate.json"
+    p.write_text(json.dumps(record))
+    rc = gb.main(["table", str(p)])
+    return rc, capsys.readouterr().out
+
+
+def test_table_renders_a_complete_record(tmp_path, capsys):
+    """The guard must be satisfiable against the record main() writes."""
+    rc, out = _table(tmp_path, capsys, {"calibration": {"old_bar_context": _CTX},
+                                        "qualification": None, "decision": {"status": "REFUSED"}})
+    assert rc == 0 and "no render" in out and "REFUSED" not in out
+
+
+def test_table_refuses_a_record_without_calibration(tmp_path, capsys):
+    rc, out = _table(tmp_path, capsys, {"qualification": None, "decision": {"status": "QUALIFIED"}})
+    assert rc == 2 and "REFUSED" in out and "'calibration'" in out
+    assert "|" not in out                          # no table over a partial record
+
+
+def test_table_refuses_a_record_with_null_calibration(tmp_path, capsys):
+    rc, out = _table(tmp_path, capsys, {"calibration": None})
+    assert rc == 2 and "REFUSED" in out and "'calibration'" in out
+
+
+@pytest.mark.parametrize("record, why", [({}, "'calibration'"), ([], "not a JSON object"),
+                                         (None, "not a JSON object")])
+def test_table_refuses_a_record_that_is_not_an_object(tmp_path, capsys, record, why):
+    rc, out = _table(tmp_path, capsys, record)
+    assert rc == 2 and "REFUSED" in out and why in out

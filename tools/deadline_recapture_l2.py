@@ -29,7 +29,9 @@ would overwrite the retained pre-L2 history with the new capture.
 
 Exit status is `tools/run_all.py`'s: 0 only if both simulator jobs exited 0
 (the control is run with `--expect-fail`, so 0 means the deadline check caught
-it). Nothing is copied or archived when a job fails.
+it). Nothing is copied or archived when a job fails. A capture record that
+cannot be read -- not a JSON object, or without `status`, `facts` or
+`schedule` -- is REFUSED (exit 2) once the files are archived (#1604, #1623).
 """
 from __future__ import annotations
 
@@ -45,6 +47,14 @@ RUNS = os.path.join(ROOT, "docs", "deadline", "runs")
 TRACES = os.path.join(ROOT, "docs", "deadline", "traces")
 WORK = os.path.join(ROOT, "build", "dl")
 
+sys.path.insert(0, os.path.join(ROOT, "tools"))
+import refusal  # noqa: E402
+
+
+class Refused(refusal.Refused, Exception):
+    """A capture record that cannot be read is not a result (#1604, #1623)."""
+
+
 # The four files the test's _capture reads back. top_samp_*.txt and the .vvp
 # the run also writes are build artefacts, not evidence, and stay out.
 ARCHIVED = ("top_bx_cmds.txt",
@@ -58,7 +68,7 @@ CAPTURES = (
 )
 
 
-def main(argv=None) -> int:
+def _run(argv=None) -> int:
     py = sys.executable
     os.makedirs(WORK, exist_ok=True)
     jobs = []
@@ -78,6 +88,18 @@ def main(argv=None) -> int:
               f"(tools/run_all.py exit {rc}); nothing archived, see {log}")
         return rc
 
+    # Preflight BOTH records before the first write under RUNS/TRACES: retained
+    # evidence is replaced only once every capture is known readable, so a
+    # damaged second capture cannot leave the first one's replacement behind.
+    records = {}
+    for name, _ in CAPTURES:
+        wpath = os.path.join(WORK, name + ".json")
+        with open(wpath) as f:
+            rec = json.load(f)
+        refusal.require_keys(rec, ("status", "facts", "schedule"),
+                             f"the capture record at {wpath}", refused=Refused)
+        records[name] = rec
+
     shutil.copyfile(batch, os.path.join(RUNS, "run_all-l2.json"))
     for name, _ in CAPTURES:
         shutil.copyfile(os.path.join(WORK, name + ".json"), os.path.join(RUNS, name + ".json"))
@@ -89,12 +111,20 @@ def main(argv=None) -> int:
             with open(os.path.join(src, n), "rb") as f, \
                     gzip.GzipFile(os.path.join(dst, n + ".gz"), "wb", mtime=0) as gz:
                 shutil.copyfileobj(f, gz)
-        rec = json.load(open(os.path.join(RUNS, name + ".json")))
+        rec = records[name]
         print(f"deadline_recapture_l2: {name} {rec['status']} "
               f"({rec['facts']['periods']}/{rec['facts']['periods_required']} periods, "
               f"{rec['facts']['writes_seen']}/{rec['facts']['writes_sent']} writes, "
               f"missed {rec['schedule']['missed']}) -> {len(ARCHIVED)} files archived")
     return 0
+
+
+def main(argv=None) -> int:
+    try:
+        return _run(argv)
+    except Refused as exc:
+        print(f"deadline_recapture_l2: REFUSED -- {exc}")
+        return 2
 
 
 if __name__ == "__main__":
