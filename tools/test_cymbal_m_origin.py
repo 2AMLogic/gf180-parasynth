@@ -12,7 +12,10 @@ put it -- so what has to be tested is the bound, not a fit:
   * that the probe REFUSES rho on a band the instrument was not qualified for,
     which is the control the first version failed (it reported 0.006);
   * that the documented attack smoother is load-bearing -- without it the same
-    sweep reports the garbage that motivated the refusal.
+    sweep reports the garbage that motivated the refusal;
+  * that `main` answers a failed shared control with the declared REFUSED
+    status, not with a measured FAIL (#1789), and that passing controls do
+    not refuse.
 """
 import json
 import math
@@ -25,6 +28,7 @@ import pytest
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import cymbal_m_origin as mo  # noqa: E402
 import cymbal_low_tail as lt  # noqa: E402
+from exit_contract import PASS, REFUSED  # noqa: E402
 
 RESULT = pathlib.Path(__file__).resolve().parents[1] / "docs/scorecard/cymbal-369/low-tail/low-tail.json"
 
@@ -207,3 +211,34 @@ def test_the_verdict_can_fire_positive_so_it_is_not_a_control_that_cannot_pass()
                     {"decay_rel_db": 3.0, "rho_M_-10": 1.2, "refused": {}}])
     assert v["reaches_target_at_db"] == 3.0, v
     assert "refused" not in v, v
+
+
+# --------------------------------------------------------------------------
+# the exit contract: a failed control is a refusal, not a measured FAIL
+# --------------------------------------------------------------------------
+def test_main_reports_the_shared_instruments_failed_controls_as_refused(
+        monkeypatch, capsys, tmp_path):
+    """#1789. `lt.check()` returns one bool, so a caller cannot tell a
+    measured failure from a refusal; for THIS caller every `ok is False`
+    means the shared instrument's own controls did not pass and nothing
+    below can be measured -- the condition `cymbal_low_tail.main` already
+    returns REFUSED for. This `main` printed REFUSED and returned 1, which
+    `tools/run_all.py` reads as a RESULT (tools/exit_contract.py). The
+    controls are monkeypatched, so no render runs."""
+    monkeypatch.setattr(mo.lt, "check", lambda: (False, ["  injected: a control that failed"]))
+    rc = mo.main(["--no-grid", "--result", str(tmp_path / "no-such-result.json")])
+    out = capsys.readouterr().out
+    assert rc == REFUSED
+    assert "  injected: a control that failed" in out
+    assert out.endswith("REFUSED: the shared instrument's own controls do not pass\n")
+
+
+def test_control_passing_controls_do_not_refuse(monkeypatch, capsys, tmp_path):
+    """The injected defect for the test above: a guard that always returned
+    REFUSED would satisfy it. Same call, one input different -- the controls
+    pass -- and `main` runs through to PASS without printing the refusal."""
+    monkeypatch.setattr(mo.lt, "check", lambda: (True, []))
+    rc = mo.main(["--no-grid", "--result", str(tmp_path / "no-such-result.json")])
+    out = capsys.readouterr().out
+    assert rc == PASS
+    assert "REFUSED: the shared instrument's own controls do not pass" not in out
