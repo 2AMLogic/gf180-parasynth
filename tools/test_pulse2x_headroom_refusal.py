@@ -13,6 +13,9 @@ as FAIL, the inversion the exit contract exists to prevent
 (tools/exit_contract.py). The repair widens the CLI boundary in `main()` to
 `refusal.Refused`, the handler shape of #1183
 (tools/measure_repeatability.py) and #1162 (tools/test_rs_guard_band_refusal.py).
+Red-first on that tree: 7 of the 9 controls failed, each with the process at
+exit 1 and the `mono_m5a_score.Refused` traceback in stderr; the class
+relation and the ValueError control were green, as they must be on any tree.
 
 THE KNOWN ANSWERS, independent of anything this repository models:
 
