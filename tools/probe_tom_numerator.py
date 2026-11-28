@@ -27,6 +27,13 @@ pitch-drop and decay distance stays <= 1 and does not grow by > 0.10, and the
 strike's bus peak stays within 1 dB of the baseline. Confirmation: the CONGAS
 (D04A, D06A, D08A), untouched by selection: body spectrum must improve on all
 three with pitch and decay preserved by the same rule.
+
+Exit status follows tools/exit_contract.py: 0 when every row that was to
+answer measured; 2 REFUSED when one of them refused instead -- its row is
+`{"refused": ...}` in `--out`, which is still written, and one line
+`REFUSED: <labels>` names it -- or when the corpus or the bit-identity control
+refuses. HP's refusal is by design (EXPECTED_REFUSED) and does not refuse the
+run (#1766; before it a run with any refused row exited 0).
 """
 from __future__ import annotations
 
@@ -43,6 +50,7 @@ import numpy as np
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "model"), str(ROOT / "tools")]
 import drums_fx as dx  # noqa: E402
+import exit_contract  # noqa: E402
 import refusal  # noqa: E402
 import run_case as rc  # noqa: E402
 
@@ -58,6 +66,23 @@ CANDIDATES = {"BP": dx.BP, "HP": dx.HP, "BP+X4": dx.BP}
 # x4 (0.25 -> 1.0, the register's ceiling) and compensates the amp by the same.
 EXCITER = {dx.M_LT: dx.E_LTX, dx.M_MT: dx.E_MTX, dx.M_HT: dx.E_HTX}
 EXC_GAIN = {"BP+X4": 4}
+# HP refuses BY DESIGN on the shipped kit, so its `refused` row is a recorded
+# finding -- docs/scorecard/tom-body-334/README.md tables it as HP's verdict --
+# and not a measurement that failed to happen. `render` divides the mode's amp
+# by |N(f0)| so a candidate cannot win on level, and HP's gain is the smallest
+# of the three, so the compensated amp overflows Q0.16 on every voice. The
+# amps `render` computes at its own guard, read from `origin/main` @ a3870ddb
+# (2026-11-28; HP's row is the message it raises, voice by voice):
+#
+#     voice          LT      MT      HT      LC      MC      HC
+#     kit amp   0.00481 0.00620 0.00993 0.00935 0.01228 0.02068
+#     BP          0.204   0.175   0.205   0.193   0.168   0.198
+#     HP         34.632  19.839  16.940  15.951   9.145   7.543
+#     BP+X4       0.051   0.044   0.051   0.048   0.042   0.049
+#
+# Any OTHER row that refuses owes a number and holds none, so that run is
+# REFUSED (#1766). HP measuring instead is not an error: that exits 0.
+EXPECTED_REFUSED = {"HP": "compensated amp >= 1.0 on every voice"}
 PLAN = {v: [m[0] for m in rc.DRUM_PLAN[v]] for v in VOICES}
 
 
@@ -178,6 +203,12 @@ def deadband(f0=90.0, q=25.0, levels=(100, 1_000, 10_000, 100_000), n=96_000) ->
     return out
 
 
+def unexpected_refusals(rows: dict) -> list:
+    """Labels whose row refused although they were supposed to answer: every
+    refused row but the by-design ones (`EXPECTED_REFUSED`), in loop order."""
+    return [label for label, row in rows.items() if "refused" in row and label not in EXPECTED_REFUSED]
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--refs", default=str(rc.configured_refs()))
@@ -212,7 +243,7 @@ def main(argv=None) -> int:
         print("bit-identity control (nums=16, all RAW):", ctl)
         if not all(ctl.values()):
             print("REFUSED: the nums=16 bank does not reproduce the shipped render")
-            return 2
+            return exit_contract.REFUSED
         rows = {}
         for kind in (None, "BP", "HP", "BP+X4"):
             label = kind or "RAW (shipped)"
@@ -231,7 +262,7 @@ def main(argv=None) -> int:
                     for k in PLAN[v]) + f"; peak {s['_peak_fs']}", flush=True)
     except refusal.Refused as e:
         print(f"REFUSED: {e}", flush=True)
-        return 2
+        return exit_contract.REFUSED
     base = rows["RAW (shipped)"]
 
     def verdict(kind, voices):
@@ -248,25 +279,28 @@ def main(argv=None) -> int:
             if abs(20 * math.log10(c["_peak_fs"] / b["_peak_fs"])) > 1.0:
                 why.append(f"{v} bus peak {b['_peak_fs']} -> {c['_peak_fs']}")
         return why
-    sel = {}
-    for kind in CANDIDATES:
-        if "refused" in rows[kind]:
-            sel[kind] = {"worst_dev_body_distance": None, "admissible": False,
-                         "reasons": [f"REFUSED: {rows[kind]['refused']}"]}
-            continue
-        why = verdict(kind, DEV)
-        worst = max(rows[kind][v]["body spectrum"]["distance"] for v in DEV)
-        sel[kind] = {"worst_dev_body_distance": worst, "admissible": not why, "reasons": why}
-    base_worst = max(base[v]["body spectrum"]["distance"] for v in DEV)
-    ok = sorted((s["worst_dev_body_distance"], k) for k, s in sel.items() if s["admissible"])
-    chosen = ok[0][1] if ok and ok[0][0] < base_worst else None
-    conf = None
-    if chosen:
-        why = verdict(chosen, ("LC", "MC", "HC"))
-        improved = {v: (base[v]["body spectrum"]["distance"], rows[chosen][v]["body spectrum"]["distance"])
-                    for v in ("LC", "MC", "HC")}
-        conf = {"reasons": why, "body_spectrum_distance": improved,
-                "passes": not why and all(b > c for b, c in improved.values())}
+    if "refused" in base:
+        sel = base_worst = chosen = conf = None    # no baseline: nothing to select against
+    else:
+        sel = {}
+        for kind in CANDIDATES:
+            if "refused" in rows[kind]:
+                sel[kind] = {"worst_dev_body_distance": None, "admissible": False,
+                             "reasons": [f"REFUSED: {rows[kind]['refused']}"]}
+                continue
+            why = verdict(kind, DEV)
+            worst = max(rows[kind][v]["body spectrum"]["distance"] for v in DEV)
+            sel[kind] = {"worst_dev_body_distance": worst, "admissible": not why, "reasons": why}
+        base_worst = max(base[v]["body spectrum"]["distance"] for v in DEV)
+        ok = sorted((s["worst_dev_body_distance"], k) for k, s in sel.items() if s["admissible"])
+        chosen = ok[0][1] if ok and ok[0][0] < base_worst else None
+        conf = None
+        if chosen:
+            why = verdict(chosen, ("LC", "MC", "HC"))
+            improved = {v: (base[v]["body spectrum"]["distance"], rows[chosen][v]["body spectrum"]["distance"])
+                        for v in ("LC", "MC", "HC")}
+            conf = {"reasons": why, "body_spectrum_distance": improved,
+                    "passes": not why and all(b > c for b, c in improved.values())}
     res = {"control_bit_identity": ctl, "rows": rows, "selection": sel,
            "baseline_worst_dev_body_distance": base_worst, "chosen": chosen, "confirmation": conf,
            "commit": subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True,
@@ -278,6 +312,15 @@ def main(argv=None) -> int:
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(res, indent=1) + "\n")
     print(f"wrote {a.out}")
+    # (#1766) the report is written first: the rows that measured are evidence.
+    # A row that was to answer and refused holds no number, and a process that
+    # exits 0 with such a row reads as PASS to anything that looks only at the
+    # exit status.
+    unexpected = unexpected_refusals(rows)
+    if unexpected:
+        print(f"REFUSED: {', '.join(unexpected)} refused -- a row that was to answer holds no number, "
+              f"so the report above is partial and this run is no verdict, not a pass", flush=True)
+        return exit_contract.REFUSED
     return 0
 
 
