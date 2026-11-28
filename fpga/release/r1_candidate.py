@@ -466,12 +466,16 @@ def main(argv=None) -> int:
     if a.write:
         try:
             m = build()
-        except Refused as exc:
+        except refusal.Refused as exc:        # any module's: build() reaches rm._capture (#1717)
             print(f"r1_candidate: REFUSED -- {exc}")
             return 2
         a.record.write_text(json.dumps(m, indent=2) + "\n")
         print(f"r1_candidate: wrote {_rel(a.record)}")
-    verdict, detail = check(a.record)
+    try:
+        verdict, detail = check(a.record)     # a refusal past check()'s own handler (#1717)
+    except refusal.Refused as exc:
+        print(f"r1_candidate: REFUSED -- {exc}")
+        return 2
     print(f"r1_candidate: {verdict} -- {detail}")
     return {"BOUND": 0, "STALE": 1}.get(verdict, 2)
 

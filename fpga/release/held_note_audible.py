@@ -52,6 +52,8 @@ sys.path[:0] = [os.path.join(ROOT, "fpga"), os.path.join(ROOT, "model"),
                 os.path.join(ROOT, "audition"), os.path.join(ROOT, "tools"),
                 os.path.join(ROOT, "rtl-sketch")]
 
+import refusal  # noqa: E402
+
 MIN_PEAK = 1024        # LSB of 16-bit; the old release-tail bound, now as a FLOOR
 NOTES = {"default": 45, "m5a-saw": 72, "m5a-pulse": 72}
 
@@ -105,7 +107,11 @@ def main(argv=None) -> int:
         plan = json.load(open(prefix + ".plan.json"))
         setup = [(r["expect"]["flag"], r["expect"]["sec"], r["expect"]["addr"],
                   r["expect"]["data"]) for r in plan["rows"] if r["kind"] == "write"]
-        init_problems = r1c.check_init(setup, kit_expected=False)
+        try:
+            init_problems = r1c.check_init(setup, kit_expected=False)
+        except refusal.Refused as exc:        # any module's refusal, by class (#1717)
+            print(f"held_note_audible: REFUSED -- {exc}")
+            return 2
     import verify_uart_bridge as vub
     # the replay's RTL defines and model are the IMAGE's configuration: r2 is
     # PULSE2X=1 (vub.image_config), every other image PULSE2X=0

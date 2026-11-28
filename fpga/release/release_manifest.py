@@ -564,12 +564,16 @@ def main(argv=None) -> int:
     if a.write:
         try:
             m = build()
-        except Refused as exc:
+        except refusal.Refused as exc:        # any module's: build() reaches r1_candidate's (#1717)
             print(f"release_manifest: REFUSED -- {exc}")
             return 2
         a.manifest.write_text(json.dumps(m, indent=2, sort_keys=False) + "\n")
         print(f"release_manifest: wrote {a.manifest}")
-    verdict, detail = check(a.manifest)
+    try:
+        verdict, detail = check(a.manifest)   # a refusal past check()'s own handler (#1717)
+    except refusal.Refused as exc:
+        print(f"release_manifest: REFUSED -- {exc}")
+        return 2
     print(f"release_manifest: {verdict} -- {detail}")
     return {"BOUND": 0, "STALE": 1}.get(verdict, 2)
 

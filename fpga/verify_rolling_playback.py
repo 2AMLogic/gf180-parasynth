@@ -62,6 +62,9 @@ import uart_host as uh                            # noqa: E402
 
 sys.path.insert(0, str(ROOT / "fpga" / "release"))
 import r1_candidate as r1c                        # noqa: E402
+if str(ROOT / "tools") not in sys.path:
+    sys.path.append(str(ROOT / "tools"))
+import refusal                                    # noqa: E402
 
 SR = uh.SR
 FIXTURES = ("bar808-full", "demo")
@@ -663,6 +666,14 @@ def main(argv=None) -> int:
         print("verify_rolling_playback: REFUSED -- --image names the sender; state the "
               "target with --expect-image (it is never inferred from the sender)")
         return 2
+    try:
+        return _run(a)
+    except refusal.Refused as exc:    # any module's refusal past _run's guard, by class (#1717)
+        print(f"verify_rolling_playback: REFUSED -- {exc}")
+        return 2
+
+
+def _run(a: argparse.Namespace) -> int:
     image = a.image or uh.DEFAULT_IMAGE
     target = a.expect_image or image
     try:

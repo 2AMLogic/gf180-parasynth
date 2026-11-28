@@ -14,7 +14,8 @@ VERDICTS (own convention, printed as `stale_control: <WORD> -- detail`):
   2 REFUSED  the counterexample could not be shown: an input is missing or
              unreadable, the unmodified copy was not BOUND (so a STALE on the
              modified one would prove nothing), the substitution is a no-op,
-             or the checker failed for a DIFFERENT reason than the one injected
+             the checker did not finish within CHECKER_TIMEOUT_S (#1717), or
+             the checker failed for a DIFFERENT reason than the one injected
 
 Both counterexamples are historical states of this repository, not invented
 values:
@@ -64,6 +65,7 @@ PREFIX = "stale_control: "
 LEGACY_CAPTURE = HERE / "evidence" / "held-note" / "default-legacy" / "capture.cmds"
 STALE_COMMAND = "held-default"
 BINDING_SUBSTITUTE = "rtl-sketch/voice_dp.v"
+CHECKER_TIMEOUT_S = 300
 
 
 class Refused(refusal.Refused, RuntimeError):
@@ -168,8 +170,13 @@ def _binding_files() -> tuple[list[str], list[str]]:
 
 
 def _run_checker(tree: Path) -> tuple[int, str]:
-    r = subprocess.run([sys.executable, str(tree / "tools/check_arty_evidence_binding.py")],
-                       cwd=tree, capture_output=True, text=True, timeout=300)
+    try:
+        r = subprocess.run([sys.executable, str(tree / "tools/check_arty_evidence_binding.py")],
+                           cwd=tree, capture_output=True, text=True, timeout=CHECKER_TIMEOUT_S)
+    except subprocess.TimeoutExpired as exc:
+        # a checker that has not finished has measured nothing (#1717)
+        raise Refused(f"check_arty_evidence_binding.py did not finish within {CHECKER_TIMEOUT_S} s "
+                      "(timeout): the checker measured nothing") from exc
     return r.returncode, (r.stdout + r.stderr).strip()
 
 
@@ -255,7 +262,7 @@ def main(argv=None) -> int:
     a.out.mkdir(parents=True, exist_ok=True)
     try:
         return (manifest_control if a.case == "manifest" else binding_control)(a.out)
-    except Refused as exc:
+    except refusal.Refused as exc:        # any module's: rm.check reaches r1_candidate's (#1717)
         return say("REFUSED", str(exc))
 
 

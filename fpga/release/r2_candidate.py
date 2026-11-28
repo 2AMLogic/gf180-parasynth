@@ -249,7 +249,11 @@ def main(argv=None) -> int:
         except Refused as exc:
             print(f"r2_candidate: REFUSED -- {exc}")
             return 2
-    v, d = check()
+    try:
+        v, d = check()                        # a refusal past check()'s own handler (#1717)
+    except refusal.Refused as exc:
+        print(f"r2_candidate: REFUSED -- {exc}")
+        return 2
     print(f"r2_candidate: {v} -- {d}")
     return {"BOUND": 0, "STALE": 1}.get(v, 2)
 
