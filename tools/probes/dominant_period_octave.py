@@ -54,6 +54,10 @@ APPARATUS PRECONDITIONS, ASSERTED HERE RATHER THAN ASSUMED:
     tools/probes/dominant_period_octave.py                 # the #774 panel
     tools/probes/dominant_period_octave.py --gaps          # the gap ladder
     tools/probes/dominant_period_octave.py --f0 865 --build-sr 48000
+
+Exit 0; 2 REFUSED when `--out` names a destination that cannot receive the
+report -- refused before a row is measured, and still 2 when the write fails
+after the report was printed.
 """
 from __future__ import annotations
 
@@ -184,6 +188,22 @@ def report(rows: list[dict], title: str, prose: list[str]) -> str:
     return "\n".join(out) + "\n"
 
 
+def _prepare_destination(path: Path) -> str | None:
+    """Make ``path`` able to receive the report before a row is measured: a
+    refusal reason, or None.
+
+    A missing parent is made here.  A directory given as the file, or a parent
+    that cannot be made, is a refusal with nothing measured; found after the
+    panel instead, it was a ``FileNotFoundError`` and exit 1 (#2040)."""
+    if path.is_dir():
+        return f"--out {path} is a directory; name the file to write"
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        return f"--out {path}: its parent directory cannot be created ({exc.strerror or exc})"
+    return None
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--f0", type=float, nargs="+", default=None)
@@ -195,6 +215,11 @@ def main(argv=None) -> int:
                     help="override JIT_OCTAVE_MARGIN_PERMILLE (per mille of r)")
     ap.add_argument("-o", "--out", type=Path)
     a = ap.parse_args(argv)
+    if a.out:
+        refused = _prepare_destination(a.out)
+        if refused:
+            print(f"REFUSED: {refused}")
+            return 2
 
     print(f"band={D.JIT_BAND_HZ} JIT_MIN_CYCLES={D.JIT_MIN_CYCLES} "
           f"JIT_OCTAVE_MARGIN_PERMILLE={D.JIT_OCTAVE_MARGIN_PERMILLE} "
@@ -224,7 +249,12 @@ def main(argv=None) -> int:
         ])
     sys.stdout.write(text)
     if a.out:
-        a.out.write_text(text)
+        try:
+            a.out.write_text(text)
+        except OSError as exc:
+            print(f"REFUSED: --out {a.out} was not written ({exc.strerror or exc}); "
+                  "the report above was measured, its record does not exist")
+            return 2
     return 0
 
 

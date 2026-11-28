@@ -24,6 +24,11 @@ Exit status follows the repository's verifier convention
         anything that looks only at the exit status (#1699; before it such a
         run exited 0). The report and `--json` are written first and carry
         every row that did measure: a partial result is evidence, not garbage.
+        Also 2 when `--json` cannot receive the record (#2040): refused before
+        any experiment for a directory given as the file or a parent that
+        cannot be made (a missing parent is made), and after the report when
+        the write itself fails -- the report is still printed, the record is
+        not there, and exit 1 would read as a distance that disagreed.
 
 WHAT IS MEASURED, AND WHY EACH ONE
 
@@ -702,6 +707,23 @@ def _refusals(node: object, path: str = "") -> list[str]:
     return out
 
 
+def _prepare_destination(path: pathlib.Path) -> str | None:
+    """Make ``path`` able to receive the record before any experiment runs: a
+    refusal reason, or None.
+
+    A missing parent is made here.  A directory given as the file, or a parent
+    that cannot be made, is a refusal with nothing measured; found after the
+    nine experiments instead, it was a ``FileNotFoundError`` and exit 1 --
+    FAIL, for a run that measured (#2040)."""
+    if path.is_dir():
+        return f"--json {path} is a directory; name the file to write"
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        return f"--json {path}: its parent directory cannot be created ({exc.strerror or exc})"
+    return None
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -713,6 +735,11 @@ def main(argv=None) -> int:
                          "decay does) and D01A's decay metric is a no-verdict for the "
                          "same reason. The decay sweep here needs a T20 to aim at.")
     a = ap.parse_args(argv)
+    if a.json:
+        refused = _prepare_destination(a.json)
+        if refused:
+            print(f"REFUSED: {refused}")
+            return exit_contract.REFUSED
 
     res: dict = {"scales": list(SCALES), "log_floor_rel": LOG_FLOOR_REL,
                  "machine_floor": MACHINE_FLOOR, "reference_file": a.ref}
@@ -764,9 +791,17 @@ def main(argv=None) -> int:
     res["E8_blind_spot"] = e8_blind_spot()
     res["E9_noise_floor"] = e9_noise_floor()
 
+    record_refused = False
     if a.json:
-        a.json.write_text(json.dumps(res, indent=1, sort_keys=True))
-        print(f"wrote {a.json}")
+        try:
+            a.json.write_text(json.dumps(res, indent=1, sort_keys=True))
+            print(f"wrote {a.json}")
+        except OSError as exc:
+            # The rows measured and the report below is still printed; a run whose
+            # record does not exist is no verdict for anything that reads the record.
+            print(f"REFUSED: --json {a.json} was not written ({exc.strerror or exc}); "
+                  "the report below is the measurement, the record does not exist")
+            record_refused = True
     report(res)
     # (#1699) An experiment that refused left `refused: ...` in its row while
     # the others measured. That run is no verdict, not a pass: a batch runner
@@ -779,6 +814,8 @@ def main(argv=None) -> int:
               "so this run is NO-VERDICT, not a pass:")
         for r in refusals:
             print(f"  {r}")
+        return exit_contract.REFUSED
+    if record_refused:
         return exit_contract.REFUSED
     return 0
 

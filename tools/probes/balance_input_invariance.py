@@ -42,6 +42,10 @@ that cannot load one of its two trees, or that compares a domain it has never
 asserted, would report "no differences" for the most trivial possible wrong
 reason.
 
+`--json` is checked before the comparison runs: a missing parent is made, and
+a directory given as the file, or a parent that cannot be made, is REFUSED
+with nothing compared. A refusal is exit 2, on stderr.
+
 Usage:
     python3 tools/probes/balance_input_invariance.py --baseline-rev f0c6816
     python3 tools/probes/balance_input_invariance.py --json /tmp/inv.json
@@ -262,6 +266,22 @@ def compare(baseline_rev: str) -> dict:
     return res
 
 
+def _require_writable(path: pathlib.Path) -> None:
+    """REFUSE a `--json` destination that cannot receive the record, before the
+    comparison runs.
+
+    A missing parent is made here.  A directory given as the file, or a parent
+    that cannot be made, is a refusal with nothing compared; found after the
+    comparison instead, it was a `FileNotFoundError` and exit 1 (#2040)."""
+    if path.is_dir():
+        raise Refused(f"--json {path} is a directory; name the file to write")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise Refused(f"--json {path}: its parent directory cannot be created "
+                      f"({exc.strerror or exc})") from exc
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--baseline-rev", default="f0c6816",
@@ -278,6 +298,8 @@ def main(argv=None) -> int:
                               else ROOT / "model" / "drums_fx.py")
             json.dump(collect(), sys.stdout)
             return 0
+        if a.json:
+            _require_writable(a.json)
         res = compare(a.baseline_rev)
     except Refused as e:
         print(f"REFUSED: {e}", file=sys.stderr)
@@ -294,7 +316,12 @@ def main(argv=None) -> int:
     print(f"CY envelope peak regs moved   : {res['cy_env_peak_registers_moved'] or 'none'}")
     print(f"CY render inputs identical    : {res['cy_render_inputs_identical']}")
     if a.json:
-        a.json.write_text(json.dumps(res, indent=1) + "\n")
+        try:
+            a.json.write_text(json.dumps(res, indent=1) + "\n")
+        except OSError as e:
+            print(f"REFUSED: --json {a.json} was not written ({e.strerror or e}); "
+                  "the comparison above was made, its record does not exist", file=sys.stderr)
+            return 2
     return 0
 
 

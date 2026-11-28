@@ -698,7 +698,7 @@ def test_a_write_failure_after_the_run_is_refused_with_the_report_printed(probe,
     out = capsys.readouterr().out
     assert code == exit_contract.REFUSED, out[-600:]
     assert "E9  how much of a log-domain distance" in out, "the report was not printed"
-    assert f"REFUSED: {target} was not written" in out, out[-600:]
+    assert f"REFUSED: --json {target} was not written" in out, out[-600:]
     assert "wrote" not in out, out[-600:]
 
 
