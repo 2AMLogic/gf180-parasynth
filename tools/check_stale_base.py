@@ -24,13 +24,33 @@ being asked, rather than a related one that happens to be easy to compute.
 
 Exit 0 clean, 1 if the merge would lose something, 2 if it could not run --
 this repository's convention, where 2 means no evidence rather than no problem.
+
+"Could not run" includes `git` itself being absent. Until #1742 that was not
+so: neither subprocess site caught the executable being missing, a
+`FileNotFoundError` escaped `main()`, and the process exited 1 -- the file-loss
+code -- before any tree had been examined. Both sites now start git through
+`_run`, which refuses.
 """
 from __future__ import annotations
 import argparse, subprocess, sys
 
 
+def _run(*a: str) -> subprocess.CompletedProcess:
+    """Start `git`, or REFUSE (exit 2) when it cannot be started at all.
+
+    OSError is caught rather than its FileNotFoundError subclass because a
+    `git` that is on PATH but not executable fails the same way (EACCES), and
+    is the same unmet precondition. It is printed with the subcommand so a
+    reader can tell WHICH of the two sites refused."""
+    try:
+        return subprocess.run(["git", *a], capture_output=True, text=True)
+    except OSError as exc:
+        print(f"REFUSED: cannot run git {' '.join(a)}: {exc}", file=sys.stderr)
+        raise SystemExit(2) from exc
+
+
 def git(*a: str) -> str:
-    r = subprocess.run(["git", *a], capture_output=True, text=True)
+    r = _run(*a)
     if r.returncode != 0:
         print(f"git {' '.join(a)} failed: {r.stderr.strip()}", file=sys.stderr)
         raise SystemExit(2)
@@ -51,8 +71,7 @@ def main() -> int:
 
     # Actually merge. Do not infer from a diff -- inferring from the wrong diff
     # is what produced three false alarms.
-    r = subprocess.run(["git", "merge-tree", "--write-tree", a.base, a.head],
-                       capture_output=True, text=True)
+    r = _run("merge-tree", "--write-tree", a.base, a.head)
     if r.returncode != 0:
         print(f"MERGE CONFLICT between {a.base} and {a.head} -- resolve before merging",
               file=sys.stderr)
