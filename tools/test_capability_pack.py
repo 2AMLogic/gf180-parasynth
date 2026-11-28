@@ -435,19 +435,38 @@ def _arm(monkeypatch, mode):
         monkeypatch.setattr(cp, name, value)
 
 
+def _rig_for(mode):
+    """The rig a fake `reference_rigs.MiniV3Rig()` hands the SHIPPED script: the
+    same damage as `_patches`, but supplied at the plugin boundary so nothing
+    in `capability_pack` itself is replaced."""
+    if mode == "plain-assertion":
+        class _Buggy(_Rig):
+            def osc_tone(self, wave, note, seconds=0.5):
+                raise AssertionError("a bug in the pack, not a refusal")
+        return _Buggy()
+    if mode.startswith("short-"):
+        _, note, periods = mode.split("-")
+        return _Rig(f"saw-{note}", _short(int(note), int(periods)))
+    return _Rig(*_NON_FINITE[mode])
+
+
 def _process(mode: str, tmp_path) -> subprocess.CompletedProcess:
-    """`python tools/capability_pack.py --run` in a real interpreter, so the
-    number a batch runner sees is a process exit status and not a return value
-    asserted in-process."""
+    """Execute `tools/capability_pack.py --run` itself, as `__main__`, in a real
+    interpreter, so the number a batch runner sees is the exit status of the
+    shipped entry point (`sys.exit(main())`) and not a return value. Only the
+    plugin host (`dawdreamer`, `reference_rigs`) is faked; the script's own
+    functions are the shipped ones."""
     driver = tmp_path / "drive_pack.py"
     driver.write_text(textwrap.dedent(f"""
-        import sys
+        import runpy, sys, types
         sys.path.insert(0, {str(HERE)!r})
-        import capability_pack as cp
         import test_capability_pack as t
-        for name, value in t._patches({mode!r}).items():
-            setattr(cp, name, value)
-        sys.exit(cp.main(["--run"]))
+        sys.modules["dawdreamer"] = types.ModuleType("dawdreamer")
+        rr = types.ModuleType("reference_rigs")
+        rr.MiniV3Rig = lambda: t._rig_for({mode!r})
+        sys.modules["reference_rigs"] = rr
+        sys.argv = [{str(HERE / "capability_pack.py")!r}, "--run"]
+        runpy.run_path(sys.argv[0], run_name="__main__")
     """), encoding="utf-8")
     return subprocess.run([sys.executable, str(driver)], capture_output=True,
                           text=True, timeout=300, cwd=str(ROOT))
