@@ -9,7 +9,7 @@ QUALIFIED**, because it is an energy ratio between two fixed windows and none of
 `docs/scorecard/cymbal-369/` outside this directory moves, so every number already committed stays reproducible.
 
 Instruments: `tools/cymbal_low_tail.py` (+ `tools/test_cymbal_low_tail.py`, 55 tests) and
-`tools/cymbal_m_origin.py` (+ `tools/test_cymbal_m_origin.py`, 13 tests). Results: `low-tail.json`, `m-origin.json`,
+`tools/cymbal_m_origin.py` (+ `tools/test_cymbal_m_origin.py`, 15 tests). Results: `low-tail.json`, `m-origin.json`,
 both carrying the commit they were produced at and a `sources_dirty` flag, both clean. Neither of those two commits
 resolves on origin — the runs' local commits never landed. `low-tail.json` also carries `controls_pass_provenance`
 (#1869): its `controls_pass` was written with the `FORWARD_INTEGRAL` control credited through a refusal, and that key
@@ -118,7 +118,7 @@ is analysis leakage. The headline holds in both.
     refuse-short-record PASS     floor-subtracted PASS 1.0227
 
   defect             rho-tracks  rho-inverts  skirt-blind  edt-known  depth-mono  refuse-trunc  refuse-short  floor-sub
-  FORWARD_INTEGRAL                                                   MOVED       MOVED      MOVED        MOVED
+  FORWARD_INTEGRAL                              MOVED        MOVED      MOVED        MOVED
   WIDE_M               MOVED       MOVED
   SWAP_BANDS           MOVED       MOVED                                                                        MOVED
   NO_TRIM                                                                            MOVED        MOVED         MOVED
@@ -137,7 +137,7 @@ the time a reader picks the JSON up.
 strike instead of from the end, so every crossing becomes the time by which that fraction of the energy has *arrived* —
 1/21.9 of the Schroeder time at −10 dB. Both ratio properties stay green under it (a ratio of two same-direction times
 still rises with a planted slow component and falls with a fast one); `edt-known`, `depth-monotone` and
-`refuse-truncated` go red, `edt-known` on a number, 0.052 of the planted time. `skirt-blind` clears its bound by 0.007
+`refuse-truncated` go red, `edt-known` on a number, 0.052 of the planted time. `skirt-blind` exceeds its bound by 0.007
 and `floor-subtracted` stays inside its own by 0.002; neither cell is load-bearing. Until #1869 this row read
 `REFUSED` and counted as a catch: the defect normalised by its first sample instead of the band's total, so it produced
 no measurement at all. The readings run and rejected before this one are re-run by
@@ -401,7 +401,7 @@ mixture, and a paired test asserts it is load-bearing.
 
 | acceptance | state |
 |---|---|
-| 2. a qualified per-band energy and decay measurement, with known answers, must-fail controls, and a check against the recordings, **before** any candidate is judged | **done for the 1–2.5 kHz decay.** 8 properties, 6 defects each verified to move one (`FORWARD_INTEGRAL` only since #1869 — until then it was `REFUSED`, and the refusal was credited as a catch), 1 asserted blind and verified blind, 68 tests across the two modules, the #101 leakage guard stated as numbers in both bands, both confounds bounded, and the zero point measured rather than assumed |
+| 2. a qualified per-band energy and decay measurement, with known answers, must-fail controls, and a check against the recordings, **before** any candidate is judged | **done for the 1–2.5 kHz decay.** 8 properties, 6 defects each verified to move one (`FORWARD_INTEGRAL` only since #1869 — until then it was `REFUSED`, and the refusal was credited as a catch), 1 asserted blind and verified blind, 70 tests across the two modules, the #101 leakage guard stated as numbers in both bands, both confounds bounded, and the zero point measured rather than assumed |
 | 3. report every setting; freeze the development subset; confirm on untouched settings | **every one of the 25 is reported** (§3), in the window that answers it, via three frozen windows whose union covers the grid and none of which is redundant. D14A's anchor CY5025 and D14B's holdout CY2500 both appear and neither is special |
 | 1. the structure matches the 808's metal circuit | **advanced, negatively and usefully.** The tone stage's shape is eliminated as the cause (0.80 dB), and the documented three-band chain is eliminated as a *sufficient* structure (9.4/16.6 dB short at any balance) |
 | 4. preservation; 5. model → RTL → I²S; 6. listening pack | **not touched here.** No kit change, so nothing to preserve and nothing to carry |
