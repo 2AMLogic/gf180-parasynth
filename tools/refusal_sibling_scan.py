@@ -82,7 +82,16 @@ WHAT THIS SCAN RESOLVES that the #1160 one-off dotted-call grep could not:
     after it raises past the try, though the Call node sits in its body. So
     a call to an `async def` is credited by the tries around it and by the
     CLI boundary only when it is written `await <call>`; a bare call reads
-    `candidate-escape` with no guard and every origin uncovered.
+    `candidate-escape` with no guard and every origin uncovered;
+  * a site written in a NESTED DEF is credited by the tries around the
+    helper's CALLS (#1600): `drum_solo_report` guards `_render(...)` with
+    `except rc.Refused`, but the `rc.render_drum_solo` call sits in
+    `_render`'s def, lexically outside that try, and read `guard=none,
+    candidate-escape`. The def that calls a local helper is read ONE level
+    up, and only when every reference to the helper in the module is a direct
+    call written in the body of the def that defines it -- the refusals are
+    `helper_call_sites`' docstring -- and an origin is credited only when
+    EVERY call catches it;
   * a SUBCLASS of the module's family, raised under its own name, is a raise
     of that family (#1956): the raise was keyed on the NAME `Refused`, so a
     def whose raises were all of a local `class Unbindable(Refused)` read as
@@ -138,16 +147,24 @@ is decided by tracing the caller with a known-answer input, as #1160 and
     its own branch alone. The credit is by PRESENCE, not by path: a handler
     anywhere in a boundary frame covers every uncovered site in the module,
     whether or not the site's own path runs through it (#1656). Guards in
-    intermediate library frames are not modelled, and neither is a guard in
-    the def that CALLS a local helper -- a call written inside a nested def
-    is lexically outside its caller's try -- so `candidate-escape` means
-    "unguarded here and no base guard at the boundary", never "escapes at the
-    exit". That last shape is the one site `rtl-sketch/` adds to the census,
-    and it is ACCEPTED rather than repaired (#1577):
-    `verify_synth_top.drum_solo_report` calls its nested `_render` inside a
-    try whose handler is `except rc.Refused`, the callee's own class. The
-    acceptance is observed, not read -- `tools/test_refusal_sibling_scan.py`
-    runs the shipped function with a refusing callee (caught, returned in the
+    intermediate library frames are not modelled, with ONE exception: the
+    def that CALLS a local helper (#1600, under WHAT THIS SCAN RESOLVES). A
+    call written inside a nested def is lexically outside its caller's try,
+    and until #1600 that read `guard=none` here. What remains unmodelled of
+    that shape is the helper that ESCAPES its def -- returned, stored on an
+    object, passed as a callback, decorated, `global` -- a call of it from
+    any other scope, a helper at module level or a method (the cross-def
+    call graph), and a helper reached without its name (`locals()`, `eval`),
+    the same class as the `global`/`nonlocal` rebinding below. Each is kept
+    a candidate rather than credited. So `candidate-escape` means
+    "unguarded here, at the helper's calls, and no base guard at the
+    boundary", never "escapes at the exit". The one site `rtl-sketch/` adds
+    to the census is that shape, and it is ACCEPTED rather than repaired
+    (#1577): `verify_synth_top.drum_solo_report` calls its nested `_render`
+    twice inside a try whose handler is `except rc.Refused`, the callee's
+    own class, and reads `covered(exact)` since #1600. The acceptance is
+    observed, not only read -- `tools/test_refusal_sibling_scan.py` runs the
+    shipped function with a refusing callee (caught, returned in the
     report's `refused` list) and with a sibling class (escapes);
   * that await rule is conservative where only the await could tell: a bare
     call to an `async def` whose coroutine is awaited INSIDE the try that
@@ -184,7 +201,9 @@ its raises and handlers the way #1193's module-level borrow had;
 `rtl-sketch/` and `audition/` sat outside the roots; and inside a function
 scope the binding that won was the walk's breadth-first order where this
 list claimed last-import-wins. All three are closed. What #1577 left open
-on purpose is the one ACCEPTED census entry named under handlers above.
+on purpose was the one ACCEPTED census entry named under handlers above;
+#1600 closed that one too, and every input that must keep such a site a
+candidate is a control in the test file, each run under the interpreter.
 
 NOT A GATE. Totals are reported, never pinned: the exit-status census
 (`tools/refusal_exit_census.py`) learned that a totals pin reds on every
@@ -213,6 +232,13 @@ BASE_STEM = "refusal"                   # the module defining the common base cl
 # scope's name, not the enclosing function's (nor the module's)
 SCOPE_NODES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
 FUNCTION_NODES = (ast.FunctionDef, ast.AsyncFunctionDef)
+# a node the walk up from a call does not cross (#1600): a def, a lambda, a
+# class body or a generator expression. A def, a lambda and a generator
+# expression run their body where it is CALLED, AWAITED or ITERATED; a class
+# body binds names of its own. `scope_entry` stops at one, so the tries
+# credited to a helper's CALLS are read inside the enclosing def. A list, set
+# or dict comprehension is NOT one -- it runs eagerly where it stands
+DEFERRED_SCOPES = SCOPE_NODES + (ast.Lambda, ast.GeneratorExp)
 
 
 # ---------------------------------------------------------------------------
@@ -580,6 +606,127 @@ def handler_origins(mod: ModInfo, by_stem: dict[str, list[ModInfo]],
     return origins, shape
 
 
+def scope_entry(mod: ModInfo, node: ast.AST) -> tuple[ast.AST | None, ast.AST]:
+    """`(scope, entry)`: the nearest deferred-scope node `node` is written in
+    -- a def, a lambda, a class body or a generator expression, None at module
+    level -- and the child of it that `node` sits under. `entry in
+    scope.body` is what tells a call in a def's BODY from one in its
+    decorators, defaults or annotations: those are written inside the def
+    node and evaluated where the def statement stands, in the enclosing
+    scope (#1600)."""
+    prev, cur = node, mod.parents.get(node)
+    while cur is not None and not isinstance(cur, DEFERRED_SCOPES):
+        prev, cur = cur, mod.parents.get(cur)
+    return cur, prev
+
+
+def _is_generator(mod: ModInfo, h: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """Whether `h` ITSELF yields: `h()` then only CREATES a generator, and
+    the site runs where it is iterated. A yield in a def nested in `h` is
+    that def's own."""
+    return any(isinstance(n, (ast.Yield, ast.YieldFrom)) and scope_entry(mod, n)[0] is h
+               for n in ast.walk(h))
+
+
+def _is_declared(mod: ModInfo, h: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """Whether a `global`/`nonlocal` statement names `h`: the def then binds
+    a name that frames outside its own def can call it by."""
+    return any(isinstance(n, (ast.Global, ast.Nonlocal)) and h.name in n.names
+               for n in ast.walk(mod.tree))
+
+
+def helper_call_sites(mod: ModInfo, site: ast.Call,
+                      ) -> tuple[ast.FunctionDef | ast.AsyncFunctionDef, list[ast.Call]] | None:
+    """`(def, calls)` when `site` is written in the body of a nested def `h`
+    and EVERY reference to `h` in the module is a direct call written in the
+    body of the def that defines it. Those calls are the frames a refusal
+    from `site` surfaces in, one level up, so the tries around them can catch
+    it (#1600): `drum_solo_report` guards its two `_render()` calls with
+    `except rc.Refused` while the `rc.render_drum_solo` call sits in
+    `_render`'s def. None, and no credit, whenever that is not decidable from
+    the AST -- fail closed; each refusal has a control in the test file, run
+    under the interpreter:
+
+      * `site` in a lambda, a generator expression, a class body or at module
+        level: no nested def holds it. A lambda has no def to follow and a
+        generator expression runs where it is iterated; a site in an eager
+        list, set or dict comprehension IS in the def's body;
+      * `site` in `h`'s decorators, defaults or annotations: evaluated at
+        the def statement, outside every try around the calls;
+      * `h` defined at module level or in a class body (a method): that is
+        the cross-def call graph, which this does not follow -- a
+        module-level helper is callable from every frame in the module;
+      * `h` decorated (the decorator holds it, and may call it or hand it
+        on), a generator (`h()` only creates one; the site runs where it is
+        iterated), or declared `global`/`nonlocal` (callable from any frame
+        by a name this module need not spell);
+      * any reference that is not the callee of a call -- returned, assigned
+        to another name, passed as a callback, stored on an object, deleted --
+        or a call from any other scope: a sibling def, a lambda, the module.
+        The name is read module-wide on purpose, so a def of the same name
+        elsewhere, called anywhere, keeps the row a candidate: a false
+        candidate is the price, never a false covered;
+      * a bare call to an `async def` `h`, which only CREATES the coroutine
+        (#1718's rule, one level up): only `await h(...)` runs the site where
+        the call is written;
+      * no call at all: an uncalled helper runs no site, and "every call is
+        guarded" must not hold vacuously of nothing.
+    """
+    h, entry = scope_entry(mod, site)
+    if not isinstance(h, FUNCTION_NODES) or entry not in h.body:
+        return None
+    outer, _ = scope_entry(mod, h)
+    if not isinstance(outer, FUNCTION_NODES):
+        return None
+    if h.decorator_list or _is_generator(mod, h) or _is_declared(mod, h):
+        return None
+    calls: list[ast.Call] = []
+    for ref in ast.walk(mod.tree):
+        if not (isinstance(ref, ast.Name) and ref.id == h.name):
+            continue
+        scope, entry = scope_entry(mod, ref)
+        call = mod.parents.get(ref)
+        if not (isinstance(ref.ctx, ast.Load) and isinstance(call, ast.Call)
+                and call.func is ref and scope is outer and entry in outer.body):
+            return None
+        if (isinstance(h, ast.AsyncFunctionDef)
+                and not isinstance(mod.parents.get(call), ast.Await)):
+            return None
+        calls.append(call)
+    return (outer, calls) if calls else None
+
+
+def helper_call_credit(mod: ModInfo, by_stem: dict[str, list[ModInfo]],
+                       site: ast.Call, origins: set[str]) -> tuple[set[str], list[str]]:
+    """(origins the tries around the helper's CALLS catch for a refusal
+    raised at `site`, the shapes of the handlers that catch them). An origin
+    is credited only when EVERY call catches it, because the refusal can
+    surface at any of them: crediting the union would read a helper with one
+    guarded and one unguarded call covered. Only tries inside the enclosing
+    def are read -- one level, the def that calls the helper; a try further
+    out guards that def's own callers, which this does not follow. A handler
+    that catches nothing of `origins` adds no shape here, unlike at a site's
+    own try: the row's `guard` is what the caller's credit rests on. Nothing
+    at all when `helper_call_sites` refuses."""
+    found = helper_call_sites(mod, site)
+    if found is None:
+        return set(), []
+    outer, calls = found
+    caught, shapes = set(origins), []
+    for call in calls:
+        cov = set()
+        for tr in enclosing_try_parents(outer, call):
+            for h in tr.handlers:
+                ho, shape = handler_origins(mod, by_stem, h)
+                got = (origins if shape in ("base", "broad")
+                       else ho & origins if shape != "other" else set())
+                cov |= got
+                if got:
+                    shapes.append((shape, got))
+        caught &= cov
+    return caught, sorted({s for s, got in shapes if got & caught})
+
+
 def _is_main_guard(node: ast.AST) -> bool:
     """`if __name__ == ...`: the `__main__` dispatch block."""
     return (isinstance(node, ast.If) and isinstance(node.test, ast.Compare)
@@ -724,6 +871,19 @@ def scan(files: list[pathlib.Path], idx: dict[str, ModInfo]) -> list[dict]:
                         _, shape = handler_origins(mod, by_stem, h)
                         if shape in ("base", "broad"):
                             ashapes.append(shape)
+                if runs_here:
+                    # (#1600) the same credit, for what it can settle here: a
+                    # base or broad handler at EVERY call of the helper
+                    every = {o for c in cands for o in raise_origins(c, fname or "", by_stem)}
+                    # ... but only when EVERY origin any candidate raises is
+                    # caught at EVERY call. A shape is a property of one
+                    # call: a base handler at one call plus a partial exact
+                    # handler at another leaves `caught` non-empty yet short
+                    # of `every`, and that shape must not settle the row
+                    # (PR #1803 review: a false covered).
+                    h_caught, h_shapes = helper_call_credit(mod, by_stem, node, every)
+                    if every and h_caught >= every:
+                        ashapes += [s for s in h_shapes if s in ("base", "broad")]
                 sites.append(dict(
                     site=f"{label}:{node.lineno}",
                     callee=f"{callee_stem}.{fname}",
@@ -751,6 +911,13 @@ def scan(files: list[pathlib.Path], idx: dict[str, ModInfo]) -> list[dict]:
                     elif shape != "other":
                         covered |= ho & origins
                         shapes.append(shape)
+            if runs_here:
+                # (#1600) one frame up: a site written in a nested def is
+                # caught by the tries around the helper's CALLS
+                up, up_shapes = helper_call_credit(mod, by_stem, node, origins)
+                if up - covered:
+                    covered |= up
+                    shapes += up_shapes
             uncovered = origins - covered
             bguards = boundary if runs_here else []
             bshapes = {shape for _, shape in bguards}

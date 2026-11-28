@@ -28,7 +28,12 @@ census read as no guard -- and the inputs that must not be credited as one. The
 #1718 section plants an `async def` callee, which `funcs` did not register: each
 control RUNS the planted coroutine code first and holds the census row to the
 interpreter's verdict, and each fix is reverted in memory to show that its
-control goes red without it. The #1956 section plants a SUBCLASS of the
+control goes red without it. The #1600 section plants a site inside a nested
+def whose caller guards the call: each control RUNS the escape route it names
+first and holds the census row to the interpreter's verdict, and each refusal
+of the credit is reverted in memory to show the control written for it reads a
+false covered without it.
+The #1956 section plants a SUBCLASS of the
 callee's own family raised under its name, which `raise_origins` read as no
 refusal: each row is held to the interpreter's verdict on the planted files,
 the same-named class outside the family is the rule-8 control, and each of
@@ -1546,13 +1551,14 @@ def test_function_scope_bindings_follow_source_order_not_walk_order(tmp_path, la
 # `rtl-sketch/verify_synth_top.py`'s `drum_solo_report` imports `run_case as rc`
 # inside the def, calls `rc.render_drum_solo` inside a nested helper `_render`,
 # and guards the two `_render()` calls with `except rc.Refused`. The call is
-# lexically outside that try (it sits in the helper's def), so the census
-# reports it `guard=none, candidate-escape`: a guard in the def that CALLS a
-# local helper is not credited. The site is ACCEPTED, not repaired -- a second
-# handler at the call would only restate the one that already catches it. The
-# controls below are the evidence for that acceptance, run on the shipped
-# function; the stipulated world is the drum model's trace and the callee,
-# nothing inside the def under test.
+# lexically outside that try (it sits in the helper's def), so until #1600 the
+# census reported it `guard=none, candidate-escape`: a guard in the def that
+# CALLS a local helper was not credited. It reads `covered(exact)` now, and
+# the site itself is still ACCEPTED, not repaired -- a second handler at the
+# call would only restate the one that already catches it. The controls below
+# are the evidence for that acceptance, run on the shipped function; the
+# stipulated world is the drum model's trace and the callee, nothing inside
+# the def under test.
 
 def _run_case_stub(raise_cls=None):
     """A `run_case` module whose `render_drum_solo` always refuses: with
@@ -1612,6 +1618,24 @@ def test_drum_solo_refusal_from_a_sibling_class_escapes_that_handler(monkeypatch
     sibling = type("Refused", (Exception,), {})
     with pytest.raises(sibling, match="stubbed refusal for BD"):
         _drum_solo_report(monkeypatch, _run_case_stub(raise_cls=sibling))()
+
+
+def test_the_real_drum_solo_site_is_covered_exact_in_the_census():
+    """The census row of the site those two controls are the evidence for,
+    read on the tracked tree: `guard=none, candidate-escape` until #1600,
+    now the handler its caller wraps both `_render()` calls in. Found by
+    callee and not by line, so an edit elsewhere in the file cannot red it."""
+    files = rss.tracked_files()
+    scope = [f for f in files if any(str(f.relative_to(rss.ROOT)).startswith(r + "/")
+                                     for r in rss.SCAN_ROOTS)]
+    idx = rss.build_index(files)
+    got = [s for s in rss.scan(scope, idx)
+           if s["callee"] == "run_case.render_drum_solo"
+           and s["site"].startswith("rtl-sketch/verify_synth_top.py:")]
+    assert len(got) == 1, got
+    assert (got[0]["origins"], got[0]["classification"], got[0]["guard"],
+            got[0]["uncovered"]) == (["preparation_contract"], "covered(exact)",
+                                     "exact", []), got[0]
 
 
 # ---------------------------------------------------------------------------
@@ -2340,6 +2364,743 @@ def helper():
 ''')
     assert s["classification"] == "candidate-escape", s
     assert s["uncovered"] == ["mod_a"], s
+
+
+# ---------------------------------------------------------------------------
+# #1600: a guard in the def that CALLS a local helper. A site written in a
+# nested def is lexically outside its caller's try, so the census read it
+# `guard=none, candidate-escape` though the refusal is caught one frame up --
+# the shape `verify_synth_top.drum_solo_report` and its `_render` have. The
+# tries around the helper's CALLS are credited now, and only when every
+# reference to the helper in the module is such a call, in the body of the def
+# that defines it. Each input that must keep the row a candidate is planted
+# with the escape route it names, RUN under the interpreter first, and held to
+# that verdict; each refusal of the credit is then reverted in memory to show
+# the control written for it reads a false covered without it.
+# ---------------------------------------------------------------------------
+
+HELPER_CALLEE = '''
+import refusal
+
+class Refused(refusal.Refused, Exception):
+    pass
+
+CALLS = 0                               # how many times a `load` ran, for the verdict
+
+def load(p):
+    global CALLS
+    CALLS += 1
+    raise Refused("planted refusal")
+'''
+
+HELPER_GUARDED = '''
+import callee
+
+def outer(p):
+    def helper(**kw):
+        return callee.load(p)            # the census site: lexically outside the try
+    try:
+        helper()                         # ...caught HERE, by the def that CALLS it
+    except callee.Refused as e:
+        return f"REFUSED  {e}"
+
+def run():
+    return outer("x")
+'''
+
+HELPER_TWO_CALLS = '''
+import callee
+
+def outer(p):
+    def helper(**kw):
+        return callee.load(p)
+    try:
+        at_strike = helper(frames=1)     # the real site's shape: two calls, one try
+        scorecard = helper()
+    except callee.Refused as exc:
+        return f"REFUSED  {exc}"
+
+def run():
+    return outer("x")
+'''
+
+HELPER_TWO_GUARDS = '''
+import refusal
+import callee
+
+def outer(p):
+    def helper(**kw):
+        return callee.load(p)
+    try:
+        helper()
+    except callee.Refused:              # exact at one call...
+        pass
+    try:
+        helper()
+    except refusal.Refused:             # ...and the base at the other
+        pass
+
+def run():
+    return outer("x")
+'''
+
+HELPER_LISTCOMP = '''
+import callee
+
+def outer(p):
+    def helper(**kw):
+        return [callee.load(x) for x in [p]]   # a list comprehension runs eagerly, inside helper()
+    try:
+        helper()
+    except callee.Refused:
+        return None
+
+def run():
+    return outer("x")
+'''
+
+HELPER_ASYNC_AWAITED = '''
+import asyncio
+import callee
+
+async def outer(p):
+    async def helper(**kw):
+        return callee.load(p)           # raises inside the coroutine...
+    try:
+        await helper()                  # ...and surfaces HERE, inside the try
+    except callee.Refused:
+        return None
+
+def run():
+    return asyncio.run(outer("x"))
+'''
+
+HELPER_MIXED_CALLERS = '''
+import callee
+
+def outer(p):
+    def helper(**kw):
+        return callee.load(p)
+    try:
+        helper()                         # guarded...
+    except callee.Refused:
+        pass
+    return helper()                      # ...and not: a second caller
+
+def run():
+    return outer("x")
+'''
+
+HELPER_RETURNED = '''
+import callee
+
+def outer(p):
+    def helper(**kw):
+        return callee.load(p)
+    try:
+        helper()
+    except callee.Refused:
+        pass
+    return helper                       # ESCAPES its def
+
+def run():
+    outer("x")()                        # called where the def never sees it
+'''
+
+HELPER_STORED = '''
+import callee
+
+REGISTRY = []
+
+def outer(p):
+    def helper(**kw):
+        return callee.load(p)
+    try:
+        helper()
+    except callee.Refused:
+        pass
+    REGISTRY.append(helper)             # stored on an object
+
+def run():
+    outer("x")
+    REGISTRY[0]()
+'''
+
+HELPER_CALLBACK = '''
+import callee
+
+def each(f, p):
+    return f(p)
+
+def outer(p):
+    def helper(*a, **kw):
+        return callee.load(p)
+    try:
+        helper()
+    except callee.Refused:
+        pass
+    return each(helper, p)              # passed as a callback: invoked inside each
+
+def run():
+    return outer("x")
+'''
+
+HELPER_SIBLING_DEF = '''
+import callee
+
+def outer(p):
+    def helper(**kw):
+        return callee.load(p)
+    def other(**kw):
+        return helper(**kw)              # called from ANOTHER nested def, unguarded
+    try:
+        helper()
+    except callee.Refused:
+        pass
+    return other()                       # the refusal leaves outer here
+
+def run():
+    return outer("x")
+'''
+
+HELPER_GLOBAL = '''
+import callee
+
+def outer(p):
+    global helper                        # the helper becomes a module attribute
+    def helper(**kw):
+        return callee.load(p)
+    try:
+        helper()
+    except callee.Refused:
+        pass
+'''
+
+HELPER_GLOBAL_USER = '''
+import caller
+
+def run():
+    caller.outer("x")
+    caller.helper()                      # called from outside the def, by attribute
+'''
+
+HELPER_UNCALLED = '''
+import callee
+
+def outer(p):
+    def helper(**kw):
+        return callee.load(p)           # defined, never called: the site cannot run
+
+def run():
+    return outer("x")
+'''
+
+HELPER_DECORATED = '''
+import callee
+
+REGISTRY = []
+
+def register(f):
+    REGISTRY.append(f)                  # the decorator holds the helper...
+    return f
+
+def outer(p):
+    @register
+    def helper(**kw):
+        return callee.load(p)
+    try:
+        helper()
+    except callee.Refused:
+        pass
+
+def run():
+    outer("x")
+    REGISTRY[0]()                       # ...and hands it on: called outside the def
+'''
+
+HELPER_ASYNC_BARE = '''
+import asyncio
+import callee
+
+async def outer(p):
+    async def helper(**kw):
+        return callee.load(p)
+    try:
+        coro = helper()                 # CREATED inside the try: no code runs yet
+    except callee.Refused:
+        return None
+    await coro                          # ...and RAISED after it
+
+def run():
+    return asyncio.run(outer("x"))
+'''
+
+HELPER_GENERATOR = '''
+import callee
+
+def outer(p):
+    def helper(**kw):
+        yield callee.load(p)            # a generator: the site runs when it is ITERATED
+        yield 0
+    try:
+        g = helper()                    # CREATED inside the try: no code runs yet
+    except callee.Refused:
+        return None
+    return list(g)                      # ...and runs after it
+
+def run():
+    return outer("x")
+'''
+
+HELPER_IN_LAMBDA = '''
+import callee
+
+REGISTRY = []
+
+def top(p):
+    def outer(q):
+        helper = lambda **kw: callee.load(q)    # a lambda has no def to follow
+        REGISTRY.append(helper)
+        try:
+            helper()
+        except callee.Refused:
+            pass
+    try:
+        outer(p)
+    except callee.Refused:
+        pass
+
+def run():
+    top("x")
+    REGISTRY[0]()                       # called where no guard reaches
+'''
+
+HELPER_IN_GENEXP = '''
+import callee
+
+REGISTRY = []
+
+def top(p):
+    def outer(q):
+        REGISTRY.append(callee.load(x) for x in [q])   # a generator expression: runs when iterated
+    try:
+        outer(p)
+    except callee.Refused:
+        pass
+
+def run():
+    top("x")
+    return list(REGISTRY[0])            # iterated outside every try
+'''
+
+HELPER_DEFAULT_ARG_SITE = '''
+import callee
+
+def outer(p):
+    def helper(x=callee.load(p)):       # a site in the DEFAULT: runs at the def statement
+        return x
+    try:
+        helper()
+    except callee.Refused:
+        return None
+
+def run():
+    return outer("x")
+'''
+
+HELPER_SIBLING_HANDLER = '''
+import refusal
+import callee
+
+class Refused(refusal.Refused, Exception):
+    pass
+
+def outer(p):
+    def helper(**kw):
+        return callee.load(p)
+    try:
+        helper()
+    except Refused:                    # the caller's OWN class: a sibling of callee's
+        return None
+
+def run():
+    return outer("x")
+'''
+
+MODULE_HELPER_GUARDED = '''
+import callee
+
+def helper(p):
+    return callee.load(p)               # a MODULE-level helper: any frame may call it
+
+def outer(p):
+    try:
+        helper(p)                       # guarded HERE
+    except callee.Refused:
+        return None
+
+def run():
+    return outer("x")
+'''
+
+HELPER_CALLEE_TWO = '''
+import callee
+import refusal
+from callee import Refused as R          # a borrowed family: its origin is `callee`
+
+class Refused(refusal.Refused, Exception):
+    pass
+
+def load(p):
+    callee.CALLS += 1
+    if p == "own":
+        raise Refused("planted refusal")
+    raise R("planted refusal")
+'''
+
+HELPER_PARTIAL = '''
+import callee2
+
+def outer(p):
+    def helper(**kw):
+        return callee2.load(p)
+    try:
+        helper()
+    except callee2.Refused:             # exact for callee2's OWN class alone
+        return None
+
+def run():
+    return outer("borrowed")            # the origin the handler cannot catch
+'''
+
+ESCAPE_ROW = ("candidate-escape", "none", ["callee"])
+
+
+def _case(src, python, row, *, callee="callee.load", extra=None,
+          order=("caller",), run_in="caller"):
+    return dict(src=src, python=python, row=row, callee=callee,
+                extra=extra or {}, order=("callee", *order), run_in=run_in)
+
+
+HELPER_CASES = {
+    # --- credited: every reference is a guarded call in the enclosing def ---
+    "every-call-guarded": _case(HELPER_GUARDED, "caught", ("covered(exact)", "exact", [])),
+    "two-calls-one-try": _case(HELPER_TWO_CALLS, "caught", ("covered(exact)", "exact", [])),
+    "exact-at-one-call-base-at-the-other": _case(
+        HELPER_TWO_GUARDS, "caught", ("covered(base+exact)", "base,exact", [])),
+    "site-in-an-eager-list-comprehension": _case(
+        HELPER_LISTCOMP, "caught", ("covered(exact)", "exact", [])),
+    "async-helper-awaited-in-the-try": _case(
+        HELPER_ASYNC_AWAITED, "caught", ("covered(exact)", "exact", [])),
+    # --- the issue's three, each with the escape route it names -------------
+    "mixed-callers": _case(HELPER_MIXED_CALLERS, "escaped", ESCAPE_ROW),
+    "returned": _case(HELPER_RETURNED, "escaped", ESCAPE_ROW),
+    "stored-on-an-object": _case(HELPER_STORED, "escaped", ESCAPE_ROW),
+    "passed-as-a-callback": _case(HELPER_CALLBACK, "escaped", ESCAPE_ROW),
+    "called-from-a-sibling-def": _case(HELPER_SIBLING_DEF, "escaped", ESCAPE_ROW),
+    "a-module-attribute-by-global": _case(
+        HELPER_GLOBAL, "escaped", ESCAPE_ROW, extra={"helper_global_user": HELPER_GLOBAL_USER},
+        order=("caller", "helper_global_user"), run_in="helper_global_user"),
+    # --- rule 8: the other inputs that satisfy "every call is guarded" -----
+    "never-called": _case(HELPER_UNCALLED, "not-run", ESCAPE_ROW),
+    "decorated": _case(HELPER_DECORATED, "escaped", ESCAPE_ROW),
+    "async-helper-created-in-the-try": _case(HELPER_ASYNC_BARE, "escaped", ESCAPE_ROW),
+    "a-generator": _case(HELPER_GENERATOR, "escaped", ESCAPE_ROW),
+    "site-in-a-lambda": _case(HELPER_IN_LAMBDA, "escaped", ESCAPE_ROW),
+    "site-in-a-generator-expression": _case(HELPER_IN_GENEXP, "escaped", ESCAPE_ROW),
+    "site-in-a-default-argument": _case(HELPER_DEFAULT_ARG_SITE, "escaped", ESCAPE_ROW),
+    "the-callers-own-sibling-class": _case(HELPER_SIBLING_HANDLER, "escaped", ESCAPE_ROW),
+}
+
+
+def _helper_files(tmp_path: pathlib.Path, modules: dict[str, str]) -> list[pathlib.Path]:
+    files = []
+    for name, body in modules.items():
+        p = tmp_path / f"{name}.py"
+        p.write_text(body)
+        files.append(p)
+    return files
+
+
+def _helper_tree(tmp_path: pathlib.Path, c: dict) -> list[pathlib.Path]:
+    """`callee.py`, whose `load` always refuses and counts its calls, the
+    caller, and any further module the case's escape route needs."""
+    return _helper_files(tmp_path, {"callee": HELPER_CALLEE, "caller": c["src"], **c["extra"]})
+
+
+def _helper_row(scan_mod, files: list[pathlib.Path], callee: str = "callee.load") -> dict:
+    """The one `callee` site of a helper tree, read by `scan_mod` (the
+    shipped scanner or a mutant of it): a second would be a fixture mistake."""
+    idx = scan_mod.build_index(files)
+    got = [s for s in scan_mod.scan(files, idx) if s["callee"] == callee]
+    assert len(got) == 1, got
+    return got[0]
+
+
+def _helper_verdict(monkeypatch, tmp_path: pathlib.Path, order: tuple[str, ...],
+                    run_in: str) -> str:
+    """What the INTERPRETER does with a planted escape route: the modules are
+    imported for real in `order`, `run()` of the last is called, and
+    'caught' / 'escaped' is read where the callee's refusal ends up.
+    'not-run' when the callee was never reached: a defect in the planting,
+    not a verdict."""
+    for name in order:
+        _import(monkeypatch, tmp_path / f"{name}.py")
+    callee = sys.modules["callee"]
+    callee.CALLS = 0
+    f = sys.modules[run_in].run
+    try:
+        asyncio.run(f()) if asyncio.iscoroutinefunction(f) else f()
+    except callee.Refused:
+        verdict = "escaped"
+    else:
+        verdict = "caught"
+    return verdict if callee.CALLS else "not-run"
+
+
+@pytest.mark.parametrize("case", list(HELPER_CASES))
+def test_the_census_row_of_a_helper_site_follows_the_interpreter(tmp_path, monkeypatch, case):
+    """The #1600 rule, held to what Python does. A site inside a nested def
+    reads covered ONLY when every reference to the helper in the module is a
+    call that the enclosing def guards; one unguarded call, one reference that
+    lets the helper out, or one shape that runs the body elsewhere, and the
+    refusal leaves the caller -- each planted below, and each read by the
+    census as the escape the interpreter reports. The first five are the
+    credit itself; they started red against the scanner that read the site's
+    own tries alone."""
+    c = HELPER_CASES[case]
+    files = _helper_tree(tmp_path, c)
+    assert _helper_verdict(monkeypatch, tmp_path, c["order"], c["run_in"]) == c["python"], case
+    s = _helper_row(rss, files, c["callee"])
+    assert (s["classification"], s["guard"], s["uncovered"]) == c["row"], (case, s)
+
+
+_OUTER_SCOPE_REFUSAL = (
+    "        if not (isinstance(ref.ctx, ast.Load) and isinstance(call, ast.Call)\n"
+    "                and call.func is ref and scope is outer and entry in outer.body):\n"
+    "            return None")
+_DECORATED_OR_DEFERRED = "    if h.decorator_list or _is_generator(mod, h) or _is_declared(mod, h):"
+_DEFERRED_SCOPES = "DEFERRED_SCOPES = SCOPE_NODES + (ast.Lambda, ast.GeneratorExp)"
+
+HELPER_MUTANTS = [
+    # (the shipped line(s), the over-credited variant, the control it turns red)
+    pytest.param("        caught &= cov", "        caught |= cov",
+                 "mixed-callers", id="the-union-of-the-calls-guards"),
+    pytest.param(
+        _OUTER_SCOPE_REFUSAL,
+        "        if not (isinstance(call, ast.Call) and call.func is ref):\n"
+        "            continue\n"
+        "        if not (isinstance(ref.ctx, ast.Load)\n"
+        "                and scope is outer and entry in outer.body):\n"
+        "            return None",
+        "returned", id="only-the-call-references-are-read"),
+    pytest.param(
+        _OUTER_SCOPE_REFUSAL,
+        "        if not (isinstance(ref.ctx, ast.Load) and isinstance(call, ast.Call)\n"
+        "                and call.func is ref):\n"
+        "            return None\n"
+        "        if not (scope is outer and entry in outer.body):\n"
+        "            continue",
+        "called-from-a-sibling-def", id="references-outside-the-enclosing-def-are-not-read"),
+    pytest.param("    return (outer, calls) if calls else None", "    return (outer, calls)",
+                 "never-called", id="an-uncalled-helper-is-vacuously-covered"),
+    pytest.param(
+        "        if (isinstance(h, ast.AsyncFunctionDef)\n"
+        "                and not isinstance(mod.parents.get(call), ast.Await)):\n"
+        "            return None",
+        "        pass",
+        "async-helper-created-in-the-try", id="a-bare-call-to-an-async-helper-counts"),
+    pytest.param(_DECORATED_OR_DEFERRED, "    if _is_generator(mod, h) or _is_declared(mod, h):",
+                 "decorated", id="a-decorated-helper-is-credited"),
+    pytest.param(_DECORATED_OR_DEFERRED, "    if h.decorator_list or _is_generator(mod, h):",
+                 "a-module-attribute-by-global", id="a-global-helper-is-credited"),
+    pytest.param(_DECORATED_OR_DEFERRED, "    if h.decorator_list or _is_declared(mod, h):",
+                 "a-generator", id="a-generator-helper-is-credited"),
+    pytest.param(_DEFERRED_SCOPES, "DEFERRED_SCOPES = SCOPE_NODES",
+                 "site-in-a-lambda", id="a-lambda-is-not-a-scope"),
+    pytest.param(_DEFERRED_SCOPES, "DEFERRED_SCOPES = SCOPE_NODES",
+                 "site-in-a-generator-expression", id="a-generator-expression-is-not-a-scope"),
+    pytest.param("    if not isinstance(h, FUNCTION_NODES) or entry not in h.body:",
+                 "    if not isinstance(h, FUNCTION_NODES):",
+                 "site-in-a-default-argument", id="a-site-in-the-defaults-is-in-the-body"),
+]
+
+
+@pytest.mark.parametrize("old,new,case", HELPER_MUTANTS)
+def test_with_a_refusal_reverted_its_control_reads_a_false_covered(tmp_path, old, new, case):
+    """The over-credited variant of the fix: ONE refusal reverted in the
+    shipped source, and the control written for it reads the site covered
+    where the interpreter lets the refusal out. The last statement is that
+    control's own assertion, run on the mutant: red, as it must be."""
+    c = HELPER_CASES[case]
+    mut = _scanner_with(old, new)
+    got = _helper_row(mut, _helper_tree(tmp_path, c), c["callee"])
+    assert got["classification"].startswith("covered"), (case, got)
+    with pytest.raises(AssertionError):
+        assert (got["classification"], got["guard"], got["uncovered"]) == c["row"], (case, got)
+
+
+def test_the_credit_is_per_origin_like_a_sites_own_try(tmp_path, monkeypatch):
+    """`helper_call_credit` credits an origin when EVERY call catches it, and
+    only that origin: the callee raises two classes and the caller's handler
+    is exact for one. The census reports the other as uncovered, as it does
+    for a site's own exact try, and Python lets that one out."""
+    files = _helper_files(tmp_path, {"callee": HELPER_CALLEE, "callee2": HELPER_CALLEE_TWO,
+                                     "caller": HELPER_PARTIAL})
+    assert _helper_verdict(monkeypatch, tmp_path, ("callee", "callee2", "caller"),
+                           "caller") == "escaped"
+    s = _helper_row(rss, files, "callee2.load")
+    assert (s["origins"], s["classification"], s["guard"], s["uncovered"]) == (
+        ["callee", "callee2"], "candidate-escape", "exact", ["callee"]), s
+
+
+def test_a_module_level_helper_is_not_followed(tmp_path, monkeypatch):
+    """Out of #1600's scope on purpose, and pinned so the boundary is
+    visible: Python catches this one and the census still lists it a
+    candidate. A module-level helper is callable from every frame in the
+    module, so the try around ONE caller's call says nothing about the
+    others -- the cross-def call graph, not one level up."""
+    files = _helper_files(tmp_path, {"callee": HELPER_CALLEE, "caller": MODULE_HELPER_GUARDED})
+    assert _helper_verdict(monkeypatch, tmp_path, ("callee", "caller"), "caller") == "caught"
+    s = _helper_row(rss, files)
+    assert (s["classification"], s["guard"], s["uncovered"]) == ESCAPE_ROW, s
+
+
+# The same credit in the stem-collision branch, which reads the tries around a
+# site on its own and lets only a base or broad guard settle a callee it
+# cannot attribute. The interpreter's verdict is not run here: which module the
+# import binds is the undecidable fact the branch exists for.
+CALLER_AMBIG_HELPER_BASE = '''
+import refusal
+from play import run
+
+def outer(p):
+    def helper(**kw):
+        return run(p)                   # WHICH play? and inside a nested helper
+    try:
+        helper()
+    except refusal.Refused:            # the base: settles it for every candidate
+        return None
+'''
+
+CALLER_AMBIG_HELPER_EXACT = CALLER_AMBIG_HELPER_BASE.replace(
+    "from play import run", "import play").replace(
+    "return run(p)", "return play.run(p)").replace(
+    "    except refusal.Refused:            # the base: settles it for every candidate\n",
+    "    except play.Refused:              # exact for a module it cannot name\n")
+
+CALLER_AMBIG_HELPER_MIXED = CALLER_AMBIG_HELPER_BASE.replace(
+    "    except refusal.Refused:            # the base: settles it for every candidate\n"
+    "        return None\n",
+    "    except refusal.Refused:\n"
+    "        pass\n"
+    "    return helper()                  # and not at this call\n")
+
+
+def _amb_helper(tmp_path, caller: str) -> tuple[dict, list[str]]:
+    """(the caller's one `play.run` row, the shapes `helper_call_credit`
+    returns for it against every origin a candidate raises): what the
+    collision branch reads."""
+    files = _collision_tree(tmp_path, PLAY_FAMILY_RAISES, PLAIN, "caller_amb_helper", caller)
+    idx = rss.build_index(files)
+    got = _sites_for(files, idx, "caller_amb_helper")
+    assert len(got) == 1, got
+    assert len(got[0]["candidates"]) == 2, got[0]
+    by_stem = rss.stem_map(idx)
+    mod = idx[str(tmp_path / "caller_amb_helper.py")]
+    site = next(n for n in ast.walk(mod.tree)
+                if isinstance(n, ast.Call) and ast.unparse(n.func) in ("run", "play.run"))
+    every = {o for c in by_stem["play"] for o in rss.raise_origins(c, "run", by_stem)}
+    return got[0], rss.helper_call_credit(mod, by_stem, site, every)[1]
+
+
+def test_a_base_guard_at_every_call_of_the_helper_settles_an_ambiguous_callee(tmp_path):
+    """Started red: the branch read `ambiguous-callee, guard=none` though the
+    caller's `except refusal.Refused` catches whichever `play` is bound."""
+    s, credit = _amb_helper(tmp_path, CALLER_AMBIG_HELPER_BASE)
+    assert credit == ["base"]
+    assert (s["classification"], s["guard"]) == ("covered(base)", "base"), s
+
+
+def test_an_exact_guard_at_the_helper_calls_settles_no_ambiguous_callee(tmp_path):
+    """What settles a collision did not widen: an exact handler names one
+    module, and the branch cannot say which candidate that is. The credit
+    IS exact here -- asserted, so this is the branch refusing it and not a
+    fixture that never reached it."""
+    s, credit = _amb_helper(tmp_path, CALLER_AMBIG_HELPER_EXACT)
+    assert credit == ["exact"]
+    assert (s["classification"], s["guard"]) == ("ambiguous-callee", "none"), s
+
+
+def test_an_ambiguous_callee_with_one_unguarded_call_stays_ambiguous(tmp_path):
+    """The mixed-callers refusal, in this branch too: one call of the helper
+    outside the try, and the base guard at the other settles nothing."""
+    s, credit = _amb_helper(tmp_path, CALLER_AMBIG_HELPER_MIXED)
+    assert credit == []
+    assert (s["classification"], s["guard"]) == ("ambiguous-callee", "none"), s
+
+
+# PR #1803 review, rule 8: the input that defeats the branch's helper credit.
+# A base handler at ONE call and a partial exact handler at the other keeps
+# `caught` non-empty while leaving the `play` origin uncaught at the second.
+ALPHA_PLAY_OWN_ORIGIN = '''
+import refusal
+
+class Refused(refusal.Refused, Exception):
+    pass
+
+def run(x):
+    raise Refused("own class -> origin play")
+'''
+
+BETA_PLAY_BORROWED_ORIGIN = '''
+import refusal
+import mod_a
+
+class Refused(refusal.Refused, Exception):
+    pass
+
+def run(x):
+    raise mod_a.Refused("borrowed class -> origin mod_a")
+'''
+
+CALLER_AMBIG_HELPER_BASE_THEN_PARTIAL = '''
+import refusal
+import mod_a
+import play
+
+def outer(p):
+    def helper(**kw):
+        return play.run(p)
+    try:
+        helper()
+    except refusal.Refused:             # base: holds for every candidate
+        pass
+    try:
+        helper()
+    except mod_a.Refused:               # exact: only the mod_a origin
+        pass
+'''
+
+
+def test_base_at_one_helper_call_and_a_partial_guard_at_another_stays_ambiguous(tmp_path):
+    """Started red: the row read covered(base) though the second call's
+    `except mod_a.Refused` lets the `play` origin out (the interpreter
+    escapes it, per the review's probe). The credit is asserted to be the
+    defeating one -- non-empty `caught`, short of `every`, a base shape."""
+    files = _collision_tree(tmp_path, ALPHA_PLAY_OWN_ORIGIN, BETA_PLAY_BORROWED_ORIGIN,
+                            "caller_amb_mixed", CALLER_AMBIG_HELPER_BASE_THEN_PARTIAL)
+    idx = rss.build_index(files)
+    got = _sites_for(files, idx, "caller_amb_mixed")
+    assert len(got) == 1, got
+    by_stem = rss.stem_map(idx)
+    mod = idx[str(tmp_path / "caller_amb_mixed.py")]
+    site = next(n for n in ast.walk(mod.tree)
+                if isinstance(n, ast.Call) and ast.unparse(n.func) == "play.run")
+    every = {o for c in by_stem["play"] for o in rss.raise_origins(c, "run", by_stem)}
+    caught, shapes = rss.helper_call_credit(mod, by_stem, site, every)
+    assert caught and caught < every and "base" in shapes, (caught, every, shapes)
+    assert (got[0]["classification"], got[0]["guard"]) == ("ambiguous-callee", "none"), got[0]
 
 
 # ---------------------------------------------------------------------------
