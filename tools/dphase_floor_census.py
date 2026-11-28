@@ -305,6 +305,30 @@ def report(pre: dict, res: dict, out) -> None:
         print(f"{v:6} {f(r):>12} {f(o):>12}", file=out)
 
 
+def _record_path(flag: str, name, kind: str) -> None:
+    """Check the `--json` or `-o` destination BEFORE the corpus is censused,
+    or Refused (#2098).
+
+    A missing parent directory is created here, as `fpga/selected_preset.py`
+    creates `--out`'s. A destination that is a directory, or whose parent
+    cannot be made, is refused now -- a census is minutes of rendering, and
+    none of it should run for a file that cannot be written -- rather than by
+    `OSError` from the write afterwards, which exited 1 with a traceback.
+
+    What this cannot see -- a parent that exists but is not writable, a disk
+    that fills -- is left to the guards around the writes.
+    """
+    out = Path(name)
+    try:
+        is_dir = out.is_dir()
+        if not is_dir:
+            out.parent.mkdir(parents=True, exist_ok=True)
+    except (OSError, ValueError) as exc:
+        raise Refused(f"{flag} {str(name)!r}: no {kind} can be written there: {exc}") from exc
+    if is_dir:
+        raise Refused(f"{flag} {str(name)!r} names an existing directory; name the {kind} file")
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -322,23 +346,47 @@ def main(argv=None) -> int:
                          "Omitted = the shipped JIT_DPHASE_FLOOR_PPM")
     ap.add_argument("--expect-corpus-sha256", default=EXPECT_CORPUS_SHA256)
     ap.add_argument("--expect-split-hash", default=EXPECT_SPLIT_HASH)
-    ap.add_argument("-o", "--out", type=Path, default=None)
-    ap.add_argument("--json", type=Path, default=None)
+    ap.add_argument("-o", "--out", type=Path, default=None,
+                    help="write the report here instead of stdout (a missing parent "
+                         "directory is created)")
+    ap.add_argument("--json", type=Path, default=None,
+                    help="write the census as JSON here (a missing parent directory is created)")
     a = ap.parse_args(argv)
     try:
+        if a.json:
+            _record_path("--json", a.json, "record")
+        if a.out:
+            _record_path("-o", a.out, "report")
         pre = check_corpus(a.refs, a.expect_corpus_sha256, a.expect_split_hash)
         res = census(a.refs, a.dphase_floor_ppm, a.jobs, a.arm)
     except Refused as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
         return 2
+    # Each write is tried on its own: one destination that fails must not
+    # cost the other, nor the report (#2098).
+    unwritten = []
     if a.json:
-        a.json.write_text(json.dumps({"corpus": pre, "census": res}, indent=2))
+        try:
+            a.json.write_text(json.dumps({"corpus": pre, "census": res}, indent=2))
+        except OSError as exc:
+            unwritten.append(f"--json {str(a.json)!r} not written: {exc}")
+    wrote_out = False
     if a.out:
-        with a.out.open("w") as fh:
-            report(pre, res, fh)
-        print(f"wrote {a.out}")
-    else:
+        try:
+            with a.out.open("w") as fh:
+                report(pre, res, fh)
+        except OSError as exc:
+            unwritten.append(f"-o {str(a.out)!r} not written: {exc}")
+        else:
+            print(f"wrote {a.out}")
+            wrote_out = True
+    if not wrote_out:
+        # Without -o this is the report's usual place; with -o it is the
+        # fallback for a destination that failed, since -o only redirects it.
         report(pre, res, sys.stdout)
+    if unwritten:
+        print("REFUSED: report printed above; " + "; ".join(unwritten), file=sys.stderr)
+        return 2
     return 0
 
 

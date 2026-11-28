@@ -9,9 +9,15 @@ import sys
 import numpy as np
 from scipy.signal import firwin
 
+import refusal
+
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 OUT = ROOT / "rtl-sketch/rate_conv_2x.v"
 Q = 30
+
+
+class Refused(refusal.Refused, Exception):
+    """The --out destination cannot hold the file. Never a generation."""
 
 
 def _function(name: str, values: np.ndarray) -> str:
@@ -115,18 +121,59 @@ endmodule
 '''
 
 
+def _record_path(name) -> None:
+    """Check the `--out` destination BEFORE the RTL text is generated, or
+    Refused (#2098).
+
+    A missing parent directory is created here, as `fpga/selected_preset.py`
+    creates `--out`'s. A destination that is a directory, or whose parent
+    cannot be made, is refused now with exit 2 rather than by `OSError` from
+    the write: that exited 1 with a traceback, the status `--check` uses for
+    "the generated RTL differs", which is a verdict. Only the write mode is
+    checked: `--check` reads `--out`, and a missing file there is that verdict.
+
+    What this cannot see -- a parent that exists but is not writable, a disk
+    that fills -- is left to the guard around the write.
+    """
+    out = pathlib.Path(name)
+    try:
+        is_dir = out.is_dir()
+        if not is_dir:
+            out.parent.mkdir(parents=True, exist_ok=True)
+    except (OSError, ValueError) as exc:
+        raise Refused(f"--out {str(name)!r}: no file can be written there: {exc}") from exc
+    if is_dir:
+        raise Refused(f"--out {str(name)!r} names an existing directory; name the file")
+
+
 def main(argv=None) -> int:
+    """Exit 0: written (with `--check`: identical to the generator). 1 with
+    `--check` when the file differs. 2 REFUSED: `--out` cannot be written."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
-    parser.add_argument("--out", type=pathlib.Path, default=OUT)
+    parser.add_argument("--out", type=pathlib.Path, default=OUT,
+                        help="the file to write, or with --check to compare (a missing "
+                             "parent directory is created)")
     args = parser.parse_args(argv)
+    if not args.check:
+        try:
+            _record_path(args.out)
+        except Refused as exc:
+            print(f"REFUSED: {exc}", file=sys.stderr)
+            return 2
     expected = generate()
     if args.check:
         if not args.out.exists() or args.out.read_text() != expected:
             print(f"generated RTL differs: {args.out}")
             return 1
     else:
-        args.out.write_text(expected)
+        try:
+            args.out.write_text(expected)
+        except OSError as exc:
+            # The file is the deliverable; unwritten, the `generated` line
+            # below would be the one claim that is not true (#2098).
+            print(f"REFUSED: --out {args.out} was not written: {exc}", file=sys.stderr)
+            return 2
     print(f"rate_conv_2x: {'verified' if args.check else 'generated'} {args.out}")
     return 0
 

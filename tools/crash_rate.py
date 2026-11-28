@@ -43,9 +43,11 @@ EXIT STATUS
 
     0   the batch ran and NO run crashed          (a rate of 0/N is a result)
     1   the batch ran and at least one run crashed
-    2   REFUSED -- preconditions failed, or every run errored before the
-        target executed. Distinct from 0 on purpose: a tool that answers when
-        it cannot is worse than one that is absent.
+    2   REFUSED -- preconditions failed, every run errored before the target
+        executed, or the --json report could not be written (refused before
+        a run where the path says so itself, #2098). Distinct from 0 on
+        purpose: a tool that answers when it cannot is worse than one that
+        is absent.
 """
 from __future__ import annotations
 import argparse, json, os, pathlib, platform, resource, shlex, signal, subprocess, sys, time
@@ -261,6 +263,12 @@ print(json.dumps({"threads_before_import": before,
     return json.loads(r.stdout.strip().splitlines()[-1])
 
 
+def write_report(json_path, env, summary, runs) -> None:
+    """The full report to `json_path`. Raises OSError; the caller decides."""
+    report = {"environment": env, "summary": summary, "runs": runs}
+    pathlib.Path(json_path).write_text(json.dumps(report, indent=2) + "\n")
+
+
 def batch_report(target, requested_runs, runs, env, json_path):
     counts = {v: sum(1 for r in runs if r["verdict"] == v)
               for v in (PASS, TESTFAIL, CRASH, ERROR, TIMEOUT)}
@@ -273,10 +281,36 @@ def batch_report(target, requested_runs, runs, env, json_path):
         "peak_rss_kb": peak,
         "median_seconds": sorted(r["seconds"] for r in runs)[len(runs) // 2] if runs else None,
     }
-    report = {"environment": env, "summary": summary, "runs": runs}
     if json_path:
-        pathlib.Path(json_path).write_text(json.dumps(report, indent=2) + "\n")
+        write_report(json_path, env, summary, runs)
     return summary
+
+
+def _unwritable_record_path(name) -> str | None:
+    """Why the `--json` destination cannot hold the report, or None.
+
+    A missing parent directory is created here, as `fpga/selected_preset.py`
+    creates `--out`'s. Called before anything runs (#2098), and answered with
+    this tool's own "REFUSED:" line and exit 2: a destination that is a
+    directory, or whose parent cannot be made, used to fail at the write
+    after the batch -- FileNotFoundError, exit 1 with a traceback, which is
+    this tool's "at least one run crashed".
+
+    What this cannot see -- a parent that exists but is not writable, a disk
+    that fills -- is left to the guards around the writes.
+    """
+    if not name:
+        return None
+    out = pathlib.Path(name)
+    try:
+        is_dir = out.is_dir()
+        if not is_dir:
+            out.parent.mkdir(parents=True, exist_ok=True)
+    except (OSError, ValueError) as exc:
+        return f"--json {str(name)!r}: no record can be written there: {exc}"
+    if is_dir:
+        return f"--json {str(name)!r} names an existing directory; name the record file"
+    return None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -290,7 +324,8 @@ def main(argv: list[str] | None = None) -> int:
                     help="extra environment for every run; repeatable")
     ap.add_argument("--probe", action="store_true",
                     help="one instrumented render (threads, .so count) and exit")
-    ap.add_argument("--json", metavar="PATH", help="write the full report here")
+    ap.add_argument("--json", metavar="PATH",
+                    help="write the full report here (a missing parent directory is created)")
     a = ap.parse_args(argv)
 
     extra_env = {}
@@ -301,17 +336,32 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         extra_env[k] = v
 
+    unwritable = _unwritable_record_path(a.json)
+    if unwritable:
+        print(f"REFUSED: {unwritable}", file=sys.stderr)
+        return 2
+
     env = environment(extra_env)
     if a.probe:
         report = {"environment": env, "probe": probe()}
         print(json.dumps(report, indent=2))
         if a.json:
-            pathlib.Path(a.json).write_text(json.dumps(report, indent=2) + "\n")
+            try:
+                pathlib.Path(a.json).write_text(json.dumps(report, indent=2) + "\n")
+            except OSError as exc:
+                # The probe is on stdout above; without its record the report
+                # is not kept, so neither status below is true (#2098).
+                print(f"REFUSED: probe printed above; --json record not written: {exc}",
+                      file=sys.stderr)
+                return 2
         return 2 if "refused" in report["probe"] else 0
 
     if a.runs < 1:
         if a.json:
-            batch_report(a.target, a.runs, [], env, a.json)
+            try:
+                batch_report(a.target, a.runs, [], env, a.json)
+            except OSError as exc:
+                print(f"REFUSED: --json record not written: {exc}", file=sys.stderr)
         print(f"REFUSED: --runs must be at least 1, got {a.runs}. A batch that "
               "ran nothing has no crash rate to report. This is NOT 'zero "
               "crashes'.", file=sys.stderr)
@@ -342,7 +392,7 @@ def main(argv: list[str] | None = None) -> int:
             for line in r["tail"].splitlines():
                 print(f"        | {line}")
 
-    summary = batch_report(a.target, a.runs, runs, env, a.json)
+    summary = batch_report(a.target, a.runs, runs, env, None)
     counts = summary["counts"]
     exercised = summary["runs_that_exercised_the_target"]
     peak = summary["peak_rss_kb"]
@@ -350,13 +400,29 @@ def main(argv: list[str] | None = None) -> int:
     for k, v in counts.items():
         print(f"  {k:<10} {v}")
     print(f"  peak RSS   {peak // 1024} MB across all runs")
+    unwritten = None
+    if a.json:
+        try:
+            write_report(a.json, env, summary, runs)
+        except OSError as exc:
+            # The counts are on stdout above; the record is the evidence, and
+            # without it neither 0 nor 1 is true (#2098). Written before the
+            # refusal below, as it always was: a batch that never reached the
+            # target still records why each run did not.
+            unwritten = exc
     if exercised == 0:
         print("\nREFUSED: no run reached the code under test "
               "(every run ERRORed or timed out), so there is no crash rate to "
               "report. This is NOT 'zero crashes'.")
+        if unwritten is not None:
+            print(f"REFUSED: --json record not written: {unwritten}", file=sys.stderr)
         return 2
     print(f"\n  crash rate {counts[CRASH]}/{exercised} "
           f"= {100 * counts[CRASH] / exercised:.1f}% of runs that ran the target")
+    if unwritten is not None:
+        print(f"REFUSED: crash rate printed above; --json record not written: {unwritten}",
+              file=sys.stderr)
+        return 2
     return 1 if counts[CRASH] else 0
 
 

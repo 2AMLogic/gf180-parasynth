@@ -229,21 +229,62 @@ def report(res: dict, out) -> None:
               f"{d['ar1']:9.4f}  {'yes' if d['refused'] else 'no'}", file=out)
 
 
+def _record_path(name) -> None:
+    """Check the `-o` destination BEFORE the grid runs, or Refused (#2098).
+
+    A missing parent directory is created here, as `fpga/selected_preset.py`
+    creates `--out`'s. A destination that is a directory, or whose parent
+    cannot be made, is refused now -- the sweep renders every stimulus of
+    every panel at both rates, and none of it should run for a report that
+    cannot be written -- rather than by `OSError` from the write afterwards,
+    which exited 1 with a traceback and lost the report, `-o` having
+    redirected it away from stdout.
+
+    What this cannot see -- a parent that exists but is not writable, a disk
+    that fills -- is left to the guard around the write.
+    """
+    if not name:
+        return
+    out = Path(name)
+    try:
+        is_dir = out.is_dir()
+        if not is_dir:
+            out.parent.mkdir(parents=True, exist_ok=True)
+    except (OSError, ValueError) as exc:
+        raise Refused(f"-o {str(name)!r}: no report can be written there: {exc}") from exc
+    if is_dir:
+        raise Refused(f"-o {str(name)!r} names an existing directory; name the report file")
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("-o", "--out", type=Path, default=None,
-                    help="write the report here instead of stdout")
+                    help="write the report here instead of stdout "
+                         "(a missing parent directory is created)")
     args = ap.parse_args(argv)
     try:
+        _record_path(args.out)
         res = measure()
     except Refused as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
         return 2
+    unwritten = None
     if args.out:
-        with args.out.open("w") as fh:
-            report(res, fh)
-        print(f"wrote {args.out}")
-    else:
+        try:
+            with args.out.open("w") as fh:
+                report(res, fh)
+        except OSError as exc:
+            unwritten = exc
+        else:
+            print(f"wrote {args.out}")
+    if unwritten is not None:
+        # `-o` only redirects the report; a destination that failed after the
+        # grid ran must not take the report down with it (#2098).
+        report(res, sys.stdout)
+        print(f"REFUSED: report printed above; -o {str(args.out)!r} not written: {unwritten}",
+              file=sys.stderr)
+        return 2
+    if not args.out:
         report(res, sys.stdout)
     return 0
 

@@ -15,7 +15,9 @@ way the full-run log interleaves them.
 """
 from __future__ import annotations
 
+import errno
 import json
+import os
 import pathlib
 import sys
 from dataclasses import asdict
@@ -370,3 +372,134 @@ def test_the_real_gh_wrapper_reports_gh_absence_as_a_refusal(monkeypatch):
     monkeypatch.setattr(m.subprocess, "run", boom)
     with pytest.raises(Refusal, match="gh"):
         m._gh(["api", "x"], pathlib.Path("."))
+
+
+# ---------------------------------------------------------------------------
+# the CLI's --snapshot destination (#2098, a slice of the #2095 class)
+#
+# THE DEFECT, red-first on origin/main @ 8eb04e5b (2026-11-28): `main` wrote
+# `a.snapshot` with `write_text` inside the `try` that catches `Refusal` only
+# -- after `collect()` had walked the live API and before a line of the
+# report was printed -- and nothing made the parent directory. Under a
+# missing one the write raised FileNotFoundError: exit 1 with a traceback,
+# the same status `--require-clean` uses for a measured NO-VERDICT.
+#
+# THE KNOWN ANSWER, from tools/exit_contract.py and not from the module under
+# test: a destination that cannot be written is REFUSED (2) -- the status
+# this script already returns through `Refusal` -- refused before `collect`
+# runs where the path says so itself. A write that fails later is refused
+# with the report printed and the gate's PASS/FAIL withheld: a window whose
+# record is gone is neither clean nor unclean.
+#
+# WHAT RUNS FOR REAL: `main`, `_load`, `render`, `summarise` and the window
+# gate, on PASS_A and RERUN_B. Doubled: `collect` (counted), which in
+# production is the `gh` API walk.
+# ---------------------------------------------------------------------------
+def _full_disk(target):
+    """`Path.write_text` that fails for `target` only."""
+    real = pathlib.Path.write_text
+
+    def write_text(self, data, *args, **kwargs):
+        if self == target:
+            raise OSError(errno.ENOSPC, "No space left on device")
+        return real(self, data, *args, **kwargs)
+
+    return write_text
+
+
+@pytest.fixture
+def collected(monkeypatch):
+    """`collect` double that counts its calls and returns nothing."""
+    import ci_verify_fast_timing as m
+    calls = []
+    monkeypatch.setattr(m, "collect", lambda *a, **k: calls.append(1) or [])
+    return calls
+
+
+@pytest.mark.parametrize("target, reason", [
+    ("{tmp}", "names an existing directory; name the record file"),
+    ("{tmp}/a-file/snap.json", "no record can be written there: [Errno 17] File exists"),
+    ("nul\x00dir/snap.json", "no record can be written there: embedded null byte"),
+], ids=["a-directory", "parent-is-a-file", "parent-has-a-nul-byte"])
+def test_an_unwritable_snapshot_destination_is_refused_before_anything_is_collected(collected,
+                                                                                   tmp_path, capsys,
+                                                                                   target, reason):
+    (tmp_path / "a-file").write_text("not a directory\n")
+    rc = main(["--snapshot", target.format(tmp=tmp_path)])
+    out, err = capsys.readouterr()
+    assert collected == [], "the API was walked for a destination that could not be written"
+    assert rc == REFUSED, (rc, out, err)
+    assert "REFUSED" in err and reason in err, err
+    assert "execution(s)" not in out, out
+
+
+def _offline(tmp_path, records):
+    """The `--offline` input, under a name no test also uses as a target."""
+    p = tmp_path / "offline.json"
+    p.write_text(json.dumps([asdict(r) for r in records]))
+    return p
+
+
+def test_a_snapshot_under_a_missing_directory_is_created_and_written(tmp_path, capsys):
+    snap = _offline(tmp_path, [PASS_A, RERUN_B])
+    target = tmp_path / "no-such-dir" / "snap.json"
+    rc = main(["--offline", str(snap), "--snapshot", str(target),
+               "--require-clean", "--window", "2"])
+    out, _ = capsys.readouterr()
+    assert rc == 0, out
+    assert "PASS: no NO-VERDICT in the last 2 executions" in out, out
+    assert json.loads(target.read_text()) == [asdict(r) for r in [PASS_A, RERUN_B]]
+
+
+def test_a_snapshot_write_failure_is_refused_with_the_report_and_without_a_verdict(tmp_path, capsys,
+                                                                                   monkeypatch):
+    snap = _offline(tmp_path, [PASS_A, RERUN_B])
+    target = tmp_path / "snap.json"
+    monkeypatch.setattr(pathlib.Path, "write_text", _full_disk(target))
+    rc = main(["--offline", str(snap), "--snapshot", str(target), "--require-clean", "--window", "2"])
+    out, err = capsys.readouterr()
+    assert rc == REFUSED, (rc, out, err)
+    assert "2 `m5a-fast` execution(s)" in out, out                    # the report is still printed
+    # the gate's verdict is withheld; the render's own "FAIL units" row is not it
+    assert "PASS: no NO-VERDICT" not in out and "lost verdict(s) in the last" not in out, out
+    assert "REFUSED" in err and "not written" in err, err
+    assert "No space left on device" in err and "Traceback" not in err, err
+    assert not target.exists()
+
+
+def test_a_snapshot_that_cannot_be_written_does_not_hide_a_later_refusal(tmp_path, capsys,
+                                                                         monkeypatch):
+    """Both reasons, one exit. The snapshot is attempted where it always was,
+    before the focus check, so a run refused afterwards still reports its own
+    reason and the unwritten snapshot beside it."""
+    snap = _offline(tmp_path, [PASS_A])
+    target = tmp_path / "snap.json"
+    monkeypatch.setattr(pathlib.Path, "write_text", _full_disk(target))
+    rc = main(["--offline", str(snap), "--snapshot", str(target), "--focus", "no_such_unit"])
+    out, err = capsys.readouterr()
+    assert rc == REFUSED, (rc, out, err)
+    assert "focus unit 'no_such_unit' appears in no measured record" in err, err
+    assert "not written" in err, err
+    assert "execution(s)" not in out, out
+
+
+@pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0,
+                    reason="root writes into a read-only directory")
+def test_a_read_only_parent_is_refused_and_leaves_no_snapshot(tmp_path, capsys):
+    """Rule 8: the input that defeats the pre-flight. The parent exists, so
+    `mkdir(exist_ok=True)` accepts it; only the guard around the write can
+    refuse it."""
+    snap = _offline(tmp_path, [PASS_A, RERUN_B])
+    parent = tmp_path / "read-only"
+    parent.mkdir()
+    parent.chmod(0o555)
+    try:
+        rc = main(["--offline", str(snap), "--snapshot", str(parent / "snap.json")])
+        written = list(parent.iterdir())
+    finally:
+        parent.chmod(0o700)
+    out, err = capsys.readouterr()
+    assert rc == REFUSED, (rc, out, err)
+    assert "REFUSED" in err and "not written" in err, err
+    assert "2 `m5a-fast` execution(s)" in out, out
+    assert written == []

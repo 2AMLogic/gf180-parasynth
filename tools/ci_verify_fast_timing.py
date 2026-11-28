@@ -44,7 +44,9 @@ REFUSED IS AN OUTCOME. This queries a live API, so it can fail to answer:
     1  measured, and the window contains a NO-VERDICT unit or a capped job
     2  REFUSED -- could not measure (no `gh`, API error, empty or short
        window, a focus slug that appears in no record, too many unreadable
-       logs)
+       logs), or the `--snapshot` destination could not hold the record:
+       refused before anything is collected where the path says so, else
+       after the report with the gate's verdict withheld (#2098)
 
 Network-dependent, so it is NOT part of `make verify`; its tests
 (`tools/test_ci_verify_fast_timing.py`) are offline and parse fixture logs.
@@ -555,6 +557,34 @@ def render(records: list[JobTiming], summary: dict, *, list_records: bool = Fals
     return "\n".join(L)
 
 
+def _record_path(name) -> None:
+    """Check the `--snapshot` destination BEFORE anything is collected, or
+    Refusal (#2098).
+
+    A missing parent directory is created here, as `fpga/selected_preset.py`
+    creates `--out`'s. A destination that is a directory, or whose parent
+    cannot be made, is refused now -- a collection walks the live API, and
+    none of it should run for a record that cannot be written -- rather than
+    by `OSError` from the write afterwards, which exited 1 with a traceback:
+    the status `--require-clean` uses for a measured NO-VERDICT.
+
+    What this cannot see -- a parent that exists but is not writable, a disk
+    that fills -- is left to the guard around the write.
+    """
+    if not name:
+        return
+    out = pathlib.Path(name)
+    try:
+        is_dir = out.is_dir()
+        if not is_dir:
+            out.parent.mkdir(parents=True, exist_ok=True)
+    except (OSError, ValueError) as exc:
+        raise Refusal(f"--snapshot {str(name)!r}: no record can be written there: {exc}") from exc
+    if is_dir:
+        raise Refusal(f"--snapshot {str(name)!r} names an existing directory; "
+                      "name the record file")
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -572,12 +602,16 @@ def main(argv: list[str] | None = None) -> int:
                     help="exit 1 if the window contains a NO-VERDICT unit or a capped job")
     ap.add_argument("--max-error-frac", type=float, default=0.2,
                     help="refuse the window if more than this share of logs is unreadable")
-    ap.add_argument("--snapshot", type=pathlib.Path, help="also write the collected records here")
+    ap.add_argument("--snapshot", type=pathlib.Path,
+                    help="also write the collected records here (a missing parent directory is created)")
     ap.add_argument("--offline", type=pathlib.Path, help="analyse a previously written snapshot, no network")
     ap.add_argument("--list", action="store_true", help="print every execution as a row")
     a = ap.parse_args(argv)
 
+    unwritten = None
     try:
+        if a.snapshot:
+            _record_path(a.snapshot)
         if a.require_clean and a.window <= 0:
             raise Refusal("--window must be positive to score any executions")
         if a.offline:
@@ -587,7 +621,14 @@ def main(argv: list[str] | None = None) -> int:
         if not records:
             raise Refusal("no records: an empty window is not a clean one")
         if a.snapshot:
-            a.snapshot.write_text(json.dumps([asdict(r) for r in records], indent=1) + "\n")
+            try:
+                a.snapshot.write_text(json.dumps([asdict(r) for r in records], indent=1) + "\n")
+            except OSError as exc:
+                # Held, not raised: the report is printed with or without the
+                # record, and the refusal comes after it (#2098). The write
+                # stays here, before the checks below, so a run that is
+                # refused later still leaves the records it collected.
+                unwritten = exc
         summary = summarise(records, a.focus, a.reference)
         if a.focus not in summary["units"]:
             raise Refusal(f"focus unit {a.focus!r} appears in no measured record; the recipe's "
@@ -597,9 +638,18 @@ def main(argv: list[str] | None = None) -> int:
                           f"are available -- raise --limit. A short window is not a clean window.")
     except Refusal as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
+        if unwritten is not None:
+            print(f"REFUSED: --snapshot {a.snapshot} not written as well: {unwritten}",
+                  file=sys.stderr)
         return REFUSED
 
     print(render(records, summary, list_records=a.list))
+    if unwritten is not None:
+        # The report is on stdout above; its snapshot is the evidence, and a
+        # window whose record is gone is neither clean nor unclean (#2098).
+        print(f"REFUSED: report printed above; --snapshot {a.snapshot} not written: "
+              f"{unwritten}", file=sys.stderr)
+        return REFUSED
     if a.require_clean:
         bad = unclean(records[:a.window])
         if bad:
