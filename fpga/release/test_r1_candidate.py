@@ -360,3 +360,36 @@ def test_control_a_key_dropped_from_the_derivation_is_stale_not_bound(monkeypatc
     assert verdict == "STALE", \
         f"a derivation that stopped emitting presets.default.calibration read {verdict}: {detail}"
     assert "presets.default.calibration" in detail, detail
+
+
+# ---- a CLI capture plan that cannot be read is REFUSED, not a traceback (#1621)
+
+@pytest.mark.parametrize("plan,names_rows", [
+    pytest.param({}, True, id="empty"),
+    pytest.param({"rows": None}, True, id="null-key"),
+    pytest.param([], False, id="list"),
+    pytest.param(5, False, id="number"),
+    pytest.param(None, False, id="null"),
+])
+def test_a_capture_plan_that_cannot_be_read_refuses_the_init_check(monkeypatch, capsys, plan,
+                                                                   names_rows):
+    """`plan["rows"]` in emitted_setup() was read with nothing checking the
+    plan the CLI wrote, so a partial capture was a `KeyError` traceback past
+    `except Refused` (exit 1)."""
+    def cli(argv):
+        prefix = argv[argv.index("--capture") + 1]
+        Path(prefix + ".plan.json").write_text(json.dumps(plan))
+        return 0
+    monkeypatch.setattr(uh, "main", cli)
+    rc = r1c.main(["init-check", "--fixture", "demo"])
+    out = capsys.readouterr().out
+    assert rc == 2 and "REFUSED" in out, out
+    assert ("'rows'" in out) is names_rows, out
+
+
+def test_the_cli_capture_the_init_check_reads_carries_rows(tmp_path):
+    # the guard above must be satisfiable against the plan the CLI really writes
+    prefix = str(tmp_path / "cap")
+    assert uh.main(["--dry-run", "run", "--fixture", "demo", "--image", r1c.HOST_IMAGE,
+                    "--capture", prefix]) == 0
+    assert json.loads(Path(prefix + ".plan.json").read_text())["rows"]

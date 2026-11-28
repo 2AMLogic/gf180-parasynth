@@ -22,6 +22,7 @@ _TOOLS = str(ROOT / "tools")
 if _TOOLS not in sys.path:
     sys.path.append(_TOOLS)
 import i2s_transcript                                             # noqa: E402
+import manifest as mf                                             # noqa: E402
 
 # The question that is this gate's own; whether the transcript is one clean,
 # un-injected PASS from a named simulator is `i2s_transcript`'s.
@@ -37,7 +38,9 @@ def sources():
 
 
 def simulation_evidence():
-    record = json.loads((ROOT / "docs/scorecard/results/M5A.json").read_text())
+    path = ROOT / "docs/scorecard/results/M5A.json"
+    record = json.loads(path.read_text())
+    mf.require_keys(record, "provenance", f"the scorecard record at {path}", refused=RuntimeError)
     transcript = ROOT / record["provenance"]["artefacts"]["spi_i2s"]
     content = transcript.read_bytes()
     expected = record["provenance"]["inputs"]["verification:SPI-I2S"].removeprefix("sha256:")

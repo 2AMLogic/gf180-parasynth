@@ -101,3 +101,50 @@ def test_r2_does_not_write_r1_or_r0_records():
     src = (HERE / "r2_release.py").read_text()
     for name in ("r1-2025.1.json", "r1-candidate.json", "baseline-2025.1.json"):
         assert f'{name}").write' not in src
+
+
+# ---- a committed manifest that cannot be read is REFUSED, not a traceback (#1621)
+
+def _manifest_at(monkeypatch, tmp_path, record):
+    """r2_release.MANIFEST pointed at a scratch copy holding `record`."""
+    p = tmp_path / "r2-manifest.json"
+    p.write_text(json.dumps(record))
+    monkeypatch.setattr(r2r, "MANIFEST", p)
+
+
+@pytest.mark.parametrize("key,case", [("image", "image"), ("host", "host")])
+@pytest.mark.parametrize("how", ["missing", "null"])
+def test_a_manifest_lacking_a_key_the_stale_control_substitutes_is_refused(
+        monkeypatch, tmp_path, capsys, key, case, how):
+    """`stale["image"]` / `stale["host"]` were read off the committed manifest
+    before anything checked it, so a partial manifest was a `KeyError`
+    traceback (exit 1) past the handler (#784's site, in the R2 copy)."""
+    record = json.loads(r2r.MANIFEST.read_text())
+    if how == "missing":
+        record.pop(key)
+    else:
+        record[key] = None
+    _manifest_at(monkeypatch, tmp_path, record)
+    rc = r2r.main(["stale-control", case, "--out", str(tmp_path / "out")])
+    out = capsys.readouterr().out
+    assert rc == 2, out
+    assert "stale_control: REFUSED" in out and repr(key) in out, out
+    assert not (tmp_path / "out").exists()
+
+
+@pytest.mark.parametrize("whole", [{}, [], 5, None], ids=["empty", "list", "number", "null"])
+def test_a_manifest_that_is_no_object_is_refused_by_the_stale_control(
+        monkeypatch, tmp_path, capsys, whole):
+    _manifest_at(monkeypatch, tmp_path, whole)
+    rc = r2r.main(["stale-control", "image", "--out", str(tmp_path / "out")])
+    out = capsys.readouterr().out
+    assert rc == 2 and "stale_control: REFUSED" in out, out
+    if whole == {}:
+        assert "'image'" in out and "'host'" in out, out
+    assert not (tmp_path / "out").exists()
+
+
+def test_the_committed_manifest_carries_the_keys_the_stale_control_substitutes():
+    # the guards above must be satisfiable against the record that ships
+    m = json.loads(r2r.MANIFEST.read_text())
+    assert m["image"] is not None and m["host"] is not None

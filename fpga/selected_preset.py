@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "model"), str(ROOT / "tools")]
 import mono_m5a_score as score
 import voice_fx as vf
+import manifest as mf
 
 NAMES = ("m5a-saw", "m5a-pulse")
 
@@ -20,6 +21,7 @@ def definition(name):
     if name not in NAMES:
         raise ValueError(f"unknown selected preset: {name}")
     manifest = json.loads(score.MANIFEST.read_text())
+    mf.require_keys(manifest, "audio", f"the reference manifest at {score.MANIFEST}", refused=ValueError)
     audio = score.MANIFEST.parent / manifest["audio"]["file"]
     if hashlib.sha256(audio.read_bytes()).hexdigest() != manifest["audio"]["sha256"]:
         raise ValueError("selected preset reference audio differs from frozen manifest")
@@ -38,11 +40,21 @@ def definition(name):
             "sound_status": "M5A has four passing properties and three failures"}
 
 
-if __name__ == "__main__":
+def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("name", choices=NAMES)
     parser.add_argument("--out", type=Path, required=True)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    try:
+        preset = definition(args.name)
+    except ValueError as exc:
+        print(f"selected_preset: REFUSED -- {exc}")
+        return 2
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps(definition(args.name), indent=2) + "\n")
+    args.out.write_text(json.dumps(preset, indent=2) + "\n")
     print(args.out)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -180,3 +180,47 @@ def test_a_tampered_r1_kit_makes_the_release_check_refuse_with_the_reason(tmp_pa
     with contextlib.redirect_stdout(out):
         assert r1r.main(["check"]) == 2
     assert "REFUSED" in out.getvalue() and "r1-kit.json" in out.getvalue()
+
+
+# ---- an R1 kit record that cannot be read is REFUSED, not a traceback (#1621)
+
+def _kit_at(monkeypatch, tmp_path, record):
+    p = tmp_path / "r1-kit.json"
+    p.write_text(json.dumps(record))
+    monkeypatch.setattr(uh, "R1_KIT", p)
+
+
+@pytest.mark.parametrize("record,why", [
+    pytest.param({}, "'writes'", id="empty"),
+    pytest.param({"writes": None}, "'writes'", id="null-key"),
+    pytest.param([], "not a JSON object", id="list"),
+    pytest.param(5, "not a JSON object", id="number"),
+    pytest.param(None, "not a JSON object", id="null"),
+])
+def test_an_r1_kit_record_lacking_writes_is_refused(tmp_path, monkeypatch, capsys, record, why):
+    """`rec["writes"]` was read before the hash check that refuses a tampered
+    kit, so a partial r1-kit.json was a `KeyError` traceback. Through
+    uart_host.main too, which had no handler for the host's own KitRefused."""
+    _kit_at(monkeypatch, tmp_path, record)
+    with pytest.raises(dx.KitRefused, match=why):
+        uh.r1_kit()
+    rc = uh.main(["play", "--fixture", "demo", "--image", "r1", "--dry-run"])
+    err = capsys.readouterr().err
+    assert rc == 2 and "REFUSED" in err and why in err, err
+
+
+def test_a_tampered_r1_kit_is_refused_by_the_host_entry_point(tmp_path, monkeypatch, capsys):
+    """The pre-existing refusal, now reported: a kit that no longer hashes to
+    R1's raised KitRefused past uart_host.main (exit 1 by traceback)."""
+    rec = json.loads(uh.R1_KIT.read_text())
+    a, v = rec["writes"][0]
+    rec["writes"][0] = [a, v ^ 1]
+    _kit_at(monkeypatch, tmp_path, rec)
+    rc = uh.main(["play", "--fixture", "demo", "--image", "r1", "--dry-run"])
+    err = capsys.readouterr().err
+    assert rc == 2 and "REFUSED" in err and "not R1's frozen kit" in err, err
+
+
+def test_the_committed_r1_kit_carries_writes():
+    # the guard above must be satisfiable against the kit that ships
+    assert json.loads(uh.R1_KIT.read_text())["writes"]

@@ -60,6 +60,7 @@ _REFUSAL_TOOLS = str(Path(__file__).resolve().parents[2] / "tools")
 if _REFUSAL_TOOLS not in sys.path:
     sys.path.append(_REFUSAL_TOOLS)
 import refusal  # noqa: E402
+import manifest as mf  # noqa: E402
 
 MANIFEST = HERE / "r1-2025.1.json"
 PUB_DIR = ROOT / "fpga/reports/arty/r1-player-preview-2025.1"
@@ -588,6 +589,7 @@ def stale_control(case: str, out: Path) -> int:
         raw = _need(MANIFEST).read_bytes()
         committed = json.loads(raw)
         stale = json.loads(raw)
+        mf.require_keys(stale, ("image", "host"), f"the manifest at {_rel(MANIFEST)}", refused=Refused)
         if case == "image":
             r0 = _json(R0_PUB_DIR / "publication.json")
             sub = {"image.bitstream_sha256": r0["bitstream_sha256"],

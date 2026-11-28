@@ -424,6 +424,93 @@ def test_publisher_refuses_a_build_whose_configuration_is_not_its_images(tmp_pat
                 for p in publish.build.sources() + publish.build.roms() + [publish.build.XDC]}
     (tmp_path / "report.json").write_text(json.dumps({
         "state": "BUILT_REQUIRES_TIMING_REVIEW", "exit_code": 0, "part": publish.build.PART,
-        "image": image, "configuration": config, "source_sha256": expected}))
+        "image": image, "configuration": config, "source_sha256": expected,
+        "script_sha256": "x", "vivado_version": "x", "seconds": 0}))
     with pytest.raises(ValueError, match="not a successful, current, selected"):
         publish.publish(tmp_path, tmp_path / "out")
+
+
+# ---- a build or publication record that cannot be read is REFUSED (#1621)
+
+BUILD_KEYS = ("script_sha256", "vivado_version", "seconds")
+
+
+def _build_record(key=None, how="missing"):
+    """report.json with every key publish() reads by subscript and no valid
+    value: the guard at the record's load refuses before any value is checked."""
+    record = {k: "x" for k in BUILD_KEYS}
+    if key is not None:
+        if how == "missing":
+            record.pop(key)
+        else:
+            record[key] = None
+    return record
+
+
+@pytest.mark.parametrize("key", BUILD_KEYS)
+@pytest.mark.parametrize("how", ["missing", "null"])
+def test_a_build_record_lacking_a_key_publish_reads_is_refused_naming_it(tmp_path, key, how):
+    """`record["script_sha256"]`, `["vivado_version"]` and `["seconds"]` were
+    read with nothing checking the record (its other keys are read through
+    `.get`), so a partial report.json was a `KeyError` traceback (exit 1) where
+    the publisher's own refusals are ValueError."""
+    (tmp_path / "report.json").write_text(json.dumps(_build_record(key, how)))
+    with pytest.raises(ValueError, match=repr(key)):
+        publish.publish(tmp_path, tmp_path / "out")
+
+
+@pytest.mark.parametrize("key", BUILD_KEYS)
+def test_the_entry_point_reports_a_build_record_lacking_a_key_as_refused(tmp_path, capsys, key):
+    (tmp_path / "report.json").write_text(json.dumps(_build_record(key)))
+    rc = publish.main([str(tmp_path), "--out", str(tmp_path / "out")])
+    out = capsys.readouterr().out
+    assert rc == 2 and "REFUSED" in out and repr(key) in out, out
+    assert not (tmp_path / "out").exists()
+
+
+@pytest.mark.parametrize("record,why", [
+    pytest.param({}, "'script_sha256', 'vivado_version', 'seconds'", id="empty"),
+    pytest.param([], "not a JSON object", id="list"),
+    pytest.param(5, "not a JSON object", id="number"),
+    pytest.param(None, "not a JSON object", id="null"),
+])
+def test_a_build_record_that_carries_nothing_readable_is_refused(tmp_path, capsys, record, why):
+    (tmp_path / "report.json").write_text(json.dumps(record))
+    with pytest.raises(ValueError, match=why):
+        publish.publish(tmp_path, tmp_path / "out")
+    rc = publish.main([str(tmp_path), "--out", str(tmp_path / "out")])
+    out = capsys.readouterr().out
+    assert rc == 2 and "REFUSED" in out and why in out, out
+    assert not (tmp_path / "out").exists()
+
+
+@pytest.mark.parametrize("record,why", [
+    pytest.param({}, "'original_artifact_sha256'", id="empty"),
+    pytest.param({"original_artifact_sha256": None}, "'original_artifact_sha256'", id="null-key"),
+    pytest.param([], "not a JSON object", id="list"),
+    pytest.param(5, "not a JSON object", id="number"),
+    pytest.param(None, "not a JSON object", id="null"),
+])
+def test_a_publication_lacking_its_artifact_hashes_is_refused_by_rederive_dsp(
+        tmp_path, capsys, record, why):
+    """`summary["original_artifact_sha256"]` was read with nothing checking the
+    committed publication, so a partial one was a `KeyError` traceback (exit 1)."""
+    (tmp_path / "publication.json").write_text(json.dumps(record))
+    with pytest.raises(ValueError, match=why):
+        publish.rederive_dsp(tmp_path)
+    rc = publish.main(["--rederive-dsp", str(tmp_path)])
+    out = capsys.readouterr().out
+    assert rc == 2 and "REFUSED" in out and why in out, out
+    assert json.loads((tmp_path / "publication.json").read_text()) == record   # untouched
+
+
+def test_the_committed_records_carry_the_keys_the_publisher_reads():
+    # the guards above must be satisfiable against the records that ship
+    reports = sorted(publish.ROOT.glob("fpga/reports/arty/*/report.json"))
+    assert len(reports) >= 7
+    for p in reports:
+        assert all(json.loads(p.read_text())[k] is not None for k in BUILD_KEYS), p
+    publications = sorted(publish.ROOT.glob("fpga/reports/arty/*/publication.json"))
+    assert len(publications) >= 4
+    for p in publications:
+        assert json.loads(p.read_text())["original_artifact_sha256"] is not None, p

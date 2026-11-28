@@ -16,6 +16,7 @@ import build_selected
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 import setup_ci_oss_cad as toolchain_pin
+import manifest as mf
 
 
 def timing_summary(report):
@@ -63,6 +64,11 @@ def publish(artifact: Path, output: Path, workflow_url: str, *, historical=False
         raise ValueError("expected one build report and one pinned toolchain record")
     report = json.loads(reports[0].read_text())
     toolchain = json.loads(toolchains[0].read_text())
+    mf.require_keys(toolchain, ("sha256", "release"), f"the toolchain record at {toolchains[0]}",
+                    refused=ValueError)
+    mf.require_keys(report, ("configuration", "device", "source_commit", "source_sha256",
+                             "simulation_evidence", "stages", "package", "state"),
+                    f"the build report at {reports[0]}", refused=ValueError)
     if toolchain["sha256"] != toolchain_pin.SHA256 or toolchain["release"] != toolchain_pin.VERSION:
         raise ValueError("toolchain identity does not match the pinned suite")
     build = reports[0].parent
@@ -145,14 +151,22 @@ def publish(artifact: Path, output: Path, workflow_url: str, *, historical=False
     return summary
 
 
-if __name__ == "__main__":
+def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("artifact", type=Path)
     parser.add_argument("--workflow-url", required=True)
     parser.add_argument("--out", type=Path, default=ROOT / "fpga/reports/selected/linux-85f")
     parser.add_argument("--historical", action="store_true",
                         help="verify the recorded source commit; do not claim the current checkout was built")
-    args = parser.parse_args()
-    result = publish(args.artifact, args.out, args.workflow_url, historical=args.historical)
+    args = parser.parse_args(argv)
+    try:
+        result = publish(args.artifact, args.out, args.workflow_url, historical=args.historical)
+    except ValueError as exc:
+        print(f"publish_selected: REFUSED -- {exc}")
+        return 2
     print(json.dumps(result, indent=2))
-    raise SystemExit(0 if result["bitstream_qualified"] else 2)
+    return 0 if result["bitstream_qualified"] else 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
