@@ -86,6 +86,27 @@ def load_prereg(path: pathlib.Path = PREREG) -> dict:
     return json.loads(path.read_text())
 
 
+def load_record(path: pathlib.Path, what: str) -> dict:
+    """A record the OPERATOR names on the command line (`judge <record>`, `judge
+    --twin <file>`). One that cannot be READ is a refusal naming the path, never a
+    traceback (#1774): the bare `json.loads(path.read_text())` turned a missing file,
+    a truncated JSON or bytes that are not UTF-8 into exit 1 by traceback, where this
+    tool's declared refusal is exit 2 and nothing was judged. The parse half is
+    `manifest.load_json_refused` re-typed as THIS module's `Refused`, the class
+    `main()` catches: `manifest.Refused` is another class and would escape it as a
+    traceback (the shape `refprofile._load_json_refused` gives it, #882). The other
+    half is `OSError`: a missing file, a directory, an unreadable one. Only those two
+    are caught -- an implementation error is still a traceback, never a refusal."""
+    try:
+        return mf.load_json_refused(path, what)
+    except mf.Refused as e:
+        raise Refused(str(e)) from e
+    except OSError as e:
+        raise Refused(f"{what} at {path} cannot be read ({e.strerror or e}) -- nothing was judged; "
+                      f"produce it with the command that writes it, or restore a tracked copy with "
+                      f"`git checkout -- {path}`") from e
+
+
 def load_checked(refs: pathlib.Path, rel: str, hashes: dict | None = None):
     p = refs / rel
     if not p.is_file():
@@ -721,11 +742,11 @@ def main(argv=None) -> int:
         elif a.cmd == "ratepath16":
             res = ratepath16(a.refs)
         elif a.cmd == "judge":
-            rec = json.loads(a.record.read_text())
+            rec = load_record(a.record, "the run record")
             mf.require_keys(rec, "rows", f"the record at {a.record}", refused=Refused)
             res = judge(rec, load_prereg())
             if a.twin:
-                twin_rec = json.loads(a.twin.read_text())
+                twin_rec = load_record(a.twin, "the twin record")
                 mf.require_keys(twin_rec, "rows", f"the twin record at {a.twin}", refused=Refused)
                 res["post_hoc"] = post_hoc(rec, twin_rec)
             print(json.dumps(_json(res), indent=1))
