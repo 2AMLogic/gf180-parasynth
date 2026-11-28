@@ -659,7 +659,7 @@ def test_frozen_record_declares_the_pre_measurement_commitments():
 # injected-bug control drives `main()` in process, because a monkeypatch cannot reach a
 # subprocess, and the last control calls the loader itself.
 RAW_READ_RAISES = {"truncated": json.JSONDecodeError,
-                   "not-utf8": UnicodeDecodeError,
+                   "not-utf8": (UnicodeDecodeError, json.JSONDecodeError),  # locale-dependent: Latin-1 decodes ff fe, then JSON fails
                    "empty": json.JSONDecodeError,
                    "directory": IsADirectoryError}
 

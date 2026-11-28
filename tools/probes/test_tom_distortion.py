@@ -780,7 +780,7 @@ REPO = pathlib.Path(__file__).resolve().parents[2]
 #: a directory where a file was named).
 RAW_READ_RAISES = {"missing": FileNotFoundError,
                    "truncated": json.JSONDecodeError,
-                   "not-utf8": UnicodeDecodeError,
+                   "not-utf8": (UnicodeDecodeError, json.JSONDecodeError),  # locale-dependent: Latin-1 decodes ff fe, then JSON fails
                    "empty": json.JSONDecodeError,
                    "directory": IsADirectoryError}
 
