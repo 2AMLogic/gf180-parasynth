@@ -21,11 +21,19 @@ THE KNOWN ANSWERS, independent of anything this repository models:
   a git-lfs pointer is not a WAV. scipy says so with `ValueError`; what the
   reader must do about it is the subject of every refusal test below.
 
-WHAT LANDED RED, on `origin/main` @ 528a228b (2026-11-28), before any
-production edit -- recorded here because a control nobody has watched fail is
-not a control (docs/verification-rules.md rule 1). Final red run, after the
-three fixture errors below were fixed: 56 failed, 17 passed, every failure
-read by its own one-line reason.
+WHAT LANDED RED, on a clean `origin/main` worktree (test file copied in,
+nothing else), before any production edit -- recorded here because a
+control nobody has watched fail is not a control (docs/verification-rules.md
+rule 1). The complete file: 59 failed, 18 passed, 4 xfailed; on the fixed
+tree 75 passed, 6 xfailed. So 57 red -> green, 18 pins green on both sides,
+and the 6 strict xfails that are the rule-8 marker below (4 xfail on both
+trees; 2 fail on the unfixed tree only because the class, or the module's
+importability, did not exist yet). Every red was read by its own one-line
+reason: no `Refused` class yet (22); scipy's ValueError out of a reader or
+a CLI (18); ab_808_loud running on import (8); IsADirectoryError (3);
+FileNotFoundError (2); an ab_808_loud CLI exiting 1 (4); drum_verify
+reading twice (1); and the zero-frame file leaving drum_verify as numpy's
+own ValueError (1).
 
   reader                  missing            pointer / directory / 0-byte
   ---------------------   ----------------   ------------------------------
@@ -60,6 +68,16 @@ and `tom_pitch_probe.read_wav`'s sibling callers get no CLI handler here; a
 truncated WAV's `WavFileWarning` is #1848's. `defect_1`'s read through
 `run_case.load_reference` stays an exit-1 execution error until #1860 lands
 (`tools/test_estimator_defects_refusal.py` pins that, and must stay green).
+
+WHAT THE READ GUARD CANNOT SEE (rule 8, measured on the fixed tree): a
+RIFF header with zero data frames. scipy raises nothing for it, so a
+guard on `wavfile.read` passes it, and `measure_conga_body_spread`,
+`test_discrimination`, `tom_pitch_probe`, `ab_808_loud` and
+`refprofile.read_clip_file` answer with an empty array while
+`drum_verify.read_wav` escapes numpy's own ValueError. `hh_probe5`
+(silent) and `score_drum_i2s` (frame count) refuse it on their content
+checks. Pinned below as strict xfails rather than fixed: it is #1848's
+truncated-WAV class, a content precondition and not a readability one.
 """
 from __future__ import annotations
 
@@ -230,6 +248,61 @@ def test_reader_answers_the_known_sine_exactly_as_before(reader, tmp_path):
 
 
 # --- the class contract that keeps the existing suites green ----------------
+def _zero_frame_wav(tmp_path: pathlib.Path) -> pathlib.Path:
+    p = tmp_path / "empty.wav"
+    wavfile.write(str(p), SR, np.zeros(0, dtype="<i2"))
+    return p
+
+
+#: THE INPUT THAT DEFEATS THE READ GUARD (verification-rules rule 8), measured
+#: on the fixed tree: a RIFF header with zero data frames raises nothing in
+#: scipy, so a guard on the read cannot see it, and these readers answer with
+#: an empty array. drum_verify's escapes as numpy's own ValueError. A
+#: zero-frame file is a content precondition, not a readability one -- #1848's
+#: truncated-WAV class -- and is deliberately not closed here. Both controls
+#: are strict: the day a reader refuses it, the xfail turns into a failure and
+#: retires itself.
+ZERO_FRAME_ANSWERS = [r for r in READERS if r.name.split(".")[0] in (
+    "measure_conga_body_spread", "test_discrimination", "tom_pitch_probe",
+    "ab_808_loud", "refprofile")]
+
+
+@pytest.mark.xfail(strict=True, raises=AssertionError,
+                   reason="read-level guard (#1861): a zero-frame WAV raises nothing in "
+                          "scipy, so the reader answers with an empty array")
+@pytest.mark.parametrize("reader", ZERO_FRAME_ANSWERS, ids=[r.name for r in ZERO_FRAME_ANSWERS])
+def test_a_zero_frame_wav_refuses(reader, tmp_path):
+    try:
+        reader.read(_zero_frame_wav(tmp_path))
+    except reader.module.Refused:
+        return
+    raise AssertionError("answered with an empty array instead of refusing")
+
+
+@pytest.mark.xfail(strict=True, raises=AssertionError,
+                   reason="read-level guard (#1861): a zero-frame WAV leaves drum_verify."
+                          "read_wav as numpy's own ValueError, an execution error")
+def test_a_zero_frame_wav_refuses_in_drum_verify(tmp_path):
+    try:
+        dv.read_wav(str(_zero_frame_wav(tmp_path)))
+    except dv.Refused:
+        return
+    except ValueError as exc:
+        raise AssertionError(f"escaped as {type(exc).__name__}: {exc}") from exc
+    raise AssertionError("answered with an empty array instead of refusing")
+
+
+def test_the_readers_with_a_content_check_refuse_a_zero_frame_wav(tmp_path):
+    """The positive leg: these two never reach for the read guard, because
+    each already states what a usable file must hold."""
+    p = _zero_frame_wav(tmp_path)
+    with pytest.raises(score.Refused, match=r"0 frames"):
+        score.load_window(p, N)
+    with pytest.raises(hh_probe5.Refused, match=r"silent"):
+        hh_probe5.scorecard_record(np.zeros(10, dtype=np.int16), "empty.wav", "s", "c",
+                                   tmp_path, _hh_prov(), {})
+
+
 #: The readers whose width refusal was a `ValueError` before this issue.
 #: `tools/test_wav_reader_refusal.py` reads conga and discrimination with
 #: `pytest.raises(ValueError)`; `measure_harness._DATA_ERRORS` lists
