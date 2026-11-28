@@ -16,6 +16,7 @@ Plus the usual: every named property must be moved by some injected defect, the
 two blind defects must be blind, and the numbers quoted in the docstring must
 come from the artifacts rather than from the prose.
 """
+import json
 import math
 import pathlib
 import sys
@@ -276,6 +277,75 @@ def test_targets_refuse_a_window_mismatch(monkeypatch):
     monkeypatch.setattr(v, "T_RHO_WINDOW", "3.5s")
     with pytest.raises(v.Refused):
         v.targets()
+
+
+def _artifacts(tmp_path, low, origin):
+    """The two step-7 artifacts, possibly altered, written where `targets()` is
+    asked to read them."""
+    lt_p, mo_p = tmp_path / "low-tail.json", tmp_path / "m-origin.json"
+    lt_p.write_text(json.dumps(low))
+    mo_p.write_text(json.dumps(origin))
+    return v.targets, lt_p, mo_p
+
+
+def _with_rho(low, window):
+    """The recordings of `window` that carry a Fischer rho_M(-10) reading."""
+    return [note for note, m in low["windows"][window]["fischer"].items()
+            if m.get("rho", {}).get("M", {}).get("-10") is not None]
+
+
+@pytest.mark.skipif(not (LOW_TAIL.is_file() and M_ORIGIN.is_file()),
+                    reason="step 7's artifacts are not present")
+@pytest.mark.parametrize("key", ["chain_bound_db", "measured_median", "measured_min",
+                                 "measured_max"])
+@pytest.mark.parametrize("bad", [float("nan"), float("inf")])
+def test_targets_refuses_a_non_finite_m_origin_figure(tmp_path, key, bad):
+    """#1929. `abs(float(got) - want) > 0.011` is False for a NaN. Measured on
+    the tree before the fix: a NaN in any of the four figures passed the guard
+    and m-origin.json was recorded under verified_against."""
+    low, origin = json.loads(LOW_TAIL.read_text()), json.loads(M_ORIGIN.read_text())
+    origin["gap"]["bands"]["M"][key] = bad
+    targets, lt_p, mo_p = _artifacts(tmp_path, low, origin)
+    with pytest.raises(v.Refused) as exc:
+        targets(lt_p, mo_p)
+    assert f"m-origin.json carries a non-finite value: gap.bands.M.{key} = {bad!r}" \
+        in str(exc.value)
+
+
+@pytest.mark.skipif(not LOW_TAIL.is_file(), reason="step 7's artifact is not present")
+@pytest.mark.parametrize("where", [0, -1], ids=["first", "last"])
+@pytest.mark.parametrize("bad", [float("nan"), float("-inf")])
+def test_targets_refuses_a_non_finite_low_tail_rho(tmp_path, where, bad):
+    """#1929, in the window `targets()` compares in. `min()` and `max()` keep a
+    NaN only when it is the first reading. Measured on the tree before the fix:
+    a NaN that was FIRST left min = max = NaN and both guards passed; a NaN
+    anywhere else was dropped from both with `n` still counting it."""
+    low, origin = json.loads(LOW_TAIL.read_text()), json.loads(M_ORIGIN.read_text())
+    window = v.T_RHO_WINDOW
+    note = _with_rho(low, window)[where]
+    low["windows"][window]["fischer"][note]["rho"]["M"]["-10"] = bad
+    targets, lt_p, mo_p = _artifacts(tmp_path, low, origin)
+    with pytest.raises(v.Refused) as exc:
+        targets(lt_p, mo_p)
+    assert (f"low-tail.json carries a non-finite value: windows.{window}.fischer.{note}"
+            f".rho.M.-10 = {bad!r}") in str(exc.value)
+
+
+@pytest.mark.skipif(not LOW_TAIL.is_file(), reason="step 7's artifact is not present")
+@pytest.mark.parametrize("where", [0, -1], ids=["first", "last"])
+def test_targets_refuses_a_non_finite_rho_in_any_window(tmp_path, where):
+    """#1929, in a window `targets()` does NOT compare in. Measured on the tree
+    before the fix: a NaN first in another window left `allmin` = NaN and the
+    over-all-windows guard passed; a NaN last in another window vanished from
+    that minimum without a word."""
+    low, origin = json.loads(LOW_TAIL.read_text()), json.loads(M_ORIGIN.read_text())
+    window = next(w for w in low["windows"] if w != v.T_RHO_WINDOW)
+    note = _with_rho(low, window)[where]
+    low["windows"][window]["fischer"][note]["rho"]["M"]["-10"] = float("nan")
+    targets, lt_p, mo_p = _artifacts(tmp_path, low, origin)
+    with pytest.raises(v.Refused) as exc:
+        targets(lt_p, mo_p)
+    assert f"windows.{window}.fischer.{note}.rho.M.-10 = nan" in str(exc.value)
 
 
 # ---------------------------------------------------------------------------

@@ -957,10 +957,28 @@ def check(*, fast=True) -> tuple[bool, list[str]]:
 # ---------------------------------------------------------------------------
 # the sweep and the verdict
 # ---------------------------------------------------------------------------
+def _refuse_non_finite(source, readings):
+    """REFUSE, naming each one, when a reading re-read off a committed artifact
+    is not a finite number (#1929).
+
+    `abs(got - want) > tol` is False for a NaN, so a NaN re-read in `targets()`
+    passed as "has not moved". `min()` and `max()` keep a NaN only when it is
+    the first reading and drop it otherwise, which is how a NaN reached three
+    of the four comparisons there -- and how any other NaN vanished from the
+    minimum while `n` still counted it.
+    """
+    bad = [f"{name} = {value!r}" for name, value in readings
+           if not math.isfinite(value)]
+    if bad:
+        raise Refused(f"{source} carries a non-finite value: " + ", ".join(bad)
+                      + "; a reading is a number or it is not a measurement")
+
+
 def targets(low_tail=None, m_origin=None) -> dict:
     """Re-read the committed step-7 artifacts and REFUSE if the numbers this
-    module quotes have moved. A target copied into a docstring goes stale; one
-    checked against its source cannot."""
+    module quotes have moved, or if any of them is not a finite number. A
+    target copied into a docstring goes stale; one checked against its source
+    cannot."""
     lt_p = low_tail or ROOT / "docs/scorecard/cymbal-369/low-tail/low-tail.json"
     mo_p = m_origin or ROOT / "docs/scorecard/cymbal-369/low-tail/m-origin.json"
     out = {"rho_808_min": T_RHO_808_MIN, "rho_baseline_max": T_RHO_BASELINE_MAX,
@@ -974,6 +992,9 @@ def targets(low_tail=None, m_origin=None) -> dict:
             raise Refused(f"{mo_p.name}'s gap is in the "
                           f"{blob.get('gap', {}).get('window')} window, this module compares "
                           f"in {T_RHO_WINDOW}")
+        _refuse_non_finite(mo_p.name,
+                           [(f"gap.bands.M.{k}", float(v))
+                            for k, v in g.items() if isinstance(v, (int, float))])
         for key, want in (("chain_bound_db", T_CHAIN_BOUND_DB),
                           ("measured_median", T_M_RE_LN_808_MEDIAN),
                           ("measured_min", M_RE_LN_808_RANGE[0]),
@@ -988,8 +1009,12 @@ def targets(low_tail=None, m_origin=None) -> dict:
         blob = json.loads(lt_p.read_text())
         per = {}
         for wname, w in blob.get("windows", {}).items():
-            vals = [float(m["rho"]["M"]["-10"]) for m in w.get("fischer", {}).values()
-                    if m.get("rho", {}).get("M", {}).get("-10") is not None]
+            readings = [(f"windows.{wname}.fischer.{note}.rho.M.-10",
+                         float(m["rho"]["M"]["-10"]))
+                        for note, m in w.get("fischer", {}).items()
+                        if m.get("rho", {}).get("M", {}).get("-10") is not None]
+            _refuse_non_finite(lt_p.name, readings)
+            vals = [value for _, value in readings]
             if vals:
                 per[wname] = {"n": len(vals), "min": round(min(vals), 4),
                               "max": round(max(vals), 4)}
