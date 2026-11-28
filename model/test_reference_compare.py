@@ -514,3 +514,220 @@ def test_a_mixed_run_with_one_acquired_curve_still_passes(monkeypatch, tmp_path,
             dict(device="ours", res=0.5, freqs=[1.0], gain_db=[0.0], corner_hz=None)]
     assert rcmp._answered(rows)
     assert not rcmp._answered(rows[:1])
+
+# =============================================================================
+# 4. a device that did not answer must not take the run down (#1936)
+# =============================================================================
+# Three shapes #1857's closing search left in this file, each reproduced by
+# RUNNING on that PR's head (d8e97813, 2026-11-28) before a line was changed:
+#
+#   * `report()` over a MIXED directory -- one device measured, another's rows
+#     all refused -- crashed. The issue names section 1 (`max()` over an empty
+#     `live`, a ValueError). The same directory crashed in four other printed
+#     sections too, each on the row shape `guard` writes: `tracking` (KeyError
+#     `want_hz`), `response` (a None cut_hz through a float format),
+#     `peakdrive` (KeyError `res`), `bigdrive` (KeyError `level_dbfs`).
+#   * `main` guarded five stages against a rig's NotImplementedError and left
+#     three things outside: `build()`, the cutoff lookup `cut_setting_for()`
+#     makes before any stage, and the whole `tracking` stage. A rig refusing
+#     in any of them left as a traceback, after the stages before it had been
+#     recorded and written nowhere.
+#   * `_stage_files` split at the LAST hyphen, so `selfosc-ours-1tanh.json`
+#     read as stage `selfosc-ours` of device `1tanh`. Seven of the ten device
+#     names carry a hyphen and none of their files counted: a directory
+#     holding nothing but a measured `ours-1tanh` refused, `0 of 0 stage
+#     file(s)`. Found here and fixed here; PR #1934's own review then fixed
+#     it independently (its `test_report_recognises_every_registered_device_filename`),
+#     so on this branch the control below is green before the fix commit. It
+#     stays: it is the end-to-end half, a measured directory through `report()`.
+#
+# WHAT IS OWED. A device that did not answer is NAMED, in the section where
+# its row would have stood, with its reason, and the report goes on to the
+# others. The status is still 0 when something else answered -- a partly
+# refused directory is a result, #1934's boundary, unchanged -- which is
+# exactly why the device must show in the text: the status alone cannot say
+# it. A rig that cannot be built, cannot state a cutoff or cannot ring for
+# `tracking` leaves every stage it was asked for `not_answerable`, recorded
+# and written like the guarded stages.
+#
+# THE CONTROLS: an all-answered directory names no device as unanswered, and
+# a sweep in which one stage answered among refused ones is still 0.
+NOT_ANSWERABLE = "ring: not answerable"
+MEASURED_SELFOSC = [dict(device="ours", res=1.3, ok=True, rms=0.5, f0=258.0,
+                         h2=None, h3=-30.0, h5=-50.0, h7=-60.0)]
+#: what `--stage all` asks of one device, and so the files a deaf rig leaves
+ALL_KEYS = ("selfosc", "response", "peak", "tracking", "drive")
+
+
+class _Unbuildable:
+    """A rig whose construction raises NotImplementedError."""
+
+    def __init__(self):
+        raise NotImplementedError("Surge XT is not installed")
+
+
+def _deaf_row(device="ours-1tanh"):
+    """The one row `guard` writes for a stage the rig could not perform."""
+    return [dict(device=device, ok=False, not_answerable=NOT_ANSWERABLE)]
+
+
+def _named(out, device, label):
+    """The report lines that are device `device`'s and carry `label`."""
+    return [ln for ln in out if ln.strip().startswith(device) and label in ln]
+
+
+def _assert_not_answerable(tmp_path, device, keys):
+    for key in keys:
+        rows = _rows(tmp_path, key, device)
+        assert len(rows) == 1 and rows[0]["ok"] is False and rows[0]["not_answerable"], (key, rows)
+
+
+def _ran_to_its_end(out) -> bool:
+    """Section 6 is the report's last; a crash in any section before it
+    means the line is absent."""
+    return any("6. THE INJECTED DEFECTS" in ln for ln in out)
+
+
+# -- `--report`: the mixed directory
+
+
+def test_a_device_whose_rows_all_refused_is_named_and_the_report_goes_on(tmp_path, capsys):
+    """THE MIXED DIRECTORY the issue names: `ours` measured, `ours-1tanh` all
+    `not_answerable`. Reproduced: `ValueError: max() iterable argument is
+    empty`, exit 1."""
+    (tmp_path / "selfosc-ours.json").write_text(json.dumps(MEASURED_SELFOSC))
+    (tmp_path / "selfosc-ours-1tanh.json").write_text(json.dumps(_deaf_row()))
+    rc, out = _report(tmp_path, capsys)
+    assert rc == PASS, (rc, out)
+    named = _named(out, "ours-1tanh", "NOT ANSWERABLE")
+    assert len(named) == 1 and NOT_ANSWERABLE in named[0], out
+    measured = [ln for ln in out if ln.startswith("ours ") and "-30.0" in ln]
+    assert len(measured) == 1, "the measured device's own row still prints: " + "\n".join(out)
+    assert _ran_to_its_end(out), out
+    assert _verdicts(out) == [], out
+
+
+def test_a_device_whose_rows_the_estimator_all_refused_is_named_too(monkeypatch, tmp_path, capsys):
+    """The other row shape that empties `live`, written by the real `main`:
+    the rig rendered silence and the estimator refused every row. Reproduced:
+    the same ValueError."""
+    rc, _ = _main(monkeypatch, tmp_path, capsys, ["--stage", "selfosc", "--devices", "ours,ours-1tanh"],
+                  {"ours": _Ringing, "ours-1tanh": _SilentRing})
+    assert rc == PASS
+    why = {r["why"] for r in _rows(tmp_path, "selfosc", "ours-1tanh")}
+    rc, out = _report(tmp_path, capsys)
+    assert rc == PASS, (rc, out)
+    named = _named(out, "ours-1tanh", "NO ROW ANSWERED")
+    assert len(named) == 1 and all(w in named[0] for w in why), out
+    assert _ran_to_its_end(out), out
+
+
+@pytest.mark.parametrize("stage,crash", [("tracking", "KeyError: 'want_hz'"),
+                                         ("response", "TypeError: unsupported format string"),
+                                         ("peakdrive", "KeyError: 'res'"),
+                                         ("bigdrive", "KeyError: 'level_dbfs'")])
+def test_the_same_device_in_the_other_printed_stages_is_named_too(tmp_path, capsys, stage, crash):
+    """The same-shape search: the issue names section 1, and each other printed
+    section took the same directory down its own way. Reproduced: `crash`."""
+    (tmp_path / "selfosc-ours.json").write_text(json.dumps(MEASURED_SELFOSC))
+    (tmp_path / f"{stage}-ours-1tanh.json").write_text(json.dumps(_deaf_row()))
+    rc, out = _report(tmp_path, capsys)
+    assert rc == PASS, (rc, out)
+    named = _named(out, "ours-1tanh", "NOT ANSWERABLE")
+    assert len(named) == 1 and NOT_ANSWERABLE in named[0], out
+    assert _ran_to_its_end(out), out
+    assert _verdicts(out) == [], out
+
+
+def test_a_measured_file_of_a_device_whose_name_carries_a_hyphen_counts(tmp_path, capsys):
+    """Red on the #1934 head this was written against (d8e97813: rc 2, `0 of 0
+    stage file(s)`). Green since that PR's review fixed `_stage_files`."""
+    (tmp_path / "selfosc-ours-1tanh.json").write_text(json.dumps(
+        [dict(MEASURED_SELFOSC[0], device="ours-1tanh")]))
+    rc, out = _report(tmp_path, capsys)
+    assert rc == PASS, (rc, out)
+    assert _verdicts(out) == [], out
+    assert len(_named(out, "ours-1tanh", "-30.0")) == 1, out
+
+
+def test_the_control_an_all_answered_directory_names_no_device_as_unanswered(monkeypatch, tmp_path, capsys):
+    """THE CONTROL for the report: over a directory in which every row
+    answered, no device is named as unanswered. Widening the rule to "name any
+    device that has a file" turns this red."""
+    rc, _ = _main(monkeypatch, tmp_path, capsys, ["--stage", "selfosc", "--devices", "ours,ours-1tanh"],
+                  {"ours": _Ringing, "ours-1tanh": _Ringing})
+    assert rc == PASS
+    rc, out = _report(tmp_path, capsys)
+    assert rc == PASS, (rc, out)
+    assert not any("NOT ANSWERABLE" in ln or "NO ROW ANSWERED" in ln for ln in out), out
+
+
+# -- a run: the three places outside `guard`
+
+
+def test_under_stage_all_a_rig_that_cannot_ring_leaves_every_requested_stage_not_answerable(
+        monkeypatch, tmp_path, capsys):
+    """The `tracking` stage sat outside `guard`. Reproduced under `--stage
+    all` with a rig that answers nothing: NotImplementedError from `ring`,
+    a traceback, after four stages had been recorded and written nowhere."""
+    rc, out = _main(monkeypatch, tmp_path, capsys, ["--stage", "all", "--devices", "ours"], {"ours": _Deaf})
+    assert rc == REFUSED, (rc, out)
+    _assert_not_answerable(tmp_path, "ours", ALL_KEYS)
+    verdicts = _verdicts(out)
+    assert len(verdicts) == 1 and out[-1] == verdicts[0], out
+    assert "0 of 5 requested stage(s) answered" in verdicts[0], verdicts[0]
+    assert all(f"ours/{key}" in verdicts[0] for key in ALL_KEYS), verdicts[0]
+    assert sum("NOT ANSWERABLE" in ln for ln in out) == len(ALL_KEYS), out
+
+
+def test_a_rig_that_cannot_state_a_cutoff_leaves_every_requested_stage_not_answerable(
+        monkeypatch, tmp_path, capsys):
+    """`cut_setting_for` calls `set_point` on a Surge rig before any stage.
+    Reproduced under `--devices ours,surge-rk`: a traceback."""
+    rc, out = _main(monkeypatch, tmp_path, capsys, ["--stage", "all", "--devices", "ours,surge-rk"],
+                    {"ours": _Deaf, "surge-rk": _Deaf})
+    assert rc == REFUSED, (rc, out)
+    _assert_not_answerable(tmp_path, "ours", ALL_KEYS)
+    _assert_not_answerable(tmp_path, "surge-rk", ALL_KEYS)
+    verdicts = _verdicts(out)
+    assert len(verdicts) == 1 and out[-1] == verdicts[0], out
+    assert "0 of 10 requested stage(s) answered" in verdicts[0], verdicts[0]
+    assert all(f"{device}/{key}" in verdicts[0] for device in ("ours", "surge-rk")
+               for key in ALL_KEYS), verdicts[0]
+
+
+@pytest.mark.parametrize("deaf", [False, True], ids=["one-device-answered", "nothing-answered"])
+def test_a_rig_that_cannot_be_built_is_not_answerable_for_every_requested_stage(
+        monkeypatch, tmp_path, capsys, deaf):
+    """`build()` sat outside `guard`. Reproduced: a traceback before the device
+    had a stage to its name. THE CONTROL is the first parameter: `ours`
+    answers two stages beside it, and the run is still 0."""
+    rc, out = _main(monkeypatch, tmp_path, capsys, ["--stage", "all", "--devices", "ours,surge-rk"],
+                    {"ours": _Deaf if deaf else _Ringing, "surge-rk": _Unbuildable})
+    assert rc == (REFUSED if deaf else PASS), (rc, out)
+    _assert_not_answerable(tmp_path, "surge-rk", ALL_KEYS)
+    assert all("Surge XT is not installed" in _rows(tmp_path, key, "surge-rk")[0]["not_answerable"]
+               for key in ALL_KEYS)
+    assert sorted(p.name for p in tmp_path.glob("*-surge-rk.json")) == \
+        sorted(f"{key}-surge-rk.json" for key in ALL_KEYS)
+    assert sum(ln.startswith("  surge-rk:") and "NOT ANSWERABLE" in ln for ln in out) == len(ALL_KEYS), out
+    verdicts = _verdicts(out)
+    if deaf:
+        assert len(verdicts) == 1 and "0 of 10 requested stage(s) answered" in verdicts[0], out
+    else:
+        assert verdicts == [], out
+
+
+def test_under_stage_all_a_deaf_rig_leaves_a_directory_the_report_can_read(monkeypatch, tmp_path, capsys):
+    """Both repairs end to end, on the shape a host without a plugin writes:
+    `ours` answers two stages and refuses three, `ours-1tanh` refuses all
+    five. Reproduced: the run itself was the traceback."""
+    rc, _ = _main(monkeypatch, tmp_path, capsys, ["--stage", "all", "--devices", "ours,ours-1tanh"],
+                  {"ours": _Ringing, "ours-1tanh": _Deaf})
+    assert rc == PASS
+    rc, out = _report(tmp_path, capsys)
+    assert rc == PASS, (rc, out)
+    # selfosc, tracking and response are printed and name it; `peak` and
+    # `drive` are written and no section prints them
+    assert len(_named(out, "ours-1tanh", "NOT ANSWERABLE")) == 3, out
+    assert _ran_to_its_end(out), out

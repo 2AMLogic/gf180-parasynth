@@ -34,6 +34,7 @@ traceback -- so "non-zero with REFUSED: on stderr" alone cannot tell a normal
 exception from the SystemExit path. The traceback line is what does.
 """
 import ast
+import json
 import os
 import pathlib
 import subprocess
@@ -149,3 +150,101 @@ def test_control_system_exit_with_a_code_exits_1_without_a_traceback():
     assert r.returncode == 1, (r.returncode, r.stdout, r.stderr)
     assert "REFUSED: code is set" in r.stderr
     assert "Traceback" not in r.stderr
+
+
+# =============================================================================
+# An arm whose every (Q, gain) point refused (#1936)
+# =============================================================================
+# `main`'s sweep records a point `cy_kit` refuses and goes on (`rows.append(dict(q=q,
+# gain=g, refused=str(e)))`, the block the test above runs). An arm whose every
+# point refused then dropped out of the shortlist without a word, and nothing
+# asked whether any arm had answered. Reproduced by RUNNING the real `main` on
+# origin/main @ e2d1bae7 (2026-11-28) with the real corpus and `cy_kit`
+# refusing the sweep points:
+#
+#   3pole-bp alone deaf (2pole, 3pole-raw answer)   rc 0; hh5.json holds two
+#                                                   arms, the third gone
+#   2pole deaf, or every arm deaf                   KeyError: '2pole', a
+#                                                   traceback (`fitted["2pole"]`)
+#
+# so the issue's "returns 0" is the one-arm case; the other two crash. All
+# three now end REFUSED (2) with each refusing arm named.
+#
+# THE BOUNDARY, stated: a literally always-raising `cy_kit` raises at the
+# unity-cascade precondition (`cy_kit("control")`, in no handler) before the
+# sweep is reached. That is the uncaught-refusal contract #1640 pinned above
+# -- exit 1, a traceback -- and it is not touched here.
+#
+# THE CONTROL: a sweep in which every arm answered is 0.
+ARMS = ("2pole", "3pole-bp", "3pole-raw")
+
+
+def _deaf_cy_kit(deaf):
+    """`cy_kit` refusing every SWEEP point of the arms in `deaf`. The
+    unity-cascade call carries no `q` and still gets the real kit: that
+    precondition is not what is under test."""
+    real = hh_probe5.cy_kit
+
+    def cy_kit(arm, **kw):
+        if arm in deaf and "q" in kw:
+            raise hh_probe5.Refused(f"{arm}: stubbed refusal at the apparatus precondition")
+        return real(arm, **kw)
+    return cy_kit
+
+
+def _refs_dir(tmp_path):
+    """The two recordings `main` checks for, as empty files: it reads their
+    audio only after the sweep, which a refused baseline never reaches."""
+    refs = tmp_path / "refs"
+    (refs / "cy8").mkdir(parents=True)
+    for name in ("CY5025.WAV", "CY2500.WAV"):
+        (refs / "cy8" / name).write_bytes(b"")
+    return refs
+
+
+@pytest.mark.parametrize("deaf", [set(ARMS), {"2pole"}], ids=["every-arm", "the-baseline-alone"])
+def test_an_arm_whose_every_point_refused_exits_refused_and_is_named(monkeypatch, tmp_path, capsys, deaf):
+    """The real `main` under `--quick` (one point per arm): every render is
+    the real one, only the sweep points of `deaf` refuse. Reproduced:
+    `KeyError: '2pole'`, a traceback, in both parameters."""
+    monkeypatch.setattr(hh_probe5, "cy_kit", _deaf_cy_kit(deaf))
+    out = tmp_path / "out"
+    rc = hh_probe5.main(["--refs", str(_refs_dir(tmp_path)), "--out", str(out), "--quick",
+                         "--seconds", "0.3"])
+    lines = capsys.readouterr().out.splitlines()
+    assert rc == 2, (rc, lines[-3:])
+    verdicts = [ln for ln in lines if ln.startswith("REFUSED:")]
+    assert len(verdicts) == 1 and lines[-1] == verdicts[0], lines[-4:]
+    assert all(arm in verdicts[0] for arm in deaf), verdicts[0]
+    assert not any(arm in verdicts[0] for arm in set(ARMS) - deaf), verdicts[0]
+    sweep = json.loads((out / "hh5.json").read_text())["surrogate_sweep"]
+    for arm in deaf:
+        assert sweep[arm] and all("refused" in r for r in sweep[arm]), (arm, sweep[arm])
+    for arm in set(ARMS) - deaf:
+        assert sweep[arm] and all("cost" in r for r in sweep[arm]), (arm, sweep[arm])
+
+
+def _sweep(deaf):
+    """A finished sweep: `refused` rows for the arms in `deaf`, a measured row
+    for the others."""
+    return {arm: [dict(q=2.5, gain=1.0, refused=f"REFUSED: {arm}")] if arm in deaf
+            else [dict(q=2.5, gain=1.0, cost=18.1)] for arm in ARMS}
+
+
+def test_one_refused_arm_among_answered_ones_is_named_and_only_itself(capsys):
+    """THE SHAPE the issue read -- one arm deaf, the others answered -- is the
+    one whose run needs the corpus to reach its end (the paragraph above has
+    that run). The decision is a function of the sweep, so it is driven here."""
+    deaf = hh_probe5.deaf_arms(_sweep({"3pole-bp"}))
+    assert deaf == ["3pole-bp"]
+    assert hh_probe5.arms_exit(deaf) == 2
+    out = capsys.readouterr().out
+    assert "3pole-bp" in out and "2pole" not in out and "3pole-raw" not in out, out
+
+
+def test_the_control_a_sweep_where_every_arm_answered_passes(capsys):
+    """THE CONTROL. Widening the rule to "any refused point" turns this red:
+    the sweep records a refused point beside measured ones all the time."""
+    assert hh_probe5.deaf_arms(_sweep(set())) == []
+    assert hh_probe5.arms_exit([]) == 0
+    assert capsys.readouterr().out == ""
