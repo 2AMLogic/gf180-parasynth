@@ -312,3 +312,63 @@ def test_the_acceptance_matrix_is_pinned_including_what_it_is_blind_to():
         assert set(rep["controls"][n]["matrix"].values()) == {"BLIND"}, n
     assert rep["controls"]["reversed"]["matrix"]["N1_worst_abs"] == "MOVED"
     assert rep["controls"]["disabled"]["matrix"]["N1_worst_abs"] == "BLIND"
+
+
+# =============================================================================
+# 7. a committed record that cannot be read is REFUSED, not a traceback
+#    (#1604, #1623)
+# =============================================================================
+# `committed_candidate()` read `val["corr_entries"]` &c. with [] and nothing
+# caught the KeyError: exit 1 by traceback -- FAIL -- where
+# tools/exit_contract.py says an unmet precondition is exit 2. One control per
+# key through the tool's own main(): each deletes ONE key from a copy of the
+# committed record under a scratch OUT_DIR. The plan is the committed one.
+KEYS = {"validation.json": ("corr_entries", "law_degree", "corr_rom", "k_rom"),
+        "sweeps.json": ("entries",)}
+
+
+def _controls_over(tmp_path, monkeypatch, capsys, which, key, null=False):
+    for name in KEYS:
+        rec = _json(os.path.join(rt.OUT_DIR, name))
+        if name == which:
+            if null:
+                rec[key] = None
+            else:
+                del rec[key]
+        (tmp_path / name).write_text(json.dumps(rec))
+    monkeypatch.setattr(rt, "OUT_DIR", str(tmp_path))
+    rc = rt.main(["controls"])
+    return rc, capsys.readouterr().err
+
+
+def test_the_committed_records_carry_every_key_the_candidate_reads():
+    """The guards below must be satisfiable against the records that ship."""
+    for name, keys in KEYS.items():
+        rec = _json(os.path.join(rt.OUT_DIR, name))
+        for key in keys:
+            assert rec.get(key) is not None, (name, key)
+
+
+@pytest.mark.parametrize("which, key", [(w, k) for w, keys in KEYS.items() for k in keys])
+def test_a_committed_record_missing_a_key_is_refused(tmp_path, monkeypatch, capsys, which, key):
+    rc, err = _controls_over(tmp_path, monkeypatch, capsys, which, key)
+    assert rc == 2 and "REFUSED" in err and f"'{key}'" in err
+    assert not (tmp_path / "controls.json").exists()    # no controls were run or written
+
+
+@pytest.mark.parametrize("which, key", [(w, k) for w, keys in KEYS.items() for k in keys])
+def test_a_committed_record_with_null_for_a_key_is_refused(tmp_path, monkeypatch, capsys, which, key):
+    rc, err = _controls_over(tmp_path, monkeypatch, capsys, which, key, null=True)
+    assert rc == 2 and "REFUSED" in err and f"'{key}'" in err
+
+
+@pytest.mark.parametrize("record, why", [({}, "'corr_entries'"), ([], "not a JSON object"),
+                                         (None, "not a JSON object")])
+def test_a_validation_record_that_is_not_an_object_is_refused(tmp_path, monkeypatch, capsys,
+                                                               record, why):
+    (tmp_path / "validation.json").write_text(json.dumps(record))
+    (tmp_path / "sweeps.json").write_text(json.dumps(_json(SWEEPS)))
+    monkeypatch.setattr(rt, "OUT_DIR", str(tmp_path))
+    rc = rt.main(["controls"])
+    err = capsys.readouterr().err
+    assert rc == 2 and "REFUSED" in err and why in err

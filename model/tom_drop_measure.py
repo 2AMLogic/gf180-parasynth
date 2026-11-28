@@ -38,6 +38,7 @@ if _REFUSAL_TOOLS not in sys.path:
 import tom_pitch_probe as P
 import refusal
 import refaudio_local as rl
+import manifest as mf
 
 
 class Refused(refusal.Refused, RuntimeError):
@@ -284,6 +285,8 @@ def provenance() -> dict:
         except Exception:
             return "?"
     cat = json.loads((REPO / "refaudio" / "catalog.json").read_text())
+    mf.require_keys(cat, "packs", f"the reference-audio catalog at {REPO / 'refaudio' / 'catalog.json'}",
+                    refused=Refused)
     pack = [p for p in cat["packs"] if p["archive"] == "808-from-mars.zip"][0]
     return {"commit": git("rev-parse", "HEAD"),
             "dirty": bool(git("status", "--porcelain")),
@@ -306,11 +309,11 @@ def main(argv: list[str]) -> int:
     groups = VOICES + (CONGAS if a.congas else [])
     try:
         require_inventory(groups)
+        prov = provenance()
     except Refused as why:
         print(f"REFUSED: {why}")
         return 2
 
-    prov = provenance()
     print(f"commit {prov['commit'][:12]}{'  DIRTY' if prov['dirty'] else '  clean'}"
           f"   archive {prov['archive']} sha256 {prov['archive_sha256'][:16]}...")
     print()

@@ -61,6 +61,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, ".."))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(ROOT, "audition"))
+sys.path.append(os.path.join(ROOT, "tools"))      # manifest.require_keys; last, so it shadows nothing
 
 import audio_measure as am                                          # noqa: E402
 import ladder_headroom as lh                                        # noqa: E402
@@ -69,6 +70,7 @@ from ring_estimator import (MIN_CYCLES, AGREE_REL, SUSTAIN_FLOOR,   # noqa: E402
                             SUSTAIN_DROP_DB, Refused, _finite,
                             is_sustained, ring_frequency)
 import voice_fx as vf                                               # noqa: E402
+import manifest as mf                                               # noqa: E402
 
 SR = rr.SR
 PLAN = os.path.join(ROOT, "docs", "res-tuning", "plan.json")
@@ -583,8 +585,13 @@ def committed_candidate() -> tuple:
     table the sweep also produced -- one fitted table, not two."""
     with open(os.path.join(OUT_DIR, "validation.json")) as fh:
         val = json.load(fh)
+    mf.require_keys(val, ("corr_entries", "law_degree", "corr_rom", "k_rom"),
+                    f"the validation record at {os.path.join(OUT_DIR, 'validation.json')}",
+                    refused=Refused)
     with open(os.path.join(OUT_DIR, "sweeps.json")) as fh:
         sw = json.load(fh)
+    mf.require_keys(sw, "entries", f"the sweep record at {os.path.join(OUT_DIR, 'sweeps.json')}",
+                    refused=Refused)
     swept = [r["corr_rom"] for r in sw["entries"] if r["CORR_ENTRIES"] == val["corr_entries"]]
     if (val["law_degree"], val["corr_entries"]) != (LAW_DEGREE, CORR_ENTRIES) or \
             not swept or swept[0] != val["corr_rom"]:
