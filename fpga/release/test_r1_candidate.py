@@ -7,7 +7,10 @@ Every claim here carries a control that turns it red:
   * a sender on the tree image with the release kit injected (WRONG_KIT) FAILS
     for the kit alone -- the preamble is present, so the kit is what is seen;
   * the rolling verifier REFUSES an image selector without a stated target;
-  * a session that finds queued events from an earlier session REFUSES.
+  * a session that finds queued events from an earlier session REFUSES;
+  * a host CLI that refuses for ANY reason reaches `check` as REFUSED (2),
+    never an exit-1 traceback, while an execution error at the same call
+    still exits 1 (#1616).
 The R0 (release) command bytes are unchanged: the R0 manifest pins them, and
 test_release_manifest/T-RELEASE-BOUND keep holding that.
 """
@@ -16,6 +19,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -28,7 +32,10 @@ for _p in (HERE, ROOT / "fpga", ROOT / "model", ROOT / "audition", ROOT / "tools
         sys.path.insert(0, str(_p))
 
 import drums_fx as dx                      # noqa: E402
+import exit_contract                       # noqa: E402
 import r1_candidate as r1c                 # noqa: E402
+import refusal                             # noqa: E402
+import release_manifest as rm              # noqa: E402
 import uart_device_sim as dev              # noqa: E402
 import uart_host as uh                     # noqa: E402
 import verify_rolling_playback as vrp      # noqa: E402
@@ -199,7 +206,6 @@ def test_drift_is_refused_with_the_r1_reason():
     with pytest.raises(qd.Rejected, match="released image was built"):
         qd.check_stream([(0, 0, qd.A_DRIFT, 5)])
 
-
 def test_live_midi_known_state_is_the_frozen_target():
     ws = r1c.live_midi_init()
     assert tuple(ws[:2]) == r1c.PREAMBLE and r1c.check_init(ws, kit_expected=True) == []
@@ -303,3 +309,87 @@ def test_control_a_key_dropped_from_the_derivation_is_stale_not_bound(monkeypatc
     assert verdict == "STALE", \
         f"a derivation that stopped emitting presets.default.calibration read {verdict}: {detail}"
     assert "presets.default.calibration" in detail, detail
+
+
+# ---------------------------------------------------------------------------
+# the CLI boundary in commands(): release_manifest._capture's refusal is a
+# SIBLING of this module's Refused and must still reach check() as REFUSED,
+# never as an uncaught exit-1 traceback (#1616: the #1569 shape, in R1)
+# ---------------------------------------------------------------------------
+def _cli(prelude: str = "") -> subprocess.CompletedProcess:
+    """`r1_candidate.py check` as a REAL process through its real entry,
+    main(), with `prelude` run in that interpreter first. A process rather
+    than a monkeypatched call: the exit status and the traceback are what
+    the contract is about, and only the process has them."""
+    code = (f"import sys\nsys.path.insert(0, {str(HERE)!r})\n"
+            "import r1_candidate as r1c\n" + prelude + "\nsys.exit(r1c.main(['check']))\n")
+    return subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
+                          timeout=300, cwd=str(ROOT))
+
+
+#: the #1574 shape (test_r2_release.py): ONLY uart_host.main refuses. The kit
+#: reads (image_kit, r1_kit) stay honest, so kit_identity() passes and build()
+#: reaches commands(), where rm._capture calls the CLI.
+_REFUSING_CLI = (
+    "import uart_host as uh\n"
+    "def refused(argv):\n"
+    "    print('uart_host: unsupported command', file=sys.stderr)\n"
+    "    return 1\n"
+    "uh.main = refused\n")
+#: an EXECUTION ERROR at the same call: not a refusal, and it must not become one
+_BROKEN_CAPTURE = (
+    "import release_manifest as rm\n"
+    "def broke(argv, outdir):\n"
+    "    raise RuntimeError('not a refusal: the capture broke')\n"
+    "rm._capture = broke\n")
+
+
+def test_sibling_refused_classes_share_only_the_base():
+    """The class relations the fix rests on. rm.Refused is NOT this module's
+    Refused, so check()'s `except Refused` misses it; both are the base;
+    and drums_fx.KitRefused is a plain RuntimeError OUTSIDE the base, which is
+    why commands() keeps a clause of its own for the kit."""
+    assert r1c.Refused is not rm.Refused
+    assert not issubclass(rm.Refused, r1c.Refused)
+    for klass in (r1c.Refused, rm.Refused):
+        assert issubclass(klass, refusal.Refused), klass
+    assert not issubclass(dx.KitRefused, refusal.Refused)
+    assert not issubclass(RuntimeError, refusal.Refused)
+
+
+def test_check_cli_on_a_clean_tree_exits_bound_0():
+    """The successful path through the real entry, as a process: the committed
+    record is BOUND and main()'s verdict maps to exit 0 -- the exit-code
+    counterpart of test_committed_r1_record_is_bound, run in the same harness
+    as the two controls below so the prelude is their only difference."""
+    p = _cli()
+    assert p.returncode == exit_contract.PASS, (p.returncode, p.stdout[-400:], p.stderr[-400:])
+    assert "r1_candidate: BOUND" in p.stdout, p.stdout[-400:]
+
+
+def test_check_cli_reports_refused_2_when_the_cli_refuses():
+    """release_manifest._capture refuses when uart_host exits non-zero, and
+    raises rm.Refused -- a SIBLING of this module's Refused. commands()
+    caught only dx.KitRefused and check() only its own Refused, so the
+    refusal escaped as a traceback and exit 1: a missing precondition
+    rendered as FAIL (tools/exit_contract.py). It must be REFUSED (2),
+    naming the CLI's own reason."""
+    p = _cli(_REFUSING_CLI)
+    assert p.returncode == exit_contract.REFUSED, (p.returncode, p.stderr[-400:])
+    assert "r1_candidate: REFUSED" in p.stdout, p.stdout[-400:]
+    assert "uart_host: unsupported command" in p.stdout, p.stdout[-400:]
+    assert "Traceback" not in p.stderr and "Traceback" not in p.stdout, p.stderr[-400:]
+
+
+def test_check_cli_keeps_a_non_refusal_error_as_exit_1():
+    """The control for the test above: the handler catches refusals by class
+    and nothing wider. A RuntimeError at the same call is an EXECUTION ERROR
+    and must still exit 1 with its traceback, never be relabelled REFUSED
+    (tools/refusal.py's inverse defect). RuntimeError rather than #1574's
+    ValueError on purpose: every Refused here IS a RuntimeError, so a handler
+    written `except RuntimeError` -- which would catch the kit refusal too --
+    fails this control."""
+    p = _cli(_BROKEN_CAPTURE)
+    assert p.returncode == exit_contract.FAIL, (p.returncode, p.stdout[-400:], p.stderr[-400:])
+    assert "Traceback" in p.stderr and "the capture broke" in p.stderr, p.stderr[-400:]
+    assert "REFUSED" not in p.stdout, "an execution error must not be relabelled a refusal"
