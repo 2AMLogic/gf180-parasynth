@@ -13,6 +13,7 @@ The naive wrapper this replaces is "exit 0 means PASS". Every test marked
 from __future__ import annotations
 
 import copy
+import importlib.metadata
 import json
 import os
 import pathlib
@@ -22,6 +23,7 @@ import subprocess
 import sys
 import textwrap
 import time
+import venv
 
 import pytest
 
@@ -875,6 +877,134 @@ def test_bootstrap_plans_nothing_when_satisfied():
     assert trial_env.plan_bootstrap(spec, python_version=spec["python"] + ".7",
                                     packages=dict(pins, numpy="0.0"), toolchain_ok=False,
                                     need_toolchain=True) == ["packages", "toolchain"]
+
+
+# ---- symlinked interpreters: one binary, several package sets (#1582) --------
+DIST = "zz-trial-env-symlink-fixture"
+
+
+def _python(home: pathlib.Path) -> str:
+    return str(home / "bin" / "python")
+
+
+def _symlinked_venv(home: pathlib.Path, packages: dict) -> pathlib.Path:
+    """A venv whose bin/python is a symlink to this process's own interpreter and
+    which holds exactly `packages`, as .dist-info/METADATA. Returns `home`."""
+    venv.EnvBuilder(symlinks=True, with_pip=False).create(home)
+    py = home / "bin" / "python"
+    assert py.is_symlink(), f"{py} was copied, not symlinked: not the #1582 shape"
+    r = subprocess.run([py, "-c", "import sysconfig; print(sysconfig.get_path('purelib'))"],
+                       capture_output=True, text=True, check=True)
+    for name, version in packages.items():
+        info = pathlib.Path(r.stdout.strip()) / f"{name.replace('-', '_')}-{version}.dist-info"
+        info.mkdir(parents=True)
+        (info / "METADATA").write_text(f"Metadata-Version: 2.1\nName: {name}\nVersion: {version}\n")
+    return home
+
+
+@pytest.fixture
+def twin_venvs(tmp_path):
+    """Two venvs that are THIS interpreter by another path, with different
+    packages, and a caller (this process) that has neither. Asserted, not
+    assumed: against a copied venv every test below would pass for nothing."""
+    a = _symlinked_venv(tmp_path / "a", {DIST: "1.0"})
+    b = _symlinked_venv(tmp_path / "b", {DIST: "2.0"})
+    assert [os.path.realpath(_python(v)) for v in (a, b)] == [os.path.realpath(sys.executable)] * 2
+    with pytest.raises(importlib.metadata.PackageNotFoundError):
+        importlib.metadata.version(DIST)
+    return a, b
+
+
+def _spec(packages: dict) -> dict:
+    return {"version": "linked-env/1", "python": "%d.%d" % sys.version_info[:2],
+            "packages": packages, "toolchain": {"bin": "nobin", "tools": {}}}
+
+
+def test_the_named_symlinked_venv_is_judged_by_its_own_packages(twin_venvs):
+    """`package_versions` and `preflight` answer for the interpreter they name,
+    never for the one calling (#1582)."""
+    a, b = twin_venvs
+    spec = _spec({DIST: "2.0"})
+    assert trial_env.package_versions(spec, _python(a)) == {DIST: "1.0"}
+    assert trial_env.package_versions(spec, _python(b)) == {DIST: "2.0"}
+    assert trial_env.package_versions(spec) == {DIST: None}
+    problems, ident = trial_env.preflight(spec, tools=[], python=_python(b))
+    assert problems == [] and ident["packages"] == {DIST: "2.0"}
+    problems, _ = trial_env.preflight(spec, tools=[], python=_python(a))
+    assert problems == [f"package {DIST} is 1.0; the spec pins 2.0"]
+
+
+def test_from_one_symlinked_venv_another_is_judged_by_its_own_packages(twin_venvs):
+    """The caller is a venv too, as when tools/item9_cold_start.py runs
+    trial_env: under a, asked about b, both one realpath, the answer is b's."""
+    a, b = twin_venvs
+    code = textwrap.dedent("""
+        import json, os, sys
+        sys.path.insert(0, sys.argv[1])
+        import trial_env
+        spec = json.loads(sys.argv[2])
+        assert os.path.realpath(sys.argv[3]) == os.path.realpath(sys.executable)
+        problems, ident = trial_env.preflight(spec, tools=[], python=sys.argv[3])
+        print(json.dumps([ident["packages"], problems]))
+        """)
+    r = subprocess.run([_python(a), "-c", code, str(HERE), json.dumps(_spec({DIST: "2.0"})),
+                        _python(b)], capture_output=True, text=True, check=False)
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout) == [{DIST: "2.0"}, []]
+
+
+def test_bootstrap_from_outside_a_satisfied_symlinked_venv_plans_nothing(twin_venvs, tmp_path,
+                                                                        capsys, monkeypatch):
+    """The issue's reproduction: `bootstrap --venv V --no-toolchain`, run by an
+    interpreter that lacks V's packages, plans nothing and says SATISFIED."""
+    _, b = twin_venvs
+    monkeypatch.setenv("PATH", str(tmp_path / "no-bin"))
+    rc = trial_env.bootstrap(_spec({DIST: "2.0"}), venv=b, need_toolchain=False, root=tmp_path)
+    out = capsys.readouterr().out
+    assert rc == 0, out
+    assert "actions: []" in out and "SATISFIED" in out and "REFUSED" not in out
+
+
+def test_package_versions_of_nothing_asked_and_of_a_target_that_cannot_answer(tmp_path):
+    broken = tmp_path / "not-python"
+    broken.write_text("#!/bin/sh\nexit 3\n")
+    broken.chmod(0o755)
+    assert trial_env.package_versions(_spec({})) == {}
+    assert trial_env.package_versions(_spec({}), str(broken)) == {}
+    assert trial_env.package_versions(_spec({DIST: "2.0"}), str(broken)) == {DIST: None}
+
+
+def _pre_fix_package_versions(spec, python=None):
+    """package_versions as it stood at 09e1a041: its in-process branch verbatim.
+    The subprocess branch -- the correct one -- is replaced by a refusal, so
+    this cannot come out right by falling through to it."""
+    names = list(spec["packages"])
+    if python is None or os.path.realpath(python) == os.path.realpath(sys.executable):
+        from importlib import metadata
+        out = {}
+        for n in names:
+            try:
+                out[n] = metadata.version(n)
+            except metadata.PackageNotFoundError:
+                out[n] = None
+        return out
+    raise AssertionError("the pre-fix shortcut did not fire: not the #1582 shape")
+
+
+def test_control_the_pre_fix_realpath_shortcut_answered_for_the_caller(twin_venvs):
+    """The bug as it shipped, kept red (#1582; verification-rules rule 5): one
+    realpath, so the pre-fix code read the caller -- which has neither package
+    set -- for both targets, and bootstrap then planned an install into a venv
+    that already carried the pin."""
+    a, b = twin_venvs
+    spec = _spec({DIST: "2.0"})
+    for target in (a, b):
+        assert _pre_fix_package_versions(spec, _python(target)) == {DIST: None}
+    assert trial_env.package_versions(spec, _python(a)) == {DIST: "1.0"}
+    assert trial_env.package_versions(spec, _python(b)) == {DIST: "2.0"}
+    assert trial_env.plan_bootstrap(spec, python_version=spec["python"] + ".0",
+                                    packages=_pre_fix_package_versions(spec, _python(b)),
+                                    toolchain_ok=True, need_toolchain=False) == ["packages"]
 
 
 # ---- the control on this suite: the rule it replaces must be red here -------
