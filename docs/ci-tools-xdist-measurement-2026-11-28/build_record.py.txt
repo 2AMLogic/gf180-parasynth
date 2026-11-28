@@ -1,0 +1,119 @@
+#!/usr/bin/env python3
+"""Build the committed record of the #1947 measurement from the downloaded
+artifacts.  usage: build_record.py <worktree> <artifacts-dir> <baseline-run>
+
+For every xdist-<candidate>-r<k>/ directory it runs the collection-union check
+against the single-process baseline, copies the small records (env.txt,
+mem.json, union.json, the tail of pytest.log from the summary line on), and
+records the sha256 of the two large files that are NOT committed (junit.xml,
+collect.txt) so a reader holding the Actions artifact can prove they hold the
+same bytes.  Exit status of every check is read from the process, never from
+a pipe.
+"""
+import hashlib
+import json
+import pathlib
+import re
+import shutil
+import subprocess
+import sys
+
+REPO, ART = (pathlib.Path(a) for a in sys.argv[1:3])
+BASE = sys.argv[3]
+OUT = REPO / "docs" / "ci-tools-xdist-measurement-2026-11-28"
+PY = REPO / ".venv" / "bin" / "python"
+TOOL = REPO / "tools" / "check_collection_union.py"
+
+
+def sha(p: pathlib.Path) -> str:
+    return hashlib.sha256(p.read_bytes()).hexdigest()
+
+
+def run(cmd):
+    p = subprocess.run([str(c) for c in cmd], capture_output=True, text=True)
+    return p.returncode, p.stdout + p.stderr
+
+
+SHARD = re.compile(r"xdist-s[01]-r[123]$")
+
+
+def record(d, cmd, code_out, extra_note=""):
+    """Copy the small records of run dir `d` into the committed record."""
+    union = d / "union.json"
+    code, out = run([*cmd, "--json", union])
+    u = json.loads(union.read_text())
+    lines = (d / "pytest.log").read_text(errors="replace").splitlines()
+    idx = [i for i, l in enumerate(lines) if re.search(r"^\d+ (passed|failed)", l)]
+    assert len(idx) >= 1, d
+    collect = (d / "collect.txt").read_text().splitlines()
+    o = OUT / d.name
+    o.mkdir(exist_ok=True)
+    for name in ("env.txt", "mem.json"):
+        shutil.copy(d / name, o / name)
+    shutil.copy(union, o / "union.json")
+    (o / "pytest-tail.txt").write_text("\n".join(lines[idx[-1]:]) + "\n")
+    (o / "sha256.txt").write_text(
+        f"{sha(d / 'junit.xml')}  junit.xml\n{sha(d / 'collect.txt')}  collect.txt\n"
+        f"{sha(d / 'pytest.log')}  pytest.log\n")
+    (o / "collect-count-line.txt").write_text(collect[-1] + "\n")
+    (o / "collect-ids.sha256").write_text(
+        hashlib.sha256(("\n".join(collect[:-2]) + "\n").encode()).hexdigest()
+        + "  collect.txt without its blank line and count line\n")
+    code_out.append((d.name, code, u["verdict"], len(u.get("outcome_diffs", [])),
+                     sum(len(u.get(k, [])) for k in ("missing", "extra", "duplicate")),
+                     lines[idx[-1]], extra_note))
+    print(d.name, "check exit", code, extra_note)
+    print(out)
+
+
+rows = []
+for d in sorted(ART.glob("xdist-*")):
+    if SHARD.fullmatch(d.name):
+        continue                              # a shard alone is half a suite; checked as a pair below
+    base = ART / f"xdist-{BASE}"
+    if d.name == base.name:                    # a run is not its own baseline
+        base = ART / ("xdist-n1-r2" if BASE.endswith("r1") else "xdist-n1-r1")
+    record(d, [PY, TOOL, "--expected", d / "collect.txt", "--junit", d / "junit.xml",
+               "--pytest-log", d / "pytest.log", "--baseline-junit", base / "junit.xml",
+               "--baseline-log", base / "pytest.log"], rows)
+
+base = ART / f"xdist-{BASE}"
+for k in (1, 2, 3):
+    a, b = ART / f"xdist-s0-r{k}", ART / f"xdist-s1-r{k}"
+    if not (a.exists() and b.exists()):
+        continue
+    for d in (a, b):                           # the same pair report, in both shard directories
+        record(d, [PY, TOOL, "--expected", a / "collect.txt", "--junit", a / "junit.xml",
+                   "--junit", b / "junit.xml",
+                   "--baseline-junit", base / "junit.xml", "--baseline-log", base / "pytest.log"],
+               rows, "(pair s0+s1: the junit of both shards, no single log covers both)")
+# each shard alone, against ITS OWN file list: the union over the list it was
+# given plus pytest's summary cross-check on its own log. Not circular with the
+# pair check above: the pair check says no file was lost from both lists; this
+# says each list's tests all ran and the junit agrees with pytest's count.
+import yaml
+wf = yaml.safe_load((OUT / "tools-shards-once.yml").read_text())
+for sh in wf["jobs"]["tools"]["strategy"]["matrix"]["shard"]:
+    files = set(sh["files"].split())
+    for k in (1, 2, 3):
+        d = ART / f"xdist-{sh['label']}-r{k}"
+        if not d.exists():
+            continue
+        ids = [l for l in (d / "collect.txt").read_text().splitlines() if "::" in l]
+        mine = [n for n in ids if n.split("::")[0] in files]
+        exp = d / "expected-own-list.txt"
+        exp.write_text("\n".join(mine) + f"\n\n{len(mine)} tests collected in 0.00s\n")
+        code, out = run([PY, TOOL, "--expected", exp, "--junit", d / "junit.xml",
+                         "--pytest-log", d / "pytest.log"])
+        (OUT / d.name / "selfcheck.txt").write_text(
+            f"{len(mine)} of the collection's {len(ids)} ids are in this shard's list of "
+            f"{len(files)} files; the check below is over those, with this shard's own log:\n"
+            + out)
+        print(d.name, "selfcheck exit", code, out.strip())
+        if code != 0:
+            bad.append((d.name, "selfcheck", code))
+
+for r in rows:
+    print(" | ".join(str(x) for x in r))
+bad = [r for r in rows if r[1] not in (0, 1) or r[4]]
+sys.exit(1 if bad else 0)

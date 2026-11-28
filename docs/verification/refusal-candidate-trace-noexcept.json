@@ -1,0 +1,2257 @@
+{
+ "revision": "8feeff614a8f8b900c96c30f1ef9c13079fb92be\n",
+ "tree_dirty": false,
+ "dirty_paths": [],
+ "scanner": {
+  "rev": "8feeff61\n",
+  "behind_origin_main": "0",
+  "roots": [
+   "tools",
+   "model",
+   "pnr",
+   "fpga",
+   "rtl-sketch",
+   "audition"
+  ],
+  "files_scanned": 421,
+  "candidates": [
+   {
+    "site": "fpga/midi_session.py:355",
+    "callee": "uart_host.image_sound_presets",
+    "origins": [
+     "drums_fx"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "drums_fx"
+    ]
+   },
+   {
+    "site": "fpga/pads_rom.py:110",
+    "callee": "uart_host.r1_kit",
+    "origins": [
+     "drums_fx"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "drums_fx"
+    ]
+   },
+   {
+    "site": "fpga/publish_binding_cases.py:116",
+    "callee": "xdc_bindings.object_queries",
+    "origins": [
+     "xdc_bindings"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "xdc_bindings"
+    ]
+   },
+   {
+    "site": "fpga/publish_binding_cases.py:123",
+    "callee": "xdc_bindings.expected_exceptions",
+    "origins": [
+     "xdc_bindings"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "xdc_bindings"
+    ]
+   },
+   {
+    "site": "fpga/release/glide_boundary.py:242",
+    "callee": "uart_host.plan_show",
+    "origins": [
+     "uart_host"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "uart_host"
+    ]
+   },
+   {
+    "site": "fpga/release/r1_candidate.py:138",
+    "callee": "uart_host.r1_kit",
+    "origins": [
+     "drums_fx"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "drums_fx"
+    ]
+   },
+   {
+    "site": "fpga/release/r1_candidate.py:279",
+    "callee": "release_manifest._capture",
+    "origins": [
+     "release_manifest"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "release_manifest"
+    ]
+   },
+   {
+    "site": "fpga/release/r2_release.py:111",
+    "callee": "r1_release.image_identity",
+    "origins": [
+     "r1_release"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "r1_release"
+    ]
+   },
+   {
+    "site": "fpga/release/r2_release.py:303",
+    "callee": "r1_release.external_io",
+    "origins": [
+     "r1_release"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "r1_release"
+    ]
+   },
+   {
+    "site": "fpga/selected_preset.py:26",
+    "callee": "mono_m5a_score.engine_configuration",
+    "origins": [
+     "mono_m5a_score"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "mono_m5a_score"
+    ]
+   },
+   {
+    "site": "fpga/selected_preset.py:28",
+    "callee": "mono_m5a_score._patch_for_wave",
+    "origins": [
+     "mono_m5a_score"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "mono_m5a_score"
+    ]
+   },
+   {
+    "site": "fpga/verify_live_midi.py:107",
+    "callee": "uart_host.image_sound_presets",
+    "origins": [
+     "drums_fx"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "drums_fx"
+    ]
+   },
+   {
+    "site": "model/bd_pedestal.py:483",
+    "callee": "bd_excitation_probe.calibrate_amp",
+    "origins": [
+     "bd_excitation_probe"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "bd_excitation_probe"
+    ]
+   },
+   {
+    "site": "model/probe_rungs_2_4_gaps.py:64",
+    "callee": "ladder_candidates.analytic_peak",
+    "origins": [
+     "ladder_candidates"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "ladder_candidates"
+    ]
+   },
+   {
+    "site": "model/probe_rungs_2_4_gaps.py:67",
+    "callee": "ladder_candidates.peak_of",
+    "origins": [
+     "ladder_candidates"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "ladder_candidates"
+    ]
+   },
+   {
+    "site": "model/probe_rungs_2_4_gaps.py:128",
+    "callee": "ladder_candidates.stage_max_lag_deg",
+    "origins": [
+     "ladder_candidates"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "ladder_candidates"
+    ]
+   },
+   {
+    "site": "model/res_tuning.py:442",
+    "callee": "sensitivity.runs",
+    "origins": [
+     "sensitivity"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "sensitivity"
+    ]
+   },
+   {
+    "site": "model/tom_drop_docs.py:207",
+    "callee": "tom_drop_fit.load_rows",
+    "origins": [
+     "tom_drop_fit"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "tom_drop_fit"
+    ]
+   },
+   {
+    "site": "rtl-sketch/verify_synth_top.py:579",
+    "callee": "run_case.render_drum_solo",
+    "origins": [
+     "preparation_contract"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "preparation_contract"
+    ]
+   },
+   {
+    "site": "tools/capability_pack.py:177",
+    "callee": "refprofile.require_capability",
+    "origins": [
+     "refprofile"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "refprofile"
+    ]
+   },
+   {
+    "site": "tools/clap_burst_timing_qual.py:132",
+    "callee": "run_case.prepare",
+    "origins": [
+     "preparation_contract"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "preparation_contract"
+    ]
+   },
+   {
+    "site": "tools/clap_final_strike_experiment.py:194",
+    "callee": "run_case.prepare",
+    "origins": [
+     "preparation_contract"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "preparation_contract"
+    ]
+   },
+   {
+    "site": "tools/clap_final_strike_experiment.py:269",
+    "callee": "run_case.render_drum_solo",
+    "origins": [
+     "preparation_contract"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "preparation_contract"
+    ]
+   },
+   {
+    "site": "tools/clap_final_strike_experiment.py:273",
+    "callee": "run_case.load_reference",
+    "origins": [
+     "preparation_contract"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "preparation_contract"
+    ]
+   },
+   {
+    "site": "tools/clap_final_strike_experiment.py:274",
+    "callee": "run_case.prepare",
+    "origins": [
+     "preparation_contract"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "preparation_contract"
+    ]
+   },
+   {
+    "site": "tools/clap_final_strike_experiment.py:296",
+    "callee": "run_case.prepare",
+    "origins": [
+     "preparation_contract"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "preparation_contract"
+    ]
+   },
+   {
+    "site": "tools/cymbal_low_tail.py:626",
+    "callee": "run_case.render_drum_solo",
+    "origins": [
+     "preparation_contract"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "preparation_contract"
+    ]
+   },
+   {
+    "site": "tools/cymbal_low_tail.py:794",
+    "callee": "run_case.render_drum_solo",
+    "origins": [
+     "preparation_contract"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "preparation_contract"
+    ]
+   },
+   {
+    "site": "tools/cymbal_low_tail.py:795",
+    "callee": "run_case.prepare",
+    "origins": [
+     "preparation_contract"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "preparation_contract"
+    ]
+   },
+   {
+    "site": "tools/cymbal_low_tail.py:412",
+    "callee": "run_case.prepare",
+    "origins": [
+     "preparation_contract"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "preparation_contract"
+    ]
+   },
+   {
+    "site": "tools/cymbal_low_tail.py:627",
+    "callee": "run_case.prepare",
+    "origins": [
+     "preparation_contract"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "preparation_contract"
+    ]
+   },
+   {
+    "site": "tools/cymbal_low_tail.py:638",
+    "callee": "run_case.prepare",
+    "origins": [
+     "preparation_contract"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "preparation_contract"
+    ]
+   },
+   {
+    "site": "tools/cymbal_m_origin.py:178",
+    "callee": "cymbal_tone_realisation.level_corner_hz",
+    "origins": [
+     "cymbal_tone_realisation"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "cymbal_tone_realisation"
+    ]
+   },
+   {
+    "site": "tools/cymbal_m_origin.py:296",
+    "callee": "cymbal_tone_realisation.level_corner_hz",
+    "origins": [
+     "cymbal_tone_realisation"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "cymbal_tone_realisation"
+    ]
+   },
+   {
+    "site": "tools/cymbal_m_origin.py:336",
+    "callee": "run_case.prepare",
+    "origins": [
+     "preparation_contract"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "preparation_contract"
+    ]
+   },
+   {
+    "site": "tools/cymbal_tone_nodal.py:217",
+    "callee": "cymbal_tone_realisation.level_corner_hz",
+    "origins": [
+     "cymbal_tone_realisation"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "cymbal_tone_realisation"
+    ]
+   },
+   {
+    "site": "tools/cymbal_tone_nodal.py:230",
+    "callee": "cymbal_tone_realisation.level_corner_hz",
+    "origins": [
+     "cymbal_tone_realisation"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "cymbal_tone_realisation"
+    ]
+   },
+   {
+    "site": "tools/cymbal_vca_clip.py:520",
+    "callee": "run_case.prepare",
+    "origins": [
+     "preparation_contract"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "preparation_contract"
+    ]
+   },
+   {
+    "site": "tools/cymbal_vca_clip.py:692",
+    "callee": "run_case.prepare",
+    "origins": [
+     "preparation_contract"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "preparation_contract"
+    ]
+   },
+   {
+    "site": "tools/f1_filter_path.py:95",
+    "callee": "mono_m5a_score.engine_configuration",
+    "origins": [
+     "mono_m5a_score"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "mono_m5a_score"
+    ]
+   },
+   {
+    "site": "tools/f1_filter_path.py:98",
+    "callee": "mono_m5a_score.engine_configuration",
+    "origins": [
+     "mono_m5a_score"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "mono_m5a_score"
+    ]
+   },
+   {
+    "site": "tools/f1_rtl_filter_path.py:457",
+    "callee": "run_case.load_filter_reference",
+    "origins": [
+     "preparation_contract"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "preparation_contract"
+    ]
+   },
+   {
+    "site": "tools/gate_calibrate.py:378",
+    "callee": "perceptual_gate.bar_for",
+    "origins": [
+     "perceptual_gate"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "perceptual_gate"
+    ]
+   },
+   {
+    "site": "tools/lead_drive_337.py:116",
+    "callee": "mono_m5a_score.engine_configuration",
+    "origins": [
+     "mono_m5a_score"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "mono_m5a_score"
+    ]
+   },
+   {
+    "site": "tools/measure_conga_body_spread.py:137",
+    "callee": "preparation_contract.check_prepared_pair",
+    "origins": [
+     "preparation_contract"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "preparation_contract"
+    ]
+   },
+   {
+    "site": "tools/mono_m1a_score.py:322",
+    "callee": "mono_m5a_score._metric",
+    "origins": [
+     "mono_m5a_score"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "mono_m5a_score"
+    ]
+   },
+   {
+    "site": "tools/mono_m1a_score.py:400",
+    "callee": "mono_m5a_score.engine_configuration",
+    "origins": [
+     "mono_m5a_score"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "mono_m5a_score"
+    ]
+   },
+   {
+    "site": "tools/mono_m1a_score.py:248",
+    "callee": "mono_m5a_score._cents_error",
+    "origins": [
+     "mono_m5a_score"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "mono_m5a_score"
+    ]
+   },
+   {
+    "site": "tools/mono_m1a_score.py:342",
+    "callee": "mono_m5a_score._metric",
+    "origins": [
+     "mono_m5a_score"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "mono_m5a_score"
+    ]
+   },
+   {
+    "site": "tools/mono_m1a_score.py:251",
+    "callee": "mono_m5a_score._harmonic_error",
+    "origins": [
+     "mono_m5a_score"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "mono_m5a_score"
+    ]
+   },
+   {
+    "site": "tools/mono_m1a_score.py:305",
+    "callee": "mono_m5a_score._metric",
+    "origins": [
+     "mono_m5a_score"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "mono_m5a_score"
+    ]
+   },
+   {
+    "site": "tools/noise_stage_attribution.py:246",
+    "callee": "perceptual_gate.distances",
+    "origins": [
+     "perceptual_gate"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "perceptual_gate"
+    ]
+   },
+   {
+    "site": "tools/performance_suite.py:629",
+    "callee": "mono_artifact_probe.make_voice",
+    "origins": [
+     "mono_artifact_probe"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "mono_artifact_probe"
+    ]
+   },
+   {
+    "site": "tools/probes/f1_calibration_headroom.py:64",
+    "callee": "mono_m5a_score.engine_configuration",
+    "origins": [
+     "mono_m5a_score"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "mono_m5a_score"
+    ]
+   },
+   {
+    "site": "tools/probes/f1_calibration_headroom.py:135",
+    "callee": "mono_m5a_score.engine_configuration",
+    "origins": [
+     "mono_m5a_score"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "mono_m5a_score"
+    ]
+   },
+   {
+    "site": "tools/probes/f1_selected_path.py:101",
+    "callee": "mono_m5a_score.engine_configuration",
+    "origins": [
+     "mono_m5a_score"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "mono_m5a_score"
+    ]
+   },
+   {
+    "site": "tools/probes/filter_corner_recalibration.py:123",
+    "callee": "refprofile.load_profile",
+    "origins": [
+     "refprofile"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "refprofile"
+    ]
+   },
+   {
+    "site": "tools/probes/filter_corner_recalibration.py:105",
+    "callee": "run_case.our_filter_curve",
+    "origins": [
+     "preparation_contract"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "preparation_contract"
+    ]
+   },
+   {
+    "site": "tools/probes/hihat/hh_probe5.py:531",
+    "callee": "run_case.prepare",
+    "origins": [
+     "preparation_contract"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "preparation_contract"
+    ]
+   },
+   {
+    "site": "tools/probes/hihat/hh_probe5.py:532",
+    "callee": "run_case.prepare",
+    "origins": [
+     "preparation_contract"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "preparation_contract"
+    ]
+   },
+   {
+    "site": "tools/probes/tom_conga_gate.py:446",
+    "callee": "run_case.render_drum_solo",
+    "origins": [
+     "preparation_contract"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "preparation_contract"
+    ]
+   },
+   {
+    "site": "tools/probes/tom_distortion.py:1579",
+    "callee": "run_case.render_drum_solo",
+    "origins": [
+     "preparation_contract"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "preparation_contract"
+    ]
+   },
+   {
+    "site": "tools/probes/tom_pitch_drop_fischer.py:772",
+    "callee": "run_case.render_drum_solo",
+    "origins": [
+     "preparation_contract"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "preparation_contract"
+    ]
+   },
+   {
+    "site": "tools/run_case.py:2531",
+    "callee": "refprofile.load_profile",
+    "origins": [
+     "refprofile"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "refprofile"
+    ]
+   },
+   {
+    "site": "tools/run_case.py:2543",
+    "callee": "refprofile.load_clip",
+    "origins": [
+     "refprofile"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "refprofile"
+    ]
+   },
+   {
+    "site": "tools/run_case.py:2717",
+    "callee": "refprofile.load_profile",
+    "origins": [
+     "refprofile"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "refprofile"
+    ]
+   },
+   {
+    "site": "tools/stage_case.py:262",
+    "callee": "provenance_retention.mark",
+    "origins": [
+     "provenance_retention"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "provenance_retention"
+    ]
+   },
+   {
+    "site": "tools/stage_case.py:590",
+    "callee": "provenance_retention.mark",
+    "origins": [
+     "provenance_retention"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "provenance_retention"
+    ]
+   },
+   {
+    "site": "tools/stage_case.py:625",
+    "callee": "provenance_retention.mark",
+    "origins": [
+     "provenance_retention"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "provenance_retention"
+    ]
+   },
+   {
+    "site": "tools/stage_case.py:595",
+    "callee": "provenance_retention.read_mark",
+    "origins": [
+     "provenance_retention"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "provenance_retention"
+    ]
+   },
+   {
+    "site": "tools/verify_m5a_filter2x_i2s.py:50",
+    "callee": "mono_m5a_score.engine_configuration",
+    "origins": [
+     "mono_m5a_score"
+    ],
+    "guard": "none",
+    "classification": "candidate-escape",
+    "uncovered": [
+     "mono_m5a_score"
+    ]
+   }
+  ],
+  "classes": {
+   "candidate-escape": 71,
+   "covered(base)": 23,
+   "covered(broad)": 4,
+   "covered(cli-base)": 136,
+   "covered(cli-exact)": 84,
+   "covered(exact)": 67,
+   "covered(exact+broad)": 2,
+   "covered(exact+local)": 6,
+   "relabelled(cli-total)": 4
+  }
+ },
+ "traces": [
+  {
+   "id": "fpga/release/glide_boundary.py:242",
+   "site": "fpga/release/glide_boundary.py:242",
+   "callee": "uart_host.plan_show",
+   "classification": null,
+   "runs": {
+    "working": [
+     {
+      "entry": "fpga/release/glide_boundary.py",
+      "argv": [
+       "--case",
+       "accept-default",
+       "--level",
+       "wrapper",
+       "--outdir",
+       "/tmp/refusal-trace-1964-YadKdF/fpga_release_glide_boundary.py_242/glide"
+      ],
+      "role": "working",
+      "timeout_s": 1500,
+      "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1964",
+      "expect": null,
+      "note": null,
+      "seconds": 63.7,
+      "exit_status": 0,
+      "traceback": false,
+      "stdout_tail": [
+       "glide_boundary: wrapper case accept-default; INC_LO 2858, INC_HI 4384395",
+       "verify_uart_bridge[accept-default]: PASS -- writes 72/72, timing bad 0, corrupt 0, I2S mismatch 0 over 15258 periods, errs 0 {}",
+       "verify_uart_bridge[accept-default]: I2S coverage 15258/15258 required periods; truncation control CAUGHT"
+      ],
+      "stderr_tail": [],
+      "harness_frame_in_traceback": false,
+      "wrap_missing": [],
+      "system_exit": 0,
+      "uncaught": null,
+      "all_raised": [],
+      "calls": [
+       {
+        "callee": "uart_host.plan_show",
+        "caller": {
+         "file": "fpga/release/glide_boundary.py",
+         "line": 242,
+         "first": 242,
+         "last": 242,
+         "fn": "wrapper_capture"
+        },
+        "args": [
+         "list(72)"
+        ],
+        "kwargs": {},
+        "outcome": "returned",
+        "returned": "list(72)"
+       }
+      ],
+      "follows": [],
+      "site_executed": [
+       "fpga/release/glide_boundary.py:242"
+      ],
+      "calls_total": 1,
+      "verdict": "RETURNED",
+      "share": null
+     }
+    ],
+    "refusing": null,
+    "boundary": [
+     {
+      "entry": "/tmp/refusal-trace-1964-YadKdF/fpga_release_glide_boundary.py_242/plan-show-arms.py",
+      "argv": [],
+      "role": "boundary",
+      "timeout_s": 600,
+      "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1964",
+      "expect": null,
+      "note": null,
+      "seconds": 0.1,
+      "exit_status": 0,
+      "traceback": false,
+      "stdout_tail": [
+       "plan_show(gate-on write, no marker: what wrapper_capture passes) -> 1 rows",
+       "plan_show(gate-on write, one marker, hold 2000{'hold_frames': 2000}) -> 2 rows",
+       "plan_show(one marker, hold 0) raised uart_host.Refused -- hold_frames 0 is not a hold: the note-off must be scheduled after the note-on's ",
+       "plan_show(two markers{'hold_frames': 2000}) raised uart_host.Refused -- more than one scheduled note-off in one plan: upload them as separate performanc",
+       "plan_show(a marker with no gate-on write{'hold_frames': 2000}) raised uart_host.Refused -- a gate-off was requested but the live writes carry no note-on gate (A_GATE_ON) w",
+       "plan_show(a write after the marker{'hold_frames': 2000}) raised uart_host.Refused -- a ('write' ...) command sits after the gate-off: the scheduled note-off must com"
+      ],
+      "stderr_tail": [],
+      "harness_frame_in_traceback": false,
+      "wrap_missing": [],
+      "system_exit": null,
+      "uncaught": null,
+      "all_raised": [
+       "uart_host.Refused"
+      ],
+      "calls": [],
+      "follows": [],
+      "site_executed": [],
+      "calls_total": 0,
+      "verdict": "NOT-REACHED",
+      "share": null
+     }
+    ]
+   },
+   "invariant": "wrapper_capture plans each case's writes as frame-0 live writes and device events one packet apart: no `gate-off` marker command and no hold_frames, and every refusing arm of plan_show needs one of the two"
+  },
+  {
+   "id": "fpga/selected_preset.py:26",
+   "site": "fpga/selected_preset.py:26",
+   "callee": "mono_m5a_score.engine_configuration",
+   "classification": null,
+   "runs": {
+    "working": [
+     {
+      "entry": "fpga/selected_preset.py",
+      "argv": [
+       "m5a-saw",
+       "--out",
+       "/tmp/refusal-trace-1964-YadKdF/fpga_selected_preset.py_26/m5a-saw.json"
+      ],
+      "role": "working",
+      "timeout_s": 900,
+      "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1964",
+      "expect": null,
+      "note": null,
+      "seconds": 0.2,
+      "exit_status": 0,
+      "traceback": false,
+      "stdout_tail": [
+       "/tmp/refusal-trace-1964-YadKdF/fpga_selected_preset.py_26/m5a-saw.json"
+      ],
+      "stderr_tail": [],
+      "harness_frame_in_traceback": false,
+      "wrap_missing": [],
+      "system_exit": null,
+      "uncaught": null,
+      "all_raised": [],
+      "calls": [
+       {
+        "callee": "mono_m5a_score.engine_configuration",
+        "caller": {
+         "file": "fpga/selected_preset.py",
+         "line": 26,
+         "first": 26,
+         "last": 26,
+         "fn": "definition"
+        },
+        "args": [
+         "selected"
+        ],
+        "kwargs": {},
+        "outcome": "returned",
+        "returned": "dict(16)"
+       }
+      ],
+      "follows": [],
+      "site_executed": [
+       "fpga/selected_preset.py:26"
+      ],
+      "calls_total": 1,
+      "verdict": "RETURNED",
+      "share": null
+     },
+     {
+      "entry": "fpga/selected_preset.py",
+      "argv": [
+       "m5a-pulse",
+       "--out",
+       "/tmp/refusal-trace-1964-YadKdF/fpga_selected_preset.py_26/m5a-pulse.json"
+      ],
+      "role": "working",
+      "timeout_s": 900,
+      "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1964",
+      "expect": null,
+      "note": null,
+      "seconds": 0.2,
+      "exit_status": 0,
+      "traceback": false,
+      "stdout_tail": [
+       "/tmp/refusal-trace-1964-YadKdF/fpga_selected_preset.py_26/m5a-pulse.json"
+      ],
+      "stderr_tail": [],
+      "harness_frame_in_traceback": false,
+      "wrap_missing": [],
+      "system_exit": null,
+      "uncaught": null,
+      "all_raised": [],
+      "calls": [
+       {
+        "callee": "mono_m5a_score.engine_configuration",
+        "caller": {
+         "file": "fpga/selected_preset.py",
+         "line": 26,
+         "first": 26,
+         "last": 26,
+         "fn": "definition"
+        },
+        "args": [
+         "selected"
+        ],
+        "kwargs": {},
+        "outcome": "returned",
+        "returned": "dict(16)"
+       }
+      ],
+      "follows": [],
+      "site_executed": [
+       "fpga/selected_preset.py:26"
+      ],
+      "calls_total": 1,
+      "verdict": "RETURNED",
+      "share": null
+     }
+    ],
+    "refusing": null,
+    "boundary": [
+     {
+      "entry": "/tmp/refusal-trace-1964-YadKdF/fpga_selected_preset.py_26/m5a-arms.py",
+      "argv": [],
+      "role": "boundary",
+      "timeout_s": 600,
+      "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1964",
+      "expect": null,
+      "note": null,
+      "seconds": 0.1,
+      "exit_status": 0,
+      "traceback": false,
+      "stdout_tail": [
+       "engine_configuration('selected') -> ['filter_causal', 'filter_drive', 'filter_g_exact', 'filter_k_comp']",
+       "engine_configuration('no-such-engine') raised mono_m5a_score.Refused -- unsupported Mono engine configuration 'no-such-engine'",
+       "_patch_for_wave(patch, 'saw', 'pulse29') returned",
+       "_patch_for_wave(patch, 'pulse', 'pulse29') returned",
+       "_patch_for_wave(patch, *('triangle', 'pulse29')) raised mono_m5a_score.Refused -- unsupported Mono waveform 'triangle'",
+       "_patch_for_wave(patch, *('pulse', 'pulse999')) raised mono_m5a_score.Refused -- unsupported M5A model pulse candidate 'pulse999'"
+      ],
+      "stderr_tail": [],
+      "harness_frame_in_traceback": false,
+      "wrap_missing": [],
+      "system_exit": null,
+      "uncaught": null,
+      "all_raised": [
+       "mono_m5a_score.Refused"
+      ],
+      "calls": [],
+      "follows": [],
+      "site_executed": [],
+      "calls_total": 0,
+      "verdict": "NOT-REACHED",
+      "share": null
+     }
+    ]
+   },
+   "invariant": "the name 'selected' is a literal and a key of mono_m5a_score.ENGINE_PROFILES"
+  },
+  {
+   "id": "fpga/selected_preset.py:28",
+   "site": "fpga/selected_preset.py:28",
+   "callee": "mono_m5a_score._patch_for_wave",
+   "classification": null,
+   "runs": {
+    "working": [
+     {
+      "entry": "fpga/selected_preset.py",
+      "argv": [
+       "m5a-saw",
+       "--out",
+       "/tmp/refusal-trace-1964-YadKdF/fpga_selected_preset.py_28/m5a-saw.json"
+      ],
+      "role": "working",
+      "timeout_s": 900,
+      "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1964",
+      "expect": null,
+      "note": null,
+      "seconds": 0.1,
+      "exit_status": 0,
+      "traceback": false,
+      "stdout_tail": [
+       "/tmp/refusal-trace-1964-YadKdF/fpga_selected_preset.py_28/m5a-saw.json"
+      ],
+      "stderr_tail": [],
+      "harness_frame_in_traceback": false,
+      "wrap_missing": [],
+      "system_exit": null,
+      "uncaught": null,
+      "all_raised": [],
+      "calls": [
+       {
+        "callee": "mono_m5a_score._patch_for_wave",
+        "caller": {
+         "file": "fpga/selected_preset.py",
+         "line": 28,
+         "first": 28,
+         "last": 28,
+         "fn": "definition"
+        },
+        "args": [
+         "dict(15)",
+         "saw"
+        ],
+        "kwargs": {},
+        "outcome": "returned",
+        "returned": "dict(15)"
+       }
+      ],
+      "follows": [],
+      "site_executed": [
+       "fpga/selected_preset.py:28"
+      ],
+      "calls_total": 1,
+      "verdict": "RETURNED",
+      "share": null
+     },
+     {
+      "entry": "fpga/selected_preset.py",
+      "argv": [
+       "m5a-pulse",
+       "--out",
+       "/tmp/refusal-trace-1964-YadKdF/fpga_selected_preset.py_28/m5a-pulse.json"
+      ],
+      "role": "working",
+      "timeout_s": 900,
+      "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1964",
+      "expect": null,
+      "note": null,
+      "seconds": 0.1,
+      "exit_status": 0,
+      "traceback": false,
+      "stdout_tail": [
+       "/tmp/refusal-trace-1964-YadKdF/fpga_selected_preset.py_28/m5a-pulse.json"
+      ],
+      "stderr_tail": [],
+      "harness_frame_in_traceback": false,
+      "wrap_missing": [],
+      "system_exit": null,
+      "uncaught": null,
+      "all_raised": [],
+      "calls": [
+       {
+        "callee": "mono_m5a_score._patch_for_wave",
+        "caller": {
+         "file": "fpga/selected_preset.py",
+         "line": 28,
+         "first": 28,
+         "last": 28,
+         "fn": "definition"
+        },
+        "args": [
+         "dict(15)",
+         "pulse"
+        ],
+        "kwargs": {},
+        "outcome": "returned",
+        "returned": "dict(15)"
+       }
+      ],
+      "follows": [],
+      "site_executed": [
+       "fpga/selected_preset.py:28"
+      ],
+      "calls_total": 1,
+      "verdict": "RETURNED",
+      "share": null
+     }
+    ],
+    "refusing": null,
+    "boundary": [
+     {
+      "entry": "/tmp/refusal-trace-1964-YadKdF/fpga_selected_preset.py_28/m5a-arms.py",
+      "argv": [],
+      "role": "boundary",
+      "timeout_s": 600,
+      "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1964",
+      "expect": null,
+      "note": null,
+      "seconds": 0.1,
+      "exit_status": 0,
+      "traceback": false,
+      "stdout_tail": [
+       "engine_configuration('selected') -> ['filter_causal', 'filter_drive', 'filter_g_exact', 'filter_k_comp']",
+       "engine_configuration('no-such-engine') raised mono_m5a_score.Refused -- unsupported Mono engine configuration 'no-such-engine'",
+       "_patch_for_wave(patch, 'saw', 'pulse29') returned",
+       "_patch_for_wave(patch, 'pulse', 'pulse29') returned",
+       "_patch_for_wave(patch, *('triangle', 'pulse29')) raised mono_m5a_score.Refused -- unsupported Mono waveform 'triangle'",
+       "_patch_for_wave(patch, *('pulse', 'pulse999')) raised mono_m5a_score.Refused -- unsupported M5A model pulse candidate 'pulse999'"
+      ],
+      "stderr_tail": [],
+      "harness_frame_in_traceback": false,
+      "wrap_missing": [],
+      "system_exit": null,
+      "uncaught": null,
+      "all_raised": [
+       "mono_m5a_score.Refused"
+      ],
+      "calls": [],
+      "follows": [],
+      "site_executed": [],
+      "calls_total": 0,
+      "verdict": "NOT-REACHED",
+      "share": null
+     }
+    ]
+   },
+   "invariant": "the wave is 'pulse' or 'saw' by the preset name, an argparse choice, and the pulse shape is the module default"
+  },
+  {
+   "id": "model/bd_pedestal.py:483",
+   "site": "model/bd_pedestal.py:483",
+   "callee": "bd_excitation_probe.calibrate_amp",
+   "classification": null,
+   "runs": {
+    "working": [
+     {
+      "entry": "model/bd_pedestal.py",
+      "argv": [
+       "--out",
+       "/tmp/refusal-trace-1964-YadKdF/model_bd_pedestal.py_483/pedestal.json"
+      ],
+      "role": "working",
+      "timeout_s": 900,
+      "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1964",
+      "expect": null,
+      "note": null,
+      "seconds": 52.9,
+      "exit_status": 0,
+      "traceback": false,
+      "stdout_tail": [],
+      "stderr_tail": [],
+      "harness_frame_in_traceback": false,
+      "wrap_missing": [],
+      "system_exit": 0,
+      "uncaught": null,
+      "all_raised": [],
+      "calls": [
+       {
+        "callee": "bd_excitation_probe.calibrate_amp",
+        "caller": {
+         "file": "model/bd_pedestal.py",
+         "line": 483,
+         "first": 483,
+         "last": 483,
+         "fn": "main"
+        },
+        "args": [
+         1,
+         1.0,
+         0
+        ],
+        "kwargs": {},
+        "outcome": "returned",
+        "returned": 0.05161614575153133
+       }
+      ],
+      "follows": [],
+      "site_executed": [
+       "model/bd_pedestal.py:483"
+      ],
+      "calls_total": 1,
+      "verdict": "RETURNED",
+      "share": null
+     }
+    ],
+    "refusing": null,
+    "boundary": [
+     {
+      "entry": "/tmp/refusal-trace-1964-YadKdF/model_bd_pedestal.py_483/calibrate-arms.py",
+      "argv": [],
+      "role": "boundary",
+      "timeout_s": 600,
+      "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1964",
+      "expect": null,
+      "note": null,
+      "seconds": 5.9,
+      "exit_status": 0,
+      "traceback": false,
+      "stdout_tail": [
+       "calibrate_amp(mf.BP, 1.0, 0) -> 0.05161614575153133",
+       "calibrate_amp(mf.BP, 1.0, 0, probe_amp=0.0) raised bd_excitation_probe.Refused -- calibration render is silent"
+      ],
+      "stderr_tail": [],
+      "harness_frame_in_traceback": false,
+      "wrap_missing": [],
+      "system_exit": null,
+      "uncaught": null,
+      "all_raised": [
+       "bd_excitation_probe.Refused"
+      ],
+      "calls": [],
+      "follows": [],
+      "site_executed": [],
+      "calls_total": 0,
+      "verdict": "NOT-REACHED",
+      "share": null
+     }
+    ]
+   },
+   "invariant": "the calibration render is a BD strike through the band-pass excitation at probe amp 0.02; calibrate_amp refuses only a silent render"
+  },
+  {
+   "id": "tools/clap_burst_timing_qual.py:132",
+   "site": "tools/clap_burst_timing_qual.py:132",
+   "callee": "run_case.prepare",
+   "classification": null,
+   "runs": {
+    "working": [
+     {
+      "entry": "tools/clap_burst_timing_qual.py",
+      "argv": [
+       "--out",
+       "/tmp/refusal-trace-1964-YadKdF/tools_clap_burst_timing_qual.py_132/burst-timing-qual.json"
+      ],
+      "role": "working",
+      "timeout_s": 900,
+      "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1964",
+      "expect": null,
+      "note": "the default --n 24: every condition, detector and sample rate, 1296 calls at :132",
+      "seconds": 2.2,
+      "exit_status": 0,
+      "traceback": false,
+      "stdout_tail": [
+       "  ok   S3+F40 sustained final tau 40 ms @ 48000             truth  31.94 med     -0.0 p95     0.00 extra  0 missed  0 refused 0",
+       "  ok   SLOW three short + slow tail, no 4th trigger @ 44100 truth  21.29 med    0.001 p95     0.00 extra  0 missed  0 refused 0",
+       "  ok   SLOW three short + slow tail, no 4th trigger @ 48000 truth  21.29 med     -0.0 p95     0.00 extra  0 missed  0 refused 0",
+       "  ok   CTRL missing final (vs S3+F20) @ 44100               truth  21.29 med    0.001 p95     0.00 extra  0 missed  0 refused 0",
+       "  ok   CTRL missing final (vs S3+F20) @ 48000               truth  21.29 med     -0.0 p95     0.00 extra  0 missed  0 refused 0",
+       "  ok   CTRL missing 2nd strike (vs S3+F20) @ 44100          truth  31.94 med   -0.011 p95     0.01 extra  0 missed  0 refused 0",
+       "  ok   CTRL missing 2nd strike (vs S3+F20) @ 48000          truth  31.94 med     -0.0 p95     0.00 extra  0 missed  0 refused 0",
+       "  ok   CTRL delayed final +8 ms (vs S3+F20) @ 44100         truth  39.94 med   -0.006 p95     0.01 extra  0 missed  0 refused 0",
+       "  ok   CTRL delayed final +8 ms (vs S3+F20) @ 48000         truth  39.94 med     -0.0 p95     0.00 extra  0 missed  0 refused 0",
+       "  ok   CTRL extra strike at 55 ms (vs S3+F20) @ 44100       truth  55.00 med    0.011 p95     0.01 extra  0 missed  0 refused 0",
+       "  ok   CTRL extra strike at 55 ms (vs S3+F20) @ 48000       truth  55.00 med      0.0 p95     0.00 extra  0 missed  0 refused 0",
+       "verdict: official UNQUALIFIED; pre-declared correction UNQUALIFIED"
+      ],
+      "stderr_tail": [],
+      "harness_frame_in_traceback": false,
+      "wrap_missing": [],
+      "system_exit": 0,
+      "uncaught": null,
+      "all_raised": [],
+      "calls": [
+       {
+        "callee": "run_case.prepare",
+        "caller": {
+         "file": "tools/clap_burst_timing_qual.py",
+         "line": 132,
+         "first": 132,
+         "last": 132,
+         "fn": "detect"
+        },
+        "args": [
+         "ndarray(17640,) float64 peak=3.3879600424521574 first=0.0 finite=True",
+         44100
+        ],
+        "kwargs": {
+         "side": "synthetic"
+        },
+        "outcome": "returned",
+        "returned": "ndarray(16019,) float64 peak=1.0 first=0.0 finite=True"
+       },
+       {
+        "callee": "run_case.prepare",
+        "caller": {
+         "file": "tools/clap_burst_timing_qual.py",
+         "line": 132,
+         "first": 132,
+         "last": 132,
+         "fn": "detect"
+        },
+        "args": [
+         "ndarray(17640,) float64 peak=1.9385457028794844 first=0.0 finite=True",
+         44100
+        ],
+        "kwargs": {
+         "side": "synthetic"
+        },
+        "outcome": "returned",
+        "returned": "ndarray(16019,) float64 peak=1.0 first=-0.0 finite=True"
+       },
+       {
+        "callee": "run_case.prepare",
+        "caller": {
+         "file": "tools/clap_burst_timing_qual.py",
+         "line": 132,
+         "first": 132,
+         "last": 132,
+         "fn": "detect"
+        },
+        "args": [
+         "ndarray(17640,) float64 peak=2.630891252657018 first=-0.0 finite=True",
+         44100
+        ],
+        "kwargs": {
+         "side": "synthetic"
+        },
+        "outcome": "returned",
+        "returned": "ndarray(16019,) float64 peak=1.0 first=-0.0 finite=True"
+       },
+       {
+        "callee": "run_case.prepare",
+        "caller": {
+         "file": "tools/clap_burst_timing_qual.py",
+         "line": 132,
+         "first": 132,
+         "last": 132,
+         "fn": "detect"
+        },
+        "args": [
+         "ndarray(17640,) float64 peak=1.9270856047786478 first=-0.0 finite=True",
+         44100
+        ],
+        "kwargs": {
+         "side": "synthetic"
+        },
+        "outcome": "returned",
+        "returned": "ndarray(16019,) float64 peak=1.0 first=0.0 finite=True"
+       },
+       {
+        "callee": "run_case.prepare",
+        "caller": {
+         "file": "tools/clap_burst_timing_qual.py",
+         "line": 132,
+         "first": 132,
+         "last": 132,
+         "fn": "detect"
+        },
+        "args": [
+         "ndarray(17640,) float64 peak=3.1015861654460264 first=0.0 finite=True",
+         44100
+        ],
+        "kwargs": {
+         "side": "synthetic"
+        },
+        "outcome": "returned",
+        "returned": "ndarray(16019,) float64 peak=1.0 first=-0.0 finite=True"
+       },
+       {
+        "callee": "run_case.prepare",
+        "caller": {
+         "file": "tools/clap_burst_timing_qual.py",
+         "line": 132,
+         "first": 132,
+         "last": 132,
+         "fn": "detect"
+        },
+        "args": [
+         "ndarray(17640,) float64 peak=1.4473836530950972 first=-0.0 finite=True",
+         44100
+        ],
+        "kwargs": {
+         "side": "synthetic"
+        },
+        "outcome": "returned",
+        "returned": "ndarray(16019,) float64 peak=1.0 first=-0.0 finite=True"
+       },
+       {
+        "callee": "run_case.prepare",
+        "caller": {
+         "file": "tools/clap_burst_timing_qual.py",
+         "line": 132,
+         "first": 132,
+         "last": 132,
+         "fn": "detect"
+        },
+        "args": [
+         "ndarray(17640,) float64 peak=2.122293101648898 first=0.0 finite=True",
+         44100
+        ],
+        "kwargs": {
+         "side": "synthetic"
+        },
+        "outcome": "returned",
+        "returned": "ndarray(16019,) float64 peak=1.0 first=0.0 finite=True"
+       },
+       {
+        "callee": "run_case.prepare",
+        "caller": {
+         "file": "tools/clap_burst_timing_qual.py",
+         "line": 132,
+         "first": 132,
+         "last": 132,
+         "fn": "detect"
+        },
+        "args": [
+         "ndarray(17640,) float64 peak=2.993343338822316 first=-0.0 finite=True",
+         44100
+        ],
+        "kwargs": {
+         "side": "synthetic"
+        },
+        "outcome": "returned",
+        "returned": "ndarray(16019,) float64 peak=1.0 first=-0.0 finite=True"
+       },
+       {
+        "callee": "run_case.prepare",
+        "caller": {
+         "file": "tools/clap_burst_timing_qual.py",
+         "line": 132,
+         "first": 132,
+         "last": 132,
+         "fn": "detect"
+        },
+        "args": [
+         "ndarray(17640,) float64 peak=2.501173462119383 first=0.0 finite=True",
+         44100
+        ],
+        "kwargs": {
+         "side": "synthetic"
+        },
+        "outcome": "returned",
+        "returned": "ndarray(16019,) float64 peak=1.0 first=-0.0 finite=True"
+       },
+       {
+        "callee": "run_case.prepare",
+        "caller": {
+         "file": "tools/clap_burst_timing_qual.py",
+         "line": 132,
+         "first": 132,
+         "last": 132,
+         "fn": "detect"
+        },
+        "args": [
+         "ndarray(17640,) float64 peak=1.6811756118100663 first=0.0 finite=True",
+         44100
+        ],
+        "kwargs": {
+         "side": "synthetic"
+        },
+        "outcome": "returned",
+        "returned": "ndarray(16019,) float64 peak=1.0 first=-0.0 finite=True"
+       },
+       {
+        "callee": "run_case.prepare",
+        "caller": {
+         "file": "tools/clap_burst_timing_qual.py",
+         "line": 132,
+         "first": 132,
+         "last": 132,
+         "fn": "detect"
+        },
+        "args": [
+         "ndarray(17640,) float64 peak=2.2539407454894422 first=-0.0 finite=True",
+         44100
+        ],
+        "kwargs": {
+         "side": "synthetic"
+        },
+        "outcome": "returned",
+        "returned": "ndarray(16019,) float64 peak=1.0 first=0.0 finite=True"
+       },
+       {
+        "callee": "run_case.prepare",
+        "caller": {
+         "file": "tools/clap_burst_timing_qual.py",
+         "line": 132,
+         "first": 132,
+         "last": 132,
+         "fn": "detect"
+        },
+        "args": [
+         "ndarray(17640,) float64 peak=1.8976632339320112 first=0.0 finite=True",
+         44100
+        ],
+        "kwargs": {
+         "side": "synthetic"
+        },
+        "outcome": "returned",
+        "returned": "ndarray(16019,) float64 peak=1.0 first=0.0 finite=True"
+       }
+      ],
+      "follows": [],
+      "site_executed": [
+       "tools/clap_burst_timing_qual.py:132"
+      ],
+      "calls_total": 1296,
+      "verdict": "RETURNED",
+      "share": null
+     }
+    ],
+    "refusing": null,
+    "boundary": [
+     {
+      "entry": "/tmp/refusal-trace-1964-YadKdF/tools_clap_burst_timing_qual.py_132/clap-prepare-arms.py",
+      "argv": [],
+      "role": "boundary",
+      "timeout_s": 600,
+      "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1964",
+      "expect": null,
+      "note": null,
+      "seconds": 0.9,
+      "exit_status": 0,
+      "traceback": false,
+      "stdout_tail": [
+       "prepare(synth(...), sr, side='synthetic') returned for all 36 conditions x sample rates x carriers; each begins with 50 ms of exact digital silence",
+       "S4 @ 44100: onset index 2205 -- the lead is 2205 samples",
+       "prepare(synth cut to its onset) raised preparation_contract.Refused -- synthetic begins at or above 2 % of its own peak: it was cut into the strike, so there is ",
+       "prepare(synth with one NaN sample) raised preparation_contract.Refused -- synthetic holds 1 non-finite samples of 17640 (1 NaN, 0 Inf; first at index 8820): this is"
+      ],
+      "stderr_tail": [],
+      "harness_frame_in_traceback": false,
+      "wrap_missing": [],
+      "system_exit": null,
+      "uncaught": null,
+      "all_raised": [
+       "preparation_contract.Refused"
+      ],
+      "calls": [],
+      "follows": [],
+      "site_executed": [],
+      "calls_total": 0,
+      "verdict": "NOT-REACHED",
+      "share": null
+     }
+    ]
+   },
+   "invariant": "every signal detect() hands prepare is synth(...)'s, which begins with int(0.050 * sr) samples of exact digital silence (env is np.zeros(n) until lead) and is finite by construction (unit-RMS band-passed Gaussian noise, or an alternating +-1 carrier); prepare refuses only a non-finite record or one whose onset is at index 0, and --n and --out do not touch the signal"
+  },
+  {
+   "id": "tools/f1_filter_path.py:95",
+   "site": "tools/f1_filter_path.py:95",
+   "callee": "mono_m5a_score.engine_configuration",
+   "classification": null,
+   "runs": {
+    "working": [
+     {
+      "entry": "tools/probes/holdout_f1d_preconditions.py",
+      "argv": [],
+      "role": "working",
+      "timeout_s": 900,
+      "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1964",
+      "expect": null,
+      "note": "builds fp.SelectedFilterPath() with every default at :93",
+      "seconds": 5.0,
+      "exit_status": 0,
+      "traceback": false,
+      "stdout_tail": [
+       "grid            32 points 40.0 .. 12000.0 Hz (reference_compare.FREQS)",
+       "plateau band    40.0 .. 125.0 Hz   7 grid points",
+       "corner          OK    216.439   {'plateau_db': -0.006111099663091512, 'band_median_db': -0.33216207423476796, 'fit_residual_db': 0.004958731031735386, 'extrapolation_db': 0.10483667885345882, 'n': 7, 'plateau_basis': 'dc-extrapolated (#150)'}",
+       "lowband         OK    -0.332   {'plateau_db': -0.3322, 'wide_open_plateau_db': -0.0006, 'band_hz': [np.float64(40.0), 125.0]}",
+       "rolloff         OK    -17.480   {'band_hz': [476.17, 1515.07], 'corner_hz': 216.439, 'n_points': 6, 'fit_residual_db': 0.5653, 'stopband_floor_db': -70.0}",
+       "rolloff band    476.2 .. 1515.1 Hz   6 grid points",
+       "",
+       "NO REFERENCE WAS READ: there is no frozen clip at this cutoff, so no distance was computed here."
+      ],
+      "stderr_tail": [],
+      "harness_frame_in_traceback": false,
+      "wrap_missing": [],
+      "system_exit": 0,
+      "uncaught": null,
+      "all_raised": [],
+      "calls": [
+       {
+        "callee": "mono_m5a_score.engine_configuration",
+        "caller": {
+         "file": "tools/f1_filter_path.py",
+         "line": 95,
+         "first": 95,
+         "last": 95,
+         "fn": "__init__"
+        },
+        "args": [
+         "selected"
+        ],
+        "kwargs": {},
+        "outcome": "returned",
+        "returned": "dict(16)"
+       }
+      ],
+      "follows": [],
+      "site_executed": [
+       "tools/f1_filter_path.py:95"
+      ],
+      "calls_total": 1,
+      "verdict": "RETURNED",
+      "share": "f1-holdout"
+     },
+     {
+      "entry": "tools/f1_rtl_filter_path.py",
+      "argv": [
+       "--json",
+       "/tmp/refusal-trace-1964-YadKdF/f1-rtl-smoke-curve.json"
+      ],
+      "role": "working",
+      "timeout_s": 900,
+      "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1964",
+      "expect": null,
+      "note": "the smoke run: RtlFilterChainPath(inject=None, frames=None) at :423 builds fp.SelectedFilterPath(fp.ENGINE_PROFILE, fp.CALIBRATION, substitute_profile=None) at :219",
+      "seconds": 21.4,
+      "exit_status": 0,
+      "traceback": false,
+      "stdout_tail": [
+       "f1_rtl_filter_path: 30000 frames, 1 tones, cut 250 Hz, words g=1089 k=0 gain=42598 ogain=100825",
+       "  RTL vs model: BIT-EXACT (0 of 30000 frames, worst 0 LSB, first at None)",
+       "  RTL response dB: -0.44"
+      ],
+      "stderr_tail": [],
+      "harness_frame_in_traceback": false,
+      "wrap_missing": [],
+      "system_exit": 0,
+      "uncaught": null,
+      "all_raised": [],
+      "calls": [
+       {
+        "callee": "mono_m5a_score.engine_configuration",
+        "caller": {
+         "file": "tools/f1_filter_path.py",
+         "line": 95,
+         "first": 95,
+         "last": 95,
+         "fn": "__init__"
+        },
+        "args": [
+         "selected"
+        ],
+        "kwargs": {},
+        "outcome": "returned",
+        "returned": "dict(16)"
+       }
+      ],
+      "follows": [],
+      "site_executed": [
+       "tools/f1_filter_path.py:95"
+      ],
+      "calls_total": 1,
+      "verdict": "RETURNED",
+      "share": "f1-rtl-smoke"
+     }
+    ],
+    "refusing": null,
+    "boundary": [
+     {
+      "entry": "/tmp/refusal-trace-1964-YadKdF/tools_f1_filter_path.py_95/f1-site-arms.py",
+      "argv": [],
+      "role": "boundary",
+      "timeout_s": 600,
+      "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1964",
+      "expect": null,
+      "note": null,
+      "seconds": 0.8,
+      "exit_status": 0,
+      "traceback": false,
+      "stdout_tail": [
+       "ENGINE_PROFILES keys: ['legacy', 'selected'] -- ENGINE_PROFILE is 'selected'",
+       "SelectedFilterPath(defaults) built: profile 'selected-m5a-reconstructed-filter2x', probe_profile 'selected-m5a-reconstructed-filter2x'",
+       "SelectedFilterPath(**{'substitute_profile': 'legacy'}) raised f1_filter_path.Refused -- F1 model path is not the selected filter: ladder is LadderFx, not RateConvertedLadder",
+       "SelectedFilterPath(**{'profile': 'no-such-engine'}) raised mono_m5a_score.Refused -- unsupported Mono engine configuration 'no-such-engine'",
+       "SelectedFilterPath(**{'substitute_profile': 'no-such-engine'}) raised mono_m5a_score.Refused -- unsupported Mono engine configuration 'no-such-engine'"
+      ],
+      "stderr_tail": [],
+      "harness_frame_in_traceback": false,
+      "wrap_missing": [],
+      "system_exit": null,
+      "uncaught": null,
+      "all_raised": [
+       "mono_m5a_score.Refused"
+      ],
+      "calls": [
+       {
+        "callee": "mono_m5a_score.engine_configuration",
+        "caller": {
+         "file": "tools/f1_filter_path.py",
+         "line": 95,
+         "first": 95,
+         "last": 95,
+         "fn": "__init__"
+        },
+        "args": [
+         "selected"
+        ],
+        "kwargs": {},
+        "outcome": "returned",
+        "returned": "dict(16)"
+       },
+       {
+        "callee": "mono_m5a_score.engine_configuration",
+        "caller": {
+         "file": "tools/f1_filter_path.py",
+         "line": 95,
+         "first": 95,
+         "last": 95,
+         "fn": "__init__"
+        },
+        "args": [
+         "selected"
+        ],
+        "kwargs": {},
+        "outcome": "returned",
+        "returned": "dict(16)"
+       },
+       {
+        "callee": "mono_m5a_score.engine_configuration",
+        "caller": {
+         "file": "tools/f1_filter_path.py",
+         "line": 95,
+         "first": 95,
+         "last": 95,
+         "fn": "__init__"
+        },
+        "args": [
+         "no-such-engine"
+        ],
+        "kwargs": {},
+        "outcome": "raised",
+        "raised": {
+         "class": "mono_m5a_score.Refused",
+         "mro": [
+          "mono_m5a_score.Refused",
+          "refusal.Refused",
+          "builtins.RuntimeError",
+          "builtins.Exception",
+          "builtins.BaseException"
+         ],
+         "in_family": true,
+         "message": "unsupported Mono engine configuration 'no-such-engine'"
+        }
+       },
+       {
+        "callee": "mono_m5a_score.engine_configuration",
+        "caller": {
+         "file": "tools/f1_filter_path.py",
+         "line": 95,
+         "first": 95,
+         "last": 95,
+         "fn": "__init__"
+        },
+        "args": [
+         "selected"
+        ],
+        "kwargs": {},
+        "outcome": "returned",
+        "returned": "dict(16)"
+       }
+      ],
+      "follows": [
+       {
+        "callee": "mono_m5a_score.engine_configuration",
+        "raised": {
+         "class": "mono_m5a_score.Refused",
+         "mro": [
+          "mono_m5a_score.Refused",
+          "refusal.Refused",
+          "builtins.RuntimeError",
+          "builtins.Exception",
+          "builtins.BaseException"
+         ],
+         "in_family": true,
+         "message": "unsupported Mono engine configuration 'no-such-engine'"
+        },
+        "stack": [
+         {
+          "file": "tools/f1_filter_path.py",
+          "line": 95,
+          "first": 95,
+          "last": 95,
+          "fn": "__init__"
+         },
+         {
+          "file": "/tmp/refusal-trace-1964-YadKdF/tools_f1_filter_path.py_95/f1-site-arms.py",
+          "line": 14,
+          "first": 14,
+          "last": 14,
+          "fn": "<module>"
+         }
+        ],
+        "propagated_out": [
+         {
+          "file": "tools/f1_filter_path.py",
+          "line": 95,
+          "first": 95,
+          "last": 95,
+          "fn": "__init__"
+         }
+        ],
+        "handlers": [
+         {
+          "file": "/tmp/refusal-trace-1964-YadKdF/tools_f1_filter_path.py_95/f1-site-arms.py",
+          "line": 16,
+          "first": 16,
+          "last": 16,
+          "fn": "<module>",
+          "clause": "Exception",
+          "handler": 16,
+          "one_line": false,
+          "role": "except",
+          "in_tree": false
+         }
+        ],
+        "tested": [],
+        "finally": [],
+        "with_unwind": [],
+        "left_entry": false
+       }
+      ],
+      "site_executed": [
+       "tools/f1_filter_path.py:95"
+      ],
+      "calls_total": 4,
+      "verdict": "HANDLED",
+      "share": null
+     }
+    ]
+   },
+   "invariant": "profile is never a CLI argument: SelectedFilterPath.__init__'s default is the literal ENGINE_PROFILE = 'selected', and every production construction leaves it there -- tools/probes/holdout_f1d_preconditions.py:93 passes nothing; RtlFilterChainPath.__init__ (tools/f1_rtl_filter_path.py:207) defaults it to fp.ENGINE_PROFILE and passes it through at :219, and its two constructions (tools/f1_rtl_filter_path.py:423, tools/score_f1_rtl.py:204) pass neither; tools/run_case.py:2664 passes substitute_profile only. 'selected' is a key of mono_m5a_score.ENGINE_PROFILES, the only thing engine_configuration refuses on"
+  },
+  {
+   "id": "tools/f1_filter_path.py:98",
+   "site": "tools/f1_filter_path.py:98",
+   "callee": "mono_m5a_score.engine_configuration",
+   "classification": null,
+   "runs": {
+    "working": [
+     {
+      "entry": "tools/probes/holdout_f1d_preconditions.py",
+      "argv": [],
+      "role": "working",
+      "timeout_s": 900,
+      "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1964",
+      "expect": null,
+      "note": "builds fp.SelectedFilterPath() with every default at :93",
+      "seconds": 5.0,
+      "exit_status": 0,
+      "traceback": false,
+      "stdout_tail": [
+       "grid            32 points 40.0 .. 12000.0 Hz (reference_compare.FREQS)",
+       "plateau band    40.0 .. 125.0 Hz   7 grid points",
+       "corner          OK    216.439   {'plateau_db': -0.006111099663091512, 'band_median_db': -0.33216207423476796, 'fit_residual_db': 0.004958731031735386, 'extrapolation_db': 0.10483667885345882, 'n': 7, 'plateau_basis': 'dc-extrapolated (#150)'}",
+       "lowband         OK    -0.332   {'plateau_db': -0.3322, 'wide_open_plateau_db': -0.0006, 'band_hz': [np.float64(40.0), 125.0]}",
+       "rolloff         OK    -17.480   {'band_hz': [476.17, 1515.07], 'corner_hz': 216.439, 'n_points': 6, 'fit_residual_db': 0.5653, 'stopband_floor_db': -70.0}",
+       "rolloff band    476.2 .. 1515.1 Hz   6 grid points",
+       "",
+       "NO REFERENCE WAS READ: there is no frozen clip at this cutoff, so no distance was computed here."
+      ],
+      "stderr_tail": [],
+      "harness_frame_in_traceback": false,
+      "wrap_missing": [],
+      "system_exit": 0,
+      "uncaught": null,
+      "all_raised": [],
+      "calls": [
+       {
+        "callee": "mono_m5a_score.engine_configuration",
+        "caller": {
+         "file": "tools/f1_filter_path.py",
+         "line": 98,
+         "first": 98,
+         "last": 98,
+         "fn": "__init__"
+        },
+        "args": [
+         "selected"
+        ],
+        "kwargs": {},
+        "outcome": "returned",
+        "returned": "dict(16)"
+       }
+      ],
+      "follows": [],
+      "site_executed": [
+       "tools/f1_filter_path.py:98"
+      ],
+      "calls_total": 1,
+      "verdict": "RETURNED",
+      "share": "f1-holdout"
+     },
+     {
+      "entry": "tools/f1_rtl_filter_path.py",
+      "argv": [
+       "--json",
+       "/tmp/refusal-trace-1964-YadKdF/f1-rtl-smoke-curve.json"
+      ],
+      "role": "working",
+      "timeout_s": 900,
+      "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1964",
+      "expect": null,
+      "note": "the smoke run: RtlFilterChainPath(inject=None, frames=None) at :423 builds fp.SelectedFilterPath(fp.ENGINE_PROFILE, fp.CALIBRATION, substitute_profile=None) at :219",
+      "seconds": 21.4,
+      "exit_status": 0,
+      "traceback": false,
+      "stdout_tail": [
+       "f1_rtl_filter_path: 30000 frames, 1 tones, cut 250 Hz, words g=1089 k=0 gain=42598 ogain=100825",
+       "  RTL vs model: BIT-EXACT (0 of 30000 frames, worst 0 LSB, first at None)",
+       "  RTL response dB: -0.44"
+      ],
+      "stderr_tail": [],
+      "harness_frame_in_traceback": false,
+      "wrap_missing": [],
+      "system_exit": 0,
+      "uncaught": null,
+      "all_raised": [],
+      "calls": [
+       {
+        "callee": "mono_m5a_score.engine_configuration",
+        "caller": {
+         "file": "tools/f1_filter_path.py",
+         "line": 98,
+         "first": 98,
+         "last": 98,
+         "fn": "__init__"
+        },
+        "args": [
+         "selected"
+        ],
+        "kwargs": {},
+        "outcome": "returned",
+        "returned": "dict(16)"
+       }
+      ],
+      "follows": [],
+      "site_executed": [
+       "tools/f1_filter_path.py:98"
+      ],
+      "calls_total": 1,
+      "verdict": "RETURNED",
+      "share": "f1-rtl-smoke"
+     }
+    ],
+    "refusing": null,
+    "boundary": [
+     {
+      "entry": "/tmp/refusal-trace-1964-YadKdF/tools_f1_filter_path.py_98/f1-site-arms.py",
+      "argv": [],
+      "role": "boundary",
+      "timeout_s": 600,
+      "tree": "/home/ubuntu/GitHub/gf180-parasynth/.loom/worktrees/issue-1964",
+      "expect": null,
+      "note": null,
+      "seconds": 0.7,
+      "exit_status": 0,
+      "traceback": false,
+      "stdout_tail": [
+       "ENGINE_PROFILES keys: ['legacy', 'selected'] -- ENGINE_PROFILE is 'selected'",
+       "SelectedFilterPath(defaults) built: profile 'selected-m5a-reconstructed-filter2x', probe_profile 'selected-m5a-reconstructed-filter2x'",
+       "SelectedFilterPath(**{'substitute_profile': 'legacy'}) raised f1_filter_path.Refused -- F1 model path is not the selected filter: ladder is LadderFx, not RateConvertedLadder",
+       "SelectedFilterPath(**{'profile': 'no-such-engine'}) raised mono_m5a_score.Refused -- unsupported Mono engine configuration 'no-such-engine'",
+       "SelectedFilterPath(**{'substitute_profile': 'no-such-engine'}) raised mono_m5a_score.Refused -- unsupported Mono engine configuration 'no-such-engine'"
+      ],
+      "stderr_tail": [],
+      "harness_frame_in_traceback": false,
+      "wrap_missing": [],
+      "system_exit": null,
+      "uncaught": null,
+      "all_raised": [
+       "mono_m5a_score.Refused"
+      ],
+      "calls": [
+       {
+        "callee": "mono_m5a_score.engine_configuration",
+        "caller": {
+         "file": "tools/f1_filter_path.py",
+         "line": 98,
+         "first": 98,
+         "last": 98,
+         "fn": "__init__"
+        },
+        "args": [
+         "selected"
+        ],
+        "kwargs": {},
+        "outcome": "returned",
+        "returned": "dict(16)"
+       },
+       {
+        "callee": "mono_m5a_score.engine_configuration",
+        "caller": {
+         "file": "tools/f1_filter_path.py",
+         "line": 98,
+         "first": 98,
+         "last": 98,
+         "fn": "__init__"
+        },
+        "args": [
+         "legacy"
+        ],
+        "kwargs": {},
+        "outcome": "returned",
+        "returned": "dict(16)"
+       },
+       {
+        "callee": "mono_m5a_score.engine_configuration",
+        "caller": {
+         "file": "tools/f1_filter_path.py",
+         "line": 98,
+         "first": 98,
+         "last": 98,
+         "fn": "__init__"
+        },
+        "args": [
+         "no-such-engine"
+        ],
+        "kwargs": {},
+        "outcome": "raised",
+        "raised": {
+         "class": "mono_m5a_score.Refused",
+         "mro": [
+          "mono_m5a_score.Refused",
+          "refusal.Refused",
+          "builtins.RuntimeError",
+          "builtins.Exception",
+          "builtins.BaseException"
+         ],
+         "in_family": true,
+         "message": "unsupported Mono engine configuration 'no-such-engine'"
+        }
+       }
+      ],
+      "follows": [
+       {
+        "callee": "mono_m5a_score.engine_configuration",
+        "raised": {
+         "class": "mono_m5a_score.Refused",
+         "mro": [
+          "mono_m5a_score.Refused",
+          "refusal.Refused",
+          "builtins.RuntimeError",
+          "builtins.Exception",
+          "builtins.BaseException"
+         ],
+         "in_family": true,
+         "message": "unsupported Mono engine configuration 'no-such-engine'"
+        },
+        "stack": [
+         {
+          "file": "tools/f1_filter_path.py",
+          "line": 98,
+          "first": 98,
+          "last": 98,
+          "fn": "__init__"
+         },
+         {
+          "file": "/tmp/refusal-trace-1964-YadKdF/tools_f1_filter_path.py_98/f1-site-arms.py",
+          "line": 14,
+          "first": 14,
+          "last": 14,
+          "fn": "<module>"
+         }
+        ],
+        "propagated_out": [
+         {
+          "file": "tools/f1_filter_path.py",
+          "line": 98,
+          "first": 98,
+          "last": 98,
+          "fn": "__init__"
+         }
+        ],
+        "handlers": [
+         {
+          "file": "/tmp/refusal-trace-1964-YadKdF/tools_f1_filter_path.py_98/f1-site-arms.py",
+          "line": 16,
+          "first": 16,
+          "last": 16,
+          "fn": "<module>",
+          "clause": "Exception",
+          "handler": 16,
+          "one_line": false,
+          "role": "except",
+          "in_tree": false
+         }
+        ],
+        "tested": [],
+        "finally": [],
+        "with_unwind": [],
+        "left_entry": false
+       }
+      ],
+      "site_executed": [
+       "tools/f1_filter_path.py:98"
+      ],
+      "calls_total": 3,
+      "verdict": "HANDLED",
+      "share": null
+     }
+    ]
+   },
+   "invariant": "substitute_profile or profile is one of three values at every production construction: None (the default, at holdout_f1d_preconditions.py:93, through RtlFilterChainPath.__init__ at f1_rtl_filter_path.py:219, and at run_case.py:2665 unless inject == 'F1_LEGACY_SUBSTITUTE') or the literal 'legacy' (run_case.py:2665) or 'selected' (the profile default). All three but None are keys of ENGINE_PROFILES. The 'legacy' substitute is then refused by the module's OWN class at f1_filter_path.py:102, which run_case.py:2670 catches -- a designed control, not this row"
+  }
+ ]
+}

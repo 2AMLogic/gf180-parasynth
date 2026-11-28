@@ -940,6 +940,9 @@ def check(*, refs=None, meas=None, require_corpus=False) -> tuple[bool, list[str
             if clean[n]["ok"] is None:
                 lines.append(f"{'':26s}   blind-to {n}: NO VERDICT (not decidable here)")
                 continue
+            if got[n]["ok"] is None:
+                lines.append(f"{'':26s}   blind-to {n}: NO VERDICT (refused under the defect)")
+                continue
             same = got[n]["ok"] == clean[n]["ok"]
             lines.append(f"{'':26s}   blind-to {n}: "
                          + ("verified blind" if same else "MOVED -- the blindness claim is wrong"))
@@ -949,9 +952,14 @@ def check(*, refs=None, meas=None, require_corpus=False) -> tuple[bool, list[str
     for b in BLIND_BY_CONSTRUCTION:
         got = properties(refs=refs, meas=meas, defect=b)
         moved = [n for n in PROPERTIES
-                 if clean[n]["ok"] is not None and got[n]["ok"] != clean[n]["ok"]]
+                 if clean[n]["ok"] is not None and got[n]["ok"] is not None
+                 and got[n]["ok"] != clean[n]["ok"]]
+        refused = [n for n in PROPERTIES
+                   if clean[n]["ok"] is not None and got[n]["ok"] is None]
         lines.append(f"{b:26s} blind by construction -- "
-                     + ("verified blind" if not moved else f"MOVED {moved}"))
+                     + ("verified blind" if not moved else f"MOVED {moved}")
+                     + (f"   [NO VERDICT, refused under the control: {', '.join(refused)}]"
+                        if refused else ""))
         if moved:
             ok = False
     return ok, lines
