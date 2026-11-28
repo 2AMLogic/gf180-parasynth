@@ -34,7 +34,9 @@ PRECONDITIONS, asserted at the point of use; each one REFUSES (exit 2)
   * host block and sample rate equal the frozen profile's (512 / 48 kHz). No
     clip automates a parameter, so the block rate cannot enter a number; it is
     asserted anyway because it is part of the rig's recorded state
-  * the rendered clip is finite, not silent, and its wide-open low band sits
+  * the rendered clip is finite, not EMPTY (#2066: an empty buffer is finite,
+    and summarising it raised `ValueError` where a refusal belongs), not
+    silent, and its wide-open low band sits
     within 6 dB of the frozen wide-open clip's (a gross wrong-state guard: a
     stray high cut or mute reads tens of dB down; it is NOT a level-dependence
     test, which is what the captures are for)
@@ -192,6 +194,15 @@ def worker(amp: float, take: int, out: pathlib.Path) -> dict:
                           f"{dev.text(dev.I['f1_sub'])!r}")
         if abs(read - cut) / cut > READBACK_TOL:
             raise Refused(f"{cond}: cutoff readback {read} Hz vs commanded {cut} Hz")
+        # #2066: finiteness, then "is there a sample at all", then the level.
+        # An empty buffer is finite -- no sample in it is non-finite -- so the
+        # first half of the line below is False for it, the second half ran,
+        # and its `.max()` raised `ValueError` on zero samples where a refusal
+        # belongs. A SILENT render was refused correctly; only the empty buffer
+        # was missing, and it gets its own words so the two are not confused
+        # (`refprofile.EMPTY_RENDER_WHY`).
+        if rp.is_empty_render(y):
+            raise Refused(f"{cond}: {rp.EMPTY_RENDER_WHY}")
         if not np.all(np.isfinite(y)) or float(np.abs(y).max()) <= 1e-9:
             raise Refused(f"{cond}: non-finite or silent render")
         if cond == "open20k":

@@ -44,6 +44,7 @@ import json
 import math
 import pathlib
 import sys
+import types
 
 import numpy as np
 import pytest
@@ -57,6 +58,9 @@ sys.path.insert(0, str(ROOT / "audition"))
 import refprofile as rp                                             # noqa: E402
 
 SR = rp.SR
+#: C3, the note `disqualification_probe` asks both rigs for (voice_fx.note_hz(48),
+#: written out so no test here has to import the audition package).
+NOTE_48_HZ = 130.8127826502993
 
 
 # ===========================================================================
@@ -947,3 +951,269 @@ def test_ordinary_audio_and_silence_are_unaffected_by_the_finite_check(profile):
     with pytest.raises(rp.Refused) as e:
         rp.load_clip("fake/clip")
     assert "silent" in str(e.value), "silence must still refuse AS silence"
+
+
+# ===========================================================================
+# #2066: a render with NO SAMPLE passes the finiteness guard
+#
+# `require_finite` asks whether every sample is a number, and an empty buffer
+# has no sample that is not one, so it passes -- and the next line,
+# `np.abs(y).max()`, raises `ValueError` on zero samples. A SILENT render was
+# already refused one line later; only the empty buffer was missing. Two
+# places in `refprofile.py` summarise a plugin's render: `render`, which
+# refuses, and `disqualification_probe`, which records.
+#
+# No plugin and no host: `render` runs over the #233 stub with `swap` applied
+# to every clip's audio after the stub rendered it, so the refused renders and
+# the control go through ONE harness and differ only in what `swap` hands back.
+# ===========================================================================
+import reference_rigs as rr                                          # noqa: E402
+import test_refprofile_post_render as post                           # noqa: E402
+
+#: The words of the empty-buffer refusal. Pinned here rather than read from the
+#: module so a rewording that merged it back into the silent refusal fails.
+EMPTY = "empty buffer"
+
+
+def _wavs(cache):
+    return sorted(p.name for p in cache.rglob("*.wav*"))
+
+
+@pytest.fixture
+def render_with(tmp_path, monkeypatch):
+    """Run `rp.render` over the #233 stub with `swap(y, n)` applied to the
+    audio of the nth render (n counting from 1) before `render` sees it."""
+    pdir = tmp_path / "refprofile"
+    monkeypatch.setattr(rp, "PROFILE_DIR", pdir)
+    monkeypatch.setattr(rp, "CACHE", pdir / "cache")
+    monkeypatch.setattr(rp, "PROFILE_JSON", pdir / "profile.json")
+    bundle = tmp_path / "Surge XT.vst3"
+    (bundle / "Contents" / "MacOS").mkdir(parents=True)
+    (bundle / "Contents" / "MacOS" / "Surge XT").write_bytes(b"not a real binary")
+    monkeypatch.setattr(rr, "PATH_SURGE", str(bundle))
+    monkeypatch.setitem(sys.modules, "dawdreamer", types.ModuleType("dawdreamer"))
+
+    def run(swap):
+        base = post._make_stub(lambda names, texts, n: None, str(bundle))
+
+        class Swapped(base):
+            def tone_render(self, freqs, cut, res, amp):
+                y, parts, read = super().tone_render(freqs, cut, res, amp)
+                return np.asarray(swap(y, self.renders)), parts, read
+
+            def drive_tone(self, f, cut, res, amp):
+                return np.asarray(swap(super().drive_tone(f, cut, res, amp),
+                                       self.renders))
+
+        monkeypatch.setattr(rr, "SurgeRig", Swapped)
+        return rp.render(probe_disqualified=False)
+
+    run.cache = pdir / "cache"
+    return run
+
+
+def test_an_empty_render_is_REFUSED_and_nothing_is_frozen(render_with):
+    """The first clip comes back with no samples -- `y[:0]`, what a host that
+    returns nothing for the render hands back. Until #2066 this escaped
+    `render` as `ValueError: zero-size array to reduction operation maximum
+    which has no identity`, a traceback and not a refusal.
+
+    What is asserted, and why each one could otherwise pass by accident:
+
+      * `rp.Refused` -- the freeze-refusal path, not a `ValueError`.
+      * the clip's id in the reason -- the refusal is about THIS clip.
+      * the empty-buffer words, and NOT the level floor's `peaks at`: silence
+        is refused by the floor with those words, and an empty buffer must not
+        be reported as though it were merely a quiet one.
+      * no `.wav` and no `.part` anywhere in the cache: the refusal comes
+        before `write_clip`, and a refused clip may not be frozen."""
+    first = rp.clip_specs()[0]["clip_id"]
+    with pytest.raises(rp.Refused) as e:
+        render_with(lambda y, n: y[:0])
+    why = str(e.value)
+    assert first in why
+    assert EMPTY in why
+    assert "peaks at" not in why, "an empty buffer must not read as a quiet one"
+    assert _wavs(render_with.cache) == []
+
+
+def test_an_empty_render_after_good_clips_refuses_at_that_clip(render_with):
+    """The guard is per clip, inside the loop: a host that renders four clips
+    and then hands back nothing refuses at the fifth, names the fifth, and the
+    four good clips stay frozen exactly as the #233 refusals leave them."""
+    specs = rp.clip_specs()
+    k = 5                                           # the 5th render, 1-based
+    bad_clip = specs[k - 1]["clip_id"]
+
+    with pytest.raises(rp.Refused) as e:
+        render_with(lambda y, n: y[:0] if n == k else y)
+    why = str(e.value)
+    assert bad_clip in why
+    assert EMPTY in why
+    for s in specs[:k - 1]:
+        assert s["clip_id"] not in why
+        assert (render_with.cache / (s["clip_id"] + ".wav")).exists(), s["clip_id"]
+    assert not (render_with.cache / (bad_clip + ".wav")).exists(), \
+        "the clip that failed its check was written to the cache anyway"
+    assert len(_wavs(render_with.cache)) == k - 1
+
+
+def test_a_sounding_render_still_freezes_every_clip_through_the_same_swap(
+        render_with):
+    """The control for the two tests above: the same swapped stub, and a
+    `swap` that hands the render back untouched. The harness must not be what
+    refuses -- a guard that refuses every clip passes all of them -- so every
+    clip is frozen, each above the level floor, and nothing says empty."""
+    n = len(rp.clip_specs())
+    prof = render_with(lambda y, n_: y)
+    assert len(prof["clips"]) == n
+    for cid, c in prof["clips"].items():
+        assert c["peak"] > rp.LEVEL_FLOOR, cid
+        assert (render_with.cache / (cid + ".wav")).exists(), cid
+    assert len(_wavs(render_with.cache)) == n
+
+
+@pytest.mark.parametrize("name, swap, speaks, is_silent", [
+    ("all zeros", lambda y, n: np.zeros_like(y), "peaks at", True),
+    ("one zero sample", lambda y, n: np.zeros(1), "peaks at", True),
+    ("all NaN", lambda y, n: np.full_like(y, np.nan), "non-finite", False),
+], ids=["all zeros", "one zero sample", "all NaN"])
+def test_silent_and_non_finite_renders_keep_their_own_refusals(
+        render_with, name, swap, speaks, is_silent):
+    """The new guard must not absorb the two refusals that already worked. A
+    silent render has samples and they are all zero -- the floor refuses it,
+    in `level_refusal`'s words -- and a NaN render is refused by
+    `require_finite` before either. Neither may come out as "empty"."""
+    first = rp.clip_specs()[0]["clip_id"]
+    with pytest.raises(rp.Refused) as e:
+        render_with(swap)
+    why = str(e.value)
+    assert first in why
+    assert speaks in why, f"{name}: refused for the wrong reason: {why}"
+    assert EMPTY not in why
+    if is_silent:
+        assert "silent" in why
+
+
+# --- `disqualification_probe`: a recorder, not a decision path --------------
+def _fake_rig(render, ring, indices):
+    """A rig stand-in for `disqualification_probe`: `I` names every parameter
+    the probe writes, `set` records nothing, and `render` / `ring` hand back
+    what the test chose. The probe reads nothing else from a rig."""
+
+    class FakeRig:
+        I = {k: k for k in indices}
+        WAVES = {"saw": 1}
+
+        def set(self, idx, v):
+            pass
+
+        def render(self, x, seconds):
+            return render()
+
+        def ring(self, cut, res, seconds):
+            return ring()
+
+    return FakeRig
+
+
+MODEL_D_I = ("o1_on", "o1_vol", "o1_wave", "cutoff", "emphasis")
+MINI_V3_I = ("lvl_ext", "ext_sw", "lvl_o1", "o1", "cutoff", "emphasis")
+
+
+def _sounding(seconds=1.5):
+    """Note 48 for `seconds`, an integer number of periods long."""
+    return _tone(hz=NOTE_48_HZ, seconds=seconds, amp=0.5)
+
+
+def _probe(monkeypatch, model_d, mini_v3):
+    monkeypatch.setattr(rr, "ModelDRig", model_d)
+    monkeypatch.setattr(rr, "MiniV3Rig", mini_v3)
+    return rp.disqualification_probe()
+
+
+def test_the_probe_records_an_empty_model_d_render_as_a_built_rig(monkeypatch):
+    """Both of Model D's renders come back with no samples. The rig BUILT --
+    every `set` was accepted -- so until #2066 the probe mislabelled it: the
+    `np.abs(y).max()` on the next line raised inside the `try`, and the
+    `except Exception` wrote `rig_builds: False` with the ValueError's text,
+    which reads as a rig that did not build. It is an empty buffer, and the
+    record now says so beside `rig_builds: True`.
+
+    What is asserted, and why each one could otherwise pass by accident:
+
+      * `rig_builds` is True and there is no `error`: the rig is not mislabelled.
+      * `peak` and `silent` are None, and `empty` is True, for BOTH renders --
+        an empty buffer has no peak and is not silent, because it has no
+        sample to be at zero. `audio_measure.is_silent` answers True for it,
+        so reading `silent` alone would call this the silence it is not.
+      * the verdict no longer opens with "renders exact silence": that
+        sentence is a measurement, and it was not the one made."""
+    out = _probe(monkeypatch,
+                 _fake_rig(lambda: np.zeros(0), lambda: np.zeros(0), MODEL_D_I),
+                 _fake_rig(_sounding, None, MINI_V3_I))
+    md = out["modeld"]
+    assert md["rig_builds"] is True, md
+    assert "error" not in md
+    for prefix in ("osc1_on_note48", "self_oscillation"):
+        assert md[f"{prefix}_empty"] is True, prefix
+        assert md[f"{prefix}_peak"] is None, prefix
+        assert md[f"{prefix}_silent"] is None, prefix
+    assert EMPTY in md["verdict"]
+    assert "exact silence" not in md["verdict"]
+    # Mini V3 rendered a signal and is recorded as it always was.
+    assert out["miniv3"]["rig_builds"] is True
+
+
+def test_the_probe_records_an_empty_mini_v3_slice_after_its_trim_as_a_built_rig(
+        monkeypatch):
+    """The probe trims 0.3 s off Mini V3's render before measuring it:
+    `mv.render(...)[int(0.3 * SR):]`. A render shorter than that trim leaves
+    an EMPTY slice -- the same shape as `render_midi_note`'s latency trim,
+    which yields nothing once the reported latency reaches the render length.
+    Until #2066 the peak line raised and the rig was recorded as not built."""
+    out = _probe(monkeypatch,
+                 _fake_rig(_sounding, _sounding, MODEL_D_I),
+                 _fake_rig(lambda: _sounding(seconds=0.2), None, MINI_V3_I))
+    mv = out["miniv3"]
+    assert mv["rig_builds"] is True, mv
+    assert "error" not in mv
+    assert sorted(mv["measured"]) == ["range_8ft", "range_default"]
+    for label, m in mv["measured"].items():
+        assert m["empty"] is True, label
+        assert m["peak"] is None and m["f0_hz"] is None, label
+        assert EMPTY in m["f0_why"], label
+    # Model D rendered a signal and is recorded as it always was.
+    assert out["modeld"]["rig_builds"] is True
+
+
+def test_the_probe_still_measures_rigs_that_render_a_signal(monkeypatch):
+    """The control for the two tests above: the same fakes, handing back a
+    tone instead of nothing. The probe must still reach its measurements --
+    peak, silence, and Mini V3's fundamental after the trim -- and mark no
+    render empty. `.get` on the new keys keeps this control green on both
+    sides of the fix: a render with a signal is never empty, before or after.
+
+    The verdict for a render WITH samples is pinned against the committed
+    `profile-notes.json`, not retyped: a re-render on a healthy host must show
+    no diff in it, and the empty case must be the only one that rewords it."""
+    out = _probe(monkeypatch,
+                 _fake_rig(_sounding, _sounding, MODEL_D_I),
+                 _fake_rig(_sounding, None, MINI_V3_I))
+    md, mv = out["modeld"], out["miniv3"]
+    assert md["rig_builds"] is True and "error" not in md
+    for prefix in ("osc1_on_note48", "self_oscillation"):
+        assert md[f"{prefix}_peak"] == pytest.approx(0.5, abs=1e-6), prefix
+        assert md[f"{prefix}_silent"] is False, prefix
+        assert md.get(f"{prefix}_empty", False) is False, prefix
+    assert EMPTY not in md["verdict"]
+    notes = ROOT / "refprofile" / "profile-notes.json"
+    if notes.exists():
+        committed = json.loads(notes.read_text())
+        if "modeld" in committed.get("disqualified", {}):
+            assert md["verdict"] == committed["disqualified"]["modeld"]["verdict"]
+    assert mv["rig_builds"] is True and "error" not in mv
+    for label, m in mv["measured"].items():
+        assert m["peak"] == pytest.approx(0.5, abs=1e-6), label
+        assert m["f0_hz"] == pytest.approx(NOTE_48_HZ, abs=0.1), label
+        assert m.get("empty", False) is False, label
