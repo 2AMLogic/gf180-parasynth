@@ -150,13 +150,17 @@ def test_compare_absent_corpus_still_refuses_with_local_reason(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# unrelated errors at the same boundary stay execution errors (exit 1)
+# an undecodable reference is a missing precondition: REFUSED (exit 2), #1860
+# (retires the #1183 / b7c88251 position that a scipy ValueError at this
+# boundary stays an execution error. That position predates the readers
+# refusing; unrelated errors still exit 1 -- pinned at the reader in
+# test_run_case.py / test_perceptual_gate.py)
 # ---------------------------------------------------------------------------
-def test_unreadable_reference_is_an_execution_error_not_a_refusal(tmp_path):
+def test_unreadable_reference_is_a_refusal_naming_the_file(tmp_path):
     p = _probe("compare", _unreadable_corpus(tmp_path))
-    assert p.returncode == 1, (p.returncode, p.stdout[-200:], p.stderr[-400:])
-    assert "Traceback" in p.stderr, p.stderr[-400:]
-    assert "REFUSED" not in p.stdout, "a scipy ValueError must not be relabelled a refusal"
+    assert p.returncode == exit_contract.REFUSED, (p.returncode, p.stdout[-200:], p.stderr[-400:])
+    assert "REFUSED" in p.stdout and "unreadable" in p.stdout, p.stdout[-400:]
+    assert "Traceback" not in p.stderr and "Traceback" not in p.stdout, p.stderr[-400:]
 
 
 # ---------------------------------------------------------------------------
