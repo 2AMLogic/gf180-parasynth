@@ -938,7 +938,22 @@ def claim_reserved_evaluation() -> pathlib.Path:
 
 
 def confirm_record(refs: pathlib.Path, pr: dict, fit_path: pathlib.Path) -> dict:
+    """Confirm the development fit on the reserved rows, once. The fit record
+    is validated BEFORE the reservation is claimed (#1748, the other end of
+    the hand-off `fit` guards at its own input, #1604): a record that is not a
+    JSON object is refused rather than tracebacked at `.get`, and a FITTED one
+    must carry every key `judge_confirmation` subscripts, so a record that
+    cannot be judged never spends the once-only evaluation. `status` is read
+    with `.get()` and deliberately NOT required: `require_keys` refuses a null,
+    and a null or absent status is the no-fit branch below, not a malformed
+    record. `median_ln_tau_ratio` is not required for the same reason -- `fit`
+    writes null there as a value."""
     fit_rec = json.loads(fit_path.read_text())
+    what = f"the fit record at {fit_path}"
+    mf.require_keys(fit_rec, (), what, refused=Refused)
+    if fit_rec.get("status") == "FITTED":
+        mf.require_keys(fit_rec, ("median_d_cents", "magnitude_proposal", "tau_proposal"),
+                        f"{what} (status FITTED)", refused=Refused)
     res = {"fit_record": {"path": str(fit_path), "sha256": _sha(fit_path)}}
     if fit_rec.get("status") != "FITTED":
         # Nothing was fitted, so there is no hypothesis to confirm. Measuring
