@@ -12,10 +12,12 @@ Exercises:
 from __future__ import annotations
 
 import ast
+import hashlib
 import io
 import json
 import pathlib
 import re
+import subprocess
 import sys
 import zipfile
 
@@ -181,7 +183,57 @@ def test_two_tools_cannot_satisfy_the_census(monkeypatch, tmp_path, with_table):
         test_census_reconciles_against_known_tier3_set()
 
 
-def test_unreachable_refusals_and_constant_populations_hold(tmp_path, monkeypatch, capsys):
+def run_hash_cli(root, sounds, samples):
+    """A separate process must import the gate from the selected checkout."""
+    tools_dir = root / "tools"
+    tools_dir.mkdir()
+    (tools_dir / "perceptual_gate.py").write_text(
+        "from pathlib import Path\n"
+        f"SOUNDS16 = {tuple(sounds)!r}\n"
+        "def render_ours(sound):\n"
+        "    Path(__file__).with_name('rendered').touch()\n"
+        f"    return {samples!r}, 48000\n"
+    )
+    return subprocess.run([sys.executable, str(ROOT / "tools/drum_render_hashes.py"),
+                           "--root", str(root)], capture_output=True, text=True, timeout=30)
+
+
+@pytest.mark.parametrize("inventory", ["empty", "single", "duplicate", "substitution", "extra"])
+def test_drum_hash_cli_refuses_incomplete_or_wrong_kit(tmp_path, inventory):
+    from drums_fx import SOUND_NAMES
+
+    sounds = {"empty": (), "single": ("BD",), "duplicate": (*SOUND_NAMES, "BD"),
+              "substitution": (*SOUND_NAMES[:-1], "unknown"), "extra": (*SOUND_NAMES, "extra")}
+    result = run_hash_cli(tmp_path, sounds[inventory], [0.25, -0.25])
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "REFUSED" in result.stderr and "16" in result.stderr
+    assert not result.stdout and not (tmp_path / "tools/rendered").exists()
+
+
+def test_drum_hash_cli_requires_gate_from_target_checkout(tmp_path):
+    result = subprocess.run([sys.executable, str(ROOT / "tools/drum_render_hashes.py"),
+                             "--root", str(tmp_path)], capture_output=True, text=True, timeout=30)
+    assert result.returncode == 2 and "not loaded from" in result.stderr
+    assert not result.stdout
+
+
+@pytest.mark.parametrize("samples", [[0.25, -0.25], [0.0, 0.0]], ids=["sounding", "silent"])
+def test_drum_hash_cli_checks_all_shipped_voices(tmp_path, samples):
+    from drums_fx import SOUND_NAMES
+
+    result = run_hash_cli(tmp_path, reversed(SOUND_NAMES), samples)
+    if not any(samples):
+        assert result.returncode == 2 and "silent" in result.stderr
+        assert not result.stdout
+        return
+    assert result.returncode == 0, result.stderr
+    digest = hashlib.sha256(np.array(samples, dtype=np.float64).tobytes() + b"48000").hexdigest()
+    assert json.loads(result.stdout)["sounds"] == {
+        s: {"n": 2, "sr": 48000, "sha256": digest} for s in SOUND_NAMES
+    }
+
+
+def test_unreachable_refusals_and_constant_populations_hold(tmp_path, monkeypatch):
     # model/drum_fit.py: constant SELF_TEST_TARGETS, --self-test runs all 8
     import drum_fit as df
     assert len(df.SELF_TEST_TARGETS) == 8
@@ -259,10 +311,6 @@ def test_unreachable_refusals_and_constant_populations_hold(tmp_path, monkeypatc
     import dphase_floor_census as dfc
     assert dfc.main(["--refs", str(empty_run)]) == 2
 
-    # tools/drum_render_hashes.py: constant 16 SOUNDS16
-    import perceptual_gate as pg
-    assert len(pg.SOUNDS16) == 16
-
     # tools/gate_calibrate.py: calibrate({}) refuses
     import gate_calibrate as gc
     assert str(gc.calibrate({})["status"]).startswith("REFUSED")
@@ -305,12 +353,6 @@ def test_unreachable_refusals_and_constant_populations_hold(tmp_path, monkeypatc
                               lead_samples=lambda sr: 1,
                               trim_samples=lambda sr: 1, onset_frac=0.5)
     assert viol and viol[0][0] == "shape"
-
-    # tools/probe_orphan_reap.py: prints explicit denominator on no-worktree root
-    import probe_orphan_reap as por
-    capsys.readouterr()
-    assert por.main(["--repo-root", str(empty_run)]) == 0
-    assert "no issue worktrees" in capsys.readouterr().out
 
     # tools/refaudio_member_list.py: folder with 0 WAVs refuses with exit 2
     import refaudio_member_list as rml

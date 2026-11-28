@@ -391,6 +391,28 @@ def known_answer() -> dict:
 # ---------------------------------------------------------------------------
 # the diagnosis
 # ---------------------------------------------------------------------------
+def reproduction_metrics(record, source, names):
+    metrics = record.get("metrics") if isinstance(record, dict) else None
+    if not isinstance(metrics, dict):
+        raise Refused(f"{source} D12A record needs a metrics object")
+    missing = set(names) - metrics.keys()
+    unexpected = metrics.keys() - set(names)
+    if missing or unexpected:
+        raise Refused(f"{source} D12A metrics differ from the CP plan: "
+                      f"missing {sorted(missing)}, unexpected {sorted(unexpected)}")
+    for name in names:
+        row = metrics[name]
+        if not isinstance(row, dict) or not isinstance(row.get("valid"), bool):
+            raise Refused(f"{source} D12A metric {name} lacks a validity decision")
+        if row["valid"]:
+            for field in ("value", "reference", "error", "tolerance"):
+                if not rc.is_finite_number(row.get(field)):
+                    raise Refused(f"{source} D12A metric {name}.{field} needs a finite number")
+        elif name == "burst/tail ratio" or not row.get("why"):
+            raise Refused(f"{source} D12A metric {name} cannot support the diagnosis: {row.get('why')}")
+    return metrics
+
+
 def reproduce(refdir) -> tuple:
     try:
         committed = json.loads(RECORD.read_text())
@@ -398,14 +420,19 @@ def reproduce(refdir) -> tuple:
         raise Refused(f"cannot read D12A record {RECORD}: {e}") from e
     if not isinstance(committed, dict):
         raise Refused(f"expected a JSON object in D12A record {RECORD}")
+    names = [entry[0] for entry in rc.DRUM_PLAN["CP"]]
+    if "burst/tail ratio" not in names or len(names) != len(set(names)):
+        raise Refused("the CP measurement plan needs distinct metrics including burst/tail ratio")
+    baseline = reproduction_metrics(committed, "committed", names)
     res = rc.run_drum_case(dict(case_id="D12A", subject="Clap / anchor",
-                                required_measurements="Burst timing; burst/tail ratio; decay"),
+                                required_measurements="; ".join(names)),
                            refdir, "", keep_audio=False)
+    scored = reproduction_metrics(res, "scorer", names)
     diffs = []
-    for name, m in committed["metrics"].items():
+    for name in names:
         for k in ("value", "reference", "error", "tolerance", "valid"):
-            if res["metrics"][name].get(k) != m.get(k):
-                diffs.append(f"{name}.{k}: committed {m.get(k)!r} now {res['metrics'][name].get(k)!r}")
+            if scored[name].get(k) != baseline[name].get(k):
+                diffs.append(f"{name}.{k}: committed {baseline[name].get(k)!r} now {scored[name].get(k)!r}")
     for side in ("ours", "reference"):
         if res["windowing"][side] != committed["windowing"][side]:
             diffs.append(f"windowing.{side} differs")
@@ -422,8 +449,8 @@ def reproduce(refdir) -> tuple:
         raise Refused("the probe's override renderer does not reproduce render_drum_solo "
                       "at the default registers; no override render can be trusted")
     y16 = np.clip(x1 * 32768.0, -32768, 32767).astype("<i2")
-    return {"fields_compared": "value/reference/error/tolerance/valid x 3 metrics, windowing, diagnostics",
-            "mismatches": 0, "metrics": {k: committed["metrics"][k] for k in committed["metrics"]},
+    return {"fields_compared": f"value/reference/error/tolerance/valid x {len(names)} metrics, windowing, diagnostics",
+            "mismatches": 0, "metrics": baseline,
             "committed_source_commit": committed["source_commit"],
             "committed_analysis_run": committed["analysis_run"],
             "committed_audio": committed["audio"],
