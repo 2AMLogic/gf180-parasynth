@@ -15,6 +15,16 @@ pins:
   * a frame unwinding through a `with` read as a handler with no clause: it
     resumes on the header at PUSH_EXC_INFO to call `__exit__`.
 
+A fourth, found later while tracing #1909 (#1958), the same shape one
+construct over:
+
+  * a frame unwinding out of an INLINED comprehension read as a handler with
+    no clause: CPython 3.12 compiles a list, set or dict comprehension into
+    its enclosing frame (PEP 709), and when the callee raises inside one the
+    frame resumes on the comprehension's own line -- inside the `try` body,
+    where there is no `except` -- at SWAP, to drop the half-built container,
+    before the enclosing clause is reached.
+
 THE KNOWN ANSWERS are in the fixtures' own exit statuses, read by running each
 caller directly (table below, CPython 3.12.3) -- a route that shares nothing
 with the tracer but the interpreter:
@@ -35,7 +45,8 @@ a result belonged -- the tracer must say HANDLED, and must not say REFUSED.
 EVERY BENCH CARRIES ITS INJECTED CONTROLS (docs/verification-rules.md rule
 2). The tracer's defects are injectable, and each control must turn the
 verdict on its fixture WRONG in the named way: `NO_FOLLOW` (blind to where
-the refusal goes), `FINALLY_IS_HANDLER`, `WITH_IS_HANDLER`.
+the refusal goes), `FINALLY_IS_HANDLER`, `WITH_IS_HANDLER`,
+`COMPREHENSION_IS_HANDLER`.
 
 The calibration on REAL code is a differential, not a pin: the R2 host
 stale-control, PR #1574's control shape, run through the CLI entry under the
@@ -51,6 +62,7 @@ import pathlib
 import shutil
 import subprocess
 import sys
+import types
 
 import pytest
 
@@ -234,6 +246,115 @@ def work(x):
         return callee.maybe(x)
 '''
 
+THROUGH = HEAD + '''\
+
+
+class through:                     # a plain context manager: no contextlib frame in the record
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        print("exit ran")
+        return False
+'''
+
+#: #1958. The same callee under the same clause, called from a plain loop and
+#: from a comprehension. CPython 3.12 inlines a list, set or dict comprehension
+#: into the caller's own frame (PEP 709); a generator expression keeps a frame
+#: of its own and is the contrast.
+_COMPREHENSION = "{v: callee.maybe(v) for v in (1, 2)}"
+_COMPREHENSION_CALLER = f'''\
+    try:
+        d = {_COMPREHENSION}
+    except refusal.Refused as e:
+        print("REFUSED:", e)
+        return 2
+'''
+
+INLINED = {
+    "inlined_loop": HEAD + _tail('''\
+    try:
+        d = {}
+        for v in (1, 2):
+            d[v] = callee.maybe(v)
+    except refusal.Refused as e:
+        print("REFUSED:", e)
+        return 2
+'''),
+    "inlined_dict": HEAD + _tail(_COMPREHENSION_CALLER),
+    "inlined_list": HEAD + _tail(_COMPREHENSION_CALLER.replace(
+        _COMPREHENSION, "[callee.maybe(v) for v in (1, 2)]")),
+    "inlined_set": HEAD + _tail(_COMPREHENSION_CALLER.replace(
+        _COMPREHENSION, "{callee.maybe(v) for v in (1, 2)}")),
+    "inlined_genexp": HEAD + _tail(_COMPREHENSION_CALLER.replace(
+        _COMPREHENSION, "list(callee.maybe(v) for v in (1, 2))")),
+    # the test plan's edge cases: a comprehension inside a comprehension (two
+    # cleanups on one line), the cleanup before a `with` header's own
+    # resumption, and a handler around a comprehension that re-raises
+    "inlined_nested": HEAD + _tail('''\
+    try:
+        d = {k: {v: callee.maybe(v) for v in (1, 2)} for k in (1,)}
+    except refusal.Refused as e:
+        print("REFUSED:", e)
+        return 2
+'''),
+    "inlined_in_with": THROUGH + _tail('''\
+    try:
+        with through():
+            d = {v: callee.maybe(v) for v in (1, 2)}
+    except refusal.Refused as e:
+        print("REFUSED:", e)
+        return 2
+'''),
+    "inlined_reraise": HEAD + '''\
+
+
+def work(x):
+    try:
+        return {v: callee.maybe(v) for v in (1, 2)}
+    except callee.Refused:
+        print("inner handler; re-raising")
+        raise
+''' + _tail('''\
+    try:
+        print("result:", work(1))
+    except refusal.Refused as e:
+        print("REFUSED:", e)
+        return 2
+'''),
+    # a clause that does not match, then one that does
+    "inlined_tested_then_matched": HEAD + '''\
+
+
+class Other(Exception):
+    pass
+''' + _tail('''\
+    try:
+        d = {v: callee.maybe(v) for v in (1, 2)}
+    except Other as e:
+        print("other")
+        return 2
+    except refusal.Refused as e:
+        print("REFUSED:", e)
+        return 3
+'''),
+    # only a clause that does not match: the refusal leaves the frame
+    "inlined_declined": HEAD + _tail('''\
+    try:
+        d = {v: callee.maybe(v) for v in (1, 2)}
+    except KeyError as e:
+        print("REFUSED:", e)
+        return 2
+'''),
+    # the input that would defeat the repair if it read EVERY resumption
+    # inside a comprehension as unwinding: a context manager swallows it
+    "inlined_swallow": "import contextlib\n" + HEAD + _tail('''\
+    with contextlib.suppress(callee.Refused):
+        d = {v: callee.maybe(v) for v in (1, 2)}
+    print("carried on after the with")
+'''),
+}
+
 
 def _fixture(tmp_path: pathlib.Path) -> dict[str, pathlib.Path]:
     files = _tree(tmp_path)
@@ -271,6 +392,42 @@ def _trace(tmp_path: pathlib.Path, name: str, arg: str, inject=(), callee="calle
 def _direct(tmp_path: pathlib.Path, name: str, arg: str) -> subprocess.CompletedProcess:
     p = subprocess.run([sys.executable, str(_fixture(tmp_path)[name]), arg], capture_output=True, text=True, timeout=60)
     return p
+
+
+def _needs_inlined_comprehensions() -> None:
+    """The shape #1958 names exists only where CPython inlines a list, set or
+    dict comprehension into its enclosing frame (PEP 709, 3.12+): on an older
+    interpreter the comprehension is a frame of its own and its caller never
+    resumes on the cleanup. Refuse there -- a skip that says so, never a pass
+    -- on the interpreter's version and on what it actually built."""
+    if sys.version_info < (3, 12):
+        pytest.skip(f"CPython {sys.version.split()[0]}: comprehensions are not inlined before 3.12 "
+                    "(PEP 709); the shape under test does not exist")
+    outer = compile("def f(xs):\n    return {x: x for x in xs}\n", "<inlining probe>", "exec")
+    [f] = [c for c in outer.co_consts if isinstance(c, types.CodeType)]
+    if any(isinstance(c, types.CodeType) for c in f.co_consts):
+        pytest.skip(f"CPython {sys.version.split()[0]} keeps the comprehension in a frame of its own; "
+                    "the shape under test does not exist")
+
+
+def _inlined(tmp_path: pathlib.Path) -> dict[str, pathlib.Path]:
+    """#1958's callers, written over the shared `refusal.py` and `callee.py`."""
+    _fixture(tmp_path)
+    return {name: _write(tmp_path, f"{name}.py", source) for name, source in INLINED.items()}
+
+
+def _trace_inlined(tmp_path: pathlib.Path, name: str, inject=()) -> tuple[dict, pathlib.Path]:
+    """Trace `INLINED[name]` at its one call, `callee.maybe(v)`."""
+    path = _inlined(tmp_path)[name]
+    run = {"entry": str(path), "argv": [], "root": str(tmp_path), "cwd": str(tmp_path), "timeout": 60}
+    rec = rct.run_child(run, tmp_path / f"inlined-{name}", ["callee.maybe"], [_site(path, "callee.maybe(v)")],
+                        extra_plan={"inject": list(inject)})
+    assert not rec.get("wrap_missing"), rec["wrap_missing"]
+    return rec, path
+
+
+def _ran(path: pathlib.Path) -> subprocess.CompletedProcess:
+    return subprocess.run([sys.executable, str(path)], capture_output=True, text=True, timeout=60, check=False)
 
 
 # ---------------------------------------------------------------------------
@@ -378,6 +535,135 @@ def test_the_child_prints_the_traceback_the_real_cli_prints(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# an inlined comprehension (PEP 709) is not a handler: #1958's pair, run
+# ---------------------------------------------------------------------------
+def _clauses(rec: dict) -> list[tuple[str, object]]:
+    return [(h["fn"], h["clause"]) for h in rec["follows"][0]["handlers"]]
+
+
+def _names_its_own_clause(rec: dict, path: pathlib.Path, left: tuple[str, ...] = ()) -> None:
+    """One handler -- `main`, the clause as written, on its own `except` line --
+    nothing tested, and no frame left but those named in `left`. A function,
+    not an inline assert, so the control below turns THIS red instead of
+    restating it."""
+    follow = rec["follows"][0]
+    assert len(follow["handlers"]) == 1, follow["handlers"]
+    handler = follow["handlers"][0]
+    header = _line_of(path, "except refusal.Refused as e:")
+    assert (handler["fn"], handler["clause"]) == ("main", "refusal.Refused"), handler
+    assert (handler["line"], handler["handler"]) == (header, header), handler
+    assert follow["tested"] == [], follow["tested"]
+    assert [s["fn"] for s in follow["propagated_out"]] == list(left), follow["propagated_out"]
+    assert not follow["left_entry"]
+
+
+@pytest.mark.parametrize("name", ["inlined_dict", "inlined_list", "inlined_set"])
+def test_a_call_inside_an_inlined_comprehension_names_the_clause_the_loop_names(tmp_path, name):
+    """#1958's pair, run: the loop caller and a comprehension caller, same
+    callee, same `except refusal.Refused as e: return 2`. Before the repair the
+    comprehension caller reported `('main', <the comprehension's line>, None,
+    None)` -- a handler with no clause inside the `try` body, where there is no
+    `except` -- and nothing for the line that caught it."""
+    _needs_inlined_comprehensions()
+    loop, loop_path = _trace_inlined(tmp_path, "inlined_loop")
+    comp, comp_path = _trace_inlined(tmp_path, name)
+    for rec, path in ((loop, loop_path), (comp, comp_path)):
+        truth = _ran(path)
+        assert (truth.returncode, truth.stdout.strip()) == (2, "REFUSED: callee refused: 1")
+        assert (rec["verdict"], rec["exit_status"], rec["traceback"]) == (rct.HANDLED, 2, False)
+        _names_its_own_clause(rec, path)
+    assert _clauses(comp) == _clauses(loop)
+
+
+def test_a_generator_expression_keeps_its_own_frame_and_names_the_clause_too(tmp_path):
+    """PEP 709 leaves a generator expression alone: the refusal leaves the
+    `<genexpr>` frame, which the record lists under `propagated_out`, and
+    `main` names its clause as the loop caller does. Nothing here needed the
+    repair; the row pins the docstring's note."""
+    _needs_inlined_comprehensions()
+    rec, path = _trace_inlined(tmp_path, "inlined_genexp")
+    truth = _ran(path)
+    assert (truth.returncode, truth.stdout.strip()) == (2, "REFUSED: callee refused: 1")
+    assert (rec["verdict"], rec["exit_status"], rec["traceback"]) == (rct.HANDLED, 2, False)
+    _names_its_own_clause(rec, path, left=("<genexpr>",))
+    assert [s["fn"] for s in rec["follows"][0]["stack"]] == ["<genexpr>", "main", "<module>"]
+
+
+@pytest.mark.parametrize("name, handlers, with_header", [
+    pytest.param("inlined_nested", [("main", "refusal.Refused")], None, id="nested"),
+    pytest.param("inlined_in_with", [("main", "refusal.Refused")], "with through():", id="in-a-with"),
+    pytest.param("inlined_reraise", [("work", "callee.Refused"), ("main", "refusal.Refused")], None,
+                 id="reraise"),
+])
+def test_an_inlined_comprehension_cleanup_leaves_the_rest_of_the_unwind_alone(tmp_path, name, handlers,
+                                                                              with_header):
+    """The test plan's edge cases, run: the cleanup must neither be recorded
+    nor stop the frame being watched, whatever it is nested in or followed by."""
+    _needs_inlined_comprehensions()
+    rec, path = _trace_inlined(tmp_path, name)
+    truth = _ran(path)
+    assert truth.returncode == 2 and truth.stdout.strip().splitlines()[-1] == "REFUSED: callee refused: 1"
+    assert (rec["verdict"], rec["exit_status"], rec["traceback"]) == (rct.HANDLED, 2, False)
+    follow = rec["follows"][0]
+    assert [(h["fn"], h["clause"]) for h in follow["handlers"] if h["in_tree"]] == handlers
+    assert all(h["clause"] is not None for h in follow["handlers"])
+    assert [w["line"] for w in follow["with_unwind"]] == ([_line_of(path, with_header)] if with_header else [])
+
+
+def test_a_clause_declined_under_a_comprehension_is_tested_and_the_matching_one_entered(tmp_path):
+    """A declined clause is still seen once the frame is not dropped at the
+    comprehension's line: in `tested`, by clause and header line."""
+    _needs_inlined_comprehensions()
+    rec, path = _trace_inlined(tmp_path, "inlined_tested_then_matched")
+    truth = _ran(path)
+    assert (truth.returncode, truth.stdout.strip()) == (3, "REFUSED: callee refused: 1")
+    assert (rec["verdict"], rec["exit_status"], rec["traceback"]) == (rct.HANDLED, 3, False)
+    follow = rec["follows"][0]
+    [tested] = follow["tested"]
+    assert (tested["fn"], tested["clause"], tested["line"]) == (
+        "main", "Other", _line_of(path, "except Other as e:"))
+    assert _clauses(rec) == [("main", "refusal.Refused")]
+    assert (follow["handlers"][0]["line"], follow["handlers"][0]["handler"]) == (
+        _line_of(path, "except refusal.Refused as e:"),) * 2
+    assert follow["propagated_out"] == [] and not follow["left_entry"]
+
+
+def test_an_unmatched_clause_under_a_comprehension_still_reads_escaped(tmp_path):
+    """Nothing matches: the frame leaves, and the record says so with no
+    handler at all."""
+    _needs_inlined_comprehensions()
+    rec, path = _trace_inlined(tmp_path, "inlined_declined")
+    truth = _ran(path)
+    assert truth.returncode == 1 and "Traceback" in truth.stderr
+    assert (rec["verdict"], rec["exit_status"], rec["traceback"]) == (rct.ESCAPED, 1, True)
+    follow = rec["follows"][0]
+    assert follow["handlers"] == []
+    [tested] = follow["tested"]
+    assert (tested["fn"], tested["clause"], tested["line"]) == (
+        "main", "KeyError", _line_of(path, "except KeyError as e:"))
+    assert follow["left_entry"] and "main" in [s["fn"] for s in follow["propagated_out"]]
+
+
+def test_a_swallow_around_a_comprehension_is_recorded_where_the_frame_carried_on(tmp_path):
+    """The repair reads a resumption inside a comprehension as unwinding. The
+    input that would defeat it: a context manager that swallows the refusal,
+    so the frame does carry on. It must still read as one handler with no
+    clause, on the statement the frame carried on at -- which is never the
+    comprehension's line, because the statement after a `with` starts a line
+    of its own."""
+    _needs_inlined_comprehensions()
+    rec, path = _trace_inlined(tmp_path, "inlined_swallow")
+    truth = _ran(path)
+    assert (truth.returncode, "carried on after the with" in truth.stdout) == (0, True)
+    assert (rec["verdict"], rec["exit_status"], rec["traceback"]) == (rct.HANDLED, 0, False)
+    follow = rec["follows"][0]
+    [handler] = follow["handlers"]
+    assert (handler["fn"], handler["clause"]) == ("main", None)
+    assert handler["line"] == _line_of(path, 'print("carried on after the with")')
+    assert [w["line"] for w in follow["with_unwind"]] == [_line_of(path, "with contextlib.suppress(")]
+
+
+# ---------------------------------------------------------------------------
 # the view: two calls on one line, and a run the site was never reached in
 # ---------------------------------------------------------------------------
 def test_two_calls_on_one_line_are_viewed_by_callee(tmp_path):
@@ -430,6 +716,23 @@ def test_control_with_read_as_a_handler(tmp_path):
     rec = _trace(tmp_path, "with_unwind", "1", inject=["WITH_IS_HANDLER"])
     in_tree = [h for h in rec["follows"][0]["handlers"] if h["in_tree"]]
     assert len(in_tree) == 1 and in_tree[0]["clause"] is None        # the `with` header, called a handler
+
+
+def test_control_inlined_comprehension_cleanup_read_as_a_handler(tmp_path):
+    """`COMPREHENSION_IS_HANDLER` reinstates #1958: the cleanup resumption is
+    recorded as a handler with no clause on the comprehension's line, and the
+    frame stops being watched, so the clause that took the exception is never
+    recorded. The exit status still tells the truth."""
+    _needs_inlined_comprehensions()
+    rec, path = _trace_inlined(tmp_path, "inlined_dict", inject=["COMPREHENSION_IS_HANDLER"])
+    follow = rec["follows"][0]
+    assert len(follow["handlers"]) == 1, follow["handlers"]
+    handler = follow["handlers"][0]
+    assert (handler["fn"], handler["line"], handler["clause"]) == (
+        "main", _line_of(path, "d = {v: callee.maybe(v)"), None)     # the comprehension's line, called a handler
+    assert rec["verdict"] == rct.HANDLED and rec["exit_status"] == 2
+    with pytest.raises(AssertionError):
+        _names_its_own_clause(rec, path)          # the paired test's check, red again
 
 
 # ---------------------------------------------------------------------------

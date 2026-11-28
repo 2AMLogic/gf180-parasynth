@@ -33,6 +33,14 @@ stack, which are by construction suspended and will each resume by either
 handling the exception or leaving. Nothing is traced before a refusal is
 raised, so a working run costs one extra function call per callee invocation.
 
+TWO RESUMPTIONS THAT ARE NOT HANDLERS, each measured on CPython 3.12.3 and
+3.13.18: a frame unwinding through a `with` resumes on the header at
+PUSH_EXC_INFO to call `__exit__`; a frame unwinding out of a list, set or dict
+comprehension inlined into it (PEP 709) resumes on the comprehension's own
+line at SWAP to drop the half-built container, before any enclosing `except`
+is reached. Both leave the frame unwinding and are not recorded as handlers
+(#1958).
+
 WHAT IT CANNOT TELL YOU, stated rather than carried:
 
   * a callee bound by `from x import f` BEFORE the finder runs, or reached
@@ -42,7 +50,11 @@ WHAT IT CANNOT TELL YOU, stated rather than carried:
     the wrapped call that let it out, which is the call site a repair would
     guard -- the scanner's own blind spot, seen from the other side;
   * a `return` inside a `finally` discards an exception without an `except`
-    clause; it reads as "left the frame", which is what it is.
+    clause; it reads as "left the frame", which is what it is;
+  * an inlined comprehension whose line lies inside a `finally` body is listed
+    with that `finally`, on the comprehension's line: the frame did resume
+    there, to run the comprehension's cleanup, not at the body's first
+    statement. No handler is claimed.
 
 It is a tracer, not a gate: per run and per site it records `ESCAPED` (the
 refusal left the entry point), `HANDLED` (a clause took it), `RETURNED` (the
@@ -201,7 +213,12 @@ def _line_role(frame) -> dict:
     test the match, matched or not; {"role": "finally"} inside a `finally`;
     {"role": "other"} anywhere else, which while unwinding is a `with` header
     or a resumption with no clause at all (a context manager's `__exit__`
-    returned true, a `return` written inside a `finally`)."""
+    returned true, a `return` written inside a `finally`). The "other" dict
+    carries "comprehension": True when the line lies inside a list, set or
+    dict comprehension of this function -- the constructs CPython 3.12 inlines
+    into it (PEP 709), which own no clause and whose one resumption while
+    unwinding is the cleanup that drops the half-built container. A generator
+    expression keeps a frame of its own and never sets it."""
     code = frame.f_code
     tree = _tree(code.co_filename)
     other: dict = {"role": "other"}
@@ -230,6 +247,15 @@ def _line_role(frame) -> dict:
         return first_line(own) == code.co_firstlineno
 
     line = frame.f_lineno
+
+    def own_comprehension(node) -> bool:
+        # an inlined list, set or dict comprehension of this function spanning
+        # the line. The cleanup the frame resumes on sits on the comprehension's
+        # FIRST line (measured on CPython 3.12.3 and 3.13.18); the rule is the
+        # whole span, which is the language's -- a comprehension owns no clause
+        return isinstance(node, (ast.ListComp, ast.SetComp, ast.DictComp)) \
+            and node.lineno <= line <= node.end_lineno and mine(node)
+
     handler, finally_hit = None, False
     for node in ast.walk(tree):
         if not isinstance(node, ast.Try) or not mine(node):
@@ -247,7 +273,11 @@ def _line_role(frame) -> dict:
                 "clause": ast.unparse(h.type) if h.type is not None else "<bare>",
                 "handler": (handler[0], h.lineno, h.body[0].lineno,
                             max(st.end_lineno for st in h.body))}
-    return {"role": "finally"} if finally_hit else other
+    if finally_hit:
+        return {"role": "finally"}
+    if any(own_comprehension(n) for n in ast.walk(tree)):
+        return {"role": "other", "comprehension": True}
+    return other
 
 
 def _opcode_at(frame) -> str:
@@ -282,7 +312,8 @@ def _follow(exc: BaseException, caller, inject: frozenset, callee: str) -> None:
     """Tag `exc` and watch the frames it is about to unwind through. Each of
     them is suspended on a call into the callee, so its next event says what
     it did: a clause it tested and did not match (`tested`), one it entered
-    (`handlers`), a `finally` or `with` it ran on the way out, or leaving."""
+    (`handlers`), a `finally` or `with` it ran on the way out, an inlined
+    comprehension's cleanup, or leaving."""
     token = object()
     try:
         setattr(exc, TAG, token)
@@ -351,6 +382,17 @@ def _follow(exc: BaseException, caller, inject: frozenset, callee: str) -> None:
                         tested(fid)
                         pending[fid] = {**_where(fr), "clause": role["clause"],
                                         "handler": header, "one_line": header == first}
+                elif role.get("comprehension") and "COMPREHENSION_IS_HANDLER" not in inject:
+                    # an inlined comprehension's own cleanup (measured on
+                    # CPython 3.12.3 and 3.13.18: the frame resumes on the
+                    # comprehension's line, at SWAP, to drop the half-built
+                    # container, then re-raises): the frame is still unwinding,
+                    # and the clause that takes the exception is still to come.
+                    # A comprehension owns no clause, so no other line event an
+                    # unwinding frame emits falls inside one: a frame that
+                    # carried on after a swallow resumes on the statement
+                    # AFTER the `with`, which starts a line of its own
+                    tested(fid)
                 else:
                     # the frame carried on with no clause of its own: either
                     # a one-line `except X: ...` it just entered, or a
