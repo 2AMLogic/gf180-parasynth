@@ -303,6 +303,49 @@ def test_band_pair_db_a_matched_decay_pair_is_inside_the_domain():
     assert abs(e.detail["decay_bias_db"]) <= rc.BAND_PAIR_MAX_DECAY_BIAS_DB
 
 
+def test_band_pair_decay_bias_is_none_on_silence_rather_than_reading_0_db():
+    """CONTROL (#1743), red on the pre-fix tree: returned 0.0 dB. A silent
+    band's power has `total <= 0`, which `_effective_span_s` maps to the
+    record length -- the STATIONARY answer -- so two silent bands read a span
+    ratio of 1, "the decay contributes nothing", on no signal at all."""
+    z = np.zeros(SR)
+    assert rc.band_pair_decay_bias_db(z, SR, (1500, 2100), (380, 560)) is None
+    # and a NaN sample, which the pre-fix bisection carried to 0.0 as well
+    bad = z.copy()
+    bad[100] = np.nan
+    assert rc.band_pair_decay_bias_db(bad, SR, (1500, 2100), (380, 560)) is None
+
+
+def test_band_pair_decay_bias_is_none_for_an_impulse_rather_than_reading_0_db():
+    """The same two-zeros shape reached WITHOUT silence: a record more
+    impulsive than the filter's own ring saturates BOTH spans at 0.0, and
+    `max(0, 1e-300) / max(0, 1e-300)` read 0.0 dB on the pre-fix tree. Two
+    zero spans have no ratio."""
+    imp = np.zeros(SR)
+    imp[100] = 1.0
+    assert rc.band_pair_decay_bias_db(imp, SR, (1500, 2100), (380, 560)) is None
+
+
+def test_band_pair_decay_bias_of_a_matched_pair_is_unchanged_by_the_repair():
+    """Paired positive, measured on the pre-fix tree (origin/main @ 3309dd59,
+    2026-11-28): 0.283 dB for the matched-decay pair above."""
+    x = _band_pair_two_tone_lead(1800.0, 460.0, 0.006, 0.006, 1.0, 1.0, 0.30)
+    assert rc.band_pair_decay_bias_db(x, SR, (1500, 2100), (380, 560)) \
+        == pytest.approx(0.28308, abs=1e-4)
+
+
+def test_band_pair_db_refuses_when_the_decay_bias_is_undefined(monkeypatch):
+    """The caller (#1743): an undefined bias becomes a refused Estimate --
+    never `abs(None)`, never a silent 0. With the gate deliberately off the
+    bias is reported as the None it is, which is not a coercion either."""
+    x = _band_pair_two_tone_lead(1800.0, 460.0, 0.006, 0.006, 1.0, 1.0, 0.30)
+    monkeypatch.setattr(rc, "band_pair_decay_bias_db", lambda *a, **k: None)
+    e = rc.band_pair_db(x, SR, (1500, 2100), (380, 560))
+    assert not e.ok and e.value is None and "decay bias" in e.reason
+    forced = rc.band_pair_db(x, SR, (1500, 2100), (380, 560), min_decay_bias_db=None)
+    assert forced.ok and forced.detail["decay_bias_db"] is None
+
+
 def test_band_pair_db_refuses_a_partial_sitting_on_a_band_edge():
     """A 4th-order Butterworth is -3 dB at its own edge, so a partial that has
     drifted close to the band edge reads low rather than absent -- a plausible
@@ -2812,3 +2855,12 @@ def test_a_bench_that_exited_nonzero_is_refused_whatever_it_printed(tmp_path, mo
     res = _m5a_run(monkeypatch, tmp_path, _smoke_report, returncode=1)
     assert _board(res) == sb.NO_VERDICT
     assert "did not pass" in res["note"], res["note"]
+
+
+def test_band_pair_decay_bias_is_none_on_short_silence_at_every_length():
+    """CONTROL (#1743 review): the short-record `return 0.0` defaults ran before
+    the silence check, so 16 zeros read 0.0 dB while 28 returned None. Silence
+    is None at every length; a SHORT LIVE record keeps the no-correction 0.0."""
+    for n in (0, 1, 7, 8, 16, 27, 28, 29, 64):
+        assert rc.band_pair_decay_bias_db(np.zeros(n), SR, (1500, 2100), (380, 560)) is None, n
+    assert rc.band_pair_decay_bias_db(np.ones(4), SR, (1500, 2100), (380, 560)) == 0.0

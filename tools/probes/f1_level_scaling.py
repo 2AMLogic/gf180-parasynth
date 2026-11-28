@@ -191,12 +191,22 @@ def project(y, parts, amp) -> np.ndarray:
 def noise_thd(y, parts, amp, sr=rr.SR, fmax=NOISE_FMAX, n_harm=N_HARM) -> dict:
     """Per tone <= fmax: least-squares fit of DC + harmonics 1..n_harm (below
     0.45 sr). Noise = residual RMS in dB re the stimulus RMS (amp/sqrt 2);
-    THD = harmonics 2..n RMS re the fundamental. Median over tones."""
+    THD = harmonics 2..n RMS re the fundamental. Median over tones.
+
+    REFUSES a tone whose fitted fundamental is zero (or whose samples are
+    non-finite): the fundamental is the reference, and with none the THD is
+    0/0. Until #1743's class re-search both sides carried a 1e-12 floor, so an
+    exactly silent render read THD 0.0 dB -- "no harmonic distortion" -- on no
+    signal. Harmonics at exact zero under a live fundamental are -inf dB, the
+    exact answer. The noise floor keeps its numerator-only floor, which reads
+    as what it is."""
     nz, th = [], []
     for i0, nw, f in parts:
         if f > fmax:
             continue
         seg = np.asarray(y[i0:i0 + nw], dtype=np.float64)
+        if not np.isfinite(seg).all():
+            raise Refused(f"noise_thd: non-finite samples in the {f:.0f} Hz tone")
         t = np.arange(nw) / sr
         ks = [k for k in range(1, n_harm + 1) if k * f < 0.45 * sr]
         cols = [np.ones(nw)]
@@ -206,9 +216,12 @@ def noise_thd(y, parts, amp, sr=rr.SR, fmax=NOISE_FMAX, n_harm=N_HARM) -> dict:
         coef, *_ = np.linalg.lstsq(A, seg, rcond=None)
         resid = seg - A @ coef
         amps_k = np.hypot(coef[1::2], coef[2::2])
+        if not (np.isfinite(amps_k).all() and amps_k[0] > 0.0):
+            raise Refused(f"noise_thd: no fundamental fitted in the {f:.0f} Hz tone "
+                          f"(silent segment?), so its THD is undefined")
         nz.append(20 * math.log10(max(np.sqrt(np.mean(resid ** 2)), 1e-12) / (amp / math.sqrt(2))))
         h = np.sqrt(np.sum(amps_k[1:] ** 2)) if len(amps_k) > 1 else 0.0
-        th.append(20 * math.log10(max(h, 1e-12) / max(amps_k[0], 1e-12)))
+        th.append(20 * math.log10(h / amps_k[0]) if h > 0.0 else float("-inf"))
     return {"noise_db_re_stimulus_median": round(float(np.median(nz)), 2),
             "noise_db_re_stimulus_worst": round(float(np.max(nz)), 2),
             "thd_db_median": round(float(np.median(th)), 2),

@@ -474,6 +474,47 @@ def band_energy_abs(x, edges=CY_BANDS) -> np.ndarray:
                      for lo, hi in edges])
 
 
+def _control_arm_db(er, ec) -> list:
+    """Per-band energy of the control render `ec` re the 2-pole render `er`, in
+    dB -- the `control` arm's whole question, which is whether 0.0 is EARNED.
+
+    REFUSES when the 2-pole render holds no energy in a band, or either side is
+    non-finite: there is then nothing for the control to be within 0.5 dB of.
+    Until #1743 this was an inline ratio with a 1e-30 floor on BOTH the control
+    and the 2-pole energy, the same epsilon on each side, so two SILENT renders
+    read 0.0 dB in every band and the arm passed -- "the cascade is
+    transparent", on no signal. A control that removes a band the 2-pole
+    renders is exactly 0 of it, -inf dB, which the 0.5 dB gate refuses as a
+    non-transparent stage as it always did."""
+    er = np.asarray(er, dtype=np.float64)
+    ec = np.asarray(ec, dtype=np.float64)
+    if not (np.isfinite(er).all() and np.isfinite(ec).all()):
+        raise Refused("the control arm's per-band energies are non-finite")
+    if not (er > 0.0).all():
+        raise Refused(f"the control arm cannot be scored: the 2-pole render holds no energy in "
+                      f"{int((er <= 0.0).sum())} of {len(er)} bands (silent render)")
+    return [float(d) for d in
+            np.where(ec > 0.0, 10 * np.log10(np.where(ec > 0.0, ec, 1.0) / er), -np.inf)]
+
+
+def _control_total_db(xr, xc) -> float:
+    """Total energy of the control render `xc` re the 2-pole render `xr`, in dB.
+
+    `er`/`ec` and these sums are ENERGIES (sums of squared samples), so the dB
+    ratio is 10*log10, not 20*log10: half the energy is -3.0103 dB. REFUSES a
+    2-pole render with no (or non-finite) total energy, where the ratio is 0/0;
+    a control that is exactly silent against a live reference is -inf dB, which
+    the 0.5 dB gate then refuses as non-transparent (it used to raise
+    `ValueError: math domain error` from `math.log10(0)` before the gate)."""
+    tr = float((np.asarray(xr, dtype=np.float64) ** 2).sum())
+    tc = float((np.asarray(xc, dtype=np.float64) ** 2).sum())
+    if not (math.isfinite(tr) and math.isfinite(tc)):
+        raise Refused("the control arm's total energies are non-finite")
+    if not tr > 0.0:
+        raise Refused("the control arm cannot be scored: the 2-pole render holds no energy (silent render)")
+    return 10 * math.log10(tc / tr) if tc > 0.0 else float("-inf")
+
+
 def decay_band_only(kit: list) -> list:
     """The same image with the cymbal's SHORT and LOW band VCAs silenced.
 
@@ -690,9 +731,8 @@ def main(argv=None) -> int:
     xr_, _ = render(decay_band_only(dx.kit_with_sounds("CY")), 2.0, "2pole")
     xc_, infoc_ = render(decay_band_only(kit_c), 2.0, "control")
     er, ec = band_energy_abs(xr_), band_energy_abs(xc_)
-    db = [20 * math.log10(max(c, 1e-30) / max(r, 1e-30)) for r, c in zip(er, ec)]
-    tot_db = 20 * math.log10(float((xc_ ** 2).sum()) ** .5
-                             / max(float((xr_ ** 2).sum()) ** .5, 1e-30))
+    db = _control_arm_db(er, ec)
+    tot_db = _control_total_db(xr_, xc_)
     say("  decay band alone, per-band energy of control re 2-pole, dB:")
     say("    " + "  ".join(f"{lo/1000:g}-{hi/1000:g}k {d:+6.2f}"
                            for (lo, hi), d in zip(CY_BANDS, db)))

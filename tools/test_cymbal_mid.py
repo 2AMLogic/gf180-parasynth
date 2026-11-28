@@ -437,3 +437,50 @@ def test_the_documented_tone_spread_at_fixed_decay_is_the_artefacts_spread():
     assert (min(spreads), max(spreads)) == pytest.approx((28.85, 85.37), abs=0.01), spreads
     assert max(pct) == pytest.approx(7.80, abs=0.01), pct
     assert max(pct) <= 7.8, "the stated <= 7.8 % bound no longer holds"
+
+
+# ---------------------------------------------------------------------------
+# #1743: `leak_dominance_db` divided two epsilon-floored energies, so an
+# exactly silent low band read 0.0 dB -- "the mid band's energy equals the
+# predicted leak" -- where there was no leak to compare against. Its siblings
+# in `two_window_t20` already guard `... if floor > 0 else None`; this did not.
+# ---------------------------------------------------------------------------
+def test_leak_dominance_refuses_a_silent_low_band_rather_than_reading_0_db():
+    """CONTROL (#1743), red on the pre-fix tree: returned 0.0. The low band is
+    the REFERENCE -- with no energy in it there is no predicted leak for the
+    mid band to be above or below, whether or not the mid band is silent."""
+    n = SR
+    band = cm.MID["M"]
+    z = np.zeros(n)
+    ones = np.ones(n)
+    xl = _q6_low(n, seed=1)
+    with pytest.raises(cb.Refused, match="low band is silent or non-finite"):
+        cm.leak_dominance_db(z, z, band, 0, n, False)              # both silent
+    with pytest.raises(cb.Refused, match="low band is silent or non-finite"):
+        cm.leak_dominance_db(ones, z, band, 0, n, False)           # reference silent only
+    bad = ones.copy()
+    bad[5] = np.nan
+    with pytest.raises(cb.Refused, match="low band is silent or non-finite"):
+        cm.leak_dominance_db(ones, bad, band, 0, n, False)         # reference non-finite
+    with pytest.raises(cb.Refused, match="mid band is non-finite"):
+        cm.leak_dominance_db(bad, xl, band, 0, n, False)           # numerator non-finite
+
+
+def test_leak_dominance_reads_minus_inf_for_a_silent_mid_band_over_a_live_low_band():
+    """One side zero is NOT silence of the measurement: a mid band with no
+    energy under a low band with some is infinitely BELOW the leak, and that
+    is the exact unfloored answer, 10*log10(0/leak), not a floor."""
+    n = SR
+    assert cm.leak_dominance_db(np.zeros(n), _q6_low(n, seed=1), cm.MID["M"], 0, n, False) \
+        == float("-inf")
+
+
+def test_leak_dominance_still_answers_on_a_real_strike():
+    """Paired positive, measured on the pre-fix tree (origin/main @ 3309dd59,
+    2026-11-28): M over the Q6 low band's leak for `strike()`'s default plant,
+    16.33 dB."""
+    y = strike()
+    n_e = int(cb.ENERGY_S * SR)
+    band = cm.MID["M"]
+    got = cm.leak_dominance_db(cb._bp(y, SR, *band), cb._bp(y, SR, *cm.L_BAND), band, 0, n_e, False)
+    assert got == pytest.approx(16.3327, abs=1e-3)

@@ -103,6 +103,19 @@ def test_a_symmetric_clipper_makes_no_difference_tone():
     assert v._asym_load_bearing() < -40.0
 
 
+def test_a_silent_drive_never_reaches_the_asym_load_bearing_ratio():
+    """NOT AN INSTANCE, PINNED (#1743). `_asym_load_bearing`'s ratio has the
+    same-epsilon shape -- `max(lo, 1e-18) / max(hi, 1e-18)` reads 0.0 dB, "the
+    symmetric tone equals the asymmetric one", for two zeros -- but a silent
+    drive cannot reach it: `clip()` refuses at `r <= 0` one call earlier, so
+    `_im_amp(amp=0.0)` raises instead of returning two zeros (measured on the
+    pre-fix tree, origin/main @ 3309dd59, 2026-11-28). This pin is what keeps
+    the classification checkable: if `clip()`'s silence refusal ever moves,
+    this goes red and the site must be re-read."""
+    with pytest.raises(v.Refused, match="silent"):
+        v._im_amp(amp=0.0)
+
+
 def test_the_symmetric_clippers_predicted_coefficient_is_exactly_zero():
     assert v.clip_a2(0.0, defect="SYMMETRIC_NL") == 0.0
     assert v.clip_a2(0.0) != 0.0

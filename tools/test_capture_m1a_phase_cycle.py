@@ -157,3 +157,79 @@ def test_an_empty_frozen_manifest_is_refused_naming_every_key(monkeypatch, tmp_p
 def test_a_frozen_manifest_with_a_null_identity_is_refused(monkeypatch, tmp_path, capsys):
     code, out, _ = _capture(monkeypatch, tmp_path, capsys, {**_committed_manifest(), "identity": None})
     assert code == 2 and "'identity'" in out
+
+
+# ---------------------------------------------------------------------------
+# #1743: `click_report` detrended with `20*log10(max(lev, 1e-30) /
+# max(trend, 1e-30))`, so an exactly silent take read a residual of 0.0 dB in
+# every block -- "no click", with 0.0 as the number -- instead of refusing.
+# `check_take` refuses a silent take first, which is why no decision is known
+# to have come from it; `click_report` is public and did not.
+# ---------------------------------------------------------------------------
+def _held(x):
+    a, b = round((ON + c.SUSTAIN_FROM_S) * SR), round((ON + c.GATE_S) * SR)
+    return x[a:b]
+
+
+def test_click_report_refuses_silence_and_a_non_finite_sample():
+    """CONTROL (#1743), red on the pre-fix tree: `{'n_events': 0,
+    'max_residual_db': 0.0, ...}`. Where the trend is zero the detrended
+    residual is 0/0, and no number -- least of all 0.0 -- belongs there."""
+    with pytest.raises(c.Refused, match="silent"):
+        c.click_report(np.zeros(SR), SR, F36)
+    bad = np.zeros(SR)
+    bad[3] = np.nan
+    with pytest.raises(c.Refused, match="non-finite"):
+        c.click_report(bad, SR, F36)
+
+
+def test_click_report_still_answers_on_a_held_saw():
+    """Paired positive, measured on the pre-fix tree (origin/main @ 3309dd59,
+    2026-11-28): no events, worst residual 1e-4 dB."""
+    r = c.click_report(_held(saw(F36)), SR, F36)
+    assert r["n_events"] == 0
+    assert r["max_residual_db"] == pytest.approx(9.708e-05, abs=1e-4)
+
+
+def test_click_report_survives_a_block_of_exact_zero_under_a_live_trend():
+    """One side zero is NOT silence of the take: a 45 ms dropout makes a
+    block's level exactly zero while the detrended trend around it stays
+    positive, so that block's residual is -inf and the report is still a
+    report. `check_take` owns refusing the dropout (ZERO_RUN_S); this pins
+    that the detector neither crashes nor answers NaN on its way there."""
+    x = saw(F36)
+    x[round(5 * SR):round(5 * SR) + 2000] = 0.
+    r = c.click_report(_held(x), SR, F36)
+    assert math.isfinite(r["max_residual_db"]) and r["n_events"] >= 1
+    # the rule-8 adversary for "a minority of -inf blocks poisons median+MAD":
+    # a 5-block window with a positive median holds at most two silent blocks,
+    # so the threshold is finite here by construction, and is pinned as such.
+    assert math.isfinite(r["threshold_db"])
+
+
+def test_a_click_report_refusal_reaches_the_take_labelled_with_its_condition(monkeypatch):
+    """The caller: `check_take` prefixes every refusal with the condition, and
+    one raised inside `click_report` must arrive the same way -- an operator
+    reading `REFUSED:` has to know which take."""
+    def refuse(x, sr, f0):
+        raise c.Refused("the click detector's trend is zero")
+
+    monkeypatch.setattr(c, "click_report", refuse)
+    with pytest.raises(c.Refused, match=r"^osc1_open: the click detector's trend is zero"):
+        c.check_take(saw(F36), SR, ON, "osc1_open")
+
+
+def test_click_report_refuses_an_unusable_threshold_rather_than_counting_zero_events():
+    """CONTROL (#1743 review): block levels [p, 0, 0, p] have a positive
+    nearest-edge trend everywhere, so half the residuals are -inf, the median is
+    -inf and the MAD NaN. The head reported n_events=0 with threshold_db=nan; it
+    must refuse."""
+    x = np.zeros(5870)
+    x[[733, 5134]] = 1
+    with pytest.raises(c.Refused, match="threshold"):
+        c.click_report(x, 48000, c.F36)
+
+
+def test_click_report_refuses_a_record_with_no_complete_block():
+    with pytest.raises(c.Refused, match="too short"):
+        c.click_report(np.ones(10) * np.arange(10), 48000, c.F36)

@@ -111,6 +111,11 @@ def measure_band_pair_stationary():
     return worst
 
 
+def _fmt_bias(v) -> str:
+    """Render a decay-bias detail that may be None (ungated band_pair_db) without a format crash."""
+    return "   None" if v is None else f"{v:+7.3f}"
+
+
 def measure_band_pair_decay():
     """The A^2*tau contamination `balance_trajectory_db`'s docstring names, as
     a NUMBER: a fixed-window band ratio carries 10*log10(tau_a/tau_b) of the
@@ -137,7 +142,7 @@ def measure_band_pair_decay():
         print(f"      tau_a={tau_a*1e3:5.1f} ms tau_b={tau_b*1e3:5.1f} ms   "
               f"reported {e.value:+7.3f} dB   error {err:+7.3f} dB   "
               f"(10log10(tau_b/tau_a) = {10*math.log10(tau_b/tau_a):+7.3f}, "
-              f"bias the record itself implies {e.detail.get('decay_bias_db', float('nan')):+7.3f})")
+              f"bias the record itself implies {_fmt_bias(e.detail.get('decay_bias_db'))})")
     print(f"      MATCHED-DECAY error (tau_a == tau_b): {base:+.3f} dB -- this is the")
     print("      irreducible cost of handing a fixed-window band ratio a DECAYING")
     print("      signal at all, with the onset edge already excluded by the lead.")

@@ -17,6 +17,7 @@ transient, the floor, a competing line), not a clean sinusoid.
 from __future__ import annotations
 import math, sys, pathlib
 import numpy as np
+import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import tom_pitch_probe as P
@@ -278,3 +279,34 @@ def test_a_fit_that_does_not_converge_is_still_a_no_fit(monkeypatch):
     t, e = _excess_trajectory()
     out = P._fit_exponential(t, e)
     assert out["tau_ms"] is None and out["shape"] is None
+
+
+# ----------------------------------------------------------- silence (#1743)
+# `_out_of_band_db` divided two epsilon-floored energies, so an exactly silent
+# segment read `10*log10(1e-30/1e-30)` = 0.0 dB: out-of-band energy "equal to"
+# in-band energy, a number where "no signal" belongs. `measure()` refuses a
+# silent file one level up, which is why no decision is known to have been read
+# through it; the helper itself did not refuse.
+def test_out_of_band_ratio_is_none_on_silence_and_on_a_non_finite_sample():
+    """CONTROL (#1743), red on the pre-fix tree: both returned 0.0."""
+    silent = np.zeros(SR)
+    assert P._out_of_band_db(silent, SR, 135.0, 0.0) is None
+    bad = silent.copy()
+    bad[100] = np.nan
+    assert P._out_of_band_db(bad, SR, 135.0, 0.0) is None
+
+
+def test_out_of_band_ratio_still_answers_on_a_real_tom():
+    """The paired positive: -13.21 dB for the synthetic MT, measured on the
+    pre-fix tree (origin/main @ 3309dd59, 2026-11-28), so the None above is a
+    refusal of silence and not a blanket one."""
+    m = P.measure(_synth("MT", 135.0, 24.0), SR, label="MT")
+    assert m["verdict"] == "OK"
+    assert m["out_of_band_db"] == pytest.approx(-13.2066, abs=1e-3)
+
+
+def test_out_of_band_ratio_is_none_for_a_segment_too_short_to_measure():
+    """CONTROL (#1743 review): a < 64-sample segment returned NaN ahead of the
+    None guard -- NaN is not the documented missing-measurement outcome."""
+    assert P._out_of_band_db(np.zeros(16), SR, 150.0, 0.0) is None
+    assert P._out_of_band_db(np.ones(16), SR, 150.0, 0.0) is None

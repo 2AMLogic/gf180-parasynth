@@ -253,11 +253,23 @@ def leak_dominance_db(xm, xl, band, a, b, with_hh1) -> float:
     than the mid band does. Measuring it over the first second only was the first version of this
     precondition, and it passed a planted signal whose late T20 it then read 40 % high -- the low
     band's decay wearing M's name, which is precisely the failure the precondition exists to
-    catch (`docs/scorecard/cymbal-369/mid-band/README.md`, wrong-then-right 1)."""
+    catch (`docs/scorecard/cymbal-369/mid-band/README.md`, wrong-then-right 1).
+
+    REFUSES when the low band holds no energy over [a, b) (or either side is non-finite): the
+    low band is the REFERENCE, and with none there is no predicted leak to be above or below.
+    Until #1743 both sides carried a 1e-30 floor, so silence read 0.0 dB -- the mid band
+    "equal to" a leak that did not exist. A mid band at exact zero under a live low band is
+    -inf dB, the exact answer, and is refused by the caller's leak margin like any other
+    subordinate band."""
     em = float(np.sum(np.asarray(xm[a:b], dtype=np.float64) ** 2))
     el = float(np.sum(np.asarray(xl[a:b], dtype=np.float64) ** 2))
+    if not math.isfinite(em):
+        raise cb.Refused(f"leak_dominance_db: the mid band is non-finite over samples [{a}, {b})")
     leak = el * 10.0 ** (skirt_leak_db(band, with_hh1) / 10.0)
-    return 10.0 * math.log10(max(em, 1e-30) / max(leak, 1e-30))
+    if not (math.isfinite(leak) and leak > 0.0):
+        raise cb.Refused(f"leak_dominance_db: the low band is silent or non-finite over samples "
+                         f"[{a}, {b}), so the predicted leak is undefined")
+    return 10.0 * math.log10(em / leak) if em > 0.0 else float("-inf")
 
 
 def _smooth_env_db(x, sr):

@@ -150,12 +150,37 @@ def explain(voice: str, kinds=(None, "BP")) -> dict:
     return out
 
 
+def _departures_db(e: np.ndarray, ef: np.ndarray) -> np.ndarray:
+    """Per-block departure of the fixed ring's block peak `e` from the float
+    reference's `ef`, in dB: 20*log10(e/ef), with no floor on either side.
+
+    REFUSES when the float reference is exactly zero in any block, or either
+    input is non-finite: there is then nothing to compare the fixed ring
+    against. Until #1743 this was `np.maximum(e, 1e-9) / np.maximum(ef, 1e-9)`
+    -- the same epsilon on both sides -- so two zeros read 0 dB and counted as
+    "within 3 dB", and so did a fixed ring dead at exact zero against a float
+    reference below ~1.4e-9 LSB, which is the very departure `deadband` exists
+    to locate. A fixed ring at exact zero against a live reference is exactly
+    0 of it: -inf dB."""
+    e = np.asarray(e, dtype=np.float64)
+    ef = np.asarray(ef, dtype=np.float64)
+    if not np.isfinite(e).all():
+        raise rc.Refused("_departures_db: the fixed ring's block peaks are non-finite")
+    if not ((ef > 0.0) & np.isfinite(ef)).all():
+        raise rc.Refused(f"_departures_db: the float reference is silent or non-finite in "
+                         f"{int((~((ef > 0.0) & np.isfinite(ef))).sum())} of {len(ef)} blocks, "
+                         f"so the fixed ring's departure is undefined")
+    return np.where(e > 0.0, 20.0 * np.log10(np.where(e > 0.0, e, 1.0) / ef), -np.inf)
+
+
 def deadband(f0=90.0, q=25.0, levels=(100, 1_000, 10_000, 100_000), n=96_000) -> dict:
     """Known answer: one bank mode (the LT pole pair) against a float
     recursion with the same integer coefficients, pinged at several levels.
     An LTI resonator's decay cannot depend on level; where the fixed one
     departs from the float by > 3 dB, and whether it then sits at exact zero,
-    locates the floor-rounding deadband in state LSB."""
+    locates the floor-rounding deadband in state LSB. REFUSES (`rc.Refused`)
+    a level that never rings: with no excitation both recursions are exactly
+    zero, which is not agreement but the absence of a comparison (#1743)."""
     import modal_fixed as mf
     from scipy.signal import lfilter
     a1, a2 = mf.pole_regs(f0, q)
@@ -167,9 +192,14 @@ def deadband(f0=90.0, q=25.0, levels=(100, 1_000, 10_000, 100_000), n=96_000) ->
         y = np.asarray(b.process(exc, [(a1, a2, 65535)], num=[mf.RAW]), dtype=np.float64)
         yf = lfilter([1.0], [1.0, -a1 / 2 ** 24, -a2 / 2 ** 24], exc.astype(np.float64)) * 65535 / 65536
         blk = int(0.01 * dx.SR)
-        pk = lambda x: np.array([np.max(np.abs(x[i:i + blk])) for i in range(0, n - blk, blk)])
+        if n < blk:
+            raise rc.Refused(f"deadband: n={n} is shorter than one {blk}-sample block, "
+                             f"so there is nothing to compare")
+        # `n - blk + 1`, not `n - blk`: a record of exactly k blocks holds k
+        # complete ones, and `range(0, n - blk, blk)` dropped the last.
+        pk = lambda x: np.array([np.max(np.abs(x[i:i + blk])) for i in range(0, n - blk + 1, blk)])
         e, ef = pk(y), pk(yf)
-        bad = np.nonzero(np.abs(20 * np.log10(np.maximum(e, 1e-9) / np.maximum(ef, 1e-9))) > 3.0)[0]
+        bad = np.nonzero(np.abs(_departures_db(e, ef)) > 3.0)[0]
         i = int(bad[0]) if len(bad) else None
         out[str(lev)] = {"departs_at_ms": None if i is None else i * 10,
                          "float_level_there_lsb": None if i is None else round(float(ef[i]), 1),
@@ -185,7 +215,15 @@ def main(argv=None) -> int:
     ap.add_argument("--explain", nargs="*", default=None, help="voices to explain decay for, then stop")
     a = ap.parse_args(argv)
     if a.explain is not None and a.explain == ["deadband"]:
-        res = deadband()
+        # This path returns before the refusal boundary below, so a refusal
+        # raised inside `deadband()` has to be caught here or it escapes as an
+        # exit-1 traceback -- a refusal rendered as FAIL (#1183; #1743 added the
+        # refusal for an unrung ring).
+        try:
+            res = deadband()
+        except refusal.Refused as e:
+            print(f"REFUSED: {e}", flush=True)
+            return 2
         print(json.dumps(res, indent=1))
         a.out.parent.mkdir(parents=True, exist_ok=True)
         a.out.write_text(json.dumps(res, indent=1) + "\n")

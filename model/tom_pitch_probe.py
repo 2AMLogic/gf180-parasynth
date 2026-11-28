@@ -519,22 +519,29 @@ def neighbour_db(x: np.ndarray, sr: int, f0: float, t0: float,
 
 
 def _out_of_band_db(x: np.ndarray, sr: int, f0: float, onset: float,
-                    span_s: float = 0.100) -> float:
+                    span_s: float = 0.100) -> float | None:
     """Energy outside [0.8, 1.25] x f0 over the first span_s, in dB."""
     """Energy outside [0.8, 1.25] x f0 relative to energy inside, over the first
     `span_s` after the onset, in dB. The synthetic controls in
-    test_tom_pitch_probe.py tie this number to an error bound."""
+    test_tom_pitch_probe.py tie this number to an error bound.
+
+    Returns None when the segment has no in-band energy (exact silence, or a
+    non-finite sample): the in-band energy is the reference, and with none the
+    ratio is 0/0. Until #1743 both sides carried a 1e-30 floor, so silence read
+    0.0 dB -- out-of-band energy "equal to" in-band energy."""
     i0 = int(onset * sr)
     seg = x[i0:i0 + int(span_s * sr)]
     if len(seg) < 64:
-        return float("nan")
+        return None             # too short to measure: the documented missing value, not NaN
     nfft = 1 << 17
     S = np.abs(np.fft.rfft(seg * np.hanning(len(seg)), nfft)) ** 2
     fr = np.fft.rfftfreq(nfft, 1.0 / sr)
     inb = (fr >= 0.8 * f0) & (fr <= 1.25 * f0)
     out = (fr > 1.25 * f0) & (fr <= 8000.0) | ((fr < 0.8 * f0) & (fr >= 20.0))
     ei, eo = float(S[inb].sum()), float(S[out].sum())
-    return 10 * math.log10(max(eo, 1e-30) / max(ei, 1e-30))
+    if not (math.isfinite(ei) and ei > 0.0 and math.isfinite(eo)):
+        return None
+    return 10 * math.log10(eo / ei) if eo > 0.0 else float("-inf")
 
 
 def _fit_exponential(t: np.ndarray, exc: np.ndarray) -> dict:

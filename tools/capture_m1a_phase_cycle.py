@@ -145,17 +145,46 @@ def click_report(x, sr, f0):
     `reference_integrity.transient_report`'s method (second difference, block
     RMS, median + k*MAD, with blocks of CLICK_PERIODS periods of f0) applied to the
     block levels AFTER dividing out their running median, so a swell lasting
-    many blocks is not an event."""
+    many blocks is not an event.
+
+    REFUSES when the running trend is exactly zero anywhere, or the levels are
+    non-finite: the trend is the reference, and where it is zero the detrended
+    residual is 0/0. Until #1743 both sides carried a 1e-30 floor, so an
+    exactly silent take read a residual of 0.0 dB everywhere -- "no click",
+    with 0.0 as the number. A block at exact zero under a live trend (a
+    dropout `check_take` refuses by its zero-run rule) is -inf dB, which is
+    not above any threshold and is not a click. Those -inf blocks cannot
+    poison the median/MAD threshold: a DETREND_BLOCKS window with a positive
+    median holds at most two silent blocks of five, so they are always a
+    minority and `med` and `mad` stay finite."""
     from scipy.ndimage import median_filter
     d = np.diff(np.asarray(x, dtype=np.float64), n=2)
     nb = max(8, int(CLICK_PERIODS * sr / f0))
     m = len(d) // nb
+    if m == 0:
+        raise Refused(f"click_report: record too short -- no complete {nb}-sample block "
+                      f"({len(d)} second-difference samples)")
     lev = np.sqrt((d[:m * nb].reshape(m, nb) ** 2).mean(axis=1))
+    if not np.isfinite(lev).all():
+        raise Refused("click_report: non-finite block levels")
     trend = median_filter(lev, size=DETREND_BLOCKS, mode="nearest")
-    res = 20 * np.log10(np.maximum(lev, 1e-30) / np.maximum(trend, 1e-30))
+    if not (trend > 0.0).all():
+        raise Refused(f"click_report: silent -- the running trend is exactly zero in "
+                      f"{int((trend <= 0.0).sum())} of {len(trend)} blocks, so the detrended "
+                      f"residual is undefined")
+    res = np.where(lev > 0.0, 20.0 * np.log10(np.where(lev > 0.0, lev, 1.0) / trend), -np.inf)
     med = float(np.median(res))
-    mad = float(np.median(np.abs(res - med)))
+    with np.errstate(invalid="ignore"):       # -inf - -inf is NaN: refused just below
+        mad = float(np.median(np.abs(res - med)))
     thr = med + max(CLICK_K * mad, CLICK_FLOOR_DB)
+    # The minority argument above is about a window of the TREND; the residuals
+    # can still be mostly -inf (levels [p, 0, 0, p] have a positive nearest-edge
+    # trend everywhere), which makes med -inf and mad NaN. `res > nan` is False
+    # everywhere, so "0 events" would be reported with a NaN threshold.
+    if not (math.isfinite(med) and math.isfinite(mad) and math.isfinite(thr)):
+        raise Refused(f"click_report: the detection threshold is unusable (median {med}, "
+                      f"MAD {mad}) -- {int(np.isneginf(res).sum())} of {len(res)} blocks sit at "
+                      f"exact zero, so no click count can be trusted")
     hot = np.flatnonzero(res > thr)
     events = [] if not len(hot) else np.split(hot, np.flatnonzero(np.diff(hot) > 2) + 1)
     return {"n_events": len(events), "threshold_db": thr, "max_residual_db": float(res.max()),
@@ -189,7 +218,10 @@ def check_take(audio, sr, on_s, condition):
     injected, want = {"n_events": None}, None
     if condition != "both_open":
         f_nominal = 2 * F36 if condition == "osc2_open" else F36
-        clean = click_report(held, sr, f_nominal)
+        try:
+            clean = click_report(held, sr, f_nominal)
+        except Refused as e:                     # a silent held sustain: label it like the rest
+            raise Refused(f"{condition}: {e}") from e
         if clean["n_events"]:
             raise Refused(f"{condition}: {clean['n_events']} transient events in the held sustain "
                           f"at {clean['event_times_s']} s -- demo noise or clicks")
