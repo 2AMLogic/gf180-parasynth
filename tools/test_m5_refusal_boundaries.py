@@ -477,3 +477,158 @@ def test_confirm_cli_boundary_carries_a_refusal_from_the_render_guard(monkeypatc
     assert capsys.readouterr().out.splitlines() == [
         "REFUSED: resonance at or above the self-oscillation boundary is out of domain"]
     assert not out.exists()
+
+
+# ---- #1804 ---------------------------------------------------------------
+# measure_m5_saw_drive --merge ranked whatever candidates it was given: with
+# drive 0.3 refused or omitted it chose 0.35, confirmed it and exited 0, and a
+# missing or refused baseline crashed with KeyError (exit 1). A comparison is
+# the four frozen drives; fewer is REFUSED. Every control below runs the real
+# file in a real interpreter over copies of the archived shards; no audio.
+
+SAW_DRIVE_ARCHIVE = SCORECARD / "m5-artifacts-333/saw-drive"
+#: the frozen comparison's shards, by the drive key each one holds
+SAW_DRIVE_SHARDS = {"0.75": "d0.75.json", "0.5": "d0.5.json", "0.35": "d0.35.json", "0.3": "d0.3.json"}
+CANDIDATE_DRIVES = ("0.5", "0.35", "0.3")
+INJECTED_REFUSAL = "frozen M5A Mini V3 audio hash mismatch"
+INCOMPLETE = "incomplete saw-drive comparison: "
+OMIT = object()
+
+
+def _archived_row(drive):
+    return json.loads((ROOT / SAW_DRIVE_ARCHIVE / SAW_DRIVE_SHARDS[drive]).read_text())["rows"][drive]
+
+
+def _merge_inputs(directory, **edits):
+    """The four archived shards as temporary copies under `directory`. A drive
+    mapped to OMIT is not supplied; one mapped to a function gets that
+    function's return in place of its row. Returns the paths given to
+    `--merge` and the rows they hold."""
+    directory.mkdir(parents=True)
+    paths, rows = [], {}
+    for drive, name in SAW_DRIVE_SHARDS.items():
+        edit = edits.get(drive)
+        if edit is OMIT:
+            continue
+        row = _archived_row(drive)
+        if edit is not None:
+            row = edit(row)
+        path = directory / name
+        path.write_text(json.dumps({"rows": {drive: row}}))
+        paths.append(path)
+        rows[drive] = row
+    return paths, rows
+
+
+def _merge(paths, out):
+    """The real `--merge` subprocess: (process, the report it wrote or None)."""
+    proc = run_cli(ROOT, "measure_m5_saw_drive", "--merge", *map(str, paths), "--out", str(out))
+    return proc, json.loads(out.read_text()) if out.exists() else None
+
+
+def _refused(row):
+    return {"drive": row["drive"], "refused": INJECTED_REFUSAL}
+
+
+def _assert_incomplete(proc, report, rows, reason):
+    """Exit 2, one `REFUSED:` line naming `reason`; the supplied rows kept in
+    `--out`; no choice, no confirmation and no ranking in the selection."""
+    assert proc.returncode == 2, (proc.stdout[-400:], proc.stderr[-400:])
+    assert [line for line in proc.stdout.splitlines() if line.startswith("REFUSED")] == [
+        f"REFUSED: {INCOMPLETE}{reason}"], proc.stdout[-400:]
+    assert "Traceback" not in proc.stdout + proc.stderr
+    assert report is not None, "the supplied rows are retained in --out"
+    assert report["rows"] == rows
+    selection = report["selection"]
+    assert selection["refused"] == INCOMPLETE + reason
+    assert selection["chosen"] is None and selection["confirmation"] is None
+    assert "verdicts" not in selection and "baseline_harmonic_shape" not in selection
+
+
+@pytest.mark.parametrize("drive", CANDIDATE_DRIVES)
+def test_merge_refuses_a_candidate_whose_shard_was_omitted(tmp_path, drive):
+    paths, rows = _merge_inputs(tmp_path / "shards", **{drive: OMIT})
+    # Asserted, not assumed: the omission leaves no refusal marker in any of
+    # the remaining inputs, so a scan for refusal text cannot see it.
+    assert set(rows) == set(SAW_DRIVE_SHARDS) - {drive}
+    assert "refused" not in "".join(p.read_text() for p in paths)
+    proc, report = _merge(paths, tmp_path / "out.json")
+    _assert_incomplete(proc, report, rows, f"drive {drive} missing")
+
+
+@pytest.mark.parametrize("drive", CANDIDATE_DRIVES)
+def test_merge_refuses_an_explicitly_refused_candidate(tmp_path, drive):
+    # The issue's partial selection, kept as the regression control: with 0.3
+    # refused, the pre-fix merge chose 0.35, confirmed it and exited 0.
+    paths, rows = _merge_inputs(tmp_path / "shards", **{drive: _refused})
+    proc, report = _merge(paths, tmp_path / "out.json")
+    _assert_incomplete(proc, report, rows, f"drive {drive} refused ({INJECTED_REFUSAL})")
+
+
+@pytest.mark.parametrize(("damage", "reason"), [
+    ("omitted", "drive 0.75 missing"),
+    ("refused", f"drive 0.75 refused ({INJECTED_REFUSAL})"),
+])
+def test_merge_refuses_a_baseline_that_is_omitted_or_refused(tmp_path, damage, reason):
+    paths, rows = _merge_inputs(tmp_path / "shards", **{"0.75": OMIT if damage == "omitted" else _refused})
+    proc, report = _merge(paths, tmp_path / "out.json")
+    _assert_incomplete(proc, report, rows, reason)
+
+
+@pytest.mark.parametrize(("value", "reason"), [
+    (None, "drive 0.3 missing"),
+    ([], "drive 0.3 not a row (list)"),
+    ("measured", "drive 0.3 not a row (str)"),
+])
+def test_merge_refuses_a_required_row_that_is_not_a_measured_record(tmp_path, value, reason):
+    paths, rows = _merge_inputs(tmp_path / "shards", **{"0.3": lambda row: value})
+    proc, report = _merge(paths, tmp_path / "out.json")
+    _assert_incomplete(proc, report, rows, reason)
+
+
+def test_merge_names_every_unmeasured_drive_and_ranks_none(tmp_path):
+    paths, rows = _merge_inputs(tmp_path / "shards", **{
+        "0.75": _refused, "0.5": lambda row: [], "0.3": OMIT})
+    proc, report = _merge(paths, tmp_path / "out.json")
+    _assert_incomplete(proc, report, rows, f"drive 0.75 refused ({INJECTED_REFUSAL}); "
+                                           "drive 0.5 not a row (list); drive 0.3 missing")
+
+
+def test_merge_does_not_relabel_a_corrupt_record_as_a_refusal(tmp_path):
+    # The inverse defect: a row that is a record but carries no measurements
+    # is not a stated refusal -- the shard writer never emits one -- so it
+    # leaves as an execution error, never as exit 2.
+    paths, _ = _merge_inputs(tmp_path / "shards", **{"0.3": lambda row: {"drive": row["drive"]}})
+    proc, report = _merge(paths, tmp_path / "out.json")
+    assert proc.returncode == 1, (proc.stdout[-400:], proc.stderr[-400:])
+    assert "Traceback" in proc.stderr and "KeyError: 'M5A'" in proc.stderr, proc.stderr[-400:]
+    assert "REFUSED" not in proc.stdout + proc.stderr
+    assert report is None
+
+
+def test_merge_of_the_complete_archived_comparison_keeps_the_recorded_selection(tmp_path):
+    paths, rows = _merge_inputs(tmp_path / "shards")
+    proc, report = _merge(paths, tmp_path / "out.json")
+    assert proc.returncode == 0, (proc.stdout[-400:], proc.stderr[-400:])
+    assert not any(line.startswith("REFUSED") for line in proc.stdout.splitlines())
+    recorded = json.loads((ROOT / SAW_DRIVE_ARCHIVE / "selection.json").read_text())
+    assert report["rows"] == rows == recorded["rows"]
+    assert report["selection"] == recorded["selection"]
+    assert report["selection"]["chosen"] == "0.3"
+    assert report["selection"]["confirmation"]["passes"] is True
+
+
+def test_merge_records_a_comparison_in_which_every_candidate_fails(tmp_path):
+    def clipping(row):
+        return {**row, "M5A": {**row["M5A"], "errors": {**row["M5A"]["errors"], "Clipping": 1}}}
+    paths, rows = _merge_inputs(tmp_path / "shards", **{d: clipping for d in CANDIDATE_DRIVES})
+    proc, report = _merge(paths, tmp_path / "out.json")
+    assert proc.returncode == 0, (proc.stdout[-400:], proc.stderr[-400:])
+    assert not any(line.startswith("REFUSED") for line in proc.stdout.splitlines())
+    assert report["rows"] == rows
+    selection = report["selection"]
+    assert selection["chosen"] is None and selection["confirmation"] is None
+    assert "refused" not in selection
+    assert set(selection["verdicts"]) == set(CANDIDATE_DRIVES)
+    for verdict in selection["verdicts"].values():
+        assert verdict["admissible"] is False and "clipping" in verdict["reasons"]

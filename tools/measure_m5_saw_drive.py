@@ -22,6 +22,8 @@ lowest Harmonic shape error such that
   * saw upper wanted power (probe, MIDI 84 and 96) not below the baseline's,
   * every pulse event identical to the baseline (the invariance control).
 A candidate that does not improve on the baseline is not a winner.
+A comparison needs all four drives measured: a merge missing any of them, or
+holding a refused one, is REFUSED and no candidate is chosen over the rest.
 Confirmation: M5B (its MIDI 72 saw was not used to select) and probe points at
 untouched notes (36, 48, 60, 72, 108, 120): relative unwanted energy not worse
 by > 1 dB, no output rail samples.
@@ -51,7 +53,8 @@ DEV = (84, 96)
 
 
 class Refused(refusal.Refused, RuntimeError):
-    """A requested saw drive is outside the frozen candidate budget."""
+    """A stated missing precondition: a requested saw drive is outside the
+    frozen candidate budget, or a merge lacks a measured baseline or candidate."""
 
 
 @contextlib.contextmanager
@@ -122,7 +125,26 @@ def r1_binding(drive: float, f: float) -> dict:
             "tree_matches_pin": now == pinned, "candidate_changes_r1_bytes": cand != pinned}
 
 
+def _unmeasured(rows):
+    """Every required drive the comparison cannot rank, each named with its
+    reason, in frozen order."""
+    why = []
+    for d in (BASE_DRIVE,) + CANDIDATES:
+        r = rows.get(str(d))
+        if r is None:
+            why.append(f"drive {d} missing")
+        elif not isinstance(r, dict):
+            why.append(f"drive {d} not a row ({type(r).__name__})")
+        elif "refused" in r:
+            why.append(f"drive {d} refused ({r['refused']})")
+    return why
+
+
 def select(rows):
+    unmeasured = _unmeasured(rows)
+    if unmeasured:
+        return {"refused": "incomplete saw-drive comparison: " + "; ".join(unmeasured),
+                "chosen": None, "confirmation": None}
     b = rows[str(BASE_DRIVE)]
     be = b["M5A"]["errors"]
     verdicts = {}
@@ -209,6 +231,9 @@ def _run(argv) -> int:
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(res, indent=1) + "\n")
     print(f"wrote {a.out}")
+    refused = res.get("selection", {}).get("refused")
+    if refused:
+        raise Refused(refused)
     return 0
 
 
