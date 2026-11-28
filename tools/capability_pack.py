@@ -8,8 +8,10 @@
     python tools/capability_pack.py --run --out report.json  render and measure
 
     exit 0  OK       the pack ran
-    exit 1  FAIL     the gate says this rig may not be used for this pack
-    exit 2  REFUSED  a precondition is unmet -- no plugin host on this box
+    exit 1  FAIL     the gate ANSWERED NO: the capability was measured, and
+                     this rig may not be used for this pack
+    exit 2  REFUSED  the gate has no answer (unknown rig, host mismatch,
+                     unmeasured capability), or no plugin host is on this box
 
 WHY THIS FILE EXISTS
 --------------------
@@ -29,11 +31,16 @@ consumes, which means:
     recorded qualified for all three, so the gate PASSES -- on a table where the
     rig's overall verdict is False. Before #136 there was no way to express that
     and no way to run this pack;
-  * a pack that declared `envelope_timing` would be refused, with a refusal that
+  * a pack that declared `envelope_timing` would FAIL, with a verdict that
     names envelope timing rather than the rig. `--gate --pack
     miniv3-envelope-timing-NOT-QUALIFIED` is that control, and it is in the file
     on purpose: a gate nobody has seen reject anything is a gate nobody should
     trust.
+  * a pack that declared `pitch_causality` would REFUSE -- nobody has measured
+    it, so the gate has no answer, and that is not the gate saying no (#1873).
+    `--gate --pack miniv3-pitch-causality-UNMEASURED` is that control. Exit 1
+    here would be a measured failure where nothing was measured, and a caller
+    that reads only the exit status could not tell.
 
 WHAT THIS FILE CANNOT DO, STATED RATHER THAN IMPLIED
 ----------------------------------------------------
@@ -157,10 +164,25 @@ MINIV3_ENVELOPE_PACK = dataclasses.replace(
     name="miniv3-envelope-timing-NOT-QUALIFIED",
     requires=("pitch", "waveform", "sustained_filter", "envelope_timing"),
     why="NOT RUNNABLE, and in this file deliberately: the same pack with a "
-        "commanded envelope time added. It must be refused, by capability, and "
+        "commanded envelope time added. It must FAIL, by capability, and "
         "it is the control for the gate above")
 
-PACKS = {p.name: p for p in (MINIV3_PACK, MINIV3_ENVELOPE_PACK)}
+#: The other control, and it ships for the same reason (#1873). Same rig, same
+#: host, one capability added -- and this one nobody has MEASURED: Mini V3's
+#: `pitch_causality` is `None`, not `False`. The gate has no answer, which is a
+#: different fact from an answer of no, and it must exit 2 rather than 1. Both
+#: controls are needed because the gate now has two ways to say "not this one"
+#: and they mean different things to a caller that reads only the exit status.
+MINIV3_UNMEASURED_PACK = dataclasses.replace(
+    MINIV3_PACK,
+    name="miniv3-pitch-causality-UNMEASURED",
+    requires=("pitch", "waveform", "sustained_filter", "pitch_causality"),
+    why="NOT RUNNABLE, and in this file deliberately: the same pack with a "
+        "capability nobody has measured added. It must be REFUSED, not FAILed "
+        "-- the gate cannot answer, and that is not the gate saying no")
+
+PACKS = {p.name: p for p in (MINIV3_PACK, MINIV3_ENVELOPE_PACK,
+                             MINIV3_UNMEASURED_PACK)}
 
 
 # ===========================================================================
@@ -340,9 +362,12 @@ def cmd_list(pack: Pack) -> int:
 def cmd_gate(pack: Pack) -> int:
     try:
         rows = gate(pack)
-    except rp.Refused as why:
-        print(f"GATE REFUSES  {why}")
+    except rp.NotQualified as why:
+        print(f"GATE FAIL  {why}")
         return FAIL
+    except rp.Refused as why:
+        print(f"GATE REFUSED  {why}")
+        return REFUSED
     for r in rows:
         print(f"OK  {pack.rig}/{pack.host} is qualified for {r['capability']}")
     print(f"OK -- {pack.name} may run against {pack.rig} under {pack.host}. "
@@ -355,9 +380,12 @@ def cmd_gate(pack: Pack) -> int:
 def cmd_run(pack: Pack, out: pathlib.Path | None) -> int:
     try:
         gate(pack)
-    except rp.Refused as why:
-        print(f"GATE REFUSES  {why}")
+    except rp.NotQualified as why:
+        print(f"GATE FAIL  {why}")
         return FAIL
+    except rp.Refused as why:
+        print(f"GATE REFUSED  {why}")
+        return REFUSED
     try:
         dev = build_rig(pack)
         audio = render(pack, dev)

@@ -549,6 +549,26 @@ def test_require_capability_returns_the_verdict_when_it_holds():
     assert v["qualified"] is True and v["capability"] == "sustained_filter"
 
 
+def test_a_measured_no_is_NotQualified_and_a_gap_is_only_Refused():
+    """**#1873, at the type level.** `require_capability` refuses two kinds of
+    thing and they are not the same exit code: a capability MEASURED and
+    rejected is a verdict (`NotQualified`, which a gate FAILs on), and a
+    capability nobody has measured is a gap (plain `Refused`, which a gate
+    REFUSES on). A handler branching on the message would be string-matching;
+    the type is the contract. `NotQualified` stays a `Refused`, so every
+    `except rp.Refused` that wants the words keeps catching both."""
+    with pytest.raises(rp.NotQualified) as measured:
+        rp.require_capability("miniv3", "dawdreamer", "envelope_timing")
+    assert isinstance(measured.value, rp.Refused)
+    assert "NOT QUALIFIED" in str(measured.value)
+
+    with pytest.raises(rp.Refused) as gap:
+        rp.require_capability("surge-type2", "dawdreamer", "pitch")
+    assert type(gap.value) is rp.Refused, \
+        f"an unmeasured capability is not a verdict: {type(gap.value)}"
+    assert "NO VERDICT" in str(gap.value)
+
+
 def test_capability_prose_is_split_out_of_the_hashed_file():
     """#129 one axis down. `split_profile` pops TOP-LEVEL keys only, so a `why`
     nested inside the `capabilities` map would ride into `profile.json` -- the
