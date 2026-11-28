@@ -1251,3 +1251,166 @@ def test_family_borrowed_inside_a_function_is_still_invisible(tmp_path):
     got = {s["callee"]: s for s in _sites_for(files, idx, "caller_local_borrow")}
     assert sorted(got) == ["local_borrower.own"], got
     assert got["local_borrower.own"]["origins"] == ["local_borrower"], got
+
+
+# --- #1641 controls: the CLI boundary reached through a wrapper ---------------
+# `hh_probe5`'s first repair (#1611, `513b0213`) put `try/except
+# refusal.Refused` in a `_cli()` wrapper that the `__main__` block calls.
+# `in_boundary` recognised a boundary try only directly in `main()` or under
+# the dispatch, so the census still listed both repaired sites as escapes
+# while every exit-status control was green; they cleared (85 -> 83) only once
+# the try moved into `__main__`. The boundary now also credits a try directly
+# in a module-level function that the dispatch or `main()` calls by bare name,
+# ONE level only. The positive controls started red against the unwidened
+# scanner. The negative controls are green before and after the widening:
+# each pins an input that would defeat it (verification-rules rule 8), so a
+# scanner that credited any module-level try turns them red.
+
+WRAPPER_CLI_HEAD = '''
+import sys
+import refusal
+import mod_a
+
+def go(p):
+    return mod_a.load(p)           # unguarded HERE; the guard, if any, is below
+'''
+
+WRAPPER_BASE_GUARD = '''
+def _cli(argv=None):
+    try:
+        return go(argv)
+    except refusal.Refused as e:
+        print(f"REFUSED  {e}")
+        return 2
+'''
+
+
+def _wrapper_cli(wrapper: str, dispatch: str) -> str:
+    """A CLI whose `go()` site is unguarded where it is written: `wrapper`
+    is the module-level def(s) between the site and the `__main__` block,
+    `dispatch` that block's statements (already indented)."""
+    return f'{WRAPPER_CLI_HEAD}\n{wrapper}\n\nif __name__ == "__main__":\n{dispatch}'
+
+
+def _wrapper_scan(tmp_path, wrapper: str, dispatch: str) -> dict:
+    """The one `mod_a.load` site of a wrapper-shaped CLI: a second site there
+    would be a fixture mistake, so it is refused rather than indexed."""
+    files = _tree(tmp_path)
+    p = tmp_path / "caller_wrapped.py"
+    p.write_text(_wrapper_cli(wrapper, dispatch))
+    files.append(p)
+    idx = rss.build_index(files)
+    got = [s for s in _sites_for(files, idx, "caller_wrapped") if s["callee"] == "mod_a.load"]
+    assert len(got) == 1, got
+    return got[0]
+
+
+def test_base_guard_in_a_wrapper_the_dispatch_calls_is_cli_base(tmp_path):
+    """The `hh_probe5` shape: unguarded at the call site, `except
+    refusal.Refused` in a `_cli()` the `__main__` block calls through
+    `sys.exit` -- red against a scanner that reads `main()` and the dispatch
+    only."""
+    s = _wrapper_scan(tmp_path, WRAPPER_BASE_GUARD, "    sys.exit(_cli())\n")
+    assert s["classification"] == "covered(cli-base)", s
+    assert s["guard"] == "none", s
+
+
+def test_wrapper_called_by_a_bare_statement_is_cli_base(tmp_path):
+    s = _wrapper_scan(tmp_path, WRAPPER_BASE_GUARD, "    _cli()\n")
+    assert s["classification"] == "covered(cli-base)", s
+
+
+def test_base_guard_in_a_wrapper_main_calls_is_cli_base(tmp_path):
+    """`main()` is the other entry the boundary reads: a wrapper IT calls by
+    bare name is the boundary too."""
+    s = _wrapper_scan(tmp_path, WRAPPER_BASE_GUARD + '''
+def main(argv=None):
+    return _cli(argv)
+''', "    sys.exit(main())\n")
+    assert s["classification"] == "covered(cli-base)", s
+
+
+def test_uncalled_wrapper_leaves_the_site_an_escape(tmp_path):
+    """Rule 8: a wrapper with a base guard that nothing reaches guards
+    nothing. The dispatch calls `go()` directly; `_cli` is defined, never
+    called."""
+    s = _wrapper_scan(tmp_path, WRAPPER_BASE_GUARD, "    sys.exit(go())\n")
+    assert s["classification"] == "candidate-escape", s
+    assert s["uncovered"] == ["mod_a"], s
+
+
+def test_wrapper_with_a_sibling_handler_leaves_the_site_an_escape(tmp_path):
+    """Rule 8: the wrapper is reached, but its handler is the caller's OWN
+    class -- a sibling of mod_a's, which it cannot catch."""
+    s = _wrapper_scan(tmp_path, '''
+class Refused(refusal.Refused, Exception):
+    pass
+
+def _cli(argv=None):
+    try:
+        return go(argv)
+    except Refused as e:
+        print(f"REFUSED  {e}")
+        return 2
+''', "    sys.exit(_cli())\n")
+    assert s["classification"] == "candidate-escape", s
+    assert s["uncovered"] == ["mod_a"], s
+
+
+def test_a_try_one_frame_further_in_is_not_the_boundary(tmp_path):
+    """One level only: `_cli` is reached, but ITS callee has the try."""
+    s = _wrapper_scan(tmp_path, '''
+def _inner(argv):
+    try:
+        return go(argv)
+    except refusal.Refused as e:
+        print(f"REFUSED  {e}")
+        return 2
+
+def _cli(argv=None):
+    return _inner(argv)
+''', "    sys.exit(_cli())\n")
+    assert s["classification"] == "candidate-escape", s
+
+
+def test_wrapper_called_from_a_nested_def_is_two_frames_in(tmp_path):
+    """`main()` calls `inner()`; `inner` calls the wrapper. A call written in
+    a def nested in the boundary is that def's, not the boundary's own."""
+    s = _wrapper_scan(tmp_path, WRAPPER_BASE_GUARD + '''
+def main():
+    def inner():
+        return _cli()
+    return inner()
+''', "    sys.exit(main())\n")
+    assert s["classification"] == "candidate-escape", s
+
+
+def test_wrapper_called_only_from_a_handler_is_not_entry(tmp_path):
+    """Rule 8: the dispatch reaches the wrapper from an `except` clause, so it
+    runs after the site's work is over and catches nothing on the way out."""
+    s = _wrapper_scan(tmp_path, WRAPPER_BASE_GUARD, '''
+    try:
+        sys.exit(go())
+    except OSError:
+        sys.exit(_cli())
+''')
+    assert s["classification"] == "candidate-escape", s
+
+
+def test_helper_with_an_unrelated_try_changes_nothing(tmp_path):
+    """`main()` calls a helper whose try is not about refusals: the helper is
+    on the boundary's call list, its `except OSError` is shape `other`, and
+    the unguarded site stays what it was."""
+    s = _wrapper_scan(tmp_path, '''
+def helper():
+    try:
+        return open("x")
+    except OSError:
+        return None
+
+def main():
+    helper()
+    return go()
+''', "    sys.exit(main())\n")
+    assert s["classification"] == "candidate-escape", s
+    assert s["uncovered"] == ["mod_a"], s
