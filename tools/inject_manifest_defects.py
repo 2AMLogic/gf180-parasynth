@@ -215,6 +215,14 @@ INJECTIONS = [
      '    pass  # _single_path_component("case_id", case_id)',
      [f"{TESTS}::test_render_refuses_a_case_id_that_is_not_one_path_component"]),
 
+    ("require_keys judges every value to be of its own type, so no key is "
+     "ever refused for a type the reader cannot dereference (#1679)",
+     "tools/manifest.py",
+     "                and not _is_of_kind(record[k], kinds[k])]",
+     "                and not _is_of_kind(record[k], type(record[k]))]",
+     [f"{TESTS}::test_require_keys_refuses_a_key_of_the_wrong_type_in_the_callers_class",
+      f"{TESTS}::test_require_keys_states_a_wrong_type_with_every_other_offence_in_one_refusal"]),
+
     ("the suite is dropped from the one make target CI invokes",
      "Makefile",
      " tools/test_manifest.py", "",

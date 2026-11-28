@@ -82,6 +82,7 @@ import sys
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools" / "probes"))
@@ -323,3 +324,39 @@ def test_a_sweep_plan_without_its_grid_is_refused(tmp_path, monkeypatch, capsys)
     assert P.main(["--k-sweep"]) == 3
     out = capsys.readouterr().out
     assert "REFUSED" in out and "'grid'" in out
+
+
+@pytest.mark.parametrize("grid", [5, True, "x", "10"])
+def test_a_sweep_plan_with_a_wrong_typed_grid_is_refused(tmp_path, monkeypatch, capsys, grid):
+    """#1679: `grid` PRESENT but not a list, which is the type
+    `[int(v) for v in plan["grid"]]` dereferences it as.
+
+    RED BEFORE THE REPAIR (#1619's guard checks presence and null only). A
+    number or a bool is a `TypeError` and `"x"` a `ValueError`, each past the
+    guard and outside `main()`'s `except Refused` -- exit 1 by traceback. The
+    fourth input is the worse one, and it was measured: a NUMERIC STRING
+    iterates its characters, so `"10"` became the grid `[1, 0]` and reached
+    the renderer -- a different sweep than the committed plan declares, with
+    no word. (Whether that run would have finished or refused later was not
+    measured; it need not be: the plan was already misread.)
+
+    So the renderer is stubbed to fail loudly: a plan that reaches it has not
+    been refused, whatever else the test sees, and the artifact path is moved
+    under tmp_path so no run of this test can write the committed one."""
+    committed = json.loads(P.K_PLAN.read_text())
+    assert isinstance(committed["grid"], list), "the committed plan must carry a grid list"
+    partial = tmp_path / P.K_PLAN.name
+    partial.write_text(json.dumps({**committed, "grid": grid}))
+    monkeypatch.setattr(P, "K_PLAN", partial)
+    monkeypatch.setattr(P, "K_SWEEP_ARTIFACT", tmp_path / "sweep.txt")
+
+    def rendered(*args, **kwargs):
+        raise AssertionError(f"grid {grid!r} reached the renderer: it was not refused")
+    monkeypatch.setattr(P, "render", rendered)
+    clean = lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="")   # noqa: E731
+    monkeypatch.setattr(P, "subprocess", SimpleNamespace(run=clean))
+
+    assert P.main(["--k-sweep"]) == 3
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "'grid'" in out and "list" in out
+    assert not (tmp_path / "sweep.txt").exists()
