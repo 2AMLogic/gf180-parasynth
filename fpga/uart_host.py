@@ -1857,6 +1857,21 @@ def budget(baud: int = DEFAULT_BAUD) -> dict:
 
 
 def main(argv=None, *, bridge_factory=None) -> int:
+    """The CLI's refusal boundary (#1671): any module's `refusal.Refused`
+    raised anywhere below -- command assembly included, which no `try` in the
+    body covers -- is REFUSED (exit 2) with its reason, never a traceback.
+    A caller that takes this in process and reads the return code
+    (release_manifest._capture) then sees a refusal. Refusals by class only:
+    an implementation error is an execution error and leaves here as one
+    (tools/refusal.py)."""
+    try:
+        return _main(argv, bridge_factory=bridge_factory)
+    except refusal.Refused as exc:
+        print(f"uart_host: REFUSED -- {exc}", file=sys.stderr)
+        return 2
+
+
+def _main(argv=None, *, bridge_factory=None) -> int:
     """`bridge_factory(port, baud)` replaces `Bridge` for tests and replay
     capture (uart_device_sim.SimSerial): everything else is the CLI as shipped."""
     open_bridge = bridge_factory or Bridge

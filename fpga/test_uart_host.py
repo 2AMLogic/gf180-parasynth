@@ -217,6 +217,48 @@ def test_main_without_port_or_dry_run_refuses():
     assert main(["--dry-run", "load"]) == 0         # dry-run needs no hardware
 
 
+def test_main_refuses_a_sibling_refusal_from_command_assembly(monkeypatch, capsys):
+    """#1671: `main` is the refusal boundary. `preset_regs` ->
+    `selected_preset.definition` raises `mono_m5a_score.Refused` -- a
+    `refusal.Refused` that is not this module's `Refused`, raised while the
+    commands are assembled, outside every `try` in the body. Before the
+    boundary it left the CLI as a traceback where the exit contract owes
+    REFUSED (2), and a caller that reads only the return code
+    (release_manifest._capture) saw no refusal at all."""
+    import refusal
+    import selected_preset
+    sibling = selected_preset.score.Refused
+    # the precondition of the injection: a refusal the body's own handlers
+    # (`except Refused`) do not name
+    assert issubclass(sibling, refusal.Refused) and not issubclass(sibling, uh.Refused)
+
+    def definition(name):
+        raise sibling("injected: engine profile missing from the tables")
+
+    monkeypatch.setattr(selected_preset, "definition", definition)
+    rc = uh.main(["--preset", "m5a-saw", "note-on", "--dry-run"])
+    err = capsys.readouterr().err
+    assert rc == 2, err
+    assert err.startswith("uart_host: REFUSED")
+    assert "engine profile missing from the tables" in err
+
+
+@pytest.mark.parametrize("error", [ValueError, KeyError])
+def test_a_non_refusal_error_from_command_assembly_still_propagates(monkeypatch, error):
+    """The control for the boundary: it catches refusals by class and nothing
+    wider (tools/refusal.py). An implementation error at the same call site
+    is an EXECUTION ERROR; it must leave `main` untouched, never become
+    `uart_host: REFUSED` (exit 2)."""
+    import selected_preset
+
+    def broke(name):
+        raise error("engine profile")
+
+    monkeypatch.setattr(selected_preset, "definition", broke)
+    with pytest.raises(error, match="engine profile"):
+        uh.main(["--preset", "m5a-saw", "note-on", "--dry-run"])
+
+
 def _applies_cells(text):
     """The `applies` column (4th-from-last field) of each data row."""
     return [ln.split()[-2] for ln in text.splitlines()[2:]]
