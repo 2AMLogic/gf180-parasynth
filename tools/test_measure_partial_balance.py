@@ -16,6 +16,7 @@ import numpy as np
 import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import exit_contract
 import measure_partial_balance as tool
 import preparation_contract as pc
 import run_case as rc
@@ -250,3 +251,126 @@ def test_the_operating_point_is_the_one_the_scorecard_scores():
             (scored["win_ms"], scored["hop_ms"], scored["t_end"]), voice
         assert tuple(op["lo"]) == tuple(scored["f_lo_range"]), voice
         assert tuple(op["hi"]) == tuple(scored["f_hi_range"]), voice
+
+
+# --- #1857: the exit status when no cell clears the floor.
+#
+# `cmd_measure` prints REFUSED in a cell whose partial stands within
+# FLOOR_MARGIN_DB of its record's floor and carries on, and then returned 0
+# whatever the table held. Reproduced on origin/main @ 528a228b (2026-11-28):
+# with every record floor-bound the table was 12 rows of `REFUSED REFUSED -`
+# and the command still exited 0 -- PASS, a RESULT -- having measured nothing.
+#
+# THE INPUT. `cmd_measure` reads each record's floor from its last 10 %, so a
+# record that ends in noise louder than its partials has a floor nothing
+# clears. The strike is the estimator's own first known case, unaltered; only
+# the tail is new, and it is noise rather than silence because a silent tail is
+# a zero floor, which every partial clears.
+#
+# WHAT DEFEATS THE CHECK (docs/verification-rules.md rule 8): the guard is per
+# CELL. One side of a voice can be floor-bound throughout while the other side
+# answers, and the run is 0 with no ERROR figure for that voice: its reference
+# column, or ours, is all REFUSED and says so in the table.
+# `test_one_floor_bound_side_does_not_refuse_...` pins that boundary rather
+# than hiding it.
+#
+# Red-first on that tree, 2026-11-28: the refusal test failed with rc 0 and
+# the two controls beside it were green.
+
+FLOOR_BOUND_TAIL_RMS = 3.0        # three times the partials' peak amplitude
+ALL_FLOOR_BOUND = (("RS", "reference"), ("RS", "ours"),
+                   ("CB", "reference"), ("CB", "ours"))
+AT_POINTS = sum(len(tool.OP[v]["at"]) for v in ("RS", "CB"))
+
+
+def _floor_bound_strike(voice, sr):
+    """The first known case for `voice`, then one second of noise: the last
+    10 % of the record is noise and nothing in it clears a 6 dB margin."""
+    f_lo, tau_lo, f_hi, tau_hi = {"RS": (455, 0.0047, 1786, 0.0024),
+                                  "CB": (540, 0.060, 800, 0.060)}[voice]
+    body = tool.two_partial(f_lo, tau_lo, 1.0, f_hi, tau_hi, 1.0, tool.OP[voice]["t_end"], sr)
+    a = int(round(1e-3 * sr))
+    x = np.zeros(a + len(body) + sr)
+    x[a:a + len(body)] = body
+    x[a + len(body):] = FLOOR_BOUND_TAIL_RMS * np.random.default_rng(0).standard_normal(sr)
+    return x
+
+
+def _measure(tmp_path, monkeypatch, capsys, floor_bound=()):
+    """(rc, stdout) of the real `cmd_measure` on two-line strikes; the
+    (voice, side) pairs in `floor_bound` get the noise tail instead."""
+    def record(voice, sr, side):
+        return _floor_bound_strike(voice, sr) if (voice, side) in floor_bound \
+            else _two_line_strike(voice, sr, 1.0)
+
+    monkeypatch.setattr(tool, "REFDIR", tmp_path)
+    for voice in ("RS", "CB"):
+        p = tmp_path / f"{voice.lower()}8" / f"{voice}.WAV"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(voice.encode())
+    monkeypatch.setattr(rc, "load_reference",
+                        lambda voice, refdir, inject="": (record(voice, 44100, "reference"), 44100,
+                                                          f"{voice.lower()}8/{voice}.WAV", "no knob"))
+    monkeypatch.setattr(rc, "render_drum_solo",
+                        lambda sound, *a, **k: (record(sound, 48000, "ours"), 48000))
+    monkeypatch.setattr(tool.PT, "find_partial",
+                        lambda x, sr, f_lo, f_hi, *, seconds=None, df=0.05: 0.5 * (f_lo + f_hi))
+    rc_ = tool.cmd_measure()
+    return rc_, capsys.readouterr().out
+
+
+def _table(out):
+    """The balance rows: the lines whose reference and ours columns are a
+    figure or REFUSED, i.e. everything but the verdict line."""
+    return [ln.split() for ln in out.splitlines()
+            if " ref " in ln and not ln.startswith("REFUSED")]
+
+
+def test_a_run_where_no_cell_clears_the_floor_is_refused_not_a_pass(
+        tmp_path, monkeypatch, capsys):
+    rc, out = _measure(tmp_path, monkeypatch, capsys, ALL_FLOOR_BOUND)
+
+    table = _table(out)
+    assert len(table) == AT_POINTS, out
+    assert all(row[1:4] == ["REFUSED", "REFUSED", "-"] for row in table), table
+    assert rc == exit_contract.REFUSED, (rc, out)
+    verdicts = [ln for ln in out.splitlines() if ln.startswith("REFUSED")]
+    assert len(verdicts) == 1 and out.splitlines()[-1] == verdicts[0], out
+    assert f"0 of {2 * AT_POINTS} cell(s)" in verdicts[0], verdicts[0]
+
+
+def test_the_control_a_run_where_one_voice_answers_still_passes(tmp_path, monkeypatch, capsys):
+    """RS floor-bound throughout, CB answering throughout: a result. Widening
+    the rule to "any REFUSED cell" turns this red."""
+    rc, out = _measure(tmp_path, monkeypatch, capsys, ALL_FLOOR_BOUND[:2])
+
+    table = _table(out)
+    rs = [row for row in table if row[1:4] == ["REFUSED", "REFUSED", "-"]]
+    cb = [row for row in table if row[1:4] != ["REFUSED", "REFUSED", "-"]]
+    assert len(rs) == len(tool.OP["RS"]["at"]) and len(cb) == len(tool.OP["CB"]["at"]), table
+    assert all(row[3] != "-" for row in cb), table
+    assert rc == exit_contract.PASS, (rc, out)
+    assert not any(ln.startswith("REFUSED") for ln in out.splitlines()), out
+
+
+def test_one_floor_bound_side_does_not_refuse_a_run_whose_other_side_answers(
+        tmp_path, monkeypatch, capsys):
+    """The stated boundary of the guard, and out of scope on purpose (#1857):
+    the RS reference alone is floor-bound, so RS has no ERROR figure at any
+    time point, and the run is still 0 because other cells answered."""
+    rc, out = _measure(tmp_path, monkeypatch, capsys, (("RS", "reference"),))
+
+    table = _table(out)
+    rs = table[:len(tool.OP["RS"]["at"])]
+    assert all(row[1] == "REFUSED" and row[2] != "REFUSED" and row[3] == "-" for row in rs), table
+    assert rc == exit_contract.PASS, (rc, out)
+    assert not any(ln.startswith("REFUSED") for ln in out.splitlines()), out
+
+
+def test_the_refusal_reason_names_the_cell_not_every_partial(tmp_path, monkeypatch, capsys):
+    """A cell needs only ONE weak partial to be refused, so the reason must not
+    claim every partial was within the margin (#1934 review)."""
+    _, out = _measure(tmp_path, monkeypatch, capsys, ALL_FLOOR_BOUND)
+    verdict = [ln for ln in out.splitlines() if ln.startswith("REFUSED")][0]
+    assert "every partial" not in verdict, verdict
+    assert "both partials" in verdict, verdict

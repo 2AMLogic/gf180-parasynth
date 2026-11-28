@@ -97,9 +97,15 @@ def test_foreign_manifest_exits_refused_and_writes_no_report(
 
 @pytest.mark.parametrize("module", ["measure_m5_operating_level", "measure_m5_saw_drive"])
 def test_m5a_refusal_is_still_recorded_per_drive(sandbox, module):
+    # #1857: the row is still recorded, and a run in which it is the ONLY row
+    # is REFUSED. This control asserted exit 0 for that run until then -- the
+    # defect, pinned.
     corrupt_audio_hash(sandbox, "M5A")
     proc = run_cli(sandbox, module, "--drives", "0.75", "--out", "result.json")
-    assert proc.returncode == 0, (proc.stdout, proc.stderr)
+    assert proc.returncode == 2, (proc.stdout, proc.stderr)
+    assert proc.stdout.splitlines()[-1].startswith(
+        "REFUSED: measured nothing: 0 of 1 drive(s) answered"), proc.stdout
+    assert "Traceback" not in proc.stdout + proc.stderr
     rows = json.loads((sandbox / "result.json").read_text())["rows"]
     assert rows["0.75"]["refused"] == "frozen M5A Mini V3 audio hash mismatch"
 

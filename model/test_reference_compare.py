@@ -243,3 +243,274 @@ def test_a_silent_stub_is_refused_rather_than_measured():
     return a plausible number (verification rule 1)."""
     with pytest.raises(am.InsufficientEvidence):
         am.harmonic_signature(np.zeros(SR), SR)
+
+
+# =============================================================================
+# 3. the exit status when nothing answered (issue #1857)
+# =============================================================================
+# `main` returned 0 unconditionally, and `--report` returned whatever
+# `report()` returns, which was 0. `guard` records a stage a rig cannot
+# perform -- NotImplementedError -- as `not_answerable` and carries on to the
+# next stage and the next device, so a run in which no stage answered wrote
+# its files, printed "written to", and exited 0: PASS, a RESULT, having
+# measured nothing. Reproduced on origin/main @ 528a228b (2026-11-28) for each
+# guarded stage of a rig that answers none, and for two requests that ask
+# nothing of anyone: `--devices ""`, and `--stage validate` -- offered by
+# argparse and named by this module's docstring, dispatched by no branch of
+# `main`.
+#
+# THE CONTROL is test_the_control_a_sweep_where_one_stage_answered: a sweep in
+# which one stage answered is 0, its `not_answerable` records written beside
+# it. The boundary of "answered" is the RIG, and it is stated rather than
+# hidden: a stage whose rig rendered and whose estimator then refused every row
+# (`ok: False`) has answered for this purpose and the run is 0. That is the
+# estimator-refusal shape, out of scope on purpose (#1857 draws #1823's line
+# here); test_a_rig_that_rendered_counts_as_answered pins it.
+#
+# Only the host boundary is stood in for (`build`). `main`, `guard`, the
+# stages, the row writers and `report` are the real ones, and the answering
+# rig renders the closed-form odd series section 1 grounds the estimator on,
+# so the control is a real measurement through the real estimator.
+#
+# Red-first on that tree, 2026-11-28: 11 of the 17 controls here failed --
+# ten with rc 0, and the all-not-answerable report through the crash --
+# and the six controls and the stated boundary were green.
+import json                                                        # noqa: E402
+
+import reference_compare as rcmp                                   # noqa: E402
+
+PASS, FAIL, REFUSED = 0, 1, 2      # tools/exit_contract.py, retyped so the oracle is not read off its subject
+GUARDED = ("selfosc", "response", "drive", "peakdrive", "bigdrive")
+
+
+class _Deaf:
+    """A rig that cannot answer: every method a stage calls raises
+    NotImplementedError, which `guard` records as `not_answerable`."""
+
+    def __getattr__(self, name):
+        def refuse(*a, **k):
+            raise NotImplementedError(f"{name}: not answerable")
+        return refuse
+
+
+class _Ringing(_Deaf):
+    """Answers `ring` with the closed-form odd series at 258 Hz -- h3, h5, h7
+    at -14, -38, -52 dB -- and refuses every other stage."""
+
+    def ring(self, cut, res, seconds=1.2, amp=0.25):
+        n = int(seconds * rcmp.SR)
+        t = np.arange(n) / rcmp.SR
+        y = np.sin(2 * math.pi * 258.0 * t)
+        for k, db in ((3, -14.0), (5, -38.0), (7, -52.0)):
+            y = y + 10 ** (db / 20.0) * np.sin(2 * math.pi * k * 258.0 * t + 0.3 * k)
+        return y
+
+
+class _SilentRing(_Deaf):
+    """Renders silence and refuses every other stage: the rig answered, and
+    the estimator refused."""
+
+    def ring(self, cut, res, seconds=1.2, amp=0.25):
+        return np.zeros(int(seconds * rcmp.SR))
+
+
+def _main(monkeypatch, tmp_path, capsys, argv, rigs):
+    """(rc, stdout lines) of the real `rcmp.main` into tmp_path with `build`
+    replaced: `rigs` is {device: rig class}."""
+    monkeypatch.setattr(rcmp, "build", lambda name: rigs[name]())
+    rc = rcmp.main([*argv, "--out", str(tmp_path)])
+    return rc, capsys.readouterr().out.splitlines()
+
+
+def _rows(tmp_path, stage, device):
+    with open(tmp_path / f"{stage}-{device}.json") as f:
+        return json.load(f)
+
+
+def _verdicts(out):
+    """The lines that BEGIN with `REFUSED:`. A stage's own `REFUSED <why>`
+    sits mid-row and never begins a line, so it is not the run's verdict."""
+    return [ln for ln in out if ln.startswith("REFUSED:")]
+
+
+@pytest.mark.parametrize("stage", (*GUARDED, "validate"))
+def test_a_request_no_stage_answered_exits_refused_not_a_pass(monkeypatch, tmp_path, capsys, stage):
+    rc, out = _main(monkeypatch, tmp_path, capsys, ["--stage", stage, "--devices", "ours"],
+                    {"ours": _Deaf})
+    assert rc == REFUSED, (rc, out)
+    assert any(ln.startswith("written to") for ln in out), "the files are written before the verdict"
+    verdicts = _verdicts(out)
+    assert len(verdicts) == 1 and out[-1] == verdicts[0], out
+    if stage == "validate":
+        assert sorted(p.name for p in tmp_path.iterdir()) == ["knobs.json"], "validate dispatches no stage"
+        assert "0 of 0 requested stage(s) answered" in verdicts[0], verdicts[0]
+    else:
+        # `--stage response` asks two things of the device: the corner/slope
+        # sweep and the resonant-peak sweep
+        keys = {"response": ("response", "peak")}.get(stage, (stage,))
+        rows = _rows(tmp_path, keys[0], "ours")
+        assert len(rows) == 1 and rows[0]["ok"] is False and rows[0]["not_answerable"], \
+            "the not_answerable record is still written: " + str(rows)
+        assert f"0 of {len(keys)} requested stage(s) answered" in verdicts[0], verdicts[0]
+        assert all(f"ours/{key}" in verdicts[0] for key in keys), verdicts[0]
+
+
+def test_no_device_requested_is_refused(monkeypatch, tmp_path, capsys):
+    """`--devices ""` asks nothing of anyone. Exit 0 there would be the same
+    defect with no rig to blame."""
+    rc, out = _main(monkeypatch, tmp_path, capsys, ["--stage", "selfosc", "--devices", ""], {})
+    assert rc == REFUSED, (rc, out)
+    assert "0 of 0 requested stage(s) answered" in _verdicts(out)[0], out
+
+
+def test_every_device_not_answerable_is_refused_and_names_each(monkeypatch, tmp_path, capsys):
+    devices = "ours,ours-1tanh,ours-2pole".split(",")
+    rc, out = _main(monkeypatch, tmp_path, capsys, ["--stage", "selfosc", "--devices", ",".join(devices)],
+                    dict.fromkeys(devices, _Deaf))
+    assert rc == REFUSED, (rc, out)
+    assert all("not_answerable" in _rows(tmp_path, "selfosc", d)[0] for d in devices)
+    verdicts = _verdicts(out)
+    assert len(verdicts) == 1 and out[-1] == verdicts[0], out
+    assert "0 of 3 requested stage(s) answered" in verdicts[0], verdicts[0]
+    assert all(f"{d}/selfosc" in verdicts[0] for d in devices), verdicts[0]
+
+
+def test_the_control_a_sweep_where_one_stage_answered_still_passes(monkeypatch, tmp_path, capsys):
+    """THE CONTROL. `ours` rings a closed-form series the real estimator
+    measures; `ours-1tanh` cannot answer. One answered stage among refused
+    ones is a result. Widening the rule to "any not_answerable" turns this
+    red."""
+    rc, out = _main(monkeypatch, tmp_path, capsys, ["--stage", "selfosc", "--devices", "ours,ours-1tanh"],
+                    {"ours": _Ringing, "ours-1tanh": _Deaf})
+    assert rc == PASS, (rc, out)
+    answered = _rows(tmp_path, "selfosc", "ours")
+    assert len(answered) == len(rcmp.res_grid("ours")), answered
+    assert all(r["ok"] and abs(r["h3"] + 14.0) < 0.1 and abs(r["h5"] + 38.0) < 0.1 for r in answered), answered
+    assert "not_answerable" in _rows(tmp_path, "selfosc", "ours-1tanh")[0]
+    assert _verdicts(out) == [], out
+
+
+def test_under_stage_all_one_answered_stage_among_refused_ones_still_passes(monkeypatch, tmp_path, capsys):
+    rc, out = _main(monkeypatch, tmp_path, capsys, ["--stage", "all", "--devices", "ours"], {"ours": _Ringing})
+    assert rc == PASS, (rc, out)
+    written = {p.name[:-len("-ours.json")]: json.load(open(p)) for p in tmp_path.glob("*-ours.json")}
+    assert set(written) == {"selfosc", "response", "peak", "tracking", "drive"}, sorted(written)
+    assert all(r["ok"] for r in written["selfosc"]), written["selfosc"]
+    assert all("not_answerable" in r for r in written["response"] + written["peak"] + written["drive"])
+    assert _verdicts(out) == [], out
+
+
+def test_a_rig_that_rendered_counts_as_answered_even_when_the_estimator_refuses(
+        monkeypatch, tmp_path, capsys):
+    """The boundary of "answered", and out of scope on purpose (#1857): the
+    rig answered every ring, the REAL estimator found each render silent and
+    refused. Those rows carry `ok: False` and a reason; they are measurements
+    that could not answer, not a rig that was not here."""
+    rc, out = _main(monkeypatch, tmp_path, capsys, ["--stage", "selfosc", "--devices", "ours"],
+                    {"ours": _SilentRing})
+    assert rc == PASS, (rc, out)
+    rows = _rows(tmp_path, "selfosc", "ours")
+    assert len(rows) == len(rcmp.res_grid("ours")), rows
+    assert all(r["ok"] is False and r["why"] for r in rows), rows
+    assert _verdicts(out) == [], out
+
+
+# -- `--report`: the same question over a directory that was written before
+
+
+def _report(tmp_path, capsys):
+    rc = rcmp.main(["--report", "--out", str(tmp_path)])
+    return rc, capsys.readouterr().out.splitlines()
+
+
+@pytest.mark.parametrize("shape", ["absent", "nothing-requested", "all-not-answerable"])
+def test_a_report_with_nothing_measured_in_it_is_refused_not_a_pass(tmp_path, capsys, shape):
+    """Reproduced on 528a228b for the first two shapes: an empty report and
+    exit 0. The third crashed instead -- `max()` over an empty table in
+    section 1 -- which is the crash shape of #1783, not a PASS; the verdict
+    now comes first. The same crash still takes a MIXED directory (one
+    device measured, another's self-oscillation rows all refused) and is
+    out of scope here; #1857's PR records it."""
+    out_dir = tmp_path / "absent" if shape == "absent" else tmp_path / "run"
+    if shape == "nothing-requested":
+        out_dir.mkdir()
+        (out_dir / "knobs.json").write_text("{}")
+    elif shape == "all-not-answerable":
+        out_dir.mkdir()
+        (out_dir / "selfosc-ours.json").write_text(json.dumps(
+            [dict(device="ours", ok=False, not_answerable="ring: not answerable")]))
+    rc, out = _report(out_dir, capsys)
+    assert rc == REFUSED, (rc, out)
+    verdicts = _verdicts(out)
+    assert len(verdicts) == 1 and out == verdicts, out
+
+
+def test_the_control_a_report_over_a_directory_with_a_measurement_still_passes(
+        monkeypatch, tmp_path, capsys):
+    """THE CONTROL for `--report`: over the files a measured run wrote,
+    the comparison prints and the status is 0. Widening the rule to "any
+    not_answerable row" would refuse every directory a plugin-less host
+    writes, and turn this red."""
+    rc, _ = _main(monkeypatch, tmp_path, capsys, ["--stage", "selfosc", "--devices", "ours"],
+                  {"ours": _Ringing})
+    assert rc == PASS
+    rc, out = _report(tmp_path, capsys)
+    assert rc == PASS, (rc, out)
+    assert _verdicts(out) == [], out
+
+
+def test_the_control_a_report_passes_on_a_measurement_it_does_not_display(tmp_path, capsys):
+    """`report()` prints nothing from the `drive` files. Something was
+    measured all the same, so the status keys on what the directory holds,
+    not on what the report shows."""
+    (tmp_path / "drive-ours.json").write_text(json.dumps(
+        [dict(device="ours", level_dbfs=-6.0, ok=True, h3=-20.0)]))
+    rc, out = _report(tmp_path, capsys)
+    assert rc == PASS, (rc, out)
+    assert _verdicts(out) == [], out
+
+
+# -- review of #1934: the filenames the writer produces, and a refused acquisition
+
+class _NoCurve(_Deaf):
+    """The rig is here and cannot acquire a curve: the response call raises
+    InsufficientEvidence (what a silent Diva capture does)."""
+
+    def tone_gain_db(self, *a, **k):
+        raise rcmp.am.InsufficientEvidence("reference is silent in a requested bin")
+
+    noise_curve = tone_gain_db
+
+
+@pytest.mark.parametrize("device", sorted(rcmp.KIND))
+def test_report_recognises_every_registered_device_filename(tmp_path, capsys, device):
+    """Splitting at the last hyphen dropped seven registered devices."""
+    (tmp_path / f"selfosc-{device}.json").write_text(json.dumps(
+        [dict(device=device, ok=True, res=0.5, rms=0.1)]))
+    assert rcmp._stage_files(str(tmp_path)) == [("selfosc", device)]
+
+
+def test_report_ignores_a_json_file_that_is_not_a_stage_file(tmp_path, capsys):
+    """CONTROL (defeats a filter that accepts any prefix): metadata only is REFUSED."""
+    (tmp_path / "notes-ours.json").write_text(json.dumps([dict(note="metadata only")]))
+    rc, out = _report(tmp_path, capsys)
+    assert rc == REFUSED, (rc, out)
+
+
+@pytest.mark.parametrize("stage", ("peakdrive", "response"))
+def test_a_stage_whose_every_acquisition_was_refused_exits_refused(
+        monkeypatch, tmp_path, capsys, stage):
+    argv = ["--stage", stage, "--devices", "ours"]
+    rc, out = _main(monkeypatch, tmp_path, capsys, argv, {"ours": _NoCurve})
+    rows = _rows(tmp_path, stage, "ours")
+    assert rows and all(r["ok"] is False for r in rows), rows
+    assert rc == REFUSED, (rc, out)
+    rc, out = _report(tmp_path, capsys)
+    assert rc == REFUSED, (rc, out)
+
+
+def test_a_mixed_run_with_one_acquired_curve_still_passes(monkeypatch, tmp_path, capsys):
+    rows = [dict(device="ours", ok=False, why="silent", unacquired=True),
+            dict(device="ours", res=0.5, freqs=[1.0], gain_db=[0.0], corner_hz=None)]
+    assert rcmp._answered(rows)
+    assert not rcmp._answered(rows[:1])

@@ -20,6 +20,13 @@ staleness question (every recorded sha must diff), so the tool REFUSES rather
 than printing zeros that look like data. A [dag] commit that is a merge, or
 whose parent carries no readable results file, is reported as skipped rather
 than counted as suppressed.
+
+Exit status follows `tools/exit_contract.py` (#1857). A [dag] commit that was
+REPLAYED is this instrument's unit of measurement, so a run that replayed
+none -- every commit it found was skipped -- is REFUSED (2, one `REFUSED:`
+line, the skipped rows still printed above it) rather than a "0 would have
+been suppressed (0%)" headline: that zero is not a measurement. Zero record
+REWRITES among replayed commits is a measured zero, and exits 0.
 """
 from __future__ import annotations
 import argparse, json, pathlib, re, subprocess, sys
@@ -27,6 +34,7 @@ import argparse, json, pathlib, re, subprocess, sys
 TOOLS = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(TOOLS))
 from compile_dag import normalise_detail                             # noqa: E402
+from exit_contract import PASS, REFUSED                              # noqa: E402
 
 ROOT = TOOLS.parent
 RESULTS = "docs/dag-results.json"
@@ -218,6 +226,11 @@ def main(argv=None) -> int:
               f"{'results diff would be EMPTY' if all_kept else ''}")
         for k, why in r["reasons"].items():
             print(f"          {k:<4} {why}")
+    if not totals["commits"]:
+        skipped = "; ".join(f"{r['commit']}: {r['note']}" for r in rows if r.get("note"))
+        print(f"\nREFUSED: replay measured nothing: 0 of {len(rows)} [dag] commit(s) replayed; "
+              f"{skipped}")
+        return REFUSED
     print()
     print(f"replayed {totals['commits']} linear [dag] commits: "
           f"{totals['records']} record rewrites, "
@@ -227,7 +240,7 @@ def main(argv=None) -> int:
           f"docs/dag-results.json diffs would have been empty.")
     print("README hunks outside the DAG block (scorecard/history counters) are "
           "out of scope for #967 and are reported only to size what remains.")
-    return 0
+    return PASS
 
 
 if __name__ == "__main__":

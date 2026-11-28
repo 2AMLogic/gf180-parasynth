@@ -24,6 +24,7 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(ROOT, "model"))
 
+import exit_contract                                               # noqa: E402
 import measure_osc_drift_reference as mod                             # noqa: E402
 import osc_drift_probe as odp                                         # noqa: E402
 
@@ -590,3 +591,107 @@ def test_each_render_and_m5a_audio_need_their_own_digest(scorecard):
             "seg1-pulse/n1-midi96",
         ],
     )
+
+
+# ---- #1857: the exit status when no window answered --------------------------
+#
+# `main` printed every window's verdict, the across-note pairs and the two
+# static refusals, wrote `--json` if asked, and returned 0. Read to the bottom
+# on origin/main @ 528a228b (2026-11-28) and then run: with no frozen Mini V3
+# audio in the checkout every window was MANIFEST_ABSENT, there was no
+# across-note measurement, and the process exited 0 -- PASS, a RESULT.
+#
+# A window ANSWERED when its report's verdict is not REFUSED, whatever a
+# refusal's code: audio the host cannot reach (CLIP_ABSENT, CLIP_HASH) and a
+# window the probe cannot read (TOO_FEW_PERIODS) both left no drift estimate.
+# An across-note pair cannot answer where its windows did not --
+# `odp.across_note_drift` refuses unless every window carries a reported
+# verdict -- so the windows alone decide. Surge XT and Diva are refused by
+# construction (`refused_references`) and are not counted either way.
+#
+# Red-first on that tree, 2026-11-28: 3 of the 4 controls here failed -- both
+# `main` cases with rc 0, the unit case for want of `windows_exit` -- and
+# the control was green.
+def _verdicts(out):
+    """The lines that BEGIN with `REFUSED:`. A refused window's own row is
+    indented, so it is never the run's verdict."""
+    return [ln for ln in out.splitlines() if ln.startswith("REFUSED:")]
+
+
+def _rows(out, needle):
+    return [ln for ln in out.splitlines() if ln.startswith("   ") and needle in ln]
+
+
+def test_the_window_count_is_on_the_verdict_whatever_the_refusals_code(capsys):
+    silent = [dict(verdict=odp.REFUSED, refusal=code)
+              for code in ("CLIP_ABSENT", "TOO_FEW_PERIODS", "ESTIMATOR_DISAGREE")]
+    assert mod.windows_exit([]) == exit_contract.REFUSED
+    assert mod.windows_exit(silent) == exit_contract.REFUSED
+    out = capsys.readouterr().out
+    assert "0 of 0 window(s) answered; no window was requested" in out, out
+    assert "0 of 3 window(s) answered; CLIP_ABSENT x1, ESTIMATOR_DISAGREE x1, TOO_FEW_PERIODS x1" in out, out
+    assert mod.windows_exit([silent[0], dict(silent[1], verdict=odp.STABLE)]) == exit_contract.PASS
+    assert _verdicts(capsys.readouterr().out) == []
+
+
+def test_no_frozen_audio_at_all_is_refused_not_a_pass(tmp_path, monkeypatch, capsys):
+    """A checkout holding neither manifest: two MANIFEST_ABSENT reports, one
+    per case, and the Surge and Diva refusals -- and nothing measured."""
+    monkeypatch.setattr(mod, "SCOREBOARD", str(tmp_path / "no-scoreboard"))
+    out = tmp_path / "drift.json"
+
+    assert mod.main(["--json", str(out)]) == exit_contract.REFUSED
+    console = capsys.readouterr().out
+    assert len(_rows(console, "MANIFEST_ABSENT")) == 2, console
+    assert "== Surge XT: REFUSED" in console and "== u-he Diva: REFUSED" in console, console
+    verdicts = _verdicts(console)
+    assert len(verdicts) == 1 and console.splitlines()[-1] == verdicts[0], console
+    assert "0 of 2 window(s) answered" in verdicts[0] and "MANIFEST_ABSENT x2" in verdicts[0], verdicts[0]
+
+    on_disk = json.load(open(out))
+    assert [r["refusal"] for r in on_disk["miniv3"]["reports"]] == ["MANIFEST_ABSENT"] * 2, \
+        "the --json record is still written on a refused run"
+    assert [r["reference"] for r in on_disk["refused"]] == ["Surge XT", "u-he Diva"]
+
+
+def _zero_every_digest(node):
+    if isinstance(node, dict):
+        return {k: ("0" * 64 if k == "sha256" else _zero_every_digest(v)) for k, v in node.items()}
+    if isinstance(node, list):
+        return [_zero_every_digest(v) for v in node]
+    return node
+
+
+@needs_frozen
+def test_frozen_audio_none_of_which_hashes_is_refused_not_a_pass(scorecard, capsys):
+    """The audio is here and is not the audio the manifests describe: every
+    window is CLIP_HASH, which is the precondition `_clip` exists to state."""
+    for case in ("mono-m1a-miniv3", "mono-m5a-miniv3"):
+        path = scorecard / case / "manifest.json"
+        path.write_text(json.dumps(_zero_every_digest(json.loads(path.read_text()))))
+    out = scorecard / "drift.json"
+
+    assert mod.main(["--json", str(out)]) == exit_contract.REFUSED
+    console = capsys.readouterr().out
+    reports = json.load(open(out))["miniv3"]["reports"]
+    assert reports and all(r["verdict"] == odp.REFUSED and r["refusal"] == "CLIP_HASH" for r in reports), reports
+    verdicts = _verdicts(console)
+    assert len(verdicts) == 1 and f"0 of {len(reports)} window(s) answered" in verdicts[0], console
+    assert f"CLIP_HASH x{len(reports)}" in verdicts[0], verdicts[0]
+
+
+@needs_frozen
+def test_the_control_a_partly_refused_run_with_a_real_measurement_still_passes(scorecard, capsys):
+    """THE CONTROL. The M5A manifest is gone, so its case is MANIFEST_ABSENT;
+    the M1A windows are the real frozen audio and answer. Widening the rule to
+    "any refusal" turns this red -- and so would counting Surge and Diva, which
+    refuse on every host."""
+    shutil.rmtree(scorecard / "mono-m5a-miniv3")
+
+    assert mod.main([]) == exit_contract.PASS
+    console = capsys.readouterr().out
+    assert len(_rows(console, "MANIFEST_ABSENT")) == 1, console
+    assert [ln.split()[1] for ln in _rows(console, "m1a/")
+            if ln.split()[1] in (odp.STABLE, odp.PERIODIC, odp.DRIFTING)], console
+    assert "== Surge XT: REFUSED" in console, console
+    assert _verdicts(console) == [], console

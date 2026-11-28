@@ -24,6 +24,11 @@ untouched notes, plus the F1 cases, which are measured separately.
 Engine: pulse2x with rectangles at 0.74 (the next image's configuration, see
 pulse2x-headroom/), and R1 for reference. No result is R1-image sound unless
 the engine says r1.
+
+Exit status follows `tools/exit_contract.py`: 0 when at least one drive was
+measured, 2 (REFUSED, one `REFUSED:` line on stdout, the report still
+written) when every drive refused, and 2 with no report for a drive
+outside the budget.
 """
 from __future__ import annotations
 
@@ -44,7 +49,7 @@ import mono_m5a_score as score  # noqa: E402
 import mono_artifact_probe as mp  # noqa: E402
 import measure_pulse2x_headroom as hr  # noqa: E402
 import refusal  # noqa: E402
-from exit_contract import REFUSED  # noqa: E402
+from exit_contract import PASS, REFUSED  # noqa: E402
 
 BASE_DRIVE = 0.75
 CANDIDATE_DRIVES = (0.5, 0.35, 0.25)          # the whole budget
@@ -170,6 +175,22 @@ def select(rows: dict) -> dict:
             "baseline_harmonic_shape": base["Harmonic shape"], "verdicts": verdicts, "chosen": chosen}
 
 
+def drives_exit(rows: dict) -> int:
+    """The drive loop's exit status (`tools/exit_contract.py`).
+
+    A drive answered when its row carries a measurement rather than a
+    `refused` record. PASS if any drive answered: a partly refused run is a
+    result, its refusals on record beside the measurements. REFUSED when
+    none did (#1857). The caller has written the report by then, so the
+    record exists; it holds no measurement, and a status of 0 would read
+    as a RESULT. `measure_m5_saw_drive` ends its own `_run` here too."""
+    if any("refused" not in r for r in rows.values()):
+        return PASS
+    why = "; ".join(f"drive {d}: {r['refused']}" for d, r in rows.items())
+    print(f"REFUSED: measured nothing: 0 of {len(rows)} drive(s) answered; {why}", flush=True)
+    return REFUSED
+
+
 def _run(argv) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--engine", choices=("pulse2x", "r1"), default="pulse2x")
@@ -212,7 +233,7 @@ def _run(argv) -> int:
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(res, indent=1) + "\n")
     print(f"wrote {a.out}")
-    return 0
+    return drives_exit(rows)
 
 
 def main(argv=None) -> int:
