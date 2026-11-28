@@ -305,7 +305,7 @@ def require_tree_identity() -> str:
 RECORD_EXTRA_KEYS = ("source_commit", "source_hashes", "reference_sha256", "corpus_git_commit")
 
 
-def require_frozen_contract(frozen: dict) -> None:
+def require_frozen_contract(frozen: dict, what: str = "the frozen record") -> None:
     """The record's measurement contract must EQUAL the probe's declared FROZEN values.
 
     The source-hash pins prove the code did not move since freeze; they say nothing about the
@@ -313,7 +313,17 @@ def require_frozen_contract(frozen: dict) -> None:
     `confirmation_settings` as read -- a hand-edited record re-rubriced the measurement of the
     same pinned production source (review repro: all three altered records reached the render).
     The code is the anchor, and this module is inside the source closure, so a changed FROZEN
-    cannot measure against an older record either: both directions force a re-freeze."""
+    cannot measure against an older record either: both directions force a re-freeze.
+
+    `what` names the record so a refusal says which file to act on."""
+    if not isinstance(frozen, dict):
+        # By what the file IS, before `k not in frozen`: that reads a list or a string as
+        # "every contract key missing" and is a TypeError on a number or null (exit 1, FAIL).
+        kind = "null" if frozen is None else f"a JSON {type(frozen).__name__}"
+        raise Refused(
+            f"{what} is {kind}, not a JSON object -- it carries no measurement contract at "
+            "all, so nothing can be checked against the probe's declared FROZEN values: the "
+            "wrong file, or a partial write; re-freeze before measuring")
     missing = sorted(k for k in FROZEN if k not in frozen)
     mistyped = sorted(k for k, w in FROZEN.items() if k in frozen
                       and isinstance(w, bool) != isinstance(frozen[k], bool))
@@ -324,7 +334,7 @@ def require_frozen_contract(frozen: dict) -> None:
         def fmt(pairs):
             return ", ".join(f"{k}={v!r}" for k, v in pairs) or "-"
         raise Refused(
-            "the frozen record's measurement contract does not match the probe's declared FROZEN "
+            f"{what}: the measurement contract does not match the probe's declared FROZEN "
             f"values: missing [{', '.join(missing) or '-'}], "
             f"mistyped-not-bool [{fmt([(k, frozen[k]) for k in mistyped])}], "
             f"changed [{fmt([(k, frozen[k]) for k in changed])}], "
@@ -376,7 +386,7 @@ def cmd_measure(a) -> int:
         print(f"REFUSED: no frozen record at {a.frozen}; run `freeze` BEFORE measuring")
         return 2
     try:
-        require_frozen_contract(frozen)
+        require_frozen_contract(frozen, f"the frozen record at {a.frozen}")
         require_corpus(a.refs, frozen)
         measured_at = require_tree_identity()
         now = source_hashes()

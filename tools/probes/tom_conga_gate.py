@@ -743,9 +743,12 @@ def main(argv=None) -> int:
             res = ratepath16(a.refs)
         elif a.cmd == "judge":
             rec = load_record(a.record, "the run record")
+            mf.require_keys(rec, "rows", f"the record at {a.record}", refused=Refused)
             res = judge(rec, load_prereg())
             if a.twin:
-                res["post_hoc"] = post_hoc(rec, load_record(a.twin, "the twin record"))
+                twin_rec = load_record(a.twin, "the twin record")
+                mf.require_keys(twin_rec, "rows", f"the twin record at {a.twin}", refused=Refused)
+                res["post_hoc"] = post_hoc(rec, twin_rec)
             print(json.dumps(_json(res), indent=1))
         else:
             pr = load_prereg()

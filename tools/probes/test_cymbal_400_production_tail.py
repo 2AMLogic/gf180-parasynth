@@ -551,6 +551,27 @@ def test_altered_contract_field_refuses_before_rendering(tmp_path, capsys, monke
     assert name in out and "re-freeze" in out, out
 
 
+@pytest.mark.parametrize("record,kind", [([], "list"), (5, "int"), ("x", "str"), (None, "null"), ({}, "dict")],
+                         ids=["list", "int", "str", "null", "dict"])
+def test_frozen_record_that_cannot_be_read_is_refused(tmp_path, capsys, record, kind):
+    """A frozen record that PARSES but is not a JSON object is refused as what it
+    IS (#1757). Before the repair `5`/`null` were exit 1 by TypeError at
+    `k not in frozen`, and `[]`/`"x"` refused as a MISSING contract -- a
+    statement about keys a file that has none cannot carry -- with no path to
+    act on. `{}` keeps the contract message, now naming the record."""
+    f = tmp_path / "frozen.json"
+    f.write_text(json.dumps(record))
+    code = pt.main(["measure", "--refs", str(tmp_path), "--frozen", str(f),
+                    "--out", str(tmp_path / "out.json")])
+    out = capsys.readouterr().out
+    assert code == 2 and "REFUSED / NO VERDICT" in out and "frozen.json" in out, out
+    assert not (tmp_path / "out.json").exists()
+    if kind == "dict":
+        assert "missing [" in out and "re-freeze" in out, out
+    else:
+        assert "not a JSON object" in out and "missing [" not in out, out
+
+
 def test_result_records_the_frozen_record_hash_not_just_its_path(tmp_path, capsys, monkeypatch, ref_long):
     """A path alone can silently refer to a different rubric later; the result must carry the
     exact frozen-record sha256 it was measured against."""

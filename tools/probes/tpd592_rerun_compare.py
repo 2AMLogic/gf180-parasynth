@@ -10,12 +10,28 @@ is shown the re-run with one injected change (a numeric leaf nudged, or an
 extra key when there is no numeric leaf) and must report it. If it cannot,
 the result is REFUSED (exit 2) rather than "identical".
 
+A record that parses but cannot be read -- not a JSON object, or one without
+`rows` -- is REFUSED (exit 2) naming the file: not a traceback (exit 1, which
+tools/exit_contract.py reads as FAIL, "the comparison ran and disagreed"), and
+not `IDENTICAL` on two files that carry nothing to compare (#1757).
+
     tools/probes/tpd592_rerun_compare.py docs/scorecard/tom-pitch-drop-592/{development,rerun-8fedbf4/development}.json
 """
 import copy
 import json
 import math
+import pathlib
 import sys
+
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
+import manifest as mf  # noqa: E402
+
+
+class Refused(refusal.Refused, RuntimeError):
+    """A stated missing precondition, distinct from pass and from fail."""
 
 
 def field_diff(a, b, key, path=""):
@@ -73,6 +89,12 @@ def main(argv=None) -> int:
         print(__doc__)
         return 2
     old, new = (json.loads(open(p).read()) for p in argv)
+    try:
+        for path, rec in zip(argv, (old, new)):
+            mf.require_keys(rec, "rows", f"the record at {path}", refused=Refused)
+    except Refused as e:
+        print(f"REFUSED: {e}")
+        return 2
     if not diff(new, _nudge(new)):
         print("REFUSED: comparator did not see an injected change")
         return 2

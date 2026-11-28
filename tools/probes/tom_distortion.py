@@ -1673,7 +1673,9 @@ def main(argv=None) -> int:
         elif a.cmd == "controls":
             res = controls_matrix()
         elif a.cmd == "judge":
-            res = judge(load_record(a.record, "the judge record"), load_prereg())
+            rec = load_record(a.record, "the judge record")
+            mf.require_keys(rec, "rows", f"the record at {a.record}", refused=Refused)
+            res = judge(rec, load_prereg())
         else:
             pr = load_prereg()
             if not a.refs.is_dir():

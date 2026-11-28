@@ -249,6 +249,77 @@ def test_provenance_names_the_commit_the_run_started_from(monkeypatch, tmp_path)
     assert p["commit_at_end"] == "B" and p["head_moved_during_run"] and p["dirty_at_end"]
 
 
+# ---- a judge record that cannot be read is REFUSED, not a traceback (#1757) --
+#: A record that PARSES but is not a #558 run record. `main()` must refuse each
+#: with exit 2 and the path named; before the repair the first dereference was a
+#: TypeError / AttributeError / KeyError -- exit 1, which tools/exit_contract.py
+#: reads as FAIL, "the judge ran and disagreed".
+UNREADABLE = [([], "list"), (5, "int"), ("x", "str"), (None, "null"), ({}, "dict")]
+
+
+#: Not "no twin". `None` is one of the UNREADABLE shapes (JSON `null`), so the
+#: helper's own "absent" marker must be an object no record can ever be.
+_NO_TWIN = object()
+
+
+def _judge(tmp_path, capsys, record, twin=_NO_TWIN):
+    """`main(["judge", ...])` over records under tmp_path. `judge` reads no
+    provenance, so nothing else is answered: the record, the twin and the
+    reader are real."""
+    rec, out = tmp_path / "run.json", tmp_path / "judge.json"
+    rec.write_text(json.dumps(record))
+    argv = ["judge", str(rec), "--out", str(out)]
+    if twin is not _NO_TWIN:
+        t = tmp_path / "twin.json"
+        t.write_text(json.dumps(twin))
+        argv += ["--twin", str(t)]
+    return tc.main(argv), capsys.readouterr().out, out
+
+
+@pytest.mark.parametrize("record,kind", UNREADABLE, ids=[k for _r, k in UNREADABLE])
+def test_judge_record_that_cannot_be_read_is_refused(tmp_path, capsys, record, kind):
+    # `{}` is #1604's own input: KeyError('rows')
+    code, out, written = _judge(tmp_path, capsys, record)
+    assert code == 2 and "REFUSED" in out and "run.json" in out, out
+    assert ("not a JSON object" if kind != "dict" else "missing required key(s) 'rows'") in out, out
+    assert not written.exists()
+
+
+def _take_rows():
+    """Rows keyed by take names (`k[:2]` is a tom or a conga), so `post_hoc`
+    selects them and DOES dereference the twin; the `D0`/`U0` rows above are all
+    skipped, and a garbage twin would pass unexamined."""
+    return {"LT50": _row("development", 10.0), "LC10": _row("untouched", 10.0)}
+
+
+def _twin_record():
+    """A twin's record for `_take_rows`: the variants `post_hoc` reads from the
+    twin side (`twin-BP` against `twin-RAW`, and the two impulse variants)."""
+    rows = {}
+    for k, split in (("LT50", "development"), ("LC10", "untouched")):
+        row = _row(split, 10.0)
+        for n in ("twin-RAW", "twin-BP", "shipped-via-take-rate"):
+            row["variants"][n] = copy.deepcopy(row["variants"]["shipped"])
+        rows[k] = row
+    return {"rows": rows}
+
+
+@pytest.mark.parametrize("twin,kind", UNREADABLE, ids=[k for _r, k in UNREADABLE])
+def test_judge_twin_that_cannot_be_read_is_refused(tmp_path, capsys, twin, kind):
+    # the run record is readable, so the refusal is the twin's and names only it
+    code, out, written = _judge(tmp_path, capsys, {"rows": _take_rows()}, twin)
+    assert code == 2 and "REFUSED" in out and "twin.json" in out, out
+    assert "run.json" not in out and not written.exists()
+
+
+def test_judge_with_a_readable_record_and_twin_passes_the_guard(tmp_path, capsys):
+    """The guard refuses what it cannot read and nothing else (rule 8: a guard
+    that refused everything would turn the controls above green)."""
+    code, out, written = _judge(tmp_path, capsys, {"rows": _take_rows()}, _twin_record())
+    assert code == 0, out
+    assert set(json.loads(written.read_text())["post_hoc"]) == {"development/tom", "untouched/conga"}
+
+
 def _write_tom_take(refs: pathlib.Path, rel: str, hz: float) -> None:
     from scipy.io import wavfile
     t = np.arange(int(1.0 * 44100)) / 44100
