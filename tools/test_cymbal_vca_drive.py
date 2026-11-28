@@ -302,6 +302,48 @@ def test_balance_targets_accepts_the_committed_record():
     assert t["gap_db"]["decay"] == pytest.approx(10.13, abs=0.005)
 
 
+# ---- a balance artifact missing a key balance_targets() reads with [] is
+# REFUSED, not a traceback (#1604, #1623). One control per key: each deletes
+# ONE key from the committed record and runs the tool's own main().
+#
+# The exit status here is 1, not 2, on purpose: main()'s handler for
+# balance_targets() is one of the two exit-1 refusal sites
+# tools/refusal_exit_census.py pins for this file (#804 scoped them out rather
+# than change a documented contract), so this control asserts the pinned
+# status and the named key.
+@pytest.mark.parametrize("key", ["gap_db", "centre_hz"])
+def test_a_balance_artifact_missing_a_key_is_refused_by_name(tmp_path, monkeypatch, capsys, key):
+    rec = json.loads(vd.BALANCE_ARTIFACT.read_text())
+    del rec[key]
+    p = tmp_path / "balance.json"
+    p.write_text(json.dumps(rec))
+    monkeypatch.setattr(vd, "BALANCE_ARTIFACT", p)
+    assert vd.main([]) == 1
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and f"'{key}'" in out
+
+
+@pytest.mark.parametrize("key", ["gap_db", "centre_hz"])
+def test_a_balance_artifact_with_null_for_a_key_is_refused_by_name(tmp_path, monkeypatch, capsys, key):
+    rec = json.loads(vd.BALANCE_ARTIFACT.read_text())
+    rec[key] = None
+    p = tmp_path / "balance.json"
+    p.write_text(json.dumps(rec))
+    monkeypatch.setattr(vd, "BALANCE_ARTIFACT", p)
+    assert vd.main([]) == 1
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and f"'{key}'" in out
+
+
+def test_an_empty_balance_artifact_is_refused_by_name(tmp_path, monkeypatch, capsys):
+    p = tmp_path / "balance.json"
+    p.write_text("{}")
+    monkeypatch.setattr(vd, "BALANCE_ARTIFACT", p)
+    assert vd.main([]) == 1
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "'gap_db'" in out and "'centre_hz'" in out
+
+
 def test_the_pinned_scan_is_the_one_the_vr4_read_used():
     """Two modules reading the same page of the same document must not be able
     to drift onto different printings of it."""

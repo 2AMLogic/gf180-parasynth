@@ -60,6 +60,7 @@ import zlib
 
 import numpy as np
 import refusal
+import manifest as mf
 
 W14B_URL = "https://zenodo.org/api/records/850891/files/smc_2014_220.pdf/content"
 W14B_SHA256 = "0e75e26df59d8117939fbb253935d648cf969d43988c6a97fdc19061df453a02"
@@ -900,6 +901,9 @@ def from_artifact(path: pathlib.Path = ARTIFACT):
     if not path.exists():
         raise Refused(f"{path} is absent; run --json with the paper present")
     blob = json.loads(path.read_text())
+    # `level_stage` and `decimation` are read by main() off the returned blob
+    mf.require_keys(blob, ("curves", "level_stage", "decimation"),
+                    f"the Figure 4 artifact at {path}", refused=Refused)
     return {k: (np.array(v["hz"]), np.array(v["db"]))
             for k, v in blob["curves"].items()}, blob
 

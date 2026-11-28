@@ -346,6 +346,53 @@ def test_load_render_refuses_a_render_id_with_no_manifest(tmp_path):
         mf.load_render("does-not-exist", runs_dir=tmp_path / "runs")
 
 
+# ---- a render manifest missing a key load_render() reads with [] is REFUSED,
+# not a traceback (#1604, #1623). `manifest.py` has no main() of its own; the
+# tool that reads through here is tools/stage_case.py, whose main() is driven
+# in test_stage_case.py. One control per key: each deletes ONE key from the
+# manifest render() wrote and loads through the real reader.
+@pytest.mark.parametrize("key", ["wav_path", "wav_sha256"])
+def test_load_render_refuses_a_manifest_missing_a_key_it_reads(tmp_path, key):
+    runs = tmp_path / "runs"
+    rec = mf.render("T1", {"hz": 440.0}, lambda: _tone(), runs_dir=runs)
+    path = runs / rec["render_id"] / "manifest.json"
+    manifest = json.loads(path.read_text())
+    del manifest[key]                      # the WAV itself is untouched and intact
+    path.write_text(json.dumps(manifest))
+    with pytest.raises(mf.Refused, match=f"render manifest.*'{key}'"):
+        mf.load_render(rec["render_id"], runs_dir=runs)
+
+
+@pytest.mark.parametrize("key", ["wav_path", "wav_sha256"])
+def test_load_render_refuses_a_manifest_with_null_for_a_key_it_reads(tmp_path, key):
+    runs = tmp_path / "runs"
+    rec = mf.render("T1", {"hz": 440.0}, lambda: _tone(), runs_dir=runs)
+    path = runs / rec["render_id"] / "manifest.json"
+    manifest = json.loads(path.read_text())
+    manifest[key] = None
+    path.write_text(json.dumps(manifest))
+    with pytest.raises(mf.Refused, match=f"null for required key.*'{key}'"):
+        mf.load_render(rec["render_id"], runs_dir=runs)
+
+
+def test_load_render_refuses_a_manifest_that_is_not_an_object(tmp_path):
+    runs = tmp_path / "runs"
+    rec = mf.render("T1", {"hz": 440.0}, lambda: _tone(), runs_dir=runs)
+    (runs / rec["render_id"] / "manifest.json").write_text("[]")
+    with pytest.raises(mf.Refused, match=r"render manifest at .* is a JSON list, not a JSON object"):
+        mf.load_render(rec["render_id"], runs_dir=runs)
+
+
+def test_the_manifest_render_writes_carries_every_key_load_render_reads(tmp_path):
+    """The guards above must be satisfiable against the record that ships:
+    render() and load_render() are the writer and the reader of one format."""
+    runs = tmp_path / "runs"
+    rec = mf.render("T1", {"hz": 440.0}, lambda: _tone(), runs_dir=runs)
+    manifest, x, sr = mf.load_render(rec["render_id"], runs_dir=runs)
+    assert manifest["wav_path"] == rec["wav_path"] and manifest["wav_sha256"] == rec["wav_sha256"]
+    assert len(x) == len(_tone()[0]) and sr == 48000
+
+
 def test_render_refuses_to_overwrite_a_retained_wav_with_different_audio(tmp_path):
     """The write-side half of "a retained WAV is what `render()` produced".
 

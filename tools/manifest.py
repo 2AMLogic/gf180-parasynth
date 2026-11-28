@@ -471,6 +471,8 @@ def load_render(render_id: str, *, runs_dir: pathlib.Path = RUNS_DIR,
         raise Refused(f"no render manifest at {manifest_path} -- render the case "
                        f"before analysing it")
     manifest = json.loads(manifest_path.read_text())
+    require_keys(manifest, ("wav_path", "wav_sha256"),
+                 f"the render manifest at {manifest_path}", refused=Refused)
     wav_path = out_dir / manifest["wav_path"]
     have = provenance.file_sha(wav_path)
     want = manifest["wav_sha256"]

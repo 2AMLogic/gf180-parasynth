@@ -160,6 +160,7 @@ if str(ROOT / "tools") not in sys.path:
 
 import cymbal_candidate as cc  # noqa: E402
 import refusal
+import manifest as mf  # noqa: E402
 
 SCORECARD = ROOT / "docs" / "scorecard" / "cymbal-369"
 BALANCE_ARTIFACT = SCORECARD / "balance" / "balance.json"
@@ -1078,8 +1079,9 @@ def vca_term_db(cfg=None) -> dict:
 def balance_targets(path=None) -> dict:
     """The gap figures this module is judged against, re-read and pinned.
 
-    REFUSES if `../balance/balance.json` is absent or if its two gap figures
-    have moved from the committed record. The headline here is a comparison
+    REFUSES if `../balance/balance.json` is absent, is not a JSON object or
+    lacks `gap_db` or `centre_hz` (#1623), or if its two gap figures have
+    moved from the committed record. The headline here is a comparison
     against those numbers; quoting it against a number that has since drifted
     is exactly the failure this repository keeps meeting.
     """
@@ -1088,6 +1090,7 @@ def balance_targets(path=None) -> dict:
         raise Refused(f"{path} is absent; the gap this module is judged "
                       "against is #396's, not one chosen here")
     rec = json.loads(path.read_text())
+    mf.require_keys(rec, ("gap_db", "centre_hz"), f"the balance artifact at {path}", refused=Refused)
     want = {"decay": 10.13, "short": 39.79}
     got = {b: float(rec["gap_db"][b]["gap_db"]) for b in want}
     drift = {b: round(got[b] - want[b], 3) for b in want if abs(got[b] - want[b]) > 0.005}

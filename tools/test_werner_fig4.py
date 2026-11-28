@@ -15,6 +15,7 @@ tests do two further things the gate cannot do for itself:
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 import pathlib
 import sys
@@ -224,3 +225,39 @@ def test_control_a_curve_with_no_resonance_is_refused_at_assembly():
     flat_b = (hz, _synth("hp2", hz, gain_db=9.0, f0=10300.0, q=0.9))
     assert wf.resonance_db(*flat_a) < 3.0
     assert wf.resonance_db(*flat_b) < 3.0
+
+
+# ---- an artifact missing a key from_artifact() reads with [] -- or that
+# main() reads off what it returns -- is REFUSED (exit 3, this tool's declared
+# refusal status), not a traceback (#1604, #1623). One control per key through
+# the tool's own main(); the refusal precedes the gate, so nothing is gated.
+def _main_over(tmp_path, capsys, blob):
+    p = tmp_path / "werner-fig4.json"
+    p.write_text(json.dumps(blob))
+    rc = wf.main(["--artifact", str(p)])
+    got = capsys.readouterr()
+    assert "KNOWN-ANSWER GATE" not in got.out
+    return rc, got.err
+
+
+@pytest.mark.parametrize("key", ["curves", "level_stage", "decimation"])
+def test_an_artifact_missing_a_key_is_refused_by_name(tmp_path, capsys, key):
+    blob = json.loads(wf.ARTIFACT.read_text())
+    del blob[key]
+    rc, err = _main_over(tmp_path, capsys, blob)
+    assert rc == 3 and "REFUSED" in err and f"'{key}'" in err
+
+
+@pytest.mark.parametrize("key", ["curves", "level_stage", "decimation"])
+def test_an_artifact_with_null_for_a_key_is_refused_by_name(tmp_path, capsys, key):
+    blob = json.loads(wf.ARTIFACT.read_text())
+    blob[key] = None
+    rc, err = _main_over(tmp_path, capsys, blob)
+    assert rc == 3 and "REFUSED" in err and f"'{key}'" in err
+
+
+@pytest.mark.parametrize("blob, why", [({}, "'curves'"), ([], "not a JSON object"),
+                                       (None, "not a JSON object")])
+def test_an_artifact_that_carries_no_curves_at_all_is_refused(tmp_path, capsys, blob, why):
+    rc, err = _main_over(tmp_path, capsys, blob)
+    assert rc == 3 and "REFUSED" in err and why in err

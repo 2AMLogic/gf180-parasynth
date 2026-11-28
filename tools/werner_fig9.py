@@ -85,6 +85,7 @@ import numpy as np
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import werner_fig4 as wf  # noqa: E402
+import manifest as mf     # noqa: E402
 
 Refused = wf.Refused
 
@@ -689,6 +690,7 @@ def from_artifact(path: pathlib.Path = ARTIFACT):
     if not path.exists():
         raise Refused(f"{path} is absent; run --from-pdf --json with the paper")
     blob = json.loads(path.read_text())
+    mf.require_keys(blob, ("bands", "meta"), f"the Figure 9 artifact at {path}", refused=Refused)
     data = {}
     for name, v in blob["bands"].items():
         data[name] = dict(v)
