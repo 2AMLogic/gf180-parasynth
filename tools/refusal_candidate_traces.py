@@ -38,6 +38,16 @@ Prerequisites, each REFUSED as an `unresolved` row rather than skipped: the
 Fischer corpus (`GF180_TR808_REFS`, else `/tmp/tr808-ref`), pyserial for the
 simulated UART session, and -- for the WORKING run of f1_rtl_filter_path only
 -- the restored frozen reference audio (`tools/refprofile_restore.py`).
+
+A SITE IS ITS CALL, NOT ITS LINE (#1772). Each entry's `site` is the
+`path:line` the scanner reported when the row was traced, and it is a record
+key: the ID keeps it for good. The call itself is named by an anchor,
+`at(function, target=...)` or `at(function, arg=...)` -- the enclosing
+function, the callee, and what separates this call from the others of that
+callee in that function -- and the tracer derives the line from it against
+the tree it runs on, REFUSING a site that does not resolve
+(`refusal_candidate_trace.resolve_sites`). An edit that moves a call costs
+nothing here; one that changes it is refused by name.
 """
 from __future__ import annotations
 
@@ -308,6 +318,15 @@ RENDERS = "the argument is an integer-model render of one strike: digital silenc
 TRACES: list[dict] = []
 
 
+def at(function: str, **discriminator) -> dict:
+    """The anchor of one site (#1772): the function the call is in, and what
+    separates it from the other calls of its callee there -- `target`, what
+    the statement assigns to, or `arg`, the call's first positional argument.
+    `in` is a keyword, so it comes through here rather than as a `dict(in=)`
+    argument. The tracer matches it against the ast and derives the line."""
+    return {"in": function, **discriminator}
+
+
 def vlm(ws: pathlib.Path) -> dict:
     return run("fpga/verify_live_midi.py", ["--outdir", str(SCRATCH / "out" / "vlm-working"), "--sustained-s", "1"],
                timeout=1500)
@@ -369,9 +388,16 @@ def hh5(ws: pathlib.Path, **replace) -> dict:
                                   env=run_case.refs_child_env(refs)))
 
 
-for _line in (441, 446, 467, 489, 490, 540):
+for _line, _anchor in (
+        (441, at("e4b_pure_f0", target="a")),
+        (446, at("e4b_pure_f0", target="b")),
+        (467, at("e5_tom", target="rendered[k]")),
+        (489, at("e5_tom", target='out["floor_same_patch_twice"]', arg="a")),
+        (490, at("e5_tom", target='out["floor_same_patch_twice"]', arg="b")),
+        (540, at("e8_blind_spot", target="base"))):
     TRACES.append(dict(
         id=f"{ADF}:{_line}", site=f"{ADF}:{_line}", callee="run_case.prepare", wrap=["run_case.prepare"],
+        **_anchor,
         working=lambda ws: adf(ws, "bd8/BD2550.WAV"), refusing=None,
         share={"working": "adf-working"},
         boundary=[lambda ws: script(ws, "prepare-arms", PREPARE_ARMS, TOOLS_PATH)],
@@ -379,34 +405,41 @@ for _line in (441, 446, 467, 489, 490, 540):
 
 TRACES += [
     dict(id=f"{ADF}:611", site=f"{ADF}:611", callee="run_case.prepare", wrap=["run_case.prepare"],
+         **at("e7_ceiling", target="a"),
          working=lambda ws: adf(ws, "bd8/BD2550.WAV"),
          refusing=[lambda ws: adf(ws, "bd8/BD2550.WAV", **{"bd8/BD5050.WAV": struck()})],
          share={"working": "adf-working", "refusing": "adf-cut-bd5050"}),
     dict(id=f"{ADF}:612", site=f"{ADF}:612", callee="run_case.prepare", wrap=["run_case.prepare"],
+         **at("e7_ceiling", target="b"),
          working=lambda ws: adf(ws, "bd8/BD2550.WAV"),
          refusing=[lambda ws: adf(ws, "bd8/BD2550.WAV", **{"sd8/SD5050.WAV": struck()})],
          share={"working": "adf-working", "refusing": "adf-cut-sd5050"}),
     dict(id=f"{ADF}:640", site=f"{ADF}:640", callee="run_case.prepare", wrap=["run_case.prepare"],
+         **at("e9_noise_floor", target="x"),
          working=lambda ws: adf(ws, "bd8/BD2550.WAV"),
          refusing=[lambda ws: adf(ws, "bd8/BD2550.WAV", **{"bd8/BD5050.WAV": struck()})],
          share={"working": "adf-working", "refusing": "adf-cut-bd5050"},
          shadowed_by=f"{ADF}:611: e9 prepares the same file e7 does, three experiments later"),
     dict(id=f"{ADF}:687", site=f"{ADF}:687", callee="run_case.prepare", wrap=["run_case.prepare"],
+         **at("main", target="x"),
          working=lambda ws: adf(ws, "bd8/BD2550.WAV"),
          refusing=[lambda ws: adf(ws, "cut/BD.WAV", **{"cut/BD.WAV": struck()}),
                    lambda ws: adf(ws, "nan/BD.WAV", **{"nan/BD.WAV": nonfinite()})],
          share={"working": "adf-working"}),
     dict(id=f"{ADF}:705", site=f"{ADF}:705", callee="run_case.prepare", wrap=["run_case.prepare"],
+         **at("main", target="zz"),
          working=lambda ws: adf(ws, "bd8/BD5050.WAV"),
          refusing=[lambda ws: adf(ws, "bd8/BD5050.WAV", **{"bd8/AA-cut.WAV": struck()})],
          share={"refusing": "adf-t20-cut"},
          note="the working run is itself a REFUSED one by design -- bd8/BD5050.WAV has no usable T20, "
               "which is the branch :705 lives in"),
     dict(id=f"{HH5}:531", site=f"{HH5}:531", callee="run_case.prepare", wrap=["run_case.prepare"],
+         **at("scorecard_record", target="ref_y"),
          working=lambda ws: hh5(ws),
          refusing=[lambda ws: hh5(ws, **{"cy8/CY5025.WAV": struck()})],
          share={"working": "hh5-working", "refusing": "hh5-cut-dev"}),
     dict(id=f"{HH5}:532", site=f"{HH5}:532", callee="run_case.prepare", wrap=["run_case.prepare"],
+         **at("scorecard_record", target="ours_y"),
          working=lambda ws: hh5(ws), refusing=None, share={"working": "hh5-working"},
          boundary=[lambda ws: script(ws, "hh5-render-arms", """\
 import numpy as np
@@ -427,17 +460,19 @@ except Exception as e:
          invariant="the argument is the probe's own integer-model CY render, " + RENDERS.split(": ", 1)[1]),
 ]
 
-for _entry, _line, _argv, _literal in (
-        ("tools/probes/tom_conga_gate.py", 446,
+for _entry, _line, _in, _arg, _argv, _literal in (
+        ("tools/probes/tom_conga_gate.py", 446, "run", "s",
          ["run", "--refs", "{refs}", "--out", "{out}", "--sounds", "LT", "--codes", "50"],
          "LT and HC are literals"),
-        ("tools/probes/tom_distortion.py", 1579, ["baseline", "--refs", "{refs}", "--out", "{out}"],
+        ("tools/probes/tom_distortion.py", 1579, "baseline", "s",
+         ["baseline", "--refs", "{refs}", "--out", "{out}"],
          "every sound is a member of tom_conga_gate.FAMILY, a literal tuple"),
-        ("tools/probes/tom_pitch_drop_fischer.py", 771,
+        ("tools/probes/tom_pitch_drop_fischer.py", 771, "assert_unity_is_shipped", "s_",
          ["measure", "--refs", "{refs}", "--split", "development", "--out", "{out}"],
          "every sound is a member of TOMS, a literal tuple")):
     TRACES.append(dict(
         id=f"{_entry}:{_line}", site=f"{_entry}:{_line}", callee="run_case.render_drum_solo",
+        **at(_in, arg=_arg),
         wrap=["run_case.render_drum_solo"],
         working=lambda ws, e=_entry, a=_argv: needs(
             corpus(ws), lambda refs: run(e, [s.format(refs=refs, out=ws / "out") for s in a],
@@ -450,6 +485,7 @@ for _entry, _line, _argv, _literal in (
 TRACES += [
     dict(id="tools/f1_rtl_filter_path.py:449", site="tools/f1_rtl_filter_path.py:449",
          callee="run_case.load_filter_reference", wrap=["run_case.load_filter_reference"],
+         **at("_profile_freqs", target="(_, _, meta)"),
          working=lambda ws: ({"unresolved": "the frozen reference audio is not restored in this tree "
                                            "(python tools/refprofile_restore.py)"}
                              if not (ROOT / "refprofile/cache").is_dir() else
@@ -462,6 +498,7 @@ TRACES += [
                     "a sibling of the local handler"))]),
     dict(id="tools/measure_pulse2x_headroom.py:191", site="tools/measure_pulse2x_headroom.py:191",
          callee="mono_artifact_probe.measure_point", wrap=["mono_artifact_probe.measure_point"],
+         **at("probe_points", target="r"),
          working=lambda ws: run("tools/measure_pulse2x_headroom.py",
                                 ["probe", "--gains", "0.85", "--out", str(ws / "probe.json")]),
          refusing=None,
@@ -479,6 +516,7 @@ except Exception as e:
                    "refuses only an unknown injection"),
     dict(id="tools/performance_suite.py:629", site="tools/performance_suite.py:629",
          callee="mono_artifact_probe.make_voice", wrap=["mono_artifact_probe.make_voice"],
+         **at("model_render", target="voice"),
          working=lambda ws: run("tools/performance_suite.py",
                                 ["--backend", "model", "--phrase", "bass", "--out", str(ws / "suite.json")],
                                 timeout=3000, note="the shortest phrase that has notes: dense_drums has none, "
@@ -500,6 +538,7 @@ except Exception as e:
                    "for every backend but synthtop"),
     dict(id="tools/measure_pulse2x_headroom.py:264", site="tools/measure_pulse2x_headroom.py:264",
          callee="mono_m5a_score.measure", wrap=["mono_m5a_score.measure"],
+         **at("phrases", target="m"),
          working=lambda ws: run("tools/measure_pulse2x_headroom.py",
                                 ["phrases", "--gains", "0.84", "--out", str(ws / "phrases.json")]),
          refusing=[lambda ws: run("tools/measure_pulse2x_headroom.py",
@@ -513,6 +552,7 @@ except Exception as e:
                               "has no handler at all"))]),
     dict(id="tools/verify_m5a_filter2x_i2s.py:50", site="tools/verify_m5a_filter2x_i2s.py:50",
          callee="mono_m5a_score.engine_configuration", wrap=["mono_m5a_score.engine_configuration"],
+         **at("main", target="engine"),
          working=lambda ws: run("tools/verify_m5a_filter2x_i2s.py", [
              "--pulse2x", "--timeout", "45", "--outdir", "build/m5a-filter2x-i2s-trace",
              "--verification", "build/verification/M5A-filter2x-i2s-trace.txt",
@@ -526,14 +566,15 @@ except Exception as e:
          invariant="the name 'selected' is a literal and a key of mono_m5a_score.ENGINE_PROFILES"),
 ]
 
-for _line, _callee, _inv in (
-        (26, "mono_m5a_score.engine_configuration",
+for _line, _callee, _target, _inv in (
+        (26, "mono_m5a_score.engine_configuration", "profile",
          "the name 'selected' is a literal and a key of mono_m5a_score.ENGINE_PROFILES"),
-        (28, "mono_m5a_score._patch_for_wave",
+        (28, "mono_m5a_score._patch_for_wave", "patch",
          "the wave is 'pulse' or 'saw' by the preset name, an argparse choice, and the pulse shape is "
          "the module default")):
     TRACES.append(dict(
         id=f"fpga/selected_preset.py:{_line}", site=f"fpga/selected_preset.py:{_line}", callee=_callee,
+        **at("definition", target=_target),
         wrap=["mono_m5a_score.engine_configuration", "mono_m5a_score._patch_for_wave"],
         working=lambda ws: [run("fpga/selected_preset.py", [n, "--out", str(ws / f"{n}.json")])
                             for n in ("m5a-saw", "m5a-pulse")],
@@ -544,6 +585,7 @@ for _line, _callee, _inv in (
 TRACES += [
     dict(id="model/bd_pedestal.py:483", site="model/bd_pedestal.py:483",
          callee="bd_excitation_probe.calibrate_amp", wrap=["bd_excitation_probe.calibrate_amp"],
+         **at("main", target="amp"),
          working=lambda ws: run("model/bd_pedestal.py", ["--out", str(ws / "pedestal.json")]),
          refusing=None,
          boundary=[lambda ws: script(ws, "calibrate-arms", """\
@@ -559,6 +601,7 @@ except Exception as e:
          invariant="the calibration render is a BD strike through the band-pass excitation at probe "
                    "amp 0.02; calibrate_amp refuses only a silent render"),
     dict(id="model/res_tuning.py:442", site="model/res_tuning.py:442", callee="sensitivity.runs",
+         **at("_select", target="groups"),
          wrap=["sensitivity.runs"],
          working=lambda ws: needs(tree(ws), lambda root: run("model/res_tuning.py", ["sweep"], root=root,
                                                             timeout=2400,
@@ -578,18 +621,21 @@ for pts in ([(1.0, 0.0), (2.0, 1.0)], [(1.0, -1.0), (2.0, 1.0)]):
                    "mean_offset_travel_cents; runs() refuses a spread that touches or crosses zero "
                    "unless the column is an exact plateau"),
     dict(id="fpga/midi_session.py:355", site="fpga/midi_session.py:355", callee="uart_host.image_sound_presets",
+         **at("MidiSession.__init__", target="self.presets"),
          wrap=KIT,
          working=[midi_sim, vlm],
          refusing=[midi_sim_r1_presets, vlm_presets_drift],
          note="two entry points reach it: the session CLI itself, and fpga/verify_live_midi.py, "
               "which builds the session under test before its oracle"),
     dict(id="fpga/pads_rom.py:110", site="fpga/pads_rom.py:110", callee="uart_host.r1_kit", wrap=KIT,
+         **at("r1_kit", target="kit"),
          working=lambda ws: run("fpga/pads_rom.py", [], expect="BOUND, exit 0"),
          refusing=[lambda ws: tampered(ws, drop_kit_writes, lambda root: run(
              "fpga/pads_rom.py", [], root=root,
              expect="handled at the boundary: except (Refused, dx.KitRefused)"))]),
     dict(id="fpga/release/r1_candidate.py:138", site="fpga/release/r1_candidate.py:138",
          callee="uart_host.r1_kit", wrap=KIT,
+         **at("frozen_kit", target="kit"),
          working=r1c_check,
          refusing=[lambda ws: tampered(ws, drop_kit_writes, lambda root: run(
                        "fpga/release/r1_candidate.py", ["check"], root=root, timeout=1200,
@@ -603,6 +649,7 @@ for pts in ([(1.0, 0.0), (2.0, 1.0)], [(1.0, -1.0), (2.0, 1.0)]):
          note="the two refusing runs are the kit-drift input through each entry point that calls "
               "frozen_kit(): neither reaches :138 with it"),
     dict(id="fpga/verify_live_midi.py:107", site="fpga/verify_live_midi.py:107", callee="r1_candidate.frozen_kit",
+         **at("target_kit_and_presets"),
          wrap=KIT + ["r1_candidate.frozen_kit"],
          working=vlm,
          refusing=[vlm_kit_drift],
@@ -611,6 +658,7 @@ for pts in ([(1.0, 0.0), (2.0, 1.0)], [(1.0, -1.0), (2.0, 1.0)]):
          share={}),
     dict(id="fpga/verify_live_midi.py:107#2", site="fpga/verify_live_midi.py:107",
          callee="uart_host.image_sound_presets", wrap=KIT + ["r1_candidate.frozen_kit"],
+         **at("target_kit_and_presets", arg='"r1"'),
          working=vlm,
          refusing=[vlm_presets_drift],
          shadowed_by="fpga/midi_session.py:355: the session under test reads the same sound table "
@@ -618,12 +666,12 @@ for pts in ([(1.0, 0.0), (2.0, 1.0)], [(1.0, -1.0), (2.0, 1.0)]):
          share={"working": "vlm-working"}),
 ]
 
-for _line, _callee, _change in (
-        (116, "xdc_bindings.object_queries", append_xdc_unstated_query),
-        (123, "xdc_bindings.expected_exceptions", append_xdc_multicycle)):
+for _line, _callee, _change, _anchor in (
+        (116, "xdc_bindings.object_queries", append_xdc_unstated_query, at("write_constraint_report", arg="text")),
+        (123, "xdc_bindings.expected_exceptions", append_xdc_multicycle, at("write_constraint_report", target="exc"))):
     TRACES.append(dict(
         id=f"fpga/publish_binding_cases.py:{_line}", site=f"fpga/publish_binding_cases.py:{_line}",
-        callee=_callee, wrap=["xdc_bindings.object_queries", "xdc_bindings.expected_exceptions"],
+        callee=_callee, **_anchor, wrap=["xdc_bindings.object_queries", "xdc_bindings.expected_exceptions"],
         working=lambda ws: run("fpga/publish_binding_cases.py", ["--case", "baseline"], expect="baseline PUBLISHED, exit 0",
                                timeout=900, share="pubcases-working"),
         refusing=[lambda ws, c=_change: tampered(ws, c, lambda root: run(
@@ -633,6 +681,7 @@ for _line, _callee, _change in (
 TRACES += [
     dict(id="fpga/release/glide_boundary.py:242", site="fpga/release/glide_boundary.py:242",
          callee="uart_host.plan_show", wrap=["uart_host.plan_show"],
+         **at("wrapper_capture", target="rows"),
          working=lambda ws: run("fpga/release/glide_boundary.py",
                                 ["--case", "accept-default", "--level", "wrapper", "--outdir", str(ws / "glide")],
                                 timeout=1500),
@@ -659,6 +708,7 @@ show("a write after the marker", [gate_on, off, ("write", 0, 0, stm.A_VOL, 5)], 
                    "refusing arm of plan_show needs one of the two"),
     dict(id="fpga/release/r1_candidate.py:279", site="fpga/release/r1_candidate.py:279",
          callee="release_manifest._capture", wrap=["release_manifest._capture"],
+         **at("commands", target="cap"),
          working=r1c_check,
          refusing=[lambda ws: tampered(ws, drop_kit_writes, lambda root: run(
                        "fpga/release/r1_candidate.py", ["check"], root=root, timeout=1200,
@@ -681,13 +731,16 @@ def drift_ext_io_dcp(root: pathlib.Path) -> None:
               lambda rec: rec.__setitem__("dcp_sha256", "0" * 64))
 
 
-for _line, _callee, _change, _expect in (
+for _line, _callee, _change, _expect, _anchor in (
         (110, "r1_release.image_identity", drift_publication_state,
-         "handled in check(): except Refused is an exact alias of r1_release.Refused"),
+         "handled in check(): except Refused is an exact alias of r1_release.Refused",
+         at("image_identity", target="img")),
         (302, "r1_release.external_io", drift_ext_io_dcp,
-         "handled in check(): except Refused is an exact alias of r1_release.Refused")):
+         "handled in check(): except Refused is an exact alias of r1_release.Refused",
+         at("build", arg="image"))):
     TRACES.append(dict(
         id=f"fpga/release/r2_release.py:{_line}", site=f"fpga/release/r2_release.py:{_line}", callee=_callee,
+        **_anchor,
         wrap=["r1_release.image_identity", "r1_release.external_io"],
         working=lambda ws: run("fpga/release/r2_release.py", ["check"], expect="BOUND, exit 0", timeout=1200,
                                share="r2-working"),
@@ -696,6 +749,7 @@ for _line, _callee, _change, _expect in (
 
 TRACES.append(dict(
     id="fpga/release/r2_release.py:372", site="fpga/release/r2_release.py:372", callee="release_manifest._capture",
+    **at("stale_control", target="cap"),
     wrap=["release_manifest._capture"],
     working=lambda ws: run("fpga/release/r2_release.py", ["stale-control", "host", "--out", str(ws / "stale-host")],
                            timeout=1200),
