@@ -99,6 +99,10 @@ def _no_output_delay(tmp_path, unconstrained, false_path=0, timing_clock=0):
     text, n = re.subn(r"checking no_output_delay \(\d+\)",
                       f"checking no_output_delay ({unconstrained + false_path + timing_clock})", text)
     assert n >= 1
+    if not timing_clock:
+        # a class counting none lists none (the parser refuses otherwise)
+        text, n = re.subn(r"(with a timing clock defined on it[^\n]*\n\n)i2s_bclk\n", r"\1", text)
+        assert n == 1, "fixture no longer lists i2s_bclk under the forwarded-clock class"
     p.write_text(text)
     return publish.inspect_reports(tmp_path)
 

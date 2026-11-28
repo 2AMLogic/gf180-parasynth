@@ -423,8 +423,10 @@ def parse_no_output_delay(timing, *, require_listed=("forwarded_clock",)):
     unknown = [key for key in require_listed if key not in _NO_OUTPUT_DELAY_MARKERS]
     if unknown:
         raise ValueError("unknown no_output_delay class: " + ", ".join(unknown))
-    total = re.search(r"checking no_output_delay \((\d+)\)", timing)
-    if total is None:
+    # check_timing prints the total twice (summary and verbose census); every
+    # occurrence must agree with the class sum, not only the first
+    totals = [int(n) for n in re.findall(r"checking no_output_delay \((\d+)\)", timing)]
+    if not totals:
         raise ValueError("report does not count no_output_delay ports")
     counts = {}
     for key, marker in _NO_OUTPUT_DELAY_MARKERS.items():
@@ -432,18 +434,20 @@ def parse_no_output_delay(timing, *, require_listed=("forwarded_clock",)):
         if match is None:
             raise ValueError("report does not classify no_output_delay ports: " + marker)
         counts[key] = int(match[1])
-    if sum(counts.values()) != int(total[1]):
+    if any(sum(counts.values()) != n for n in totals):
         raise ValueError("no_output_delay classes do not sum to the count")
     ports = {}
     for key in require_listed:
-        ports[key] = []
-        if counts[key]:
-            listed = re.search(re.escape(_NO_OUTPUT_DELAY_MARKERS[key]) + r"[^\n]*\n\n(.*?\n)\n",
-                               timing, re.DOTALL)
-            if listed is None or len(listed[1].split()) != counts[key]:
-                raise ValueError("no_output_delay ports are not listed for class " + key)
-            ports[key] = listed[1].split()
-    return int(total[1]), counts, ports
+        # the class's section: after its sentence, up to the next sentence or
+        # the next check heading. Read even for a zero count, so a port listed
+        # under a class that counts none refuses
+        section = re.search(re.escape(_NO_OUTPUT_DELAY_MARKERS[key]) + r"[^\n]*\n(.*?)"
+                            r"(?=^ There |^\d+\. checking |\Z)", timing, re.DOTALL | re.MULTILINE)
+        listed = section[1].split() if section else []
+        if len(listed) != counts[key]:
+            raise ValueError("no_output_delay ports are not listed for class " + key)
+        ports[key] = listed
+    return totals[0], counts, ports
 
 
 def inspect_reports(directory, design="arty_a7_top"):

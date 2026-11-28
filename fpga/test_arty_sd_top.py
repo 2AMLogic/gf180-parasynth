@@ -310,6 +310,30 @@ def test_output_disposition_refuses_classes_that_do_not_sum_to_the_count():
         sd.output_disposition(lying)
 
 
+def test_output_disposition_refuses_a_lie_in_the_verbose_census_only():
+    # review of #1593: the total is printed twice (summary, verbose census).
+    # Changing only the second leaves the first-match read clean; every
+    # occurrence must agree with the class sum.
+    timing = (ROOT / "fpga/reports/arty/sd-demo-2025.1/timing.rpt").read_text()
+    head, sep, tail = timing.rpartition("checking no_output_delay (3)")
+    assert sep and head.count("checking no_output_delay (3)") == 1, "fixture lost its two totals"
+    lying = head + "checking no_output_delay (99)" + tail
+    assert re.search(r"checking no_output_delay \((\d+)\)", lying)[1] == "3"  # first match still clean
+    with pytest.raises(ValueError, match="do not sum"):
+        sd.output_disposition(lying)
+
+
+def test_output_disposition_refuses_a_port_listed_under_a_zero_count_class():
+    # review of #1593: a required class counting 0 must list nothing; a port
+    # beneath it used to be skipped, so the disposition read as clean.
+    timing = (ROOT / "fpga/reports/arty/sd-demo-2025.1/timing.rpt").read_text()
+    sentence = " There are 0 ports with no output delay specified.\n"
+    assert sentence in timing, "fixture no longer has an empty unconstrained class"
+    lying = timing.replace(sentence, sentence + "\ni2s_sdata\n")
+    with pytest.raises(ValueError, match="not listed"):
+        sd.output_disposition(lying)
+
+
 def test_the_shipped_parser_accepted_the_report_the_sum_check_refuses(monkeypatch):
     # injected-bug control (docs/verification-rules.md rule 5): the pre-#1590
     # parser -- the three sentences and their lists, read without the census
