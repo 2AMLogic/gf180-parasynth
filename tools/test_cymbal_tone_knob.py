@@ -20,6 +20,8 @@ import json
 import math
 import os
 import pathlib
+import re
+import subprocess
 import sys
 
 import numpy as np
@@ -421,6 +423,220 @@ def test_require_corpus_on_a_silent_corpus_exits_1(tmp_path, capsys):
         assert any(ln.startswith(d) and "NO VERDICT" in ln and "REFUSED" in ln
                    for ln in out), (d, out)
     assert "Traceback" not in "\n".join(out)
+
+
+# ---------------------------------------------------------------------------
+# a non-finite record reaching `prepare` is that same refusal, not a traceback
+# (#1893, one row of #1782's census)
+# ---------------------------------------------------------------------------
+# Read off the AST, this module lets an estimator refusal through every handler
+# it defines: `audio_measure.NonFiniteAudio` is an `InsufficientEvidence`, so an
+# `AssertionError`, and the handlers at `measured_or_refused` and `main` name
+# only `refusal.Refused`. Run before any change (origin/main dd0449e0), it does
+# not escape: the row is unreachable, and no handler changed. `run_case.prepare`
+# converts the raise into its own `Refused` (tools/run_case.py:1478-1481)
+# before it leaves, and that class IS a `refusal.Refused`. A non-finite sample
+# cannot even arrive from a FILE: `cymbal_bands._load` refuses a non-int16 WAV
+# on its width before any cast, and int16 cannot hold one. What is left is a
+# loader that returns one anyway, and that is what the patched `_load` below
+# stands in for.
+#
+# Every control below was watched go red against a source mutant on that same
+# tree, then reverted (docs/verification-rules.md rule 2). Each cell is how
+# many tests in that group went red (groups of 4, 1, 2, 2, 1 and 1, in the
+# order the tests appear below):
+#
+#   mutant                                      unit  ordinary  check  require  wav  assert
+#   M0 :724 catches the LOCAL `Refused`         --    --        2      2        1    --
+#   M1 `prepare`'s conversion deleted           4     --        2      2        --   --
+#   M2 :724 += `AssertionError`                 --    --        --     --       --   1
+#   M3 :724 = `Exception`                       --    --        --     --       --   1
+#   M4 `_load`'s width refusal as `ValueError`  --    --        --     --       1    --
+#
+# M0 is #1160's shape at this handler: of the tests that were here before,
+# the 58 that ran were all blind to it, the three silent-corpus ones included,
+# because a silent record raises the LOCAL class (9 more skip without the
+# corpus). M1 is the escape the census predicted, `audio_measure.NonFiniteAudio`
+# out of `main`. M2 and M3 are the widening the issue forbids, and only the
+# AssertionError control sees them.
+SR_NONFINITE = SR_SILENT
+N_NONFINITE = 2 * SR_NONFINITE          # 2 s: the silent fixture's shape
+
+#: each injection -> (NaN samples, Inf samples, index of the first), so the
+#: refusal is checked against what was planted rather than trusted
+INJECTED = {"all_nan": (N_NONFINITE, 0, 0), "all_inf": (0, N_NONFINITE, 0),
+            "one_nan": (1, 0, N_NONFINITE // 2), "one_inf": (0, 1, N_NONFINITE // 2)}
+
+
+def _ordinary_record() -> np.ndarray:
+    """A record `measure_windows` can measure: 20 ms of true lead, then white
+    noise decaying with a 0.3 s time constant."""
+    g = np.random.default_rng(1893)
+    t = np.arange(N_NONFINITE) / SR_NONFINITE
+    x = g.standard_normal(N_NONFINITE) * np.exp(-t / 0.3)
+    x[:int(0.020 * SR_NONFINITE)] = 0.0
+    return x
+
+
+def _nonfinite(how: str) -> np.ndarray:
+    """The ordinary record with exactly `INJECTED[how]` planted in it."""
+    x = _ordinary_record()
+    nan, inf, first = INJECTED[how]
+    if nan:
+        x[first:first + nan] = np.nan
+    if inf:
+        x[first:first + inf] = np.inf
+    return x
+
+
+def _refs_whose_loader_returns(tmp_path, monkeypatch, record) -> pathlib.Path:
+    """A corpus root whose loader hands `record` back for every file."""
+    refs = tmp_path / "refs"
+    (refs / "cy8").mkdir(parents=True)
+    monkeypatch.setattr(cb, "_load", lambda p: (record, SR_NONFINITE))
+    return refs
+
+
+@pytest.mark.parametrize("how", sorted(INJECTED))
+def test_a_nonfinite_record_from_the_loader_leaves_prepare_as_a_refusal(
+        tmp_path, monkeypatch, how):
+    """The class is the whole question. `NonFiniteAudio` would pass every
+    handler here; what `run_case.prepare` lets out is its own `Refused`, which
+    is not an `AssertionError`. The reason is checked against what was planted,
+    so the refusal is provably the injected samples', read at the `prepare`
+    call with the file as its side."""
+    refs = _refs_whose_loader_returns(tmp_path, monkeypatch, _nonfinite(how))
+    with pytest.raises(tk.refusal.Refused, match="CY0000.WAV holds") as info:
+        tk.measure_windows(refs)
+    assert not isinstance(info.value, AssertionError), type(info.value)
+    nan, inf, first = INJECTED[how]
+    got = re.search(r"holds (\d+) non-finite samples of (\d+) \((\d+) NaN, (\d+) Inf; "
+                    r"first at index (\d+)\)", str(info.value))
+    want = (nan + inf, N_NONFINITE, nan, inf, first)
+    assert got and tuple(map(int, got.groups())) == want, str(info.value)
+
+
+def test_the_same_loader_on_an_ordinary_record_is_measured(tmp_path, monkeypatch):
+    """Rule 5's first condition for the controls above: with nothing planted,
+    the same patched loader gets past the boundary -- every window decided,
+    nothing refused -- so those refusals are the planted samples' and not the
+    harness's. Stated at this boundary on purpose: the FULL gate on this
+    synthetic noise exits 1 (`WRONG_ANALYSIS_BANDS: NOTHING -- this control
+    cannot fail`), which is the noise failing a control written for cymbal
+    recordings, not the harness refusing."""
+    refs = _refs_whose_loader_returns(tmp_path, monkeypatch, _ordinary_record())
+    meas, why = tk.measured_or_refused(refs)
+    assert why is None and meas is not None, (meas, why)
+    assert meas["n_refused"] == 0, meas["floor_margins"]
+
+
+@pytest.mark.parametrize("how", ["all_nan", "one_inf"])
+def test_check_on_a_nonfinite_corpus_degrades_to_NO_VERDICT(
+        tmp_path, monkeypatch, capsys, how):
+    """As for a silent corpus: the refusal reaches the CLI as the designed
+    corpus-absent degradation -- exit 0, the reason reported, the two
+    corpus-gated controls NO VERDICT, the artifact-backed property still
+    decided -- and nothing reaches stderr."""
+    refs = _refs_whose_loader_returns(tmp_path, monkeypatch, _nonfinite(how))
+    assert tk.main(["--check", "--refs", str(refs)]) == 0
+    out, err = capsys.readouterr()
+    lines = out.splitlines()
+    assert err == "" and "Traceback" not in out, (err, out[-600:])
+    [line] = [ln for ln in lines if "the windowed measurement REFUSED:" in ln]
+    assert "CY0000.WAV holds" in line, line
+    for d in tk.CORPUS_DEFECTS:
+        [row] = [ln for ln in lines if ln.startswith(d)]
+        assert "NO VERDICT" in row, row
+    [a1] = [ln for ln in lines if ln.startswith("alpha-law-1s")]
+    assert a1.rstrip().endswith("pass"), a1
+
+
+@pytest.mark.parametrize("how", ["all_nan", "one_inf"])
+def test_require_corpus_on_a_nonfinite_corpus_exits_1_without_a_traceback(
+        tmp_path, monkeypatch, capsys, how):
+    """The other half, where the exit status alone cannot decide: a required
+    control that stays undecided fails the gate with exit 1, and so does an
+    uncaught `NonFiniteAudio`. They are told apart by what comes with the 1 --
+    the reason on stdout and an empty stderr, never a traceback."""
+    refs = _refs_whose_loader_returns(tmp_path, monkeypatch, _nonfinite(how))
+    assert tk.main(["--check", "--require-corpus", "--refs", str(refs)]) == 1
+    out, err = capsys.readouterr()
+    lines = out.splitlines()
+    assert err == "" and "Traceback" not in out, (err, out[-600:])
+    assert any("the windowed measurement REFUSED:" in ln and "CY0000.WAV holds" in ln
+               for ln in lines), out[-600:]
+    for d in tk.CORPUS_DEFECTS:
+        assert any(ln.startswith(d) and "NO VERDICT" in ln and "REFUSED" in ln
+                   for ln in lines), (d, out)
+
+
+def test_a_float32_wav_holding_a_nan_is_refused_on_its_width(tmp_path, capsys):
+    """The FILE route, with nothing patched. `cymbal_bands._load` refuses any
+    non-int16 WAV before the cast, so the NaN never reaches `prepare`: the
+    reason names the format and carries no non-finite count. The guard reads
+    the width alone, so a float32 WAV holding an Inf takes this same branch."""
+    refs = tmp_path / "refs"
+    (refs / "cy8").mkdir(parents=True)
+    wav = refs / "cy8" / "CY0000.WAV"
+    wavfile.write(str(wav), SR_NONFINITE, _nonfinite("one_nan").astype(np.float32))
+    # the fixture is what it claims to be: still float32, still holding the NaN
+    sr, back = wavfile.read(str(wav))
+    assert sr == SR_NONFINITE and back.dtype == np.float32
+    assert int(np.isnan(back).sum()) == 1, back
+    assert tk.main(["--check", "--refs", str(refs)]) == 0
+    out, err = capsys.readouterr()
+    [line] = [ln for ln in out.splitlines() if "the windowed measurement REFUSED:" in ln]
+    assert line == (f"(the windowed measurement REFUSED: {wav}: float32 samples, "
+                    "expected 16-bit PCM (int16))"), line
+    assert err == "" and "Traceback" not in out, (err, out[-600:])
+    assert tk.main(["--check", "--require-corpus", "--refs", str(refs)]) == 1
+    out, err = capsys.readouterr()
+    assert err == "" and "Traceback" not in out, (err, out[-600:])
+    for d in tk.CORPUS_DEFECTS:
+        assert any(ln.startswith(d) and "NO VERDICT" in ln and "REFUSED" in ln
+                   for ln in out.splitlines()), (d, out)
+
+
+#: A child interpreter that replaces `cymbal_bands._load`, then runs the REAL
+#: tools/cymbal_tone_knob.py as `__main__` -- an exit status is a process's,
+#: not a function's return value. argv: the script, then the CLI's own args.
+_LOAD_RAISES = """\
+import pathlib, runpy, sys
+script, *argv = sys.argv[1:]
+root = pathlib.Path(script).resolve().parents[1]
+sys.path[:0] = [str(root / "model"), str(root / "tools")]
+import cymbal_bands as cb
+
+
+def _load(p):
+    raise AssertionError("control: a plain AssertionError at the load site")
+
+
+cb._load = _load
+sys.argv = [script, *argv]
+runpy.run_path(script, run_name="__main__")
+"""
+
+
+def test_a_plain_assertion_error_at_the_load_site_still_exits_1(tmp_path):
+    """The control the two above must not pass by widening. A plain
+    `AssertionError` at the same site is an execution error, not a refusal:
+    neither handler may take it. Exit 1, a traceback through
+    `measure_windows`, and no report started. A handler widened to
+    `AssertionError` or `Exception` turns it into NO VERDICT (exit 0) and
+    this control red."""
+    script = ROOT / "tools" / "cymbal_tone_knob.py"
+    assert script.is_file(), script
+    refs = tmp_path / "refs"
+    (refs / "cy8").mkdir(parents=True)
+    p = subprocess.run([sys.executable, "-c", _LOAD_RAISES, str(script),
+                        "--check", "--refs", str(refs)],
+                       capture_output=True, text=True, timeout=600, cwd=str(ROOT))
+    assert p.returncode == 1, (p.returncode, p.stderr[-600:])
+    assert "Traceback (most recent call last)" in p.stderr, p.stderr[-600:]
+    assert ", in measure_windows" in p.stderr, p.stderr[-600:]
+    assert "AssertionError: control: a plain AssertionError" in p.stderr, p.stderr[-600:]
+    assert p.stdout == "", p.stdout[-400:]
 
 
 # ---------------------------------------------------------------------------
