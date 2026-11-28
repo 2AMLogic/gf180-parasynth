@@ -360,12 +360,21 @@ def _reusable_control_run(paths: dict, case_id: str, part: str) -> bool:
     one -- whose `PASS --`, WAV and schedule sit beside it -- reads as caught,
     with the earlier run's numbers (#1580). One run prints each of its
     once-per-run records once, and a caught run prints no PASS verdict, so
-    any repeated record is a second capture. It is re-run: the answer this
-    gives a report it cannot bind."""
+    any repeated record is a second capture.
+
+    It also asserts the same floor `i2s_transcript.validate_clean_pass` does on
+    the simulator backend declaration: count `0` is a cache miss (#1659). A
+    control report cannot go through `validate_clean_pass` because it is never
+    a clean PASS, yet the bench prints `simulator backend <sim>` unconditionally
+    before running the simulation, so a report with no backend declaration is
+    truncated or hand-edited text from an unnamed apparatus and must be re-run
+    rather than credited."""
     if not paths["report"].is_file():
         return False
     text = paths["report"].read_text()
-    if any(count > 1 for count in i2s_transcript.record_counts(text).values()):
+    counts = i2s_transcript.record_counts(text)
+    if (any(count > 1 for count in counts.values())
+            or counts["simulator backend declaration"] < 1):
         return False
     return (f"ENSEMBLE {case_id} part {part}:" in text
             and f"INJECT_BUG_{CONTROL_INJECT}" in text
