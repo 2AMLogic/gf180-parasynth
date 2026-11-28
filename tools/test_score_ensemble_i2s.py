@@ -492,6 +492,20 @@ NOT_AN_OBJECT = ["[1, 2, 3]", "5", "null"]
 
 
 @pytest.mark.parametrize("text", NOT_AN_OBJECT)
+def test_a_bound_schedule_that_is_not_an_object_refuses(tmp_path, text):
+    """`validate_part` binds the report to the schedule by hash before it
+    reads a key, so the sidecar is rebound to whatever the test wrote. The
+    binding sits inside a `try:`, which is why the sweep that filed #1863
+    did not see this one."""
+    paths, _, wav_sha, _ = _part_files(tmp_path, "mix")
+    paths["schedule"].write_text(text)
+    schedule_sha = hashlib.sha256(paths["schedule"].read_bytes()).hexdigest()
+    report = _report(part="mix", wav_sha=wav_sha, schedule_sha=schedule_sha, periods=CASE_FRAMES)
+    with pytest.raises(score.Refused, match="schedule.*not a JSON object"):
+        score.validate_part("E1A", "mix", report, paths["wav"], paths["schedule"])
+
+
+@pytest.mark.parametrize("text", NOT_AN_OBJECT)
 def test_an_injected_schedule_that_is_not_an_object_refuses(tmp_path, monkeypatch, text):
     """Reached past the reuse check on purpose: that path binds the schedule
     by hash, so the file is whatever the injected run just wrote."""
