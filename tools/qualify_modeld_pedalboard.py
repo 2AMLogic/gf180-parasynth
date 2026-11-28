@@ -32,10 +32,13 @@ D is not installed at ...` rather than `no pedalboard on this machine`. **The
 remaining blocker is the licensed plugin binary alone.** The third refusal --
 a bundle that exists but will not load -- used to escape as a TRACEBACK; see
 docs/pedalboard-rig.md, "A bundle that exists is not a plugin". A refusal of a
-different kind, found 2026-11-28 (#1919): a rig that QUALIFIES and then renders
-a clip that is not finite. `write_clip` refuses to freeze it, and that refusal
--- raised after the measurement, not before it -- escaped the same way, because
-the write sat outside the `try` at the top of `main`.
+different kind, found 2026-11-28 (#1919, #1978): a rig that QUALIFIES and then
+renders a clip that is not finite. The clip is asserted to be numbers as soon
+as it is rendered, with or without `--wav` -- until #1978 the check lived only
+in `write_clip`, so a run that asked for no file exited 0 and printed the NEXT
+banner over a clip that was not a signal -- and that refusal, raised after the
+measurement and not before it, is handled where it arises rather than escaping
+the `try` at the top of `main`.
 
 WHAT A NON-ZERO EXIT MEANS FOR THE REST OF THE WORK
 ---------------------------------------------------
@@ -61,6 +64,7 @@ sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "audition"))
 sys.path.insert(0, str(ROOT / "tools"))
 
+import audio_measure as am                                          # noqa: E402
 import refprofile as rp                                             # noqa: E402
 
 OK, FAIL, REFUSED = rp.OK, rp.FAIL, rp.REFUSED
@@ -196,16 +200,17 @@ def main(argv=None) -> int:
     if code == OK and dev is not None:
         print("\nthe clip that qualified:")
         y = dev.render_note(dev.note)
-        print(f"  {len(y)} frames  peak {float(np.abs(y).max()):.6f}  "
-              f"note {dev.note}  block {dev.block}  sr {dev.sr}")
-        if a.wav:
-            try:
+        try:
+            am.require_finite(y, "the clip that qualified")
+            print(f"  {len(y)} frames  peak {float(np.abs(y).max()):.6f}  "
+                  f"note {dev.note}  block {dev.block}  sr {dev.sr}")
+            if a.wav:
                 rp.write_clip(pathlib.Path(a.wav), y, dev.sr)
                 print(f"  wrote {a.wav}")
-            except rp.Refused as why:
-                print(f"REFUSED  {why}")
-                rec["outcome"], rec["why"] = "REFUSED", str(why)
-                code = REFUSED
+        except (rp.Refused, am.NonFiniteAudio) as why:
+            print(f"REFUSED  {why}")
+            rec["outcome"], rec["why"] = "REFUSED", str(why)
+            code = REFUSED
         if code == OK:
             print("\nNEXT: record the verdict in tools/refprofile.py "
                   "RIG_VERDICTS['modeld-pedalboard'] (qualified=True, with this run's "

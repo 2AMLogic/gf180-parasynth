@@ -87,6 +87,11 @@ BOUNDARIES = (
     ("tools/refprofile.py", "render",
      "the decision to accept a plugin's clip INTO the profile, where the "
      "level floor it sits beside is the guard a NaN is invisible to"),
+    ("tools/qualify_modeld_pedalboard.py", "main",
+     "the pedalboard rig's clip, accepted on its way into the profile: "
+     "`_PedalboardPlugin.render` overrides `_Plugin.render` and never reaches "
+     "`render_midi_note`, so this audio crosses no other registered boundary, "
+     "and until #1978 the only check on it was `write_clip`'s -- under `--wav`"),
     ("tools/run_case.py", "load_reference",
      "the external reference corpus reader (a WAV this repository did not write)"),
     ("tools/run_case.py", "prepare",
