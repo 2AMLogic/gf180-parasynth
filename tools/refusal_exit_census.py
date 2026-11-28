@@ -36,7 +36,18 @@ the census guards:
     mode this tool exists to prevent.  The guard that still fires: a site
     refusing with an UNDECLARED status lands in sites_outside_set and turns
     --check red.  Drift in the totals is still visible -- they print in every
-    --check run -- just never as a failing pin.
+    --check run -- just never as a failing pin;
+  * a third, LABEL/STATUS pass (issue #1790), REPORTED and never pinned.  The
+    handler pass reads handlers; a refusal carried in prose -- `print` of
+    REFUSED, then a bare `return 1` outside any refusal handler -- has no
+    handler to read, so the census stayed green while tools/run_all.py
+    rendered those exits FAIL: the #804 inversion, in a shape the tool
+    written to catch its neighbours could not see.  The pass lists, as
+    file:line, every `return <status>` outside the declared set whose label
+    -- the last print before it, with no return or raise between -- opens on
+    REFUSED.  It is not pinned for the reason the totals are not: the sites
+    belong to the tools that print them, and a pin that reds on the merges
+    that repair or add one gets trained away.
 
     python tools/refusal_exit_census.py            # the census
     python tools/refusal_exit_census.py --check    # self-test (pinned answers)
@@ -60,10 +71,43 @@ therefore resolves two name forms: a module-level int assignment in the same
 file, and a name imported from `tools/exit_contract.py`.  Returns it cannot
 resolve are not counted (documented blind spot, not a zero).  Module-level
 `REFUSED = <int>` declarations are reported by the constant pass separately;
-the two passes are reported separately rather than summed, because a sum
-would hide which detector found what.  `tools/exit_contract.py` itself is
-excluded from both passes: it DECLARES the statuses, it does not refuse with
-them.
+the passes are reported separately rather than summed, because a sum would
+hide which detector found what.  `tools/exit_contract.py` itself is excluded
+from every pass: it DECLARES the statuses, it does not refuse with them.
+
+The label/status pass reads a label BESIDE a return: the last print before
+it in flat source order, with no return or raise between.  Every shape below
+reads as SILENT to it -- a documented blind spot, not a zero:
+
+  * a label held in a variable or concatenated (`msg = "REFUSED"; print(msg)`,
+    `print("REFUSED: " + why)`).  Only a str literal, or an f-string whose
+    leading part is a literal, is read -- after leading whitespace, because
+    two of the sites print `"\nREFUSED: ..."` -- and only as the whole word
+    REFUSED: `REFUSED_TYPES` is not a label;
+  * a label that does not OPEN on REFUSED: a tool-name prefix
+    (`midi_session: REFUSED -- ...`, fpga/midi_session.py) or a sibling
+    spelling (`NO VERDICT: ...`, `REJECTED -- ...`).  tools/dsp_dpreg_sim.py
+    prints `NO VERDICT` and returns 1; this pass does not say so;
+  * a refusal printed in a helper: the function that returns 1 never prints,
+    the callee prints but returns no status;
+  * `sys.exit(<status>)` beside the label -- the pass reads `return` only.
+    The `print REFUSED; sys.exit(2)` sites in this tree exit 2 by
+    inspection, not by this tool;
+  * a `return` whose status is neither an int literal nor a name the handler
+    pass could resolve (`return 0 if ok else 1`, `return rc`);
+  * a label that is beside the return in control flow but not in source
+    order.  The walk ignores branching: a REFUSED print, a conditional
+    `return 0`, then a bare `return 1` is silent (the `return 0` ended the
+    label on paper while control flows around it), and a loop that prints
+    REFUSED and then FAIL before a flag-driven `return 1` is silent (FAIL
+    relabels).  A helper that prints its own labels (`_print(findings)`) is
+    transparent, so a return below it inherits the last literal print()
+    above -- which an intervening return clears, usually;
+  * a return inside a handler for a refusal class, where the pass defers to
+    the handler pass entirely -- including a handler's SECOND return, which
+    that pass does not count either.  The handler's print is still a label,
+    so a handler that prints and falls through to a `return 1` IS seen; a
+    handler for any other class (`except OSError:`) is not deferred at all.
 """
 
 from __future__ import annotations
@@ -72,6 +116,7 @@ import argparse
 import ast
 import collections
 import pathlib
+import re
 import subprocess
 import sys
 import refusal
@@ -225,11 +270,29 @@ def _runner_honours_contract(runner_tree: ast.Module) -> None:
 def _exit_contract_imports(tree: ast.Module) -> dict[str, str]:
     """`from exit_contract import X [as Y]` bindings: local name -> contract name."""
     out: dict[str, str] = {}
-    for st in ast.walk(tree):
-        if isinstance(st, ast.ImportFrom) and st.module == "exit_contract":
-            for a in st.names:
+    stack: list[ast.AST] = [tree]
+    while stack:                       # ast.walk minus the leaves (_LEAF_TYPES)
+        node = stack.pop()
+        if isinstance(node, ast.ImportFrom) and node.module == "exit_contract":
+            for a in node.names:
                 out[a.asname or a.name] = a.name
+        stack.extend(c for c in ast.iter_child_nodes(node) if type(c) not in _LEAF_TYPES)
     return out
+
+
+# Node types whose subtree can hold no def, handler, print, return or raise:
+# the expression contexts (Load/Store/Del -- one per Name/Attribute, roughly
+# 40% of every node the walkers below visit), the operator tokens, and the
+# leaves.  Skipping them changes no result and is the label pass's cost cut
+# (#1827 review: parsing was not the dominant cost, the walk is).
+_LEAF_TYPES = frozenset({
+    ast.Load, ast.Store, ast.Del, ast.Constant, ast.Name,
+    ast.And, ast.Or, ast.Not, ast.Invert, ast.UAdd, ast.USub,
+    ast.Add, ast.Sub, ast.Mult, ast.MatMult, ast.Div, ast.Mod, ast.Pow,
+    ast.LShift, ast.RShift, ast.BitOr, ast.BitXor, ast.BitAnd, ast.FloorDiv,
+    ast.Eq, ast.NotEq, ast.Lt, ast.LtE, ast.Gt, ast.GtE, ast.Is, ast.IsNot,
+    ast.In, ast.NotIn, ast.Pass, ast.Break, ast.Continue,
+})
 
 
 def _handlers_in_scope(tree: ast.Module) -> list[tuple[str, ast.ExceptHandler]]:
@@ -246,7 +309,7 @@ def _handlers_in_scope(tree: ast.Module) -> list[tuple[str, ast.ExceptHandler]]:
             elif isinstance(child, ast.ExceptHandler):
                 out.append((func, child))
                 visit(child, func)
-            else:
+            elif type(child) not in _LEAF_TYPES:
                 visit(child, func)
 
     visit(tree, MODULE_LEVEL)
@@ -286,17 +349,38 @@ def _return_status(value, local: dict[str, int], imported: dict[str, str],
     return None
 
 
-def handler_census(files: list[str], contract: dict[str, int]) -> dict[int, list[tuple[str, str, int]]]:
-    """Per exit status, the `except <refusal>: ... return <status>` sites,
-    each as (file, enclosing function, line)."""
-    by: dict[int, list[tuple[str, str, int]]] = collections.defaultdict(list)
+def parse_sources(files: list[str]) -> dict[str, ast.Module]:
+    """Parse each scanned file ONCE.  Parsing is essentially the whole runtime
+    of the census (~3 s per pass over the tracked tree), so `census()` parses
+    here and hands the trees to all three passes.  Unreadable or unparseable
+    files are skipped, exactly as each pass skipped them before."""
+    out: dict[str, ast.Module] = {}
     for f in files:
         if pathlib.Path(f).name.startswith("test_") or f == str(CONTRACT):
             continue
         try:
-            tree = ast.parse((ROOT / f).read_text())
+            out[f] = ast.parse((ROOT / f).read_text())
         except (OSError, SyntaxError):
             continue
+    return out
+
+
+def _scanned_trees(files: list[str], trees: dict[str, ast.Module] | None):
+    """(file, tree) per scanned file: from `trees` when the caller already
+    parsed them, else parsed here.  Same exclusions either way."""
+    if trees is None:
+        trees = parse_sources(files)
+    for f in files:
+        if f in trees:
+            yield f, trees[f]
+
+
+def handler_census(files: list[str], contract: dict[str, int],
+                   trees: dict[str, ast.Module] | None = None) -> dict[int, list[tuple[str, str, int]]]:
+    """Per exit status, the `except <refusal>: ... return <status>` sites,
+    each as (file, enclosing function, line)."""
+    by: dict[int, list[tuple[str, str, int]]] = collections.defaultdict(list)
+    for f, tree in _scanned_trees(files, trees):
         local = _module_int_assigns(tree)
         imported = _exit_contract_imports(tree)
         for func, node in _handlers_in_scope(tree):
@@ -311,18 +395,13 @@ def handler_census(files: list[str], contract: dict[str, int]) -> dict[int, list
     return dict(by)
 
 
-def constant_census(files: list[str]) -> dict[int, list[tuple[str, str, int]]]:
+def constant_census(files: list[str],
+                    trees: dict[str, ast.Module] | None = None) -> dict[int, list[tuple[str, str, int]]]:
     """Per exit status, the module-level `REFUSED = <int>` declarations.  These
     are invisible to `handler_census` when no handler returns the constant.
     Module-level by construction, so every site keys as MODULE_LEVEL."""
     by: dict[int, list[tuple[str, str, int]]] = collections.defaultdict(list)
-    for f in files:
-        if pathlib.Path(f).name.startswith("test_") or f == str(CONTRACT):
-            continue
-        try:
-            tree = ast.parse((ROOT / f).read_text())
-        except (OSError, SyntaxError):
-            continue
+    for f, tree in _scanned_trees(files, trees):
         for st in tree.body:
             if not isinstance(st, ast.Assign):
                 continue
@@ -331,6 +410,121 @@ def constant_census(files: list[str]) -> dict[int, list[tuple[str, str, int]]]:
             if isinstance(st.value, ast.Constant) and isinstance(st.value.value, int) \
                     and not isinstance(st.value.value, bool):
                 by[st.value.value].append((f, MODULE_LEVEL, st.lineno))
+    return dict(by)
+
+
+# The refusal label the label/status pass reads, as a whole word.  `REFUSED:`,
+# `REFUSED (` and a bare `REFUSED` match; `REFUSED_TYPES` and a message that
+# merely CONTAINS the word (`MISSED: ... expected REFUSED`,
+# tools/check_iverilog_generate_case_string.py) do not.
+REFUSED_LABEL = re.compile(r"REFUSED\b")
+
+
+def _label_prefix(node: ast.AST) -> str | None:
+    """The literal a print() argument opens with: a str constant, or an
+    f-string's leading str constant.  None when neither, i.e. the label is
+    not something this pass can read."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.JoinedStr) and node.values \
+            and isinstance(node.values[0], ast.Constant) \
+            and isinstance(node.values[0].value, str):
+        return node.values[0].value
+    return None
+
+
+def _prints_refused(node: ast.AST) -> bool:
+    """True for `print(<label>, ...)` whose label opens on the word REFUSED
+    once leading whitespace is dropped -- two of the sites print
+    `"\\nREFUSED: ..."`, and a startswith() on the raw literal misses them."""
+    if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+            and node.func.id == "print" and node.args):
+        return False
+    prefix = _label_prefix(node.args[0])
+    return prefix is not None and REFUSED_LABEL.match(prefix.lstrip()) is not None
+
+
+def label_sites(tree: ast.Module, local: dict[str, int], imported: dict[str, str],
+                contract: dict[str, int], no_evidence: frozenset[int]) -> list[tuple[int, str, int]]:
+    """(exit status, innermost enclosing function, line) for every
+    `return <status>` OUTSIDE any refusal handler whose label is a print of
+    REFUSED, where status is outside NO_EVIDENCE.  Source order.
+
+    The label must sit BESIDE the return, and "beside" is a walk, not a
+    function: back through the function's statements from the return, the
+    first print, return or raise met must be a print of REFUSED.  A statement
+    that does none of those is transparent (a diagnostic line, `ok = False`);
+    an earlier return or raise ends the path the print belongs to; a
+    differently-labelled print relabels.
+
+    WRONG BEFORE IT WAS RIGHT: the first rule was function granularity -- "the
+    function prints REFUSED somewhere" -- and on 03148399 it listed 50 sites,
+    at least 14 of them a main() whose REFUSED paths all `return 2` inside
+    handlers, beside a correctly-labelled FAIL return.  It read as a list of
+    inversions and was not one.  This walk lists 16 on that tree, each
+    inspected: the 12 the issue named, two more in the same files that a
+    `grep -A1` cannot see (a diagnostic line or a flag between the print and
+    the return), and two in files the issue's grep never opened.
+
+    Scoping follows _handlers_in_scope: a print and a return in a nested def
+    belong to the nested def.  Inside a handler for a refusal class the
+    handler pass owns the site, so a return there is never listed -- but the
+    handler's print is still a label, and a handler that prints and falls
+    through to a `return 1` is listed (no Return inside it, so the handler
+    pass counts nothing).  A handler for any other class (`except OSError:`)
+    is not skipped at all: the handler pass is blind to it too."""
+    events: dict[ast.AST, list[tuple[int, str, object, bool]]] = collections.defaultdict(list)
+
+    def visit(node: ast.AST, func, in_refusal_handler: bool) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                visit(child, child, False)
+            elif isinstance(child, ast.ExceptHandler):
+                is_refusal = bool(set(_handled_classes(child)) & REFUSAL_CLASSES)
+                visit(child, func, in_refusal_handler or is_refusal)
+            elif type(child) in _LEAF_TYPES:
+                continue
+            else:
+                if func is not None:
+                    if isinstance(child, ast.Call) and isinstance(child.func, ast.Name) \
+                            and child.func.id == "print":
+                        events[func].append((child.lineno, "print", _prints_refused(child), False))
+                    elif isinstance(child, ast.Return):
+                        events[func].append((child.lineno, "return", child, in_refusal_handler))
+                    elif isinstance(child, ast.Raise):
+                        events[func].append((child.lineno, "raise", None, False))
+                visit(child, func, in_refusal_handler)
+
+    visit(tree, None, False)
+    out = []
+    for func, ev in events.items():
+        labelled = False        # the last label met was a print of REFUSED
+        for _, kind, payload, in_handler in sorted(ev, key=lambda e: e[0]):
+            if kind == "print":
+                labelled = payload
+            elif kind == "raise":
+                labelled = False
+            else:
+                status = _return_status(payload.value, local, imported, contract)
+                if labelled and not in_handler and status is not None \
+                        and status not in no_evidence:
+                    out.append((status, func.name, payload.lineno))
+                labelled = False
+    return sorted(out, key=lambda s: (s[2], s[1]))
+
+
+def label_census(files: list[str], contract: dict[str, int],
+                 no_evidence: frozenset[int],
+                 trees: dict[str, ast.Module] | None = None) -> dict[int, list[tuple[str, str, int]]]:
+    """Per exit status, the label/status sites, each as (file, enclosing
+    function, line).  REPORTED, never pinned (issue #1790); same file
+    exclusions as the other two passes."""
+    by: dict[int, list[tuple[str, str, int]]] = collections.defaultdict(list)
+    for f, tree in _scanned_trees(files, trees):
+        local = _module_int_assigns(tree)
+        imported = _exit_contract_imports(tree)
+        for status, func, ln in label_sites(tree, local, imported, contract, no_evidence):
+            by[status].append((f, func, ln))
     return dict(by)
 
 
@@ -344,8 +538,11 @@ def census() -> dict:
     no_evidence = _contract_no_evidence(contract_tree)
     _runner_honours_contract(runner_tree)
     contract_ints = _contract_ints(contract_tree)
-    handlers, constants = handler_census(files, contract_ints), constant_census(files)
-    codes = sorted(set(handlers) | set(constants))
+    trees = parse_sources(files)  # one read+parse per file, shared by all three passes
+    handlers = handler_census(files, contract_ints, trees)
+    constants = constant_census(files, trees)
+    labels = label_census(files, contract_ints, no_evidence, trees)
+    codes = sorted(set(handlers) | set(constants) | set(labels))
     return {
         "n_python_files": len(files),
         "no_evidence": sorted(no_evidence),
@@ -354,6 +551,7 @@ def census() -> dict:
                 "handler_sites": sorted(handlers.get(c, [])),
                 "handler_files": sorted({f for f, _, _ in handlers.get(c, [])}),
                 "constant_sites": sorted(constants.get(c, [])),
+                "label_sites": sorted(labels.get(c, [])),
                 # the column that matters: how run_all.py renders this family
                 "run_all_state": "NO-VERDICT" if c in no_evidence
                                  else ("PASS" if c == 0 else "FAIL"),
@@ -385,6 +583,22 @@ def render(res: dict) -> str:
             lines.append(f"  exit {c}  {f}:{ln}  (REFUSED = {c})")
     if not misreported:
         lines.append("  none -- every refusal family is reported NO-VERDICT")
+    # The third detector gets its own section, never a sum with the lines
+    # above: which detector found what stays readable (see the docstring).
+    label = [(c, f, func, ln) for c, d in res["codes"].items()
+             for (f, func, ln) in d.get("label_sites", [])]
+    lines += ["", "Label/status pass, REPORTED and never pinned (issue #1790): a print of "
+                  "REFUSED is the last label before the return, with no return or raise "
+                  "between, outside any refusal handler where the handler pass cannot "
+                  "see it; run_all.py renders that status as a result (PASS for 0, FAIL "
+                  "otherwise) instead of NO-VERDICT:"]
+    for c, f, func, ln in label:
+        lines.append(f"  exit {c}  {f}:{ln}  (in {func})")
+    if label:
+        lines.append(f"  {len(label)} sites in {len({f for _, f, _, _ in label})} files "
+                     f"-- reported, not pinned")
+    else:
+        lines.append("  none -- no print of REFUSED sits beside a return outside a handler")
     return "\n".join(lines)
 
 
@@ -459,8 +673,10 @@ def check() -> tuple[bool, list[str]]:
         d = res["codes"][c]
         consts = (f", {len(d['constant_sites'])} REFUSED= constants"
                   if d["constant_sites"] else "")
+        labels = (f", {len(d['label_sites'])} label/status sites"
+                  if d.get("label_sites") else "")
         out.append(f"  note exit {c}: {len(d['handler_sites'])} handler sites in "
-                   f"{len(d['handler_files'])} files{consts} -- reported, not pinned")
+                   f"{len(d['handler_files'])} files{consts}{labels} -- reported, not pinned")
 
     # The control that makes the census mean something: every refusal site
     # outside the declared set must be one of the pinned, documented
