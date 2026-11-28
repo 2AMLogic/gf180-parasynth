@@ -69,6 +69,14 @@ WHAT THIS SCAN RESOLVES that the #1160 one-off dotted-call grep could not:
     own `Refused` inside that def and leaves every sibling def reading the
     module's. It never sets `<mod>.Refused`: a function-local name is not a
     module attribute.
+  * a callee raising its refusal only through a DOTTED name is a site
+    (#1667): `import relay` then `raise relay.Refused(...)` binds no family
+    NAME, and `scan` dropped every call into such a callee as "no family at
+    all" before the raise was read. Whether a callee can refuse is now
+    decided by the raises its def holds, and a dotted raise counts only when
+    the name IS the family and an import binds its root -- as a call's must.
+    Any other dotted raise (`self.Error`, `e.with_traceback(tb)`) is no
+    refusal, where it had been credited to its root's stem.
 
 WHAT IT CANNOT TELL YOU, and why the per-site list is an inventory, not a
 verdict. A dotted call is not necessarily a raising call on the CLI's input
@@ -207,7 +215,6 @@ class ModInfo:
         self.refused_origin: str | None = None   # stem whose class our Refused is
         self.refused_names: dict[str, str] = {}  # family name -> stem it last resolved to
         self.has_local_family = False            # a local `class Refused` def (maybe shadowed)
-        self.has_family = False                  # a family name bound anywhere: module level or a def
         self.parents: dict[ast.AST, ast.AST] = {}          # child -> parent, for the scope walk
         self.scopes: dict[ast.AST, _Bindings] = {}         # function node -> its own bindings
         self._read_bindings()
@@ -329,9 +336,6 @@ class ModInfo:
             # was bound after a shallower, later one and won (#1577)
             for node in sorted(nodes, key=lambda n: (n.lineno, n.col_offset)):
                 _bind(node, b.imports, b.from_imports)
-        self.has_family = bool(self.refused_names) or any(
-            ent[1] == FAMILY_NAME for b in self.scopes.values()
-            for ent in b.from_imports.values())
 
 
 def build_index(files: list[pathlib.Path]) -> dict[str, ModInfo]:
@@ -393,10 +397,15 @@ def raise_origins(mod: ModInfo, fname: str,
             fam = mod.family_name_at(txt, node)
             if fam is not None:
                 out.add(defining(fam))
-            elif "." in txt:
-                head = txt.split(".")[0]
-                stem = mod.resolve_head(head, node) or head
-                out.add(defining(stem) if txt.endswith(f".{FAMILY_NAME}") else stem)
+            elif txt.endswith(f".{FAMILY_NAME}"):
+                # `raise relay.Refused(...)`: the family through a DOTTED name
+                # the module binds no family name for (#1667). The root must
+                # be an import binding, as a call's must: any other dotted
+                # raise (`self.Error`, `e.with_traceback(tb)`) names no
+                # module's class, and crediting its root invented an origin.
+                stem = mod.resolve_head(txt.split(".")[0], node)
+                if stem is not None:
+                    out.add(defining(stem))
     return out
 
 
@@ -544,12 +553,12 @@ def scan(files: list[pathlib.Path], idx: dict[str, ModInfo]) -> list[dict]:
                 # decidable from the AST, so name the candidates instead of
                 # guessing -- unless a base/broad guard settles coverage the
                 # same way for every one of them. A collision whose every
-                # candidate either has no family or raises no refusal for
-                # this callee cannot refuse under ANY resolution, so it is
-                # not a site at all -- the multi-candidate mirror of the
-                # single-callee filters below (#1214).
-                if not any(c.has_family and raise_origins(c, fname or "", by_stem)
-                           for c in cands):
+                # candidate raises no refusal for this callee cannot refuse
+                # under ANY resolution, so it is not a site at all -- the
+                # multi-candidate mirror of the single-callee filter below
+                # (#1214). Neither tests for a family NAME: a callee raising
+                # only `mod.Refused` dotted binds none (#1667).
+                if not any(raise_origins(c, fname or "", by_stem) for c in cands):
                     continue
                 ashapes = []
                 for tr in enclosing_try_parents(mod.tree, node):
@@ -569,8 +578,6 @@ def scan(files: list[pathlib.Path], idx: dict[str, ModInfo]) -> list[dict]:
                 ))
                 continue
             callee = cands[0]
-            if not callee.has_family:
-                continue                      # callee has no family at all
             origins = raise_origins(callee, fname or "", by_stem)
             if not origins:
                 continue                      # this function raises no refusal
