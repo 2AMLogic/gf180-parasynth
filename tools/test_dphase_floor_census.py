@@ -16,6 +16,10 @@ see.
 """
 from __future__ import annotations
 
+import errno
+import json
+import os
+import pathlib
 import sys
 from pathlib import Path
 
@@ -206,3 +210,164 @@ def test_the_floor_refusal_set_only_grows_with_the_floor():
     assert seen_floor < len(clips) * len(ladder), (
         "every clip was floor-refused at every floor, which is also vacuous: "
         "a constant predicate is trivially monotone")
+
+
+# ---------------------------------------------------------------------------
+# the CLI's --json and -o/--out destinations (#2098, a slice of the #2095 class)
+#
+# THE DEFECT, red-first on origin/main @ 8eb04e5b (2026-11-28): after the
+# whole corpus had been checked and censused, `main` wrote `a.json` with
+# `write_text` and opened `a.out` with `open("w")`, and nothing made either
+# parent directory. Under a missing one either raised FileNotFoundError out
+# of `main`: exit 1 with a traceback, and the census -- minutes of rendering
+# -- was lost with its record.
+#
+# THE KNOWN ANSWER, from tools/exit_contract.py and not from the module under
+# test: a destination that cannot be written is REFUSED (2), the status this
+# script already returns through `Refused`; refused before the census runs
+# where the path says so itself; refused after it otherwise, with the report
+# then on stdout, because `-o` only redirects it.
+#
+# WHAT RUNS FOR REAL: `main` and `report`. Doubled, counted: `check_corpus`
+# and `census`, which in production need the Fischer set and a render pool.
+# ---------------------------------------------------------------------------
+@pytest.fixture
+def counted(monkeypatch):
+    """The real CLI with its corpus check and census doubled and counted."""
+    from model.discrimination_features import census_counts
+    calls = {"check_corpus": 0, "census": 0}
+    none_refused = census_counts([dc.ROW_STATES[0]] * 4)
+
+    def check_corpus(*a, **k):
+        calls["check_corpus"] += 1
+        return dict(refdir="/x", corpus_sha256="deadbeef", n_wav=116,
+                    split_hash="cafe", n_clips=116)
+
+    def census(*a, **k):
+        calls["census"] += 1
+        return {"ref": {**none_refused, "per_voice": {"BD": none_refused}},
+                "render": {**none_refused, "per_voice": {"BD": none_refused}},
+                "arm": "ours", "floor_ppm": 20.0, "floor_is_shipped": True}
+
+    monkeypatch.setattr(dc, "check_corpus", check_corpus)
+    monkeypatch.setattr(dc, "census", census)
+    return calls
+
+
+def _full_disk(target, name):
+    """`Path.<name>` (`write_text` or `open`) that fails for `target` when
+    writing, and only then."""
+    real = getattr(pathlib.Path, name)
+
+    def write(self, *args, **kwargs):
+        if self == target and (name == "write_text" or "w" in args[0]):
+            raise OSError(errno.ENOSPC, "No space left on device")
+        return real(self, *args, **kwargs)
+
+    return write
+
+
+NOTHING_RUN = {"check_corpus": 0, "census": 0}
+DESTINATIONS = [("--json", "census.json", "record"), ("-o", "census.txt", "report")]
+CASES = ["a-directory", "parent-is-a-file", "parent-has-a-nul-byte"]
+
+
+def _unwritable(tmp_path, filename, kind):
+    """Three destinations that cannot hold the file, each with the reason it
+    must be refused by (the #2040 wording), in the order of CASES."""
+    return [
+        (str(tmp_path), f"names an existing directory; name the {kind} file"),
+        (str(tmp_path / "a-file" / filename),
+         f"no {kind} can be written there: [Errno 17] File exists"),
+        (f"nul\x00dir/{filename}", "embedded null"),
+    ]
+
+
+@pytest.mark.parametrize("flag, filename, kind", DESTINATIONS, ids=["--json", "--out"])
+@pytest.mark.parametrize("case", CASES)
+def test_an_unwritable_destination_is_refused_before_the_census_runs(counted, tmp_path, capsys,
+                                                                     flag, filename, kind, case):
+    (tmp_path / "a-file").write_text("not a directory\n")
+    target, reason = _unwritable(tmp_path, filename, kind)[CASES.index(case)]
+    rc = dc.main([flag, target])
+    out, err = capsys.readouterr()
+    assert rc == 2, (rc, out, err)
+    assert "REFUSED" in err and reason in err, err
+    assert counted == NOTHING_RUN, "the census ran for a destination that could not be written"
+    assert "floor" not in out, out
+
+
+def test_a_json_record_under_a_missing_directory_is_created_and_written(counted, tmp_path, capsys):
+    target = tmp_path / "no-such-dir" / "census.json"
+    rc = dc.main(["--json", str(target)])
+    out, _ = capsys.readouterr()
+    assert rc == 0, out
+    assert counted["census"] == 1
+    assert json.loads(target.read_text())["corpus"]["n_wav"] == 116
+    assert "ref side: 0 / 4 refused by the floor" in out        # no -o: the report is on stdout
+
+
+def test_a_report_under_a_missing_directory_is_created_and_written(counted, tmp_path, capsys):
+    target = tmp_path / "no-such-dir" / "census.txt"
+    rc = dc.main(["-o", str(target)])
+    out, _ = capsys.readouterr()
+    assert rc == 0, out
+    assert "ref side: 0 / 4 refused by the floor" in target.read_text()
+    assert f"wrote {target}" in out and "ref side" not in out, out
+
+
+@pytest.mark.parametrize("flag, name, patch", [("--json", "census.json", "write_text"),
+                                               ("-o", "census.txt", "open")],
+                         ids=["--json", "--out"])
+def test_a_write_failure_after_the_census_is_refused_with_the_report_on_stdout(counted, tmp_path,
+                                                                              capsys, monkeypatch,
+                                                                              flag, name, patch):
+    target = tmp_path / name
+    monkeypatch.setattr(pathlib.Path, patch, _full_disk(target, patch))
+    rc = dc.main([flag, str(target)])
+    out, err = capsys.readouterr()
+    assert rc == 2, (rc, out, err)
+    assert "ref side: 0 / 4 refused by the floor" in out, out      # the report survives either way
+    assert "REFUSED" in err and "not written" in err, err
+    assert "No space left on device" in err and "Traceback" not in err, err
+    assert "wrote" not in out and not target.exists(), out
+
+
+def test_an_unwritten_json_record_is_refused_though_the_report_file_was_written(counted, tmp_path,
+                                                                               capsys, monkeypatch):
+    """Two destinations, one of them lost: still REFUSED, and the one that
+    was written says so."""
+    (tmp_path / "keep.txt").write_text("x")
+    target = tmp_path / "census.json"
+    monkeypatch.setattr(pathlib.Path, "write_text", _full_disk(target, "write_text"))
+    report = tmp_path / "census.txt"
+    rc = dc.main(["--json", str(target), "-o", str(report)])
+    out, err = capsys.readouterr()
+    assert rc == 2, (rc, out, err)
+    assert f"wrote {report}" in out and "ref side" not in out, out
+    assert "REFUSED" in err and "--json" in err and "not written" in err, err
+    assert "ref side" in report.read_text() and not target.exists()
+
+
+@pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0,
+                    reason="root writes into a read-only directory")
+@pytest.mark.parametrize("flag, name", [("--json", "census.json"), ("-o", "census.txt")],
+                         ids=["--json", "--out"])
+def test_a_read_only_parent_is_refused_and_leaves_nothing_behind(counted, tmp_path, capsys,
+                                                                 flag, name):
+    """Rule 8: the input that defeats the pre-flight. The parent exists, so
+    `mkdir(exist_ok=True)` accepts it; only the guard around the write can
+    refuse it."""
+    parent = tmp_path / "read-only"
+    parent.mkdir()
+    parent.chmod(0o555)
+    try:
+        rc = dc.main([flag, str(parent / name)])
+        written = list(parent.iterdir())
+    finally:
+        parent.chmod(0o700)
+    out, err = capsys.readouterr()
+    assert rc == 2, (rc, out, err)
+    assert "REFUSED" in err and "not written" in err, err
+    assert "ref side: 0 / 4 refused by the floor" in out, out
+    assert written == []

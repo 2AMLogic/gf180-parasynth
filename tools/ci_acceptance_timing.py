@@ -29,7 +29,10 @@ like a check that passed:
 
     0  measured, and the window is clean
     1  measured, and the window contains a timeout cancellation
-    2  REFUSED -- could not measure (no `gh`, API error, window too short)
+    2  REFUSED -- could not measure (no `gh`, API error, window too short), or
+       the `--snapshot` destination could not hold the record: refused before
+       anything is collected where the path says so, else after the report
+       with the gate's verdict withheld (#2098)
 
 Network-dependent, so it is NOT part of `make verify`; run it by hand when you
 need the evidence. Its own tests (`tools/test_ci_acceptance_timing.py`) are
@@ -256,6 +259,34 @@ def render(records: list[JobRecord], summary: dict) -> str:
     return "\n".join(lines)
 
 
+def _record_path(name) -> None:
+    """Check the `--snapshot` destination BEFORE anything is collected, or
+    Refusal (#2098).
+
+    A missing parent directory is created here, as `fpga/selected_preset.py`
+    creates `--out`'s. A destination that is a directory, or whose parent
+    cannot be made, is refused now -- a collection walks the live API, and
+    none of it should run for a record that cannot be written -- rather than
+    by `OSError` from the write afterwards, which exited 1 with a traceback:
+    the status `--require-clean` uses for a measured cancellation.
+
+    What this cannot see -- a parent that exists but is not writable, a disk
+    that fills -- is left to the guard around the write.
+    """
+    if not name:
+        return
+    out = pathlib.Path(name)
+    try:
+        is_dir = out.is_dir()
+        if not is_dir:
+            out.parent.mkdir(parents=True, exist_ok=True)
+    except (OSError, ValueError) as exc:
+        raise Refusal(f"--snapshot {str(name)!r}: no record can be written there: {exc}") from exc
+    if is_dir:
+        raise Refusal(f"--snapshot {str(name)!r} names an existing directory; "
+                      "name the record file")
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -274,12 +305,16 @@ def main(argv: list[str] | None = None) -> int:
                          "Printed in the report -- a filtered window is a "
                          "narrower claim, not a cleaner one.")
     ap.add_argument("--snapshot", type=pathlib.Path,
-                    help="also write the collected records here")
+                    help="also write the collected records here "
+                         "(a missing parent directory is created)")
     ap.add_argument("--offline", type=pathlib.Path,
                     help="analyse a previously written snapshot, no network")
     args = ap.parse_args(argv)
 
+    unwritten = None
     try:
+        if args.snapshot:
+            _record_path(args.snapshot)
         if args.require_clean and args.window <= 0:
             raise Refusal("--window must be positive to score any jobs")
         if args.offline:
@@ -289,7 +324,14 @@ def main(argv: list[str] | None = None) -> int:
             records = collect(args.repo, args.workflow, args.job, args.limit,
                               pathlib.Path(__file__).resolve().parent.parent)
         if args.snapshot:
-            args.snapshot.write_text(json.dumps([asdict(r) for r in records], indent=1))
+            try:
+                args.snapshot.write_text(json.dumps([asdict(r) for r in records], indent=1))
+            except OSError as exc:
+                # Held, not raised: the report is printed with or without the
+                # record, and the refusal comes after it (#2098). The write
+                # stays here, before the filters below, so a window that is
+                # refused later still leaves the records it collected.
+                unwritten = exc
         if args.runner_class:
             records = [r for r in records if r.runner_bucket == args.runner_class]
             print(f"(restricted to runner class {args.runner_class!r})")
@@ -301,9 +343,18 @@ def main(argv: list[str] | None = None) -> int:
                           f"window is not a clean window.")
     except Refusal as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
+        if unwritten is not None:
+            print(f"REFUSED: --snapshot {args.snapshot} not written as well: {unwritten}",
+                  file=sys.stderr)
         return REFUSED
 
     print(render(records, summarise(records)))
+    if unwritten is not None:
+        # The report is on stdout above; its snapshot is the evidence, and a
+        # window whose record is gone is neither clean nor unclean (#2098).
+        print(f"REFUSED: report printed above; --snapshot {args.snapshot} not written: "
+              f"{unwritten}", file=sys.stderr)
+        return REFUSED
 
     if args.require_clean:
         bad = timeout_cancellations(records, args.window)

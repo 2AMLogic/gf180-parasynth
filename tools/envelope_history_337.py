@@ -144,11 +144,40 @@ def measure(src: Path = SRC):
     return rows
 
 
+def _record_path(name) -> None:
+    """Check the `--out` destination BEFORE the frozen audio is read, or
+    Refused (#2098).
+
+    A missing parent directory is created here, as `fpga/selected_preset.py`
+    creates `--out`'s. A destination that is a directory, or whose parent
+    cannot be made, is refused now rather than by `OSError` from the write
+    after the verdict was computed and printed -- which exited 1 with a
+    traceback: a status this script never assigns, for a verdict that had
+    just printed VIABLE, with the record lost.
+
+    What this cannot see -- a parent that exists but is not writable, a disk
+    that fills -- is left to the guard around the write.
+    """
+    if not name:
+        return
+    out = Path(name)
+    try:
+        is_dir = out.is_dir()
+        if not is_dir:
+            out.parent.mkdir(parents=True, exist_ok=True)
+    except (OSError, ValueError) as exc:
+        raise Refused(f"--out {str(name)!r}: no record can be written there: {exc}") from exc
+    if is_dir:
+        raise Refused(f"--out {str(name)!r} names an existing directory; name the record file")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--out", type=Path)
+    ap.add_argument("--out", type=Path,
+                    help="write the verdict and its rows here (a missing parent directory is created)")
     a = ap.parse_args(argv)
     try:
+        _record_path(a.out)
         rows = measure()
         per_wave = gate(rows)
     except Refused as e:
@@ -170,7 +199,13 @@ def main(argv=None):
     print(per_wave)
     print("VERDICT:", res["verdict"])
     if a.out:
-        a.out.write_text(json.dumps(res, indent=1))
+        try:
+            a.out.write_text(json.dumps(res, indent=1))
+        except OSError as e:
+            # The verdict is on stdout above; its record is the evidence, and
+            # without it the exit is neither (#2098).
+            print("REFUSED: verdict printed above; --out record not written:", e)
+            return 2
     return 0
 
 

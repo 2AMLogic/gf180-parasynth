@@ -10,9 +10,11 @@ Outcomes, kept distinct (a tool that answers when it cannot looks like data):
 
   0  both arms ran, controls held, verdicts recorded
   1  a job failed (exit status other than 0/2) -- a RESULT, reported
-  2  REFUSED  corpus absent, arms ran on different corpora, or the BEFORE arm
+  2  REFUSED  corpus absent, arms ran on different corpora, the BEFORE arm
               did not reproduce the historical headline (the apparatus is not
-              known to work, so no delta is reported)
+              known to work, so no delta is reported), or the --json record
+              could not be written -- refused before an arm runs where the
+              path says so itself (#2098)
 
 Heavy and corpus-dependent: run on the build box, not a loom worker.
 """
@@ -108,6 +110,32 @@ def table(before: dict, after: dict) -> str:
     return "\n".join(lines)
 
 
+def _record_path(name: str | None) -> None:
+    """Check the `--json` destination BEFORE an arm runs, or Refused (#2098).
+
+    A missing parent directory is created here, as `fpga/selected_preset.py`
+    creates `--out`'s. A destination that is a directory, or whose parent
+    cannot be made, is refused now -- two arms cost minutes, and none of it
+    should run for a record that cannot be written -- rather than by `OSError`
+    from the write afterwards, which exited 1 with a traceback: this tool's
+    "a job FAILED -- a RESULT", for arms that had run.
+
+    What this cannot see -- a parent that exists but is not writable, a disk
+    that fills -- is left to the guard around the write.
+    """
+    if not name:
+        return
+    out = pathlib.Path(name)
+    try:
+        is_dir = out.is_dir()
+        if not is_dir:
+            out.parent.mkdir(parents=True, exist_ok=True)
+    except (OSError, ValueError) as exc:
+        raise Refused(f"--json {str(name)!r}: no record can be written there: {exc}") from exc
+    if is_dir:
+        raise Refused(f"--json {str(name)!r} names an existing directory; name the record file")
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--before", default=BEFORE_DEFAULT)
@@ -115,10 +143,12 @@ def main(argv=None) -> int:
     ap.add_argument("--refs", type=pathlib.Path,
                     default=rc.configured_refs())
     ap.add_argument("--timeout", type=float, default=3600)
-    ap.add_argument("--json", type=pathlib.Path)
+    ap.add_argument("--json", type=pathlib.Path,
+                    help="write both arms' results here (a missing parent directory is created)")
     ap.add_argument("--python", default=sys.executable)
     a = ap.parse_args(argv)
     try:
+        _record_path(a.json)
         manifest = corpus_manifest(a.refs)
         before = run_arm(a.before, a.refs, a.timeout, a.python)
         after = run_arm(a.after, a.refs, a.timeout, a.python)
@@ -131,8 +161,14 @@ def main(argv=None) -> int:
     print(f"corpus {a.refs} {manifest}\nbefore {before['sha']}\nafter  {after['sha']}\n")
     print(table(before, after))
     if a.json:
-        a.json.write_text(json.dumps(dict(corpus=str(a.refs), manifest=manifest,
-                                          before=before, after=after), indent=2))
+        try:
+            a.json.write_text(json.dumps(dict(corpus=str(a.refs), manifest=manifest,
+                                              before=before, after=after), indent=2))
+        except OSError as e:
+            # The table is on stdout above; its record is the evidence, and
+            # without it neither 0 nor 1 is true (#2098).
+            print(f"REFUSED  table printed above; record not written: {e}", file=sys.stderr)
+            return 2
     states = [classify(r) for arm in (before, after) for r in arm["jobs"].values()]
     return 1 if FAILED in states else (2 if REFUSED in states else 0)
 

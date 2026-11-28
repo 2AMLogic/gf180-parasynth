@@ -17,7 +17,7 @@ which nothing executed must REFUSE rather than report zero.
     python -m pytest tools/test_crash_rate.py -q
 """
 from __future__ import annotations
-import json, os, pathlib, signal, sys
+import errno, json, os, pathlib, signal, sys
 
 import pytest
 
@@ -453,3 +453,186 @@ def test_small():
     del ballast
     # A bare pytest+numpy interpreter is well under 200 MB; the ballast alone is 600.
     assert small_rss < 300 * 1024, small_rss
+
+
+# ---------------------------------------------------------------------------
+# the CLI's --json destination (#2098, a slice of the #2095 class)
+#
+# THE DEFECT, red-first on origin/main @ 8eb04e5b (2026-11-28): `--json` was
+# written after the work -- in `--probe` mode by `main` at the line the #2095
+# census named, and in batch mode by `batch_report` before its own summary
+# was printed -- and nothing made the parent directory. Under a missing one
+# the write raised FileNotFoundError: exit 1, "the batch ran and at least one
+# run crashed", for a batch in which nothing crashed, with the record lost.
+#
+# THE KNOWN ANSWER, from tools/exit_contract.py and this file's own EXIT
+# STATUS block, and not from the module under test: a destination that cannot
+# be written is a precondition that was not met, so REFUSED (2) whichever way
+# the batch went -- never 1, a crash rate whose evidence is gone. Refused
+# before a run where the path says so itself.
+#
+# WHAT RUNS FOR REAL: `main`, `batch_report`, the `--runs` precondition and
+# the summary. Doubled: `run_once`, `probe` and `preconditions` (the last
+# spawns an interpreter per import and is not what is under test).
+# ---------------------------------------------------------------------------
+class _Harness:
+    """The real CLI with its child processes doubled: every run PASSes."""
+
+    def __init__(self, monkeypatch):
+        self.runs = self.probes = 0
+        self.run = {"verdict": cr.PASS, "peak_rss_kb": 2048, "seconds": 0.5,
+                    "tail": "", "signal": None, "signal_name": None}
+        monkeypatch.setattr(cr, "run_once", lambda *a: self.run_once())
+        monkeypatch.setattr(cr, "probe", self.probe)
+        monkeypatch.setattr(cr, "preconditions", lambda target: [])
+
+    def run_once(self):
+        self.runs += 1
+        return dict(self.run)
+
+    def probe(self):
+        self.probes += 1
+        return {"threads_before_import": 1}
+
+
+@pytest.fixture
+def harness(monkeypatch):
+    return _Harness(monkeypatch)
+
+
+def _full_disk(target):
+    """`Path.write_text` that fails for `target` only."""
+    real = pathlib.Path.write_text
+
+    def write_text(self, data, *args, **kwargs):
+        if self == target:
+            raise OSError(errno.ENOSPC, "No space left on device")
+        return real(self, data, *args, **kwargs)
+
+    return write_text
+
+
+BATCH_ARGV = ["--target", "model/x.py", "--runs", "2"]
+
+
+@pytest.mark.parametrize("target, reason", [
+    ("{tmp}", "names an existing directory; name the record file"),
+    ("{tmp}/a-file/r.json", "no record can be written there: [Errno 17] File exists"),
+    ("nul\x00dir/r.json", "embedded null"),
+], ids=["a-directory", "parent-is-a-file", "parent-has-a-nul-byte"])
+def test_an_unwritable_json_destination_is_refused_before_anything_runs(harness, tmp_path, capsys,
+                                                                       target, reason):
+    (tmp_path / "a-file").write_text("not a directory\n")
+    rc = cr.main([*BATCH_ARGV, "--json", target.format(tmp=tmp_path)])
+    out, err = capsys.readouterr()
+    assert rc == 2, (rc, out, err)
+    assert "REFUSED" in err and reason in err, err
+    assert harness.runs == 0, "a run was launched for a destination that could not be written"
+    assert "crash rate" not in out, out
+    assert cr.main(["--probe", "--json", str(tmp_path)]) == 2
+    assert harness.probes == 0, "the probe ran for a destination that could not be written"
+
+
+def test_a_batch_record_under_a_missing_directory_is_created_and_written(harness, tmp_path, capsys):
+    target = tmp_path / "no-such-dir" / "r.json"
+    rc = cr.main([*BATCH_ARGV, "--json", str(target)])
+    out, _ = capsys.readouterr()
+    assert rc == 0, out
+    assert harness.runs == 2 and "crash rate 0/2" in out, out
+    report = json.loads(target.read_text())
+    assert report["summary"]["counts"][cr.PASS] == 2 and report["summary"]["crash_rate"] == 0.0
+    assert len(report["runs"]) == 2
+
+
+def test_a_probe_record_under_a_missing_directory_is_created_and_written(harness, tmp_path, capsys):
+    target = tmp_path / "no-such-dir" / "probe.json"
+    rc = cr.main(["--probe", "--json", str(target)])
+    out, _ = capsys.readouterr()
+    assert rc == 0, out
+    assert harness.probes == 1
+    assert json.loads(target.read_text())["probe"] == {"threads_before_import": 1}
+
+
+def test_a_write_failure_after_the_batch_is_refused_with_the_rate_printed(harness, tmp_path, capsys,
+                                                                          monkeypatch):
+    target = tmp_path / "r.json"
+    monkeypatch.setattr(pathlib.Path, "write_text", _full_disk(target))
+    rc = cr.main([*BATCH_ARGV, "--json", str(target)])
+    out, err = capsys.readouterr()
+    assert rc == 2, (rc, out, err)
+    assert harness.runs == 2 and "crash rate 0/2" in out, out      # the rate is still printed
+    assert "REFUSED" in err and "not written" in err, err
+    assert "No space left on device" in err and "Traceback" not in err, err
+    assert not target.exists()
+
+
+def test_a_crashing_batch_whose_record_is_unwritten_is_refused_not_a_crash_rate(harness, tmp_path,
+                                                                               capsys, monkeypatch):
+    """The fourth corner. A crash is a result and exits 1 while its record
+    exists; with the record unwritten the 1 must not be reached."""
+    harness.run["verdict"] = cr.CRASH
+    argv = [*BATCH_ARGV, "--json", str(tmp_path / "r.json")]
+    assert cr.main(argv) == 1
+    assert "crash rate 2/2" in capsys.readouterr().out
+    monkeypatch.setattr(pathlib.Path, "write_text", _full_disk(tmp_path / "r.json"))
+    assert cr.main(argv) == 2
+    out, err = capsys.readouterr()
+    assert "crash rate 2/2" in out and "not written" in err, (out, err)
+
+
+def test_a_probe_whose_record_is_unwritten_is_refused(harness, tmp_path, capsys, monkeypatch):
+    target = tmp_path / "probe.json"
+    monkeypatch.setattr(pathlib.Path, "write_text", _full_disk(target))
+    rc = cr.main(["--probe", "--json", str(target)])
+    out, err = capsys.readouterr()
+    assert rc == 2, (rc, out, err)
+    assert harness.probes == 1 and '"threads_before_import": 1' in out, out
+    assert "REFUSED" in err and "not written" in err, err
+    assert not target.exists()
+
+
+def test_the_zero_runs_refusal_still_names_the_count_when_the_record_is_unwritten(harness, tmp_path,
+                                                                                 capsys,
+                                                                                 monkeypatch):
+    """`--runs 0` writes an empty-batch record and then REFUSES. With the
+    record unwritten both reasons are printed and the exit is still 2: the
+    refusal `test_a_zero_or_negative_run_count_refuses_instead_of_raising`
+    pins is not replaced by one about the path."""
+    target = tmp_path / "r.json"
+    monkeypatch.setattr(pathlib.Path, "write_text", _full_disk(target))
+    rc = cr.main(["--target", "model/x.py", "--runs", "0", "--json", str(target)])
+    out, err = capsys.readouterr()
+    assert rc == 2, (rc, out, err)
+    assert "REFUSED: --runs must be at least 1, got 0" in err, err
+    assert "not written" in err, err
+    assert "Traceback" not in err, err
+
+
+def test_an_unwritable_record_path_is_refused_before_the_zero_runs_branch(harness, tmp_path, capsys):
+    """Nothing is written for a batch of zero, so the path is refused first."""
+    rc = cr.main(["--target", "model/x.py", "--runs", "0", "--json", str(tmp_path)])
+    err = capsys.readouterr().err
+    assert rc == 2, err
+    assert "REFUSED" in err and "names an existing directory" in err, err
+    assert harness.runs == 0
+
+
+@pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0,
+                    reason="root writes into a read-only directory")
+def test_a_read_only_parent_is_refused_and_leaves_no_record(harness, tmp_path, capsys):
+    """Rule 8: the input that defeats the pre-flight. The parent exists, so
+    `mkdir(exist_ok=True)` accepts it; only the guard around the write can
+    refuse it."""
+    parent = tmp_path / "read-only"
+    parent.mkdir()
+    parent.chmod(0o555)
+    try:
+        rc = cr.main([*BATCH_ARGV, "--json", str(parent / "r.json")])
+        written = list(parent.iterdir())
+    finally:
+        parent.chmod(0o700)
+    out, err = capsys.readouterr()
+    assert rc == 2, (rc, out, err)
+    assert "REFUSED" in err and "not written" in err, err
+    assert "crash rate 0/2" in out, out
+    assert written == []

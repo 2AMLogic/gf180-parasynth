@@ -9,6 +9,13 @@ compares the frame each GATE_ON / GATE_OFF was APPLIED at the pins (the
 bench's own write log, `top_wrs_*.txt`: applied frame, flag, section,
 address, data, predicted frame) with the musical schedule the frozen manifest
 states, both relative to the phrase's first applied write.
+
+Exit status: 0 with the offsets printed and, when `--out` is given, the record
+written. 2 (REFUSED, `tools/exit_contract.py`) when the `--out` destination
+cannot hold the record -- refused before a run is read where the path says so
+-- or when the write fails after the offsets (#2098). The input refusals in
+this file are `SystemExit("REFUSED: ...")`, which exits 1; that is the older
+convention and it is not changed here.
 """
 from __future__ import annotations
 
@@ -16,6 +23,7 @@ import argparse
 import glob
 import json
 import pathlib
+import sys
 
 A_GATE_ON, A_GATE_OFF = 0x20, 0x21
 SR = 48_000
@@ -45,12 +53,42 @@ def intended(manifest: pathlib.Path):
     return on, off
 
 
+def _unwritable_out(name) -> str | None:
+    """Why the `--out` destination cannot hold the record, or None.
+
+    A missing parent directory is created here, as `fpga/selected_preset.py`
+    creates `--out`'s. Called before a run is read (#2098): a destination
+    that is a directory, or whose parent cannot be made, is refused at once
+    rather than by `OSError` from the write after every offset was computed
+    and printed -- which exited 1 with a traceback.
+
+    What this cannot see -- a parent that exists but is not writable, a disk
+    that fills -- is left to the guard around the write.
+    """
+    out = pathlib.Path(name)
+    try:
+        is_dir = out.is_dir()
+        if not is_dir:
+            out.parent.mkdir(parents=True, exist_ok=True)
+    except (OSError, ValueError) as exc:
+        return f"--out {str(name)!r}: no record can be written there: {exc}"
+    if is_dir:
+        return f"--out {str(name)!r} names an existing directory; name the record file"
+    return None
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--manifest", type=pathlib.Path, required=True)
     ap.add_argument("runs", nargs="+", help="label=outdir")
-    ap.add_argument("--out", type=pathlib.Path, default=None)
+    ap.add_argument("--out", type=pathlib.Path, default=None,
+                    help="write the offsets here (a missing parent directory is created)")
     a = ap.parse_args(argv)
+    if a.out is not None:
+        unwritable = _unwritable_out(a.out)
+        if unwritable:
+            print(f"REFUSED: {unwritable}", file=sys.stderr)
+            return 2
     ion, ioff = intended(a.manifest)
     res = {}
     for spec in a.runs:
@@ -67,7 +105,13 @@ def main(argv=None):
         print(f"{label:24s} GATE_ON offsets (frames, vs the schedule, first event aligned): {don}; "
               f"GATE_OFF: {doff}")
     if a.out:
-        a.out.write_text(json.dumps(res, indent=1) + "\n")
+        try:
+            a.out.write_text(json.dumps(res, indent=1) + "\n")
+        except OSError as exc:
+            # The offsets are on stdout above; the record is their evidence
+            # (#2098).
+            print(f"REFUSED: offsets printed above; --out record not written: {exc}", file=sys.stderr)
+            return 2
     return 0
 
 

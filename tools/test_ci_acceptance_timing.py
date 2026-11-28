@@ -12,8 +12,10 @@ repos/.../actions/runs/<id>/jobs` responses from the #264 investigation.
 from __future__ import annotations
 
 import datetime as dt
+import errno
 import json
 import os
+import pathlib
 import sys
 from dataclasses import asdict
 
@@ -21,8 +23,9 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import ci_acceptance_timing as mod                               # noqa: E402
 from ci_acceptance_timing import (                                # noqa: E402
-    JobRecord, Refusal, main, parse_jobs, runner_class, summarise,
+    JobRecord, Refusal, REFUSED, main, parse_jobs, runner_class, summarise,
     timeout_cancellations,
 )
 
@@ -213,3 +216,130 @@ def test_refusal_is_raised_when_gh_is_missing(monkeypatch):
     monkeypatch.setattr(mod.subprocess, "run", _boom)
     with pytest.raises(Refusal):
         mod._gh(["run", "list"], mod.pathlib.Path("."))
+
+
+# ---------------------------------------------------------------------------
+# the CLI's --snapshot destination (#2098, a slice of the #2095 class)
+#
+# THE DEFECT, red-first on origin/main @ 8eb04e5b (2026-11-28): `main` wrote
+# `args.snapshot` with `write_text` inside the `try` that catches `Refusal`
+# only -- after `collect()` had walked the live API and before a line of the
+# report was printed -- and nothing made the parent directory. Under a
+# missing one the write raised FileNotFoundError: exit 1 with a traceback,
+# the same status `--require-clean` uses for a measured cancellation.
+#
+# THE KNOWN ANSWER, from tools/exit_contract.py and not from the module under
+# test: a destination that cannot be written is REFUSED (2) -- the status
+# this script already returns through `Refusal` -- refused before `collect`
+# runs where the path says so itself. A write that fails later is refused
+# with the report printed and the gate's PASS/FAIL withheld: a window whose
+# record is gone is neither clean nor unclean.
+#
+# WHAT RUNS FOR REAL: `main`, the offline load, `render`, `summarise` and the
+# window gate. Doubled: `collect` (counted), which in production is the `gh`
+# API walk. The late failure is made by a `write_text` that raises ENOSPC,
+# because a full disk cannot be produced on demand.
+# ---------------------------------------------------------------------------
+def _full_disk(target):
+    """`Path.write_text` that fails for `target` only."""
+    real = pathlib.Path.write_text
+
+    def write_text(self, data, *args, **kwargs):
+        if self == target:
+            raise OSError(errno.ENOSPC, "No space left on device")
+        return real(self, data, *args, **kwargs)
+
+    return write_text
+
+
+@pytest.fixture
+def collected(monkeypatch):
+    """`collect` double that counts its calls and returns nothing."""
+    calls = []
+    monkeypatch.setattr(mod, "collect", lambda *a, **k: calls.append(1) or [])
+    return calls
+
+
+@pytest.mark.parametrize("target, reason", [
+    ("{tmp}", "names an existing directory; name the record file"),
+    ("{tmp}/a-file/snap.json", "no record can be written there: [Errno 17] File exists"),
+    ("nul\x00dir/snap.json", "embedded null"),
+], ids=["a-directory", "parent-is-a-file", "parent-has-a-nul-byte"])
+def test_an_unwritable_snapshot_destination_is_refused_before_anything_is_collected(collected,
+                                                                                   tmp_path, capsys,
+                                                                                   target, reason):
+    (tmp_path / "a-file").write_text("not a directory\n")
+    rc = main(["--snapshot", target.format(tmp=tmp_path)])
+    out, err = capsys.readouterr()
+    assert rc == REFUSED, (rc, out, err)
+    assert "REFUSED" in err and reason in err, err
+    assert collected == [], "the API was walked for a destination that could not be written"
+    assert "job(s) measured" not in out, out
+
+
+def test_a_snapshot_under_a_missing_directory_is_created_and_written(tmp_path, capsys):
+    recs = _records([("success", "blacksmith-a-4vcpu", 360)] * 4)
+    snap = _snapshot(tmp_path, recs, name="offline.json")
+    target = tmp_path / "no-such-dir" / "snap.json"
+    argv = ["--offline", str(snap), "--snapshot", str(target), "--require-clean", "--window", "4"]
+    rc = main(argv)
+    out, _ = capsys.readouterr()
+    assert rc == 0, out
+    assert "PASS: no cancellations in the last 4 jobs" in out, out
+    assert [JobRecord(**r) for r in json.loads(target.read_text())] == recs
+
+
+def test_a_snapshot_write_failure_is_refused_with_the_report_and_without_a_verdict(tmp_path, capsys,
+                                                                                   monkeypatch):
+    recs = _records([("success", "blacksmith-a-4vcpu", 360)] * 4)
+    snap = _snapshot(tmp_path, recs, name="offline.json")      # the input; the target is another file
+    target = tmp_path / "snap.json"
+    monkeypatch.setattr(pathlib.Path, "write_text", _full_disk(target))
+    rc = main(["--offline", str(snap), "--snapshot", str(target), "--require-clean", "--window", "4"])
+    out, err = capsys.readouterr()
+    assert rc == REFUSED, (rc, out, err)
+    assert "4 `acceptance` job(s) measured" in out, out          # the report is still printed
+    assert "PASS: no cancellations" not in out and "FAIL:" not in out, out   # the gate's verdict is withheld
+    assert "REFUSED" in err and "not written" in err, err
+    assert "No space left on device" in err and "Traceback" not in err, err
+    assert not target.exists()
+
+
+def test_a_snapshot_that_cannot_be_written_does_not_hide_a_later_refusal(tmp_path, capsys,
+                                                                         monkeypatch):
+    """Both reasons, one exit. The snapshot is attempted where it always was,
+    before the runner-class filter, so a window refused afterwards still
+    reports its own reason and the unwritten snapshot beside it."""
+    recs = _records([("success", "GitHub Actions 1", 440)] * 4)
+    snap = _snapshot(tmp_path, recs, name="offline.json")
+    target = tmp_path / "snap.json"
+    monkeypatch.setattr(pathlib.Path, "write_text", _full_disk(target))
+    rc = main(["--offline", str(snap), "--snapshot", str(target), "--require-clean", "--window", "4",
+               "--runner-class", "blacksmith"])
+    out, err = capsys.readouterr()
+    assert rc == REFUSED, (rc, out, err)
+    assert "no jobs on runner class 'blacksmith'" in err, err
+    assert "not written" in err, err
+    assert "job(s) measured" not in out, out
+
+
+@pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0,
+                    reason="root writes into a read-only directory")
+def test_a_read_only_parent_is_refused_and_leaves_no_snapshot(tmp_path, capsys):
+    """Rule 8: the input that defeats the pre-flight. The parent exists, so
+    `mkdir(exist_ok=True)` accepts it; only the guard around the write can
+    refuse it."""
+    snap = _snapshot(tmp_path, _records([("success", "blacksmith-a-4vcpu", 360)] * 4))
+    parent = tmp_path / "read-only"
+    parent.mkdir()
+    parent.chmod(0o555)
+    try:
+        rc = main(["--offline", str(snap), "--snapshot", str(parent / "snap.json")])
+        written = list(parent.iterdir())
+    finally:
+        parent.chmod(0o700)
+    out, err = capsys.readouterr()
+    assert rc == REFUSED, (rc, out, err)
+    assert "REFUSED" in err and "not written" in err, err
+    assert "4 `acceptance` job(s) measured" in out, out
+    assert written == []
