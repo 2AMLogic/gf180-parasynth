@@ -12,7 +12,13 @@ Three kinds of test, and the middle kind is the one that matters:
   * controls that must fail, as the properties x defects matrix, including
     CAND2_LEVEL_ONLY -- the realisation that actually shipped as candidate 2
     and measured a negative -- so the bound stays discriminating rather than
-    decorative.
+    decorative;
+  * controls that REFUSE: one that cannot be evaluated is NO VERDICT, booked in
+    neither denominator and carried out of `check()` as None -- never the False
+    of a control that was evaluated and moved nothing (#1853);
+  * a CLEAN run that REFUSES is the same NO VERDICT, and a refusal from the
+    report's tables or the record's bands reaches the caller as `REFUSED:` and
+    exit 2 -- never a traceback wearing the FAIL status (#1992).
 """
 from __future__ import annotations
 
@@ -240,10 +246,15 @@ def test_a_uniform_gain_change_is_blind_everywhere_by_construction(figs):
 
 
 def test_the_clean_gate_passes_and_every_control_is_caught(figs):
+    """Unchanged by #1853: nothing refuses, so the summary carries no NO VERDICT
+    count and the verdict is True, not a truthy stand-in for it."""
     fig9, poles, corner = figs
     ok, lines = ct.check(poles, corner, fig9)
-    assert ok, "\n".join(lines)
+    assert ok is True, "\n".join(lines)
     assert any("5/5 controls" in ln for ln in lines), "\n".join(lines)
+    assert ("  5/5 controls turned at least one property red; "
+            "1/1 blind-by-construction controls stayed blind" in lines), "\n".join(lines)
+    assert "NO VERDICT" not in "\n".join(lines) and "REFUSED" not in "\n".join(lines)
 
 
 def test_an_absent_artifact_refuses_rather_than_answering(tmp_path):
@@ -253,3 +264,369 @@ def test_an_absent_artifact_refuses_rather_than_answering(tmp_path):
     bad.write_text(json.dumps({"level_stage": {}}))
     with pytest.raises(ct.Refused):
         ct.level_corner_hz(bad)
+
+
+# ---- a control that REFUSES is NO VERDICT, not a control that moved nothing ----
+#
+# #1853. `check()` printed the row REFUSED and then appended False to `caught`,
+# so a control that did not run read as one that was evaluated and moved
+# nothing: 4/5 controls, False, exit 1. The refusals are planted INSIDE the
+# real `properties()` -- at `shape_error`, which every control reaches with its
+# own `defect=` -- so the class raised and the handler exercised are the real
+# ones. What is returned is the list of controls that actually fired: a plant
+# that never ran must not pass as one that did (rule 5, condition 2).
+
+
+def _plant(monkeypatch, *, raises=None, inert=()):
+    """`raises` maps a control to the exception its evaluation raises; `inert`
+    names synthetic controls to add to the matrix that are evaluated and move
+    nothing."""
+    raises = raises or {}
+    real_props, real_err = ct.properties, ct.shape_error
+    fired = []
+
+    def shape_error(band, poles, corner_hz, *, defect=None):
+        if defect in raises:
+            fired.append(defect)
+            raise raises[defect]
+        return real_err(band, poles, corner_hz, defect=defect)
+
+    def properties(poles, corner_hz, fig9, *, defect=None):
+        if defect in inert:
+            fired.append(defect)
+            return real_props(poles, corner_hz, fig9)
+        return real_props(poles, corner_hz, fig9, defect=defect)
+
+    monkeypatch.setattr(ct, "shape_error", shape_error)
+    monkeypatch.setattr(ct, "properties", properties)
+    monkeypatch.setattr(ct, "DEFECTS", ct.DEFECTS + tuple(inert))
+    return fired
+
+
+def _row(defect):
+    """The `check()` row for one control, as the matrix prints its name."""
+    return f"  {defect:20s} "
+
+
+def test_a_control_that_refuses_is_no_verdict_not_an_uncaught_control(figs, monkeypatch):
+    """Red first on main: 4/5 controls, False. After: the row keeps its reason,
+    the count and its denominator exclude it, and every other control is still
+    evaluated and still caught."""
+    fig9, poles, corner = figs
+    fired = _plant(monkeypatch, raises={"SWAP_BANDS": ct.Refused("planted: unrealisable here")})
+    verdict, lines = ct.check(poles, corner, fig9)
+    assert fired == ["SWAP_BANDS"]
+    assert _row("SWAP_BANDS") + "REFUSED: planted: unrealisable here" in lines
+    for d in ct.DEFECTS:
+        if d != "SWAP_BANDS":
+            assert any(ln.startswith(_row(d)) and "MOVED" in ln for ln in lines), d
+    assert any(ln.startswith(_row("UNIFORM_6DB")) and "BLIND" in ln for ln in lines)
+    assert ("  4/4 controls turned at least one property red; "
+            "1/1 blind-by-construction controls stayed blind; 1 NO VERDICT" in lines)
+    assert not any("4/5 controls" in ln for ln in lines), "\n".join(lines)
+    assert verdict is None
+
+
+def test_every_control_refusing_is_still_no_verdict(figs, monkeypatch):
+    """Rule 8's input for the repair: with nothing evaluated, both `all()`s are
+    vacuously true. That is not a pass -- 0/0 is not evidence."""
+    fig9, poles, corner = figs
+    every = ct.DEFECTS + ct.BLIND_BY_CONSTRUCTION
+    fired = _plant(monkeypatch, raises={d: ct.Refused(f"planted: {d}") for d in every})
+    verdict, lines = ct.check(poles, corner, fig9)
+    assert fired == list(every)
+    assert ("  0/0 controls turned at least one property red; "
+            f"0/0 blind-by-construction controls stayed blind; {len(every)} NO VERDICT" in lines)
+    assert verdict is None
+
+
+def test_a_refused_blind_control_is_neither_stayed_blind_nor_caught(figs, monkeypatch):
+    """On main this refusal went into `caught`: the line read 5/5 controls over
+    an all(caught) that was False. It must leave both lists."""
+    fig9, poles, corner = figs
+    fired = _plant(monkeypatch,
+                   raises={"UNIFORM_6DB": ct.Refused("planted: no level to renormalise")})
+    verdict, lines = ct.check(poles, corner, fig9)
+    assert fired == ["UNIFORM_6DB"]
+    assert _row("UNIFORM_6DB") + "REFUSED: planted: no level to renormalise" in lines
+    assert ("  5/5 controls turned at least one property red; "
+            "0/0 blind-by-construction controls stayed blind; 1 NO VERDICT" in lines)
+    assert not any("1/1 blind-by-construction" in ln for ln in lines), "\n".join(lines)
+    assert verdict is None
+
+
+def test_a_measured_failure_outranks_a_refusal(figs, monkeypatch):
+    """The injected-bug control for the repair: NO VERDICT must not become the
+    way a broken detector reads. One control is evaluated and moves nothing,
+    another refuses; the verdict is the measured FAIL."""
+    fig9, poles, corner = figs
+    fired = _plant(monkeypatch, raises={"SWAP_BANDS": ct.Refused("planted: unrealisable here")},
+                   inert=("INERT",))
+    verdict, lines = ct.check(poles, corner, fig9)
+    assert fired == ["SWAP_BANDS", "INERT"]
+    blind = " ".join(f"{'BLIND':>11s}" for _ in ct.PROPERTIES)
+    assert _row("INERT") + blind in lines
+    assert ("  4/5 controls turned at least one property red; "
+            "1/1 blind-by-construction controls stayed blind; 1 NO VERDICT" in lines)
+    assert verdict is False
+
+
+def test_a_pole_the_bank_cannot_hold_is_this_modules_refusal(figs, monkeypatch):
+    """The one ValueError the old handler was written for: `cc.real_pole_regs`
+    raises rather than clip. An unrealisable control is a refusal, and must
+    arrive at `check()` as THIS module's Refused."""
+    fig9, poles, corner = figs
+    real = cc.real_pole_regs
+
+    def unfit(hz):
+        # only the HP_POLE_NOT_LP control asks for the short band's high-pass pole
+        if any(f == poles["short"][0] for f in hz):
+            raise ValueError("coefficient 2.100000 outside the Q2.24 register")
+        return real(hz)
+
+    monkeypatch.setattr(ct.cc, "real_pole_regs", unfit)
+    with pytest.raises(ct.Refused, match="outside the Q2.24 register"):
+        ct.realisation("short", poles, defect="HP_POLE_NOT_LP")
+    verdict, lines = ct.check(poles, corner, fig9)
+    reason = _row("HP_POLE_NOT_LP") + "REFUSED: coefficient 2.100000 outside the Q2.24 register"
+    assert any(ln.startswith(reason) for ln in lines), "\n".join(lines)
+    assert sum("REFUSED" in ln for ln in lines) == 1, "\n".join(lines)
+    assert ("  4/4 controls turned at least one property red; "
+            "1/1 blind-by-construction controls stayed blind; 1 NO VERDICT" in lines)
+    assert verdict is None
+
+
+def test_an_execution_error_inside_a_control_is_not_relabelled_refused(figs, monkeypatch):
+    """Rule 8: the input that would defeat the repair is an implementation
+    error raised for one control. With `ValueError` out of the handler it must
+    propagate as itself -- never a REFUSED row, never a NO VERDICT."""
+    fig9, poles, corner = figs
+    fired = _plant(monkeypatch,
+                   raises={"SIGN_A1": ValueError("an implementation error, not a precondition")})
+    with pytest.raises(ValueError, match="an implementation error"):
+        ct.check(poles, corner, fig9)
+    assert fired == ["SIGN_A1"]
+
+
+@pytest.mark.parametrize("verdict, label, status",
+                         [(True, "PASS", 0), (False, "FAIL", 1), (None, "NO VERDICT", 2)])
+def test_main_and_record_carry_each_verdict_as_itself(figs, tmp_path, capsys, monkeypatch,
+                                                      verdict, label, status):
+    """`check()`'s boolean readers: None must not fall through a truthiness
+    test into FAIL. `pass` stays `true` for PASS only; `verdict` names all three."""
+    monkeypatch.setattr(ct, "check", lambda *a: (verdict, ["  (planted)"]))
+    out = tmp_path / "rec.json"
+    assert ct.main(["--check", "--json", str(out)]) == status
+    assert "gate: " + label in capsys.readouterr().out
+    gate = json.loads(out.read_text())["gate"]
+    assert gate["verdict"] == label and gate["pass"] is (verdict is True), gate
+
+
+def test_main_exits_2_when_a_control_refuses_and_nothing_else_fails(monkeypatch, capsys):
+    """End to end through the real `check()`: red first on main (exit 1)."""
+    fired = _plant(monkeypatch, raises={"SWAP_BANDS": ct.Refused("planted: unrealisable here")})
+    assert ct.main(["--check"]) == 2
+    assert fired == ["SWAP_BANDS"]
+    out = capsys.readouterr().out
+    assert "REFUSED: planted: unrealisable here" in out and "gate: NO VERDICT" in out, out
+
+
+def test_main_still_exits_1_when_a_control_moves_nothing_beside_a_refusal(monkeypatch, capsys):
+    _plant(monkeypatch, raises={"SWAP_BANDS": ct.Refused("planted: unrealisable here")},
+           inert=("INERT",))
+    assert ct.main(["--check"]) == 1
+    assert "gate: FAIL" in capsys.readouterr().out
+
+
+# ---- a refusal from the CLEAN run is NO VERDICT, not an uncaught exception ----
+#
+# #1992. `check()` evaluated the clean run outside any handler and `main()` called
+# `check()` outside its own, so a Refused from the clean run escaped both as a
+# traceback: the shell saw exit 1, the status reserved for a control that was
+# evaluated and moved nothing. #1853's repair handled the control loop and
+# deliberately left this path alone. The refusal is planted INSIDE the real
+# `properties()`, for the `defect is None` call only, so the class raised is the
+# real one and every control would still be evaluable. What is returned is the
+# list of controls that reached the real function: on a refused clean run that
+# must be empty, because no control may then be reported as evaluated (rule 5,
+# conditions 1 and 2).
+
+CLEAN = "clean"
+CLEAN_REFUSAL = "REFUSED: planted: the clean run cannot be evaluated"
+UNFIT = "REFUSED: coefficient 2.100000 outside the Q2.24 register"
+
+
+def _plant_clean(monkeypatch, exc):
+    """Make the clean run's `properties()` -- the `defect is None` call only --
+    raise `exc`; return the list of controls that reached the real function."""
+    real_props = ct.properties
+    reached = []
+
+    def properties(poles, corner_hz, fig9, *, defect=None):
+        if defect is None:
+            raise exc
+        reached.append(defect)
+        return real_props(poles, corner_hz, fig9, defect=defect)
+
+    monkeypatch.setattr(ct, "properties", properties)
+    return reached
+
+
+def _plant_clean_fail(monkeypatch):
+    """A clean run that IS evaluated and does not pass: `tone-tilt` goes red."""
+
+    real_props = ct.properties
+
+    def properties(poles, corner_hz, fig9, *, defect=None):
+        got = real_props(poles, corner_hz, fig9, defect=defect)
+        if defect is None:
+            got = dict(got)
+            got["tone-tilt"] = (False, "planted: the clean run does not pass")
+        return got
+
+    monkeypatch.setattr(ct, "properties", properties)
+
+
+def _plant_unfit_short_pole(monkeypatch):
+    """The real raise site. `cc.real_pole_regs` declines a coefficient that will
+    not fit its register; made to do so for the short band's tone pole, so every
+    path that realises the CLEAN tone stage -- the gate's clean run, `report()`'s
+    tables, `record()`'s bands -- refuses through this module's `Refused`."""
+    real = cc.real_pole_regs
+    short = cc.TONE_REALISATION["short"]["extra_pole_hz"]
+
+    def unfit(hz):
+        if list(hz) == [short]:
+            raise ValueError("coefficient 2.100000 outside the Q2.24 register")
+        return real(hz)
+
+    monkeypatch.setattr(ct.cc, "real_pole_regs", unfit)
+
+
+def test_a_refused_clean_run_is_no_verdict_not_an_uncaught_exception(figs, monkeypatch):
+    """Red first on the #1876 head: the planted Refused escapes `check()`. After:
+    the row names the reason, no property and no control is reported as
+    evaluated, and the verdict is None -- not the False of a control that moved
+    nothing, and not a pass."""
+    fig9, poles, corner = figs
+    reached = _plant_clean(monkeypatch, ct.Refused("planted: the clean run cannot be evaluated"))
+    verdict, lines = ct.check(poles, corner, fig9)
+    assert reached == []
+    assert _row(CLEAN) + CLEAN_REFUSAL in lines, "\n".join(lines)
+    assert any(ln.startswith("the clean run REFUSED; no control was evaluated") for ln in lines), (
+        "\n".join(lines))
+    assert verdict is None
+    text = "\n".join(lines)
+    assert "PASS" not in text and "FAIL" not in text, text
+
+
+def test_main_exits_2_when_the_clean_run_refuses(figs, monkeypatch, capsys):
+    """End to end through the real `check()`: red first on the #1876 head, where
+    the Refused leaves `main()` as a traceback and the process as exit 1."""
+    reached = _plant_clean(monkeypatch, ct.Refused("planted: the clean run cannot be evaluated"))
+    assert ct.main(["--check"]) == 2
+    assert reached == []
+    out = capsys.readouterr().out
+    assert CLEAN_REFUSAL in out, out
+    assert "gate: NO VERDICT" in out, out
+    assert "gate: PASS" not in out and "gate: FAIL" not in out, out
+
+
+@pytest.mark.parametrize("argv", [["--json"], ["--check", "--json"]])
+def test_main_json_records_a_refused_clean_run_as_no_verdict(figs, tmp_path, capsys, monkeypatch,
+                                                            argv):
+    """`record()` reaches the gate through `check()`: the evidence record carries
+    the refusal as its verdict -- `pass` false, `verdict` NO VERDICT, the row with
+    its reason -- and the exit status is 2, not the 1 a traceback would give."""
+    _plant_clean(monkeypatch, ct.Refused("planted: the clean run cannot be evaluated"))
+    out = tmp_path / "rec.json"
+    assert ct.main(argv + [str(out)]) == 2
+    gate = json.loads(out.read_text())["gate"]
+    assert gate["verdict"] == "NO VERDICT" and gate["pass"] is False, gate
+    assert _row(CLEAN) + CLEAN_REFUSAL in gate["lines"]
+    assert f"wrote {out}" in capsys.readouterr().out
+
+
+def test_a_clean_run_that_fails_without_refusing_is_still_fail(figs, monkeypatch, capsys):
+    """Rule 8's input for the guard: a clean run that IS evaluated and does not
+    pass is a measured FAIL (exit 1). The refusal handler must not turn every
+    non-passing clean run into NO VERDICT."""
+    fig9, poles, corner = figs
+    _plant_clean_fail(monkeypatch)
+    verdict, lines = ct.check(poles, corner, fig9)
+    assert verdict is False
+    assert any(ln.startswith("the clean run does not pass; the controls below mean nothing")
+               for ln in lines), "\n".join(lines)
+    assert ct.main(["--check"]) == 1
+    out = capsys.readouterr().out
+    assert "gate: FAIL" in out and "NO VERDICT" not in out, out
+
+
+def test_an_execution_error_in_the_clean_run_is_not_relabelled_refused(figs, monkeypatch):
+    """Rule 8, as for a control (#1853): the handler is for refusals. An
+    implementation error raised by the clean run must propagate as itself --
+    never a REFUSED row, never a NO VERDICT."""
+    fig9, poles, corner = figs
+    _plant_clean(monkeypatch, ValueError("an implementation error, not a precondition"))
+    with pytest.raises(ValueError, match="an implementation error"):
+        ct.check(poles, corner, fig9)
+
+
+def test_a_sibling_modules_refusal_in_the_clean_run_is_still_no_verdict(figs, monkeypatch, capsys):
+    """Rule 8's other input, #1160's shape: each module's `Refused` subclasses
+    `refusal.Refused` and none subclasses another's, so a handler written against
+    THIS module's class catches none of a sibling's. `properties()` calls into
+    `werner_fig9`; a refusal raised there must read as refused, not escape as a
+    traceback because the guard named the wrong class."""
+    assert not issubclass(w9.Refused, ct.Refused)
+    _plant_clean(monkeypatch, w9.Refused("planted: Figure 9 cannot be read"))
+    assert ct.main(["--check"]) == 2
+    out = capsys.readouterr().out
+    assert "REFUSED: planted: Figure 9 cannot be read" in out and "gate: NO VERDICT" in out, out
+
+
+@pytest.mark.parametrize("argv", [[], ["--report"], ["--report", "--check"], ["--json"]])
+def test_a_refusal_outside_the_gate_reaches_the_caller_as_refused(figs, tmp_path, capsys,
+                                                                  monkeypatch, argv):
+    """`report()`'s tables and `record()`'s bands call `realisation()` outside
+    `check()`, and no arguments means `--report`. Red first on the #1876 head
+    (traceback, exit 1); after, the same `REFUSED:` line and exit 2 that `main()`
+    already gives an artifact it cannot read. No record is written."""
+    _plant_unfit_short_pole(monkeypatch)
+    rec = tmp_path / "rec.json"
+    assert ct.main(argv + ([str(rec)] if "--json" in argv else [])) == 2
+    out = capsys.readouterr().out
+    assert UNFIT in out, out
+    assert "gate: PASS" not in out and "gate: FAIL" not in out, out
+    assert not rec.exists()
+
+
+def test_a_measured_fail_outranks_a_refusal_beside_it(figs, tmp_path, capsys, monkeypatch):
+    """Rule 8's input for the exit status: a FAIL that was measured must not be
+    masked by a refusal beside it. The clean run fails; then the record's bands
+    refuse (exit 1, no record written), and the report refuses beside the gate
+    (the gate still prints, still 1). Both raises are planted at the `record()`
+    and `report()` boundaries, because no input refuses either without also
+    refusing the clean run -- that raise site belongs to
+    `test_a_refusal_outside_the_gate_reaches_the_caller_as_refused`."""
+    _plant_clean_fail(monkeypatch)
+
+    def record(poles, corner, fig9):
+        raise ct.Refused("planted: the bands cannot be built")
+
+    monkeypatch.setattr(ct, "record", record)
+    rec = tmp_path / "rec.json"
+    assert ct.main(["--check", "--json", str(rec)]) == 1
+    assert not rec.exists()
+    out = capsys.readouterr().out
+    assert "gate: FAIL" in out, out
+    assert "REFUSED: planted: the bands cannot be built" in out, out
+
+    def report(poles, corner):
+        raise ct.Refused("planted: the tables cannot be built")
+
+    monkeypatch.setattr(ct, "report", report)
+    assert ct.main(["--report", "--check"]) == 1
+    out = capsys.readouterr().out
+    assert "REFUSED: planted: the tables cannot be built" in out, out
+    assert "gate: FAIL" in out, out
