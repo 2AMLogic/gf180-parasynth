@@ -73,11 +73,23 @@ def write_report(report: dict, out_text: str, tool: str,
 
     Returns the resolved output path, or None when `out_text` resolves
     outside `root` -- the caller renders that as REFUSED, exit 2, with the
-    same `<tool>: REFUSED -- ...` line the three scripts printed inline."""
+    same `<tool>: REFUSED -- ...` line the three scripts printed inline.
+
+    Raises ValueError, having written nothing, when the report holds a NaN
+    or Infinity. `json.dumps` writes those as bare tokens by default and
+    they are not JSON (#1406, #1409), so this is the backstop behind every
+    guard that keeps a non-finite number from getting this far (#1636); the
+    caller's main() renders it as REFUSED, exit 2. The record is serialised
+    before anything on disk is touched, so a file already at `out` is left
+    exactly as it was."""
     out = repo_path(out_text, root=root)
     if not out.resolve().is_relative_to(root):
         print(f"{tool}: REFUSED -- output must remain inside the repository")
         return None
+    try:
+        text = json.dumps(report, indent=2, allow_nan=False) + "\n"
+    except ValueError as exc:
+        raise ValueError(f"the report holds a number that is not JSON ({exc})") from exc
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(report, indent=2) + "\n")
+    out.write_text(text)
     return out

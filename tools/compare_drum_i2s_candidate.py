@@ -19,7 +19,10 @@ What it refuses:
     with another chip record answers a different question;
   * two records of different cases, different references, different tolerance
     policies or different properties. A delta between incomparable measurements
-    is a number with no meaning.
+    is a number with no meaning;
+  * a property whose difference, or difference in tolerances, is not finite.
+    Every number in both records can be finite and subtracting two of them
+    can still overflow (#1636).
 
 What it reports: per property, both values, the signed difference, that
 difference as a fraction of the property's own tolerance, and whether the two
@@ -198,10 +201,15 @@ def compare_records(baseline: dict, candidate: dict, case: dict | None = None) -
         base_worst = base_row["verdict"]["properties"][name]
         cand_worst = cand_row["verdict"]["properties"][name]
         base_pass, cand_pass = base_worst <= 1.0, cand_worst <= 1.0
+        difference = float(c["value"]) - float(b["value"])
+        in_tolerances = difference / tolerance
+        if not (math.isfinite(difference) and math.isfinite(in_tolerances)):
+            raise Refused(f"property {name} difference is not finite: {difference!r}, "
+                          f"{in_tolerances!r} tolerances")
         row = {"property": name, "units": b.get("units"), "tolerance": tolerance,
                "baseline_value": float(b["value"]), "candidate_value": float(c["value"]),
-               "difference": float(c["value"]) - float(b["value"]),
-               "difference_in_tolerances": (float(c["value"]) - float(b["value"])) / tolerance,
+               "difference": difference,
+               "difference_in_tolerances": in_tolerances,
                "baseline_worst": base_worst, "candidate_worst": cand_worst,
                "baseline_within_tolerance": base_pass,
                "candidate_within_tolerance": cand_pass,
@@ -263,10 +271,10 @@ def main(argv=None) -> int:
     candidate = delta_report.repo_path(a.candidate, root=ROOT)
     try:
         report = compare_files(baseline, candidate)
+        out = delta_report.write_report(report, a.out, "compare_drum_i2s_candidate", root=ROOT)
     except (OSError, ValueError, Refused, subprocess.CalledProcessError) as exc:
         print(f"compare_drum_i2s_candidate: REFUSED -- {exc}")
         return 2
-    out = delta_report.write_report(report, a.out, "compare_drum_i2s_candidate", root=ROOT)
     if out is None:
         return 2
     print(json.dumps({"report": str(out.relative_to(ROOT)),

@@ -145,12 +145,17 @@ def compare_records(baseline: dict, candidate: dict) -> dict:
         before = float(baseline_row["metrics"][name]["error"])
         after = float(candidate_row["metrics"][name]["error"])
         before_pass, after_pass = abs(before) <= limit, abs(after) <= limit
+        delta = abs(after) - abs(before)
+        fraction = delta / limit
+        if not (math.isfinite(delta) and math.isfinite(fraction)):
+            raise Refused(f"property {name} difference is not finite: {delta!r}, "
+                          f"{fraction!r} of the tolerance")
         item = {"units": units, "limit": limit,
                 "baseline_error": round(before, 6), "candidate_error": round(after, 6),
                 "baseline_inside_tolerance": before_pass,
                 "candidate_inside_tolerance": after_pass,
-                "delta": round(abs(after) - abs(before), 6),
-                "delta_fraction_of_tolerance": round((abs(after) - abs(before)) / limit, 6)}
+                "delta": round(delta, 6),
+                "delta_fraction_of_tolerance": round(fraction, 6)}
         per_metric[name] = item
         if before_pass and not after_pass:
             lost_passes.append(name)
@@ -211,10 +216,10 @@ def main(argv=None) -> int:
     candidate = delta_report.repo_path(a.candidate, root=ROOT)
     try:
         report = compare_files(baseline, candidate)
+        out = delta_report.write_report(report, a.out, "compare_ensemble_candidate", root=ROOT)
     except (OSError, ValueError, Refused, subprocess.CalledProcessError) as exc:
         print(f"compare_ensemble_candidate: REFUSED -- {exc}")
         return 2
-    out = delta_report.write_report(report, a.out, "compare_ensemble_candidate", root=ROOT)
     if out is None:
         return 2
     comparison = report["comparison"]
