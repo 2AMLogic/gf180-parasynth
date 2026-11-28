@@ -78,9 +78,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 #: ``test``) collects by directory. CI collects the same ones in four jobs:
 #: ``python`` collects ``model/ spec/``, ``tools`` collects ``tools/`` and
 #: ``pnr`` collects ``pnr/`` (all by directory, #404), and ``fpga-uncovered``
-#: (rungs.yml) collects ``fpga/release/`` plus the nine other fpga/ files no
-#: other job names (#853) -- on top of the 23 fpga/ files ``m5a-fast`` runs
-#: via ``make verify-fast``.
+#: (rungs.yml) collects ``fpga/release/`` plus the other fpga/ files named in
+#: its ``FPGA_UNCOVERED_PATHS`` (#853) -- on top of the fpga/ files that
+#: ``m5a-fast`` names explicitly through ``make verify-fast``.
 GUARDED_DIRS = ("model", "spec", "tools", "fpga", "pnr")
 
 #: pytest's own defaults (``python_functions = test``,
