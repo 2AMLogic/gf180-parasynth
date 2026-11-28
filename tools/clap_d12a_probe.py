@@ -65,6 +65,7 @@ import run_all  # noqa: E402
 
 OUT_DIR = ROOT / "docs" / "scorecard" / "clap-d12a"
 RECORD = ROOT / "docs" / "scorecard" / "results" / "D12A.json"
+COMMITTED_RECORD_FIELDS = ("metrics", "windowing", "diagnostics", "source_commit", "analysis_run", "audio")
 
 
 def write_json(path, obj, default=None) -> None:
@@ -420,6 +421,10 @@ def reproduce(refdir) -> tuple:
         raise Refused(f"cannot read D12A record {RECORD}: {e}") from e
     if not isinstance(committed, dict):
         raise Refused(f"expected a JSON object in D12A record {RECORD}")
+    missing = [f for f in COMMITTED_RECORD_FIELDS if f not in committed]
+    if missing:
+        raise Refused(f"the committed D12A record {RECORD} lacks {', '.join(missing)} -- "
+                      f"a partial record; nothing was compared")
     names = [entry[0] for entry in rc.DRUM_PLAN["CP"]]
     if "burst/tail ratio" not in names or len(names) != len(set(names)):
         raise Refused("the CP measurement plan needs distinct metrics including burst/tail ratio")

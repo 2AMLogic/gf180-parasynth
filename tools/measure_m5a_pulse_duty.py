@@ -15,13 +15,14 @@ import subprocess
 import sys
 
 import numpy as np
-from scipy.io import wavfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
 import audio_measure as am
 import mono_m5a_score as m5a
+import refusal
+from exit_contract import REFUSED
 import run_all
 import voice_fx as vf
 
@@ -35,45 +36,26 @@ def write_json(path, obj, default=None) -> None:
     run_all.write_json_atomic(str(path), obj, default=default)
 
 
-def _shape_summary(model, reference, f0_model, f0_reference, sr):
-    comparisons = {f"h{k}": m5a._harmonic_error(model, reference, k)
-                   for k in range(2, 13)
-                   if k * max(f0_model, f0_reference) < sr / 2}
-    errors = {key: (round(float(value), 4) if value is not None else None)
-              for key, (value, _status) in comparisons.items()}
-    statuses = {key: status for key, (_value, status) in comparisons.items()}
-    measured = [abs(value) for value in errors.values() if value is not None]
-    if len(measured) < 2:
-        raise RuntimeError("fewer than two pulse harmonics are comparable")
-    return {"harmonic_error_db_model_minus_reference": errors,
-            "harmonic_comparison": statuses,
-            "max_common_partial_error_db": round(max(measured), 4)}
+def _shape_summary(model, reference, f0_model, f0_reference, sr, *, context=""):
+    compared = m5a.harmonic_summary(model, reference, f0_model, f0_reference, sr,
+                                    context=context)
+    return {"harmonic_error_db_model_minus_reference": compared.errors,
+            "harmonic_comparison": compared.statuses,
+            "max_common_partial_error_db": round(compared.max_abs_error, 4)}
 
 
 def measure(shapes=SHAPES):
     unknown = sorted(set(shapes) - set(SHAPES))
     if unknown or not shapes or len(set(shapes)) != len(shapes):
         raise ValueError(f"shapes must be unique members of {SHAPES}; invalid={unknown}")
-    manifest_bytes = m5a.MANIFEST.read_bytes()
-    manifest = json.loads(manifest_bytes)
-    audio_meta = manifest["audio"]
-    reference_path = m5a.MANIFEST.parent / audio_meta["file"]
-    reference_bytes = reference_path.read_bytes()
-    reference_sha = hashlib.sha256(reference_bytes).hexdigest()
-    if reference_sha != audio_meta["sha256"]:
-        raise RuntimeError("frozen M5A WAV hash does not match its manifest")
-    sr, reference = wavfile.read(reference_path)
-    if sr != m5a.SR or reference.dtype != np.float32 or reference.ndim != 1:
-        raise RuntimeError("reference must be mono float32 at 48 kHz")
-    reference = reference.astype(np.float64)
-    if len(reference) != audio_meta["samples"] or not np.isfinite(reference).all():
-        raise RuntimeError("reference length or finite-sample check failed")
+    reference = m5a.load_reference("M5A")
+    manifest, ref, sr = reference.manifest, reference.pcm, m5a.SR
 
     segment = next(item for item in manifest["timeline"]["segments"]
                    if item["wave"] == "pulse")
     base_patch = m5a._voice_patch(manifest)
     offset = int(segment["offset_samples"])
-    ref_segment = reference[offset:offset + int(segment["samples"])]
+    ref_segment = ref[offset:offset + int(segment["samples"])]
     runs = []
     for shape in shapes:
         patch = {**base_patch, "waves": (shape, shape, shape)}
@@ -84,7 +66,7 @@ def measure(shapes=SHAPES):
                                 vf.VoiceFx(oversample_2x=True))
         common = min(len(ref_segment), len(pcm))
         if abs(len(ref_segment) - len(pcm)) > 128:
-            raise RuntimeError("model and reference pulse segment lengths differ by >128 samples")
+            raise m5a.Refused("model and reference pulse segment lengths differ by >128 samples")
         model_segment = pcm[:common].astype(np.float64) / 32768.0
         events = []
         for event in segment["midi_events"]:
@@ -97,15 +79,16 @@ def measure(shapes=SHAPES):
             fm = am.refine_f0(x_model, f0_expected, sr)
             fr = am.refine_f0(x_reference, f0_expected, sr)
             if not fm.ok or not fr.ok:
-                raise RuntimeError(f"pulse MIDI {note} pitch refused: "
-                                   f"{fm.reason if not fm.ok else fr.reason}")
+                raise m5a.Refused(f"pulse MIDI {note} pitch refused: "
+                                  f"{fm.reason if not fm.ok else fr.reason}")
             sm = am.harmonic_signature(x_model, sr, f0=fm.value, kmax=12)
             sf = am.harmonic_signature(x_reference, sr, f0=fr.value, kmax=12)
             amodel = am.foldback_alias_db(x_model, fm.value, sr)
             aref = am.foldback_alias_db(x_reference, fr.value, sr)
             if not amodel.ok or not aref.ok:
-                raise RuntimeError(f"pulse MIDI {note} alias estimator refused")
-            summary = _shape_summary(sm, sf, fm.value, fr.value, sr)
+                raise m5a.Refused(f"pulse MIDI {note} alias estimator refused")
+            summary = _shape_summary(sm, sf, fm.value, fr.value, sr,
+                                     context=f"pulse MIDI {note}")
             summary.update({
                 "wave": shape,
                 "midi": note,
@@ -136,8 +119,8 @@ def measure(shapes=SHAPES):
         "source_commit": commit,
         "source_hashes": {path: hashlib.sha256((ROOT / path).read_bytes()).hexdigest()
                           for path in sources},
-        "reference_sha256": reference_sha,
-        "manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
+        "reference_sha256": reference.audio_sha256,
+        "manifest_sha256": reference.manifest_sha256,
         "oscillator_config": "selected 2x voice model",
         "fixed_filter_drive": base_patch["drive"],
         "fixed_cutoff_hz": base_patch["cutoff"][0],
@@ -152,7 +135,11 @@ def main(argv=None):
     parser.add_argument("--shapes", nargs="+", choices=SHAPES, default=list(SHAPES))
     parser.add_argument("--out", default="docs/scorecard/mono-m5a-miniv3/pulse-duty-v1.json")
     args = parser.parse_args(argv)
-    report = measure(args.shapes)
+    try:
+        report = measure(args.shapes)
+    except refusal.Refused as exc:
+        print(f"REFUSED: {exc}")
+        return REFUSED
     path = ROOT / args.out
     write_json(path, report)
     print(json.dumps({"report": str(path.relative_to(ROOT)),

@@ -497,6 +497,66 @@ def test_a_caught_control_report_from_the_board_binds_both_sidecars(name):
     assert re.search(r"^verify_synth_top: ensemble schedule sha256 [0-9a-f]{64}$", text, re.M)
 
 
+# --------------------------------------------------------------------------- #
+# one capture in the report, not two (#1562)
+# --------------------------------------------------------------------------- #
+TWO_RUNS = ("mix: ambiguous transcript: it holds 2 simulator backend declarations, "
+            "2 PASS verdicts, 2 decoded I2S WAV digests, and one run prints one of each")
+WITHOUT_A_BACKEND = ("mix: ambiguous transcript: it holds 2 PASS verdicts, "
+                     "2 decoded I2S WAV digests, and one run prints one of each")
+
+
+def _second_run(outdir, part, **report_kw):
+    """A second clean run of `part`, its three files under `outdir/b`: the same
+    schedule, and a WAV the first run did not decode."""
+    (outdir / "b").mkdir(exist_ok=True)
+    second = np.zeros(CASE_FRAMES, dtype=np.int64)
+    second[10] = 100
+    return _part_files(outdir / "b", part, samples=second, **report_kw)
+
+
+def test_two_clean_runs_in_one_report_are_refused_rather_than_paired(tmp_path):
+    """START RED (#1562). Offered BOTH of the second run's sidecars -- so both
+    of its digests are in the report -- the report used to yield the FIRST
+    run's latency."""
+    a_paths, a, a_wav_sha, _ = _part_files(tmp_path, "mix")
+    b_paths, b, b_wav_sha, _ = _second_run(tmp_path, "mix", latency=4)
+    assert a_wav_sha != b_wav_sha
+    assert score.validate_part("E1A", "mix", a, a_paths["wav"],
+                               a_paths["schedule"])["worst_latency_frames"] == 3
+    assert score.validate_part("E1A", "mix", b, b_paths["wav"],
+                               b_paths["schedule"])["worst_latency_frames"] == 4
+    other = b.replace("simulator backend verilator", "simulator backend iverilog")
+    stripped = b.replace("verify_synth_top: simulator backend verilator\n", "")
+    assert stripped != b
+    for second, reason in ((b, TWO_RUNS), (other, TWO_RUNS), (stripped, WITHOUT_A_BACKEND)):
+        with pytest.raises(score.Refused) as caught:
+            score.validate_part("E1A", "mix", a + second, b_paths["wav"], b_paths["schedule"])
+        assert str(caught.value) == reason
+
+
+def test_main_refuses_a_two_run_report_before_measuring_anything(tmp_path, monkeypatch, capsys):
+    """START RED (#1562), on the path that ships. Every part's report holds two
+    clean runs; each used to validate as the first run's and reach `measure`.
+    The stand-in leaves the supplied reports on disk, just as the RTL runs
+    would."""
+    for part in score.parts_for("E1A"):
+        paths, a, *_ = _part_files(tmp_path, part)
+        _, b, *_ = _second_run(tmp_path, part, latency=4)
+        paths["report"].write_text(a + b)
+
+    def measured(*_):
+        raise AssertionError("the scorer measured audio described by a report "
+                             "it had to refuse")
+    monkeypatch.setattr(score, "measure", measured)
+    monkeypatch.setattr(score, "ROOT", tmp_path)
+    monkeypatch.setattr(score, "run_part",
+                        lambda case, part, outdir, **kw: {"part": part, "status": 0})
+    assert score.main(["--outdir", str(tmp_path), "--jobs", "1"]) == 2
+    assert "REFUSED -- " + TWO_RUNS in capsys.readouterr().out
+    assert not (tmp_path / "docs/scorecard/results/E1A.json").exists()
+
+
 def test_measurement_sources_hash_the_transcript_gate():
     """Mirror of #1208: the module this scorer calls to validate transcripts
     must be in its own hashed sources, derived from the import rather than a

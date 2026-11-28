@@ -66,7 +66,7 @@
         "role": "hygiene",
         "path": ".github/workflows/rungs.yml",
         "passed": true,
-        "content_hash": "sha256:ef34ecfdece45773384d5a4efdd7dc3d8ba3fb18c0512a27174851ae1b3b3308"
+        "content_hash": "sha256:4a35c37a7c9c6962e211bacbe3ac4dbeda466d0cce24f6ab123470d9610c3856"
       },
       {
         "check": "present",

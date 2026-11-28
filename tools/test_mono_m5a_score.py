@@ -2,6 +2,7 @@ import hashlib
 import json
 import pathlib
 
+import numpy as np
 import pytest
 
 import mono_m5a_score as score
@@ -406,3 +407,161 @@ def test_measure_without_audio_writes_no_wav_and_changes_nothing_else(tmp_path):
     assert loud["audio"] != "not written (--no-audio)"
     assert {k: v for k, v in quiet.items() if k != "audio"} \
         == {k: v for k, v in loud.items() if k != "audio"}
+
+
+def test_load_reference_returns_the_frozen_record_with_its_digests():
+    reference = score.load_reference("M5A")
+    manifest = json.loads(score.MANIFEST.read_text())
+    assert reference.manifest == manifest
+    assert reference.audio_path == score.MANIFEST.parent / manifest["audio"]["file"]
+    assert reference.audio_sha256 == manifest["audio"]["sha256"]
+    assert reference.manifest_sha256 == hashlib.sha256(score.MANIFEST.read_bytes()).hexdigest()
+    assert reference.pcm.dtype == np.float64
+    assert len(reference.pcm) == manifest["audio"]["samples"]
+
+
+def _damaged_m5a_record(tmp_path, damage):
+    """An M5A record that fails exactly one gate of `load_reference`."""
+    from scipy.io import wavfile
+
+    manifest = json.loads(score.MANIFEST.read_text())
+    audio = tmp_path / "audio.wav"
+    if damage in ("nan", "int16"):
+        samples = int(manifest["audio"]["samples"])
+        pcm = (np.full(samples, np.nan, dtype=np.float32) if damage == "nan"
+               else np.zeros(samples, dtype=np.int16))
+        wavfile.write(audio, score.SR, pcm)
+        manifest["audio"] = {**manifest["audio"], "file": audio.name,
+                             "sha256": hashlib.sha256(audio.read_bytes()).hexdigest()}
+    elif damage == "hash":
+        audio.write_bytes(b"not the frozen audio")
+        manifest["audio"] = {**manifest["audio"], "file": audio.name, "sha256": "0" * 64}
+    elif damage == "suite":
+        manifest["identity"] = {"name": "Mini V4", "version": "4.0.4.6366"}
+    else:
+        manifest["case_id"] = "M5B"
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(manifest))
+    return path
+
+
+@pytest.mark.parametrize(("damage", "reason"), [
+    ("suite", "reference-suite mix"),
+    ("case", "identifies as 'M5B', expected M5A"),
+    ("hash", "hash mismatch"),
+    ("nan", "finite-sample"),
+    ("int16", "not mono float32"),
+])
+def test_load_reference_refuses_each_drifted_gate(tmp_path, damage, reason):
+    # #1570: the five gates the three sibling tools had each dropped a part of.
+    with pytest.raises(score.Refused, match=reason):
+        score.load_reference("M5A", manifest_path=_damaged_m5a_record(tmp_path, damage))
+
+
+def test_load_reference_honours_the_m5a_manifest_override(tmp_path, monkeypatch):
+    monkeypatch.setattr(score, "MANIFEST", _damaged_m5a_record(tmp_path, "case"))
+    with pytest.raises(score.Refused, match="identifies as"):
+        score.load_reference("M5A")
+
+
+def test_harmonic_summary_rounds_each_partial_but_not_the_max():
+    model = {"h2": -40.0, "h3": -20.0, "floor4": -65.0}
+    reference = {"h2": -30.0, "h3": -21.0, "h4": -30.0}
+    summary = score.harmonic_summary(model, reference, 1000.0, 1000.0, 48000,
+                                     context="saw MIDI 84")
+    assert summary.errors["h2"] == -10.0 and summary.errors["h3"] == 1.0
+    assert summary.errors["h4"] == -35.0 and summary.statuses["h4"] == "model_below_floor_bound"
+    assert summary.errors["h5"] is None and summary.statuses["h5"] == "both_below_floor"
+    assert summary.max_abs_error == 35.0
+    # The scorecard metric is rounded to 5 dp, so the max must stay unrounded.
+    near = score.harmonic_summary({"h2": -30.00004, "h3": -20.00003},
+                                 {"h2": -30.0, "h3": -20.0}, 1000.0, 1000.0, 48000)
+    assert near.errors["h2"] == 0.0 and near.errors["h3"] == 0.0
+    assert near.max_abs_error == pytest.approx(0.00004)
+
+
+def test_harmonic_summary_refuses_fewer_than_two_comparable_partials():
+    signature = {"h2": -40.0, "h3": -30.0, "h4": -50.0}
+    for f0 in (9000.0, 12000.0):
+        with pytest.raises(score.Refused,
+                           match="saw MIDI 96 has fewer than two comparable partials"):
+            score.harmonic_summary(signature, signature, f0, f0, 48000, context="saw MIDI 96")
+    silent = {"h2": None, "h3": None, "h4": None}
+    with pytest.raises(score.Refused, match="fewer than two comparable partials"):
+        score.harmonic_summary(silent, silent, 1000.0, 1000.0, 48000)
+
+
+def test_selected_engine_voice_passes_blep_through_and_defaults_on():
+    profile = score.engine_configuration("selected")
+    assert score._voice_for_engine(profile).blep is True
+    assert score._voice_for_engine(profile, blep=False).blep is False
+
+
+def _swap_after_first_read(monkeypatch, target, decoy_bytes):
+    """Replace `target` with `decoy_bytes` right after the first read of it."""
+    real_bytes, real_text = pathlib.Path.read_bytes, pathlib.Path.read_text
+    state = {"swapped": False}
+
+    def swap(path):
+        if pathlib.Path(path) == target and not state["swapped"]:
+            state["swapped"] = True
+            target.write_bytes(decoy_bytes)
+
+    def read_bytes(self):
+        data = real_bytes(self)
+        swap(self)
+        return data
+
+    def read_text(self, *args, **kwargs):
+        data = real_text(self, *args, **kwargs)
+        swap(self)
+        return data
+
+    monkeypatch.setattr(pathlib.Path, "read_bytes", read_bytes)
+    monkeypatch.setattr(pathlib.Path, "read_text", read_text)
+    return state
+
+
+def _m5a_copy(tmp_path):
+    manifest = json.loads(score.MANIFEST.read_text())
+    (tmp_path / manifest["audio"]["file"]).write_bytes(
+        (score.MANIFEST.parent / manifest["audio"]["file"]).read_bytes())
+    path = tmp_path / "manifest.json"
+    path.write_bytes(score.MANIFEST.read_bytes())
+    return path, manifest
+
+
+def test_load_reference_manifest_content_and_digest_come_from_one_read(tmp_path, monkeypatch):
+    # #1586 review: a file replaced between the parse and the hash must not pair
+    # one file's content with another's digest.
+    path, manifest = _m5a_copy(tmp_path)
+    original = path.read_bytes()
+    decoy = json.dumps({**manifest, "case_id": "M5B"}).encode()
+    state = _swap_after_first_read(monkeypatch, path, decoy)
+    reference = score.load_reference("M5A", manifest_path=path)
+    assert state["swapped"]
+    assert reference.manifest["case_id"] == "M5A"
+    assert reference.manifest_sha256 == hashlib.sha256(original).hexdigest()
+
+
+def test_load_reference_audio_content_and_digest_come_from_one_read(tmp_path, monkeypatch):
+    from scipy.io import wavfile
+
+    path, manifest = _m5a_copy(tmp_path)
+    audio = tmp_path / manifest["audio"]["file"]
+    silent = tmp_path / "silent.wav"
+    wavfile.write(silent, score.SR, np.zeros(int(manifest["audio"]["samples"]), np.float32))
+    state = _swap_after_first_read(monkeypatch, audio, silent.read_bytes())
+    reference = score.load_reference("M5A", manifest_path=path)
+    assert state["swapped"]
+    assert np.count_nonzero(reference.pcm) > 0
+    assert reference.audio_sha256 == manifest["audio"]["sha256"]
+
+
+def test_load_reference_accepts_a_manifest_with_a_utf8_bom(tmp_path):
+    # Attack-bias parsed bytes, so a BOM was accepted before it used this loader.
+    path, manifest = _m5a_copy(tmp_path)
+    path.write_bytes(b"\xef\xbb\xbf" + path.read_bytes())
+    reference = score.load_reference("M5A", manifest_path=path)
+    assert reference.manifest == manifest
+    assert reference.manifest_sha256 == hashlib.sha256(path.read_bytes()).hexdigest()
