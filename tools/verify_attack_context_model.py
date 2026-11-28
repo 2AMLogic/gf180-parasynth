@@ -49,6 +49,23 @@ class Refused(refusal.Refused, AssertionError):
     """The evidence cannot be checked in this state; distinct from a measured mismatch."""
 
 
+ABSENT, MALFORMED = 1, 128
+
+
+def object_status(commit: str, root: Path) -> tuple[int, str]:
+    """`git cat-file -e -- <commit>`: its exit status and git's own stderr line.
+
+    Three answers, not two (#2084). 0, the object is here. ABSENT, a full
+    object name this clone does not hold. MALFORMED, a name git will not
+    resolve. The `^{commit}` peel this replaces exited MALFORMED for the last
+    two alike, so a malformed `source_commit` was reported as rebased away.
+    `--` keeps a leading-dash name an object name: read as an option it is a
+    usage error, a status with no diagnosis.
+    """
+    probe = subprocess.run(["git", "cat-file", "-e", "--", commit], cwd=root, capture_output=True)
+    return probe.returncode, probe.stderr.decode(errors="replace").strip()
+
+
 def require_reachable(commit: str, root: Path) -> None:
     """Refuse unless `commit` is an ancestor of HEAD (#215).
 
@@ -58,14 +75,26 @@ def require_reachable(commit: str, root: Path) -> None:
     commit still holds it as a dangling object, so the check passes there and
     fails in a fresh CI checkout. Reachable-from-HEAD is what a fresh checkout
     of this branch will have.
+
+    Absent and malformed are refused apart (#2084), as git's own status tells
+    them and the peel's did not. Commit-ness is no longer asserted at the
+    existence probe: a tree or a blob is present, and is refused below as
+    present but not an ancestor.
     """
     fix = "regenerate the report with tools/compare_mono_attack_context.py on the rebased branch"
     if not isinstance(commit, str) or not commit:
         raise Refused(f"source_commit is missing from the report; {fix}")
-    exists = subprocess.run(["git", "cat-file", "-e", f"{commit}^{{commit}}"], cwd=root, capture_output=True)
-    if exists.returncode != 0:
+    status, reason = object_status(commit, root)
+    if status == ABSENT:
         raise Refused(f"source_commit {commit} not reachable: no such commit in this checkout "
                       f"(rebased away, or a shallow clone); {fix}")
+    said = reason or "git said nothing"
+    if status == MALFORMED:
+        raise Refused(f"source_commit {commit!r} is not a name git resolves to an object (git cat-file -e "
+                      f"exited {status}: {said}); the record is malformed: check what wrote source_commit")
+    if status != 0:
+        raise Refused(f"source_commit {commit!r}: git cat-file -e exited {status}, which is neither 0 (object "
+                      f"present), 1 (object absent) nor 128 (name unparseable): {said}. Cause not established")
     anc = subprocess.run(["git", "merge-base", "--is-ancestor", commit, "HEAD"], cwd=root, capture_output=True)
     if anc.returncode != 0:
         raise Refused(f"source_commit {commit} not reachable: it exists here but is not an ancestor of HEAD "
