@@ -103,7 +103,15 @@ def print_properties(measured):
 
 
 def check(record: dict, candidate: dict, baseline: dict, manifest: dict) -> list[str]:
-    """Every reason the record is not the selected candidate; [] when it is."""
+    """Every reason the record is not the selected candidate; [] when it is.
+
+    REFUSES (`mf.Refused`) a record that lacks a key this function reads with
+    `[]` (#1604): that is a partial record, not a mismatch."""
+    for rec, keys, what in ((record, ("diagnostics", "audio", "metrics"), "the M1A board record"),
+                            (candidate, ("patch", "sha256", "measurements", "metrics"),
+                             "the -4 dB candidate record"),
+                            (baseline, ("measurements",), "the pre-selection baseline record")):
+        mf.require_keys(rec, keys, what, refused=mf.Refused)
     problems = []
     config = record["diagnostics"]["configuration"]
     selected = _norm(bass.patch_for_reference(manifest, bass.SELECTED_PATCH))
@@ -184,10 +192,10 @@ def main(argv=None) -> int:
         candidate = mf.load_json_refused(CANDIDATE, "the -4 dB candidate record")
         baseline = mf.load_json_refused(BASELINE, "the pre-selection baseline record")
         manifest, _ = bass.load_reference()
+        problems = check(record, candidate, baseline, manifest)
     except (OSError, ValueError, bass.Refused, mf.Refused) as exc:
         print(f"REFUSED: {exc}")
         return 2
-    problems = check(record, candidate, baseline, manifest)
     for p in problems:
         print("MISMATCH:", p)
     if problems:

@@ -76,8 +76,10 @@ instrument side.
 """
 from __future__ import annotations
 
+import json
 import pathlib
 import sys
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -294,3 +296,30 @@ def test_one_lsb_is_the_smallest_change_the_block_can_express():
     rng = np.random.default_rng(0)
     y = np.clip(np.asarray(b, np.int64) + rng.integers(-1, 2, len(b)), -32768, 32767)
     assert float(np.abs(y - np.asarray(b, np.int64)).max()) == 1.0
+
+
+# ---------------------------------------------------------------------------
+# 11. A sweep plan that cannot be read is REFUSED, not a traceback (#1604)
+# ---------------------------------------------------------------------------
+def test_a_sweep_plan_without_its_grid_is_refused(tmp_path, monkeypatch, capsys):
+    """`report_k_sweep` reads the committed plan's `grid` with `[]`. A plan
+    without it exited 1 by `KeyError` -- FAIL, "a result" -- where the tool's
+    own declared refusal is 3 (`exit_contract.REFUSED_ALTERNATE`; 2 is this
+    tool's usage error). The committed plan is read first, so the guard is
+    known to be satisfiable against the record that ships, and then the one
+    key is removed from THAT record.
+
+    The committed-and-clean precondition is answered, not exercised: a plan
+    under tmp_path is not tracked, and that precondition is not what this
+    control is about."""
+    committed = json.loads(P.K_PLAN.read_text())
+    assert committed["grid"], "the committed plan must carry its grid"
+    partial = tmp_path / P.K_PLAN.name
+    partial.write_text(json.dumps({k: v for k, v in committed.items() if k != "grid"}))
+    monkeypatch.setattr(P, "K_PLAN", partial)
+    clean = lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="")   # noqa: E731
+    monkeypatch.setattr(P, "subprocess", SimpleNamespace(run=clean))
+
+    assert P.main(["--k-sweep"]) == 3
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "'grid'" in out

@@ -126,7 +126,10 @@ def probe(engine: str, drive: float, vol_factor: float) -> dict:
         for nt in PROBE_NOTES:
             with engine_ctx(engine):
                 r = mp.measure_point(engine, nt, mp.held_patch(waves=(wave,) * 3, drive=drive, vol=vol))
-            o = r["stages"]["output"]
+            o = mp.require_measured(r, "output", ("unwanted_dbfs", "unwanted_rel_db", "upper_wanted_rel_db",
+                                                  "intended_dbfs"),
+                                    f"measure_m5_operating_level.probe: engine {engine}, drive {drive}, "
+                                    f"{wave} note {nt}")
             out[f"{wave}/{nt}"] = {"unwanted_dbfs": o["unwanted_dbfs"], "unwanted_rel_db": o["unwanted_rel_db"],
                                    "upper_wanted_rel_db": o["upper_wanted_rel_db"],
                                    "intended_dbfs": o["intended_dbfs"],

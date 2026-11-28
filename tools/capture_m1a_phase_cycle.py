@@ -43,6 +43,7 @@ from scipy.io import wavfile
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
+import manifest as mf                                                # noqa: E402
 import measure_mono_m1a_reference as m1a  # noqa: E402
 
 ref = m1a.ref
@@ -282,6 +283,8 @@ def main():
         if dirty:
             raise Refused("commit the capture instrument before capturing:\n" + dirty)
         manifest = json.loads((FROZEN / "manifest.json").read_text())
+        mf.require_keys(manifest, ("sample_rate_hz", "block_size_samples", "identity"),
+                        f"the frozen manifest at {FROZEN / 'manifest.json'}", refused=Refused)
         if manifest["sample_rate_hz"] != ref.SR or manifest["block_size_samples"] != ref.BLOCK:
             raise Refused("host rate/block differ from the frozen manifest")
         identity = ref._plugin_metadata()

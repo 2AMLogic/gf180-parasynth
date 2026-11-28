@@ -90,7 +90,8 @@ def probe(cut):
     for nt in PROBE_NOTES:
         with ol.engine_ctx("pulse2x"):
             r = mp.measure_point("pulse2x", nt, mp.held_patch(waves=("pulse29",) * 3, cutoff=(cut, cut)))
-        o = r["stages"]["output"]
+        o = mp.require_measured(r, "output", ("unwanted_rel_db", "upper_wanted_rel_db"),
+                                f"measure_m5_pulse_cutoff.probe: cutoff {cut}, note {nt}")
         out[str(nt)] = {"unwanted_rel_db": o["unwanted_rel_db"], "upper_wanted_rel_db": o["upper_wanted_rel_db"],
                         "output_rail": r["clip"]["output_rail_samples"]}
     return out

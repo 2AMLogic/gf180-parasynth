@@ -111,13 +111,38 @@ def load_cases() -> list[dict]:
 
 
 def load_result(case_id: str) -> dict | None:
+    """The record under `results/<case_id>.json`, or None when there is no file.
+
+    None means NOT RUN, so a file that exists but holds no object -- `null`,
+    a number, an array -- must not come back as None: that reported a case
+    that ran and wrote `null` as never attempted (#1669). It comes back in
+    the `_broken` shape instead: NO VERDICT, and it still counts against
+    coverage."""
     p = RESULTS / f"{case_id}.json"
     if not p.exists():
         return None
     try:
-        return json.loads(p.read_text())
+        data = json.loads(p.read_text())
     except Exception as e:
         return {"_broken": f"{type(e).__name__}: {e}"}
+    if not isinstance(data, dict):
+        return {"_broken": f"record is JSON {json.dumps(data)[:40]}, not an object"}
+    return data
+
+
+def _engine_text(engine) -> str:
+    """The engine as the text every renderer leans on it being.
+
+    A record can name its engine with any JSON value -- `5`, `true`, a list --
+    and the row carries it so the board can say `unknown engine 5`. `main()`
+    then sorts the engines, joins them and formats each to a width, none of
+    which takes a non-string: one such record was exit 1 with a traceback,
+    which `tools/exit_contract.py` defines as FAIL, for a case the board had
+    already declined to score (#1669). Stringified rather than dropped,
+    because the board's "no case measured on the integrated RTL" note hangs
+    off the set of engines, and a board whose only record names a non-string
+    engine has still not been measured on the RTL."""
+    return engine if isinstance(engine, str) else repr(engine)
 
 
 def evaluate(case: dict, res: dict | None) -> dict:
@@ -132,7 +157,7 @@ def evaluate(case: dict, res: dict | None) -> dict:
     engine = res.get("engine", "")
     if engine and engine not in ENGINES:
         return {"state": NO_VERDICT, "worst": None,
-                "why": f"unknown engine {engine!r}", "engine": engine}
+                "why": f"unknown engine {engine!r}", "engine": _engine_text(engine)}
     if not engine:
         return {"state": NO_VERDICT, "worst": None,
                 "why": "no engine recorded -- which thing produced this audio?",
@@ -534,7 +559,14 @@ def main() -> int:
                      f"{icon[r['state']]} | {w} | {r['why'][:60]} |")
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text("\n".join(L) + "\n")
-        print(f"\nwrote {out.relative_to(ROOT)}")
+        # The board is on disk by now, so nothing below may raise. A path
+        # outside ROOT has no relative form, and `relative_to` raising here
+        # was exit 1 -- FAIL -- with the file written (#1669).
+        try:
+            shown = out.relative_to(ROOT)
+        except ValueError:
+            shown = out
+        print(f"\nwrote {shown}")
 
     if a.check:
         bad = [c["case_id"] for c, r in rows

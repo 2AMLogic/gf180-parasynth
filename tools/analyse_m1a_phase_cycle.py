@@ -38,6 +38,7 @@ import numpy as np
 from scipy.io import wavfile
 
 import diagnose_m1a_harmonic_phase as d
+import manifest as mf
 import refusal
 import run_all
 
@@ -359,9 +360,11 @@ def _read(path):
 
 
 def load_capture():
-    record = json.loads((CAPTURE / "capture.json").read_text())
-    if record.get("state") != "CAPTURED":
+    path = CAPTURE / "capture.json"
+    record = json.loads(path.read_text())
+    if not isinstance(record, dict) or record.get("state") != "CAPTURED":
         raise Refused("capture record is not CAPTURED")
+    mf.require_keys(record, "takes", f"the capture record at {path}", refused=Refused)
     takes = {}
     for name, take in record["takes"].items():
         audio = {}

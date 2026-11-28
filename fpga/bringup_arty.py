@@ -234,10 +234,21 @@ def require_port(serial: str, timeout_s: float = 30.0) -> str:
 # --------------------------------------------------------------------------
 # steps
 # --------------------------------------------------------------------------
+def run_child(command: list, *, timeout: float, cwd=None):
+    """subprocess.run for a child the bench waits on. One that has not finished
+    by its deadline has measured nothing -- whether the board configured, the
+    link answered or a note was delivered is unknown, not 'no' -- so it is
+    REFUSED (#1690): never a TimeoutExpired traceback, and never counted as a
+    note not delivered."""
+    try:
+        return subprocess.run(command, capture_output=True, text=True, timeout=timeout, cwd=cwd)
+    except subprocess.TimeoutExpired as exc:
+        raise Refused(f"{exc}; the bench did not complete, so nothing was measured") from exc
+
+
 def flash(bit: pathlib.Path, serial: str) -> None:
-    p = subprocess.run(["openFPGALoader", "-b", "arty_a7_100t",
-                        "--ftdi-serial", serial, str(bit)],
-                       capture_output=True, text=True, timeout=600)
+    p = run_child(["openFPGALoader", "-b", "arty_a7_100t",
+                   "--ftdi-serial", serial, str(bit)], timeout=600)
     out = p.stdout + p.stderr
     if p.returncode != 0:
         print(out.strip()[-500:])
@@ -254,9 +265,8 @@ def status_samples(repo: pathlib.Path, port: str, n: int = 25) -> list:
     samples = []
     for _ in range(n):
         t0 = time.time()
-        p = subprocess.run([sys.executable, "fpga/uart_host.py",
-                            "--port", port, "status"],
-                           capture_output=True, text=True, timeout=60, cwd=repo)
+        p = run_child([sys.executable, "fpga/uart_host.py",
+                       "--port", port, "status"], timeout=60, cwd=repo)
         t1 = time.time()
         m = re.search(r"STATUS frame (\d+)", p.stdout + p.stderr)
         if not m:
@@ -277,10 +287,9 @@ def play_note(repo: pathlib.Path, port: str, image: str, note: int,
     fix) -- so a retry at a fresh anchor cannot change it and would only
     bury the host's advice under ten invocations (#1075). Print the whole
     refusal line: it carries the operator's instruction."""
-    p = subprocess.run([sys.executable, "fpga/uart_host.py", "--port", port,
-                        "--image", image, "run", "--note", str(note),
-                        "--hold-frames", str(hold)],
-                       capture_output=True, text=True, timeout=180, cwd=repo)
+    p = run_child([sys.executable, "fpga/uart_host.py", "--port", port,
+                   "--image", image, "run", "--note", str(note),
+                   "--hold-frames", str(hold)], timeout=180, cwd=repo)
     out = p.stdout + p.stderr
     verdict = classify(p.returncode, out)
     if verdict == "played":
@@ -339,7 +348,11 @@ def main(argv=None) -> int:
     notes = [int(x) for x in a.notes.split(",") if x.strip()]
     print(f"playing {len(notes)} notes, {a.hold_frames / SR:.2f}s each, "
           f"--image {a.image}")
-    ok = sum(play_note(a.repo, port, a.image, n, a.hold_frames) for n in notes)
+    try:
+        ok = sum(play_note(a.repo, port, a.image, n, a.hold_frames) for n in notes)
+    except Refused as exc:
+        print(f"REFUSED -- {exc}")
+        return 2
     print(f"--- {ok}/{len(notes)} notes delivered ---")
     print("NOTE: delivery is not audibility. The DAC's XSMT must be high and "
           "FMT low (#460); nothing here can see past the FPGA pins.")

@@ -147,7 +147,7 @@ historical script is `git show b9930a4a:pnr/klt/ladder_dp/run-klt.sh`, and
 
 **The rule.** If you work around a tool rather than a bug in our design, the
 workaround is evidence and it goes upstream -- `2AMLogic/klayout-tools` for
-layout and flow, `rjwalters/loom` for agent orchestration. Record the exact
+layout and flow, `2AMLogic/loom` for agent orchestration. Record the exact
 version, the exact error, and the patch you applied. A workaround that lives
 only in a shell script is a finding nobody else can use.
 
@@ -391,11 +391,11 @@ Do not commit in the main checkout, and do not edit files another agent owns —
 your brief says which are yours. Expect to merge.
 
 <!-- BEGIN LOOM ORCHESTRATION -->
-This repository uses [Loom](https://github.com/rjwalters/loom) for AI-powered development orchestration — see the Loom repository for the full guide (roles, labels, worktrees, configuration). When installed, Loom also writes a locally-substituted copy of that guide to `.loom/CLAUDE.md`.
+This repository uses [Loom](https://github.com/2AMLogic/loom) for AI-powered development orchestration — see the Loom repository for the full guide (roles, labels, worktrees, configuration). When installed, Loom also writes a locally-substituted copy of that guide to `.loom/CLAUDE.md`.
 <!-- END LOOM ORCHESTRATION -->
 
 <!-- BEGIN LOOM ORCHESTRATION (AGENTS) -->
-This repository uses [Loom](https://github.com/rjwalters/loom) for AI-powered development orchestration (dual-runtime: Claude Code reads `CLAUDE.md`; OpenAI Codex CLI and other AGENTS.md-aware runtimes read this file). See the Loom repository for the full guide (roles, labels, worktrees, configuration). When installed, Loom also writes a locally-substituted copy of the runtime-neutral guide to `.loom/AGENTS.md`.
+This repository uses [Loom](https://github.com/2AMLogic/loom) for AI-powered development orchestration (dual-runtime: Claude Code reads `CLAUDE.md`; OpenAI Codex CLI and other AGENTS.md-aware runtimes read this file). See the Loom repository for the full guide (roles, labels, worktrees, configuration). When installed, Loom also writes a locally-substituted copy of the runtime-neutral guide to `.loom/AGENTS.md`.
 <!-- END LOOM ORCHESTRATION (AGENTS) -->
 
 <!-- BEGIN REPO-SKILLS -->

@@ -28,7 +28,9 @@ Covered (each a statement that editing it changes what the V3 suite MEANS):
 Outcomes, per the exit contract: PASS 0 (every hash held), FAIL 1 (a file's
 hash moved or a covered file is missing -- the freeze is broken, and the
 offending path is named), REFUSED 2 (the freeze manifest is missing or
-malformed, so nothing could be checked).
+malformed, or the corpus manifest a canonical entry is resolved from is
+missing, unreadable or lacks a key of that path, so nothing could be
+checked).
 
 A mutation of one frozen file is a committed control for this tool:
 `tools/test_reference_freeze.py` copies the tree, edits one byte, and requires
@@ -46,6 +48,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 import reference_suites as rs                                        # noqa: E402
+import manifest as mf                                                # noqa: E402
 
 OK, FAIL, REFUSED = 0, 1, 2
 
@@ -78,8 +81,18 @@ def _canonical_hash(obj) -> str:
 
 
 def _resolve(root: pathlib.Path, dotted: str):
-    obj = json.loads((root / CORPUS_MANIFEST).read_text())
+    """The object at `dotted` in the corpus manifest, or REFUSED: the manifest
+    missing, unparseable, not an object, or without any key of the path."""
+    path = root / CORPUS_MANIFEST
+    if not path.exists():
+        raise Refused(f"corpus manifest missing: {path}")
+    what = f"{CORPUS_MANIFEST} at {path} (key path {dotted})"
+    try:
+        obj = mf.load_json_refused(path, what)
+    except mf.Refused as exc:
+        raise Refused(str(exc)) from exc
     for part in dotted.split("."):
+        mf.require_keys(obj, part, what, refused=Refused)
         obj = obj[part]
     return obj
 
@@ -144,7 +157,11 @@ def check(root: pathlib.Path, path: pathlib.Path) -> int:
     for kind, digest, subject in expected:
         actual: str
         if kind == "canon":
-            actual = _canonical_hash(_resolve(root, subject))
+            try:
+                actual = _canonical_hash(_resolve(root, subject))
+            except Refused as why:
+                print(f"REFUSED  {why}")
+                return REFUSED
         else:
             f = root / subject
             if not f.exists():

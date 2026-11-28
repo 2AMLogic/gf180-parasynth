@@ -284,9 +284,12 @@ def _sim(d: Path, lines: list, frame0: int, total: int, defines=()) -> list:
                        capture_output=True, text=True)
     if r.returncode:
         raise Refused(f"iverilog failed: {r.stdout}{r.stderr}")
-    r = subprocess.run(["vvp", "-n", str(exe), f"+cmds={d / 'cmds.txt'}", f"+log={d / 'log.txt'}",
-                        f"+frame0={frame0}", f"+cycles={total}"], capture_output=True,
-                       text=True, timeout=3600)
+    try:
+        r = subprocess.run(["vvp", "-n", str(exe), f"+cmds={d / 'cmds.txt'}",
+                            f"+log={d / 'log.txt'}", f"+frame0={frame0}",
+                            f"+cycles={total}"], capture_output=True, text=True, timeout=3600)
+    except subprocess.TimeoutExpired as exc:
+        raise Refused(f"{exc}; the simulation did not finish, so nothing was measured") from exc
     if r.returncode or "done at cycle" not in r.stdout:
         raise Refused(f"vvp failed: {r.stdout[-400:]}{r.stderr[-400:]}")
     return [ln.split() for ln in (d / "log.txt").read_text().splitlines()]

@@ -238,19 +238,28 @@ def extract(zf: zipfile.ZipFile, archive: str, member: str, want: int | None,
     here whatever asked for the member: it is inside refaudio/cache/<pack>/, or
     the member is not written (#1602). A member the archive cannot deliver --
     a corrupt stream, a CRC that disagrees -- is one member's FAIL, not the
-    run's traceback."""
+    run's traceback.
+
+    Landing the member is the filesystem's to refuse: a directory that cannot be
+    made because a FILE already holds that name (`a` beside `a/b.wav`), a `.part`
+    that cannot be written or moved into place. Each is this member's reason,
+    naming the exception, never the run's traceback (#1684). The `.part` is
+    removed only once it has been written: under a member that is a file the
+    removal itself raises `NotADirectoryError`."""
     pack = cache / archive[:-4]
     dest = pack / member
-    if not dest.resolve().is_relative_to(pack.resolve()):
-        return f"not written: {member!r} would land outside refaudio/cache/{archive[:-4]}/"
-    dest.parent.mkdir(parents=True, exist_ok=True)
     part = dest.with_name(dest.name + ".part")
+    written = False
     try:
+        if not dest.resolve().is_relative_to(pack.resolve()):
+            return f"not written: {member!r} would land outside refaudio/cache/{archive[:-4]}/"
+        dest.parent.mkdir(parents=True, exist_ok=True)
         try:
             info = zf.getinfo(member)
         except KeyError:
             return "no such member in the archive"
         with zf.open(info) as src, part.open("wb") as out:
+            written = True
             while True:
                 chunk = src.read(1 << 20)
                 if not chunk:
@@ -265,8 +274,11 @@ def extract(zf: zipfile.ZipFile, archive: str, member: str, want: int | None,
         return None
     except (zipfile.BadZipFile, zlib.error, EOFError) as why:
         return f"cannot be read from the archive ({type(why).__name__}: {why})"
+    except OSError as why:
+        return f"not written ({type(why).__name__}): {why}"
     finally:
-        part.unlink(missing_ok=True)
+        if written:
+            part.unlink(missing_ok=True)
 
 
 def extract_from_archive(zf: zipfile.ZipFile, archive: str, members: list[str],

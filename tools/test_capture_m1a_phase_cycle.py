@@ -4,6 +4,7 @@ Each apparatus failure this repository has already met is synthesised here and
 must REFUSE: demo clicks, a dropout, digital silence, a sub-audio octave, an
 isolated oscillator whose level moves. A clean held saw must pass. These run
 without the plugin."""
+import json
 import math
 
 import numpy as np
@@ -111,3 +112,48 @@ def test_slow_psi_cycle_swell_is_not_a_click_but_clicks_on_it_are():
     y[round(4.0 * SR):round(4.0 * SR) + 12] += .15 * np.random.default_rng(2).standard_normal(12)
     with pytest.raises(c.Refused, match="transient"):
         c.check_take(y, SR, ON, "full")
+
+
+# ---- a frozen manifest that cannot be read is REFUSED, not a traceback (#1604)
+def _capture(monkeypatch, tmp_path, capsys, manifest):
+    """`main()` over a frozen manifest under a scratch FROZEN dir.
+
+    The clean-tree precondition is answered, not exercised. The manifest and
+    the reader are real; the plugin is never reached, because the key check
+    refuses before anything is rendered."""
+    frozen, out = tmp_path / "frozen", tmp_path / "out"
+    frozen.mkdir()
+    (frozen / "manifest.json").write_text(json.dumps(manifest))
+    monkeypatch.setattr(c, "FROZEN", frozen)
+    monkeypatch.setattr(c, "OUT", out)
+    monkeypatch.setattr(c, "_git", lambda *args: "")
+    code = c.main()
+    return code, capsys.readouterr().out, out
+
+
+def _committed_manifest():
+    return json.loads((c.FROZEN / "manifest.json").read_text())
+
+
+def test_the_committed_frozen_manifest_carries_the_keys_the_capture_reads():
+    # the guard below must be satisfiable against the record that ships
+    assert {"sample_rate_hz", "block_size_samples", "identity"} <= set(_committed_manifest())
+
+
+@pytest.mark.parametrize("key", ["sample_rate_hz", "block_size_samples", "identity"])
+def test_a_frozen_manifest_missing_a_key_is_refused(monkeypatch, tmp_path, capsys, key):
+    manifest = {k: v for k, v in _committed_manifest().items() if k != key}
+    code, out, refused = _capture(monkeypatch, tmp_path, capsys, manifest)
+    assert code == 2 and "REFUSED" in out and f"'{key}'" in out
+    assert json.loads((refused / "refused.json").read_text())["state"] == "REFUSED"
+
+
+def test_an_empty_frozen_manifest_is_refused_naming_every_key(monkeypatch, tmp_path, capsys):
+    # #1604's own input: `KeyError: 'sample_rate_hz'`, exit 1, before the repair
+    code, out, _ = _capture(monkeypatch, tmp_path, capsys, {})
+    assert code == 2 and all(f"'{k}'" in out for k in ("sample_rate_hz", "block_size_samples", "identity"))
+
+
+def test_a_frozen_manifest_with_a_null_identity_is_refused(monkeypatch, tmp_path, capsys):
+    code, out, _ = _capture(monkeypatch, tmp_path, capsys, {**_committed_manifest(), "identity": None})
+    assert code == 2 and "'identity'" in out

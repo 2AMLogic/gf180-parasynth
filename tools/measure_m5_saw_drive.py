@@ -89,7 +89,9 @@ def probe(engine, drive, f):
         with ol.engine_ctx(engine):
             r = mp.measure_point(engine, nt, mp.held_patch(waves=("saw",) * 3, drive=drive,
                                                            vol=SAW_VOL * f))
-        o = r["stages"]["output"]
+        o = mp.require_measured(r, "output", ("unwanted_rel_db", "unwanted_dbfs", "upper_wanted_rel_db",
+                                              "intended_dbfs"),
+                                f"measure_m5_saw_drive.probe: engine {engine}, drive {drive}, note {nt}")
         out[str(nt)] = {"unwanted_rel_db": o["unwanted_rel_db"], "unwanted_dbfs": o["unwanted_dbfs"],
                         "upper_wanted_rel_db": o["upper_wanted_rel_db"], "intended_dbfs": o["intended_dbfs"],
                         "output_rail": r["clip"]["output_rail_samples"]}

@@ -644,7 +644,7 @@ jobs:
         run: python -m pytest $FPGA_UNCOVERED_PATHS -q
       - name: collection floor -- an exclusion cannot be silent
         run: |
-          FLOOR=332
+          FLOOR=342
           st=0
           out=$(python -m pytest $FPGA_UNCOVERED_PATHS --collect-only -q 2>&1) || st=$?
           n=$(printf '%s\n' "$out" | sed -n 's/^\([0-9][0-9]*\) tests\? collected.*/\1/p' | tail -n 1)

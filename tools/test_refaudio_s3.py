@@ -201,6 +201,50 @@ def test_missing_member_is_FAIL(env, monkeypatch):
     assert s3.main([ARCH, "808 Loops From Mars/absent.wav"]) == s3.FAIL
 
 
+# --- #1684: a member that cannot be landed -------------------------------------
+#
+# `--prefix` on an unindexed pack is the reachable route: the member names come
+# from the archive's own directory, so no committed index screens them.
+
+FILE_MEMBER = "808 Loops From Mars/WAV/a"
+NESTED_MEMBER = FILE_MEMBER + "/b.wav"
+
+
+def _stacked_zip() -> bytes:
+    """A FILE member whose name is also the directory of another member."""
+    b = io.BytesIO()
+    with zipfile.ZipFile(b, "w") as z:
+        z.writestr(FILE_MEMBER, b"a")
+        z.writestr(NESTED_MEMBER, b"ab")
+    return b.getvalue()
+
+
+@pytest.mark.parametrize(("argv", "stuck", "says"), [
+    (["--prefix", ARCH, "808 Loops From Mars/WAV/"], NESTED_MEMBER, "FileExistsError"),
+    ([ARCH, NESTED_MEMBER, FILE_MEMBER], FILE_MEMBER, "IsADirectoryError"),
+], ids=["prefix-mkdir-onto-a-file", "typed-rename-onto-a-directory"])
+def test_a_member_that_cannot_land_is_its_own_fail_and_the_run_finishes(
+        env, monkeypatch, capsys, argv, stuck, says):
+    """START RED (#1684): against a3186508 both orders escaped `main()` as the
+    exception in `says`, through this route's own loop, so the tally never
+    printed."""
+    monkeypatch.setattr(s3.rl, "indexed_sizes", lambda archive: None)      # unindexed: names from the archive
+    _fake_aws(monkeypatch, _stacked_zip())
+    assert s3.main(argv) == s3.FAIL
+    lines = capsys.readouterr().out.splitlines()
+    i = lines.index(f"FAIL     {stuck}")
+    assert says in lines[i + 1], lines
+    assert lines[-1] == "1 fetched, 1 failed"
+    good = NESTED_MEMBER if stuck == FILE_MEMBER else FILE_MEMBER
+    assert [ln for ln in lines if ln.startswith("FETCHED")] == \
+        [f"FETCHED  refaudio/cache/{ARCH[:-4]}/{good}  (archive SHA-256 verified)"]
+    pack = s3.CACHE / ARCH[:-4]
+    assert {p.relative_to(pack).as_posix(): p.read_bytes()
+            for p in s3.CACHE.rglob("*") if p.is_file()} == {good: b"ab" if good == NESTED_MEMBER else b"a"}
+    assert not list(s3.CACHE.rglob("*.part"))
+    assert not (s3.ARCHIVES / ARCH).exists()
+
+
 def test_prefix_excludes_macosx_and_clean_removes(env, monkeypatch):
     _fake_aws(monkeypatch, _zip())
     assert s3.main(["--prefix", ARCH, "808 Loops From Mars/WAV/"]) == s3.FETCHED

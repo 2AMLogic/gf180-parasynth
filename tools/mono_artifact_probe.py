@@ -351,6 +351,37 @@ def measure_point(engine: str, note: int, patch: dict, *, inject: str = "") -> d
     return row
 
 
+def require_measured(row: dict, stage: str, fields, where: str) -> dict:
+    """`row["stages"][stage]` of a measure_point row that measured it, else Refused.
+
+    measure_point answers a silent note with verdict FAIL-ACTIVITY and no
+    stages, and a stage it could not split with {"refused": "<text>"}; a
+    reader that indexes either shows a KeyError -- an implementation error
+    where a stated refusal belongs (#1628, #1692). `fields` are the keys the
+    reader is about to read: each must be PRESENT, a None value is not a
+    refusal (upper_wanted_rel_db is None for a stage with no 5-20 kHz harmonic)."""
+    fields = (fields,) if isinstance(fields, str) else tuple(fields)
+    verdict = row.get("verdict")
+    if verdict != "MEASURED":
+        detail = ""
+        activity = row.get("activity")
+        if isinstance(activity, dict) and "output_level_dbfs" in activity:
+            detail += f", output {activity['output_level_dbfs']} dBFS"
+        if row.get("reason"):
+            detail += f"; reason: {row['reason']}"
+        raise Refused(f"{where}: measure_point did not measure (verdict {verdict}{detail})")
+    stages = row.get("stages")
+    got = stages.get(stage) if isinstance(stages, dict) else None
+    if not isinstance(got, dict):
+        raise Refused(f"{where}: measure_point verdict MEASURED has no '{stage}' stage")
+    if "refused" in got:
+        raise Refused(f"{where}: {stage} stage refused: {got['refused']}")
+    missing = [f for f in fields if f not in got]
+    if missing:
+        raise Refused(f"{where}: {stage} stage has no {', '.join(repr(m) for m in missing)}")
+    return got
+
+
 # ---- controls: properties x defects (verification-rules.md rule 4) -------------
 PROPERTIES = {
     "unwanted_dbfs": lambda r: r["stages"]["output"].get("unwanted_dbfs"),
@@ -532,22 +563,26 @@ def drive_sweep(notes=(72, 84, 96), drives=(0.05, 0.25, 0.5, 0.75, 1.0, 1.6),
         for d in drives:
             row = measure_point("r1", note, held_patch(waves=(wave,) * 3,
                                                        cutoff=(cutoff, cutoff), drive=d))
+            where = f"drive_sweep: note {note}, drive {d}, {wave}, cutoff {cutoff}"
+            ladder = require_measured(row, "ladder_out", ("harmonics_rel_h1_db",), where)
+            osc = require_measured(row, "oscillator", ("harmonics_rel_h1_db",), where)
+            o = require_measured(row, "output", ("unwanted_dbfs", "unwanted_rel_db", "intended_dbfs",
+                                                 "upper_wanted_rel_db"), where)
             f0 = row["f0_hz"]
             lin = {f"h{k}": round(-20 * math.log10(1 + (k * f0 / cutoff) ** 2) * 2
                                   + 20 * math.log10(1 + (f0 / cutoff) ** 2) * 2, 3)
                    for k in range(2, 13) if k * f0 < SR / 2}
             ideal = {f"h{k}": -20 * math.log10(k) for k in range(2, 13)}
             def deficit(stage):
-                h = row["stages"][stage]["harmonics_rel_h1_db"]
-                return {k: round(v - ideal[k], 3) for k, v in h.items() if k in lin}
+                return {k: round(v - ideal[k], 3) for k, v in stage["harmonics_rel_h1_db"].items() if k in lin}
             out.append({"note": note, "drive": d, "f0_hz": f0,
-                        "ladder_deficit_db": deficit("ladder_out"),
-                        "oscillator_deficit_db": deficit("oscillator"),
+                        "ladder_deficit_db": deficit(ladder),
+                        "oscillator_deficit_db": deficit(osc),
                         "linear_4pole_db": lin,
-                        "output_unwanted_dbfs": row["stages"]["output"]["unwanted_dbfs"],
-                        "output_unwanted_rel_db": row["stages"]["output"]["unwanted_rel_db"],
-                        "output_intended_dbfs": row["stages"]["output"]["intended_dbfs"],
-                        "upper_wanted_rel_db": row["stages"]["output"]["upper_wanted_rel_db"]})
+                        "output_unwanted_dbfs": o["unwanted_dbfs"],
+                        "output_unwanted_rel_db": o["unwanted_rel_db"],
+                        "output_intended_dbfs": o["intended_dbfs"],
+                        "upper_wanted_rel_db": o["upper_wanted_rel_db"]})
             print(f"n{note} drive {d:4.2f}: ladder deficit h2..h6 "
                   f"{[out[-1]['ladder_deficit_db'].get(f'h{k}') for k in range(2, 7)]} "
                   f"(linear {[lin.get(f'h{k}') for k in range(2, 7)]}); unwanted "
