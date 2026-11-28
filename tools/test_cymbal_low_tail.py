@@ -16,7 +16,10 @@ The module under test adds a QUALIFIED 1-2.5 kHz decay to the cymbal work
     is what the docstring claims (#101 was window leakage);
   * the real corpus's record lengths, which are what force two windows;
   * every injected defect turns at least one named property red, and the one
-    transformation asserted blind stays blind.
+    transformation asserted blind stays blind;
+  * one of them, `FORWARD_INTEGRAL`, does it by ANSWERING a wrong time: it
+    refused for its first two months and the refusal was credited as a catch,
+    so `edt-known` had no live control (#1869).
 """
 import json
 import math
@@ -464,13 +467,132 @@ def test_the_downward_property_is_seen_by_a_defect_and_is_not_decoration():
     assert saw, "no injected defect moves rho-inverts"
 
 
+def test_the_crossing_time_property_is_moved_by_a_wrong_answered_time_not_only_by_a_refusal():
+    """The twin of the test above, for `edt-known` -- and the hole #1869 is
+    about. A property no defect moves is coverage in costume; one that a defect
+    moves only by making the depth REFUSE has still never had its 5 %
+    comparison against the planted time exercised by a control. Both halves are
+    asserted: some defect reddens `edt-known`, and it does so with a NUMBER."""
+    saw = []
+    for d in lt.DEFECTS:
+        try:
+            got = lt.properties(defect=d)
+        except lt.Refused:
+            continue
+        if got["edt-known"][0] is False:
+            saw.append((d, got["edt-known"][1]))
+    assert saw, "no injected defect moves edt-known"
+    assert any(v is not None for _, v in saw), ("edt-known went red only by refusing", saw)
+
+
+# --------------------------------------------------------------------------
+# the forward integral: it must ANSWER WRONG, not refuse (#1869)
+# --------------------------------------------------------------------------
+# `FORWARD_INTEGRAL` refused from the day it was written -- `sch[0]` is the
+# first sample, not the band's total -- and `check()` credited the refusal as a
+# catch. A defect named here may not pass through a refusal in the matrix test
+# below: for it, refusing IS the failure being controlled.
+MUST_ANSWER = ("FORWARD_INTEGRAL",)
+
+
+def _arrival(tau, depth):
+    """The known-WRONG answer for `FORWARD_INTEGRAL`, derived here: the time at
+    which a fraction 10^(depth/10) of an exponential's energy has ARRIVED.
+
+    Power exp(-2t/tau) -> cumulative arrival 1 - exp(-2t/tau); solve for t. The
+    Schroeder time (`_planted`, above) asks when that fraction REMAINS. At
+    -10 dB the arrival time is 1/21.9 of the Schroeder time; at -5 dB, 1/3.0.
+    """
+    return 1e3 * (-tau / 2.0) * math.log(1.0 - 10 ** (depth / 10.0))
+
+
+def test_forward_integral_answers_a_wrong_time_and_edt_known_sees_it():
+    """The repair's own claim, on the record `edt-known` is judged on. There is
+    deliberately no try/except: a Refused out of `properties()` fails this
+    test, because a refusal credited as a catch is the defect being repaired."""
+    passed, ratio = lt.properties(defect="FORWARD_INTEGRAL")["edt-known"]
+    assert passed is False
+    assert ratio is not None, "edt-known went red only because the depth was refused"
+    ok, lines = lt.check()
+    assert ok, "\n".join(lines)
+    names = lt.DEFECTS + lt.BLIND_BY_CONSTRUCTION
+    rows = [ln for ln in lines if ln.strip().startswith(names)]
+    assert rows and not any("REFUSED" in r for r in rows), "\n".join(lines)
+
+
+def test_the_forward_integrals_answer_is_the_energy_arrival_time():
+    """What the defect computes, pinned against an independent one-liner
+    rather than against the module's own arithmetic: the first sample at which
+    the band's CUMULATIVE energy reaches 10^(d/10) of its total -- the same
+    level crossing `schroeder_times` reads, on an integral running the other
+    way. Same band signal, so the same sample to within a sample or two (the
+    tool subtracts a floor some 1e-7 of the peak; this does not)."""
+    y, sr = lt.synth(tau_l=0.35, a_h=0.0, a_m=0.0)
+    y = y[: lt.rc.required_lead_samples(sr) + int(lt.TRIM_S * sr)]     # what measure() analyses
+    xb = cb._bp(y, sr, *lt.BANDS[lt.REF_BAND])
+    frac = np.cumsum(xb * xb) / float(np.sum(xb * xb))
+    got = lt.measure(y, sr, defect="FORWARD_INTEGRAL")["bands"][lt.REF_BAND]["times_ms"]
+    for d in (-5.0, -10.0):
+        assert got[f"{d:.0f}"] is not None, got
+        want = 1e3 * float(np.argmax(frac >= 10 ** (d / 10.0))) / sr
+        assert abs(got[f"{d:.0f}"] - want) < 0.05, (d, got[f"{d:.0f}"], want)
+
+
+@pytest.mark.parametrize("tau", (0.15, 0.25, 0.45))
+@pytest.mark.parametrize("seed", (123, 2024))
+def test_the_forward_integral_reads_the_arrival_time_on_records_not_used_to_select_it(tau, seed):
+    """The claim confirmed where it was not selected. The reading was chosen on
+    ONE record -- tau 0.35, seed 7, the 2.0 s window, the Ln band -- so this
+    runs other taus, other seeds, a 2.5 s window and all three bands.
+
+    Judged as a ratio to the SAME record's clean reading, which is what makes
+    it a fair test: that ratio is independent of tau, of the seed and of the
+    window, and it must sit near the analytic arrival/Schroeder ratio (within a
+    factor of two, where the clean instrument sits at 1.0 -- 21.9x and 3.0x
+    above it at the two depths)."""
+    y, sr = lt.synth(tau_l=tau, a_h=0.0, a_m=0.0, seed=seed)
+    clean = lt.measure(y, sr, trim_s=2.5)["bands"]
+    fwd = lt.measure(y, sr, trim_s=2.5, defect="FORWARD_INTEGRAL")["bands"]
+    ref = clean[lt.REF_BAND]["times_ms"]
+    # The record is a fair one: the clean instrument reads the planted decay.
+    assert ref["-10"] is not None, clean[lt.REF_BAND]
+    assert ref["-10"] == pytest.approx(lt.t_edt(tau, -10.0), rel=0.10)
+    for d in (-5.0, -10.0):
+        k = f"{d:.0f}"
+        assert ref[k] is not None and fwd[lt.REF_BAND]["times_ms"][k] is not None
+        r = fwd[lt.REF_BAND]["times_ms"][k] / ref[k]
+        analytic = _arrival(tau, d) / lt.t_edt(tau, d)
+        assert analytic / 2.0 < r < 2.0 * analytic, (tau, seed, k, r, analytic)
+        # ... and every band ANSWERS: the leading-zero lead is not a refusal.
+        for band in lt.BANDS:
+            assert fwd[band]["times_ms"][k] is not None, (band, k, fwd[band]["refused"][k])
+
+
+@pytest.mark.parametrize("defect", (None, "FORWARD_INTEGRAL"))
+def test_a_band_with_no_energy_above_its_floor_refuses_whichever_way_the_integral_runs(defect):
+    """The no-energy guard must move with the normaliser (#1869). A flat band's
+    floor IS its whole power, so there is nothing above it to integrate from
+    either end; an exactly-zero band is caught one guard earlier. The paired
+    negative to the test above: the repair makes the defect answer on a record
+    that holds energy, not answer on one that holds none."""
+    n = lt.rc.required_lead_samples(lt.SR) + 2 * lt.SR
+    with pytest.raises(lt.Refused, match="band holds no energy above its floor"):
+        lt.schroeder_times(np.full(n, 0.5), lt.SR, defect=defect)
+    with pytest.raises(lt.Refused, match="band is silent"):
+        lt.schroeder_times(np.zeros(n), lt.SR, defect=defect)
+
+
 @pytest.mark.parametrize("defect", lt.DEFECTS)
 def test_each_injected_defect_turns_at_least_one_property_red(defect):
     """A control that cannot fail is worse than no control (#376). Each defect
-    must move something, and the matrix in `--check` records WHICH."""
+    must move something, and the matrix in `--check` records WHICH.
+
+    A defect in `MUST_ANSWER` may not pass through the refusal here: for it,
+    refusing is the failure being controlled, not a catch (#1869)."""
     try:
         got = lt.properties(defect=defect)
-    except lt.Refused:
+    except lt.Refused as e:
+        assert defect not in MUST_ANSWER, f"{defect} refused rather than answered: {e}"
         return                      # a defect that makes the tool refuse is caught
     red = [p for p in lt.PROPERTIES if got[p][0] is False]
     assert red, f"{defect} turned nothing red"
