@@ -161,6 +161,24 @@ def require_inventory(groups) -> None:
         raise Refused("\n".join([*lines, FETCH_HINT]))
 
 
+def check_json_destination(name: str) -> None:
+    """Make `--json`'s parent directory, or REFUSE the path.
+
+    Called before anything is measured, so a path that names a directory, or
+    whose parent cannot be made, is refused in seconds. It used to raise at the
+    write instead, after every take had been measured: exit 1 and a traceback,
+    with the whole report lost (#2097). A parent that is there but not writable
+    passes here -- `mkdir(exist_ok=True)` cannot see permission -- and is
+    REFUSED at the write."""
+    p = pathlib.Path(name)
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as why:
+        raise Refused(f"--json {name}: its parent cannot be made ({why})") from why
+    if p.is_dir():
+        raise Refused(f"--json {name} is a directory, not a file to write")
+
+
 def run_voice(folder: str, stem: str, accent: str) -> list[dict]:
     rows = []
     for p in files_for(folder, stem, accent):
@@ -305,6 +323,8 @@ def main(argv: list[str]) -> int:
 
     groups = VOICES + (CONGAS if a.congas else [])
     try:
+        if a.json:
+            check_json_destination(a.json)                 # before anything is measured
         require_inventory(groups)
     except Refused as why:
         print(f"REFUSED: {why}")
@@ -451,7 +471,12 @@ def main(argv: list[str]) -> int:
                   f"{d['max_xcorr']:.4f}  ({d['pair'][0]} vs {d['pair'][1]})")
 
     if a.json:
-        pathlib.Path(a.json).write_text(json.dumps(out, indent=1))
+        try:
+            pathlib.Path(a.json).write_text(json.dumps(out, indent=1))
+        except OSError as why:
+            print(f"REFUSED: the report above was measured, but --json {a.json} could not be "
+                  f"written ({why})")
+            return 2
         print(f"\nwrote {a.json}")
     return 0
 

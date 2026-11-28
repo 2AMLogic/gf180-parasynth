@@ -255,11 +255,31 @@ def run() -> dict:
             "congas": conga_verdict()}
 
 
+def check_json_destination(name) -> None:
+    """Make `--json`'s parent directory, or REFUSE the path.
+
+    Called before anything is checked, so a path that names a directory, or
+    whose parent cannot be made, is refused in seconds. It used to raise at the
+    write instead, after the whole check: exit 1 and a traceback, which hid
+    the check's own verdict along with the record (#2097). A parent that is
+    there but not writable passes here -- `mkdir(exist_ok=True)` cannot see
+    permission -- and is REFUSED at the write."""
+    p = pathlib.Path(name)
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as why:
+        raise Refused(f"--json {name}: its parent cannot be made ({why})") from why
+    if p.is_dir():
+        raise Refused(f"--json {name} is a directory, not a file to write")
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--json", type=pathlib.Path)
     a = ap.parse_args(argv)
     try:
+        if a.json:
+            check_json_destination(a.json)                 # before anything is checked
         r = run()
     except Refused as e:
         print(f"REFUSED: {e}")
@@ -279,7 +299,12 @@ def main(argv=None) -> int:
     print(f"  bounds: |median| <= {CONGA_MEDIAN_MAX}, worst <= {CONGA_WORST_MAX}"
           f"  -> {r['congas']['verdict']}")
     if a.json:
-        a.json.write_text(json.dumps(r, indent=1), encoding="utf-8")
+        try:
+            a.json.write_text(json.dumps(r, indent=1), encoding="utf-8")
+        except OSError as why:
+            print(f"REFUSED: the verdict above was checked, but --json {a.json} could not be "
+                  f"written ({why})")
+            return 2
         print(f"\nwrote {a.json}")
     return 0 if not r["prose_disagreements"] and r["congas"]["verdict"] == "PASS" else 1
 

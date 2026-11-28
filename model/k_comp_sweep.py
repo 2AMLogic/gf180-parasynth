@@ -16,13 +16,40 @@ that at a high cutoff they end before the oscillation reaches its limit cycle.
     .venv/bin/python model/k_comp_sweep.py            # ~3 min; the table DR 0006 quotes
     .venv/bin/python model/k_comp_sweep.py --quick    # fewer cutoffs, coarser bisection
 """
-import argparse, json, math, os, sys, time
+import argparse, json, math, os, pathlib, sys, time
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "audition"))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+_REFUSAL_TOOLS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
 import numpy as np
 import dsp, fixed
 import voice_fx as vf
 from dsp import SR
+import refusal
+
+
+class Refused(refusal.Refused, RuntimeError):
+    """A precondition is not met; nothing was attempted."""
+
+
+def check_json_destination(name: str) -> None:
+    """Make `--json`'s parent directory, or REFUSE the path.
+
+    Called before the first cutoff is bisected, so a path that names a
+    directory, or whose parent cannot be made, is refused in seconds. It used
+    to raise at the write instead, after the whole sweep (minutes): exit 1 and
+    a traceback, with every row lost (#2097). A parent that is there but not
+    writable passes here -- `mkdir(exist_ok=True)` cannot see permission -- and
+    is REFUSED at the write."""
+    p = pathlib.Path(name)
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as why:
+        raise Refused(f"--json {name}: its parent cannot be made ({why})") from why
+    if p.is_dir():
+        raise Refused(f"--json {name} is a directory, not a file to write")
+
 
 CUTS = [30, 50, 100, 200, 300, 400, 600, 800, 1000, 1200, 1600, 2000, 2500, 3000,
         4000, 5000, 6000, 8000, 10000, 12000, 15000, 18000, 21600]
@@ -122,6 +149,12 @@ def main(argv=None):
     ap.add_argument("--json", type=str, default=None, help="write the rows here")
     ap.add_argument("-v", action="store_true")
     a = ap.parse_args(argv)
+    if a.json:
+        try:
+            check_json_destination(a.json)
+        except Refused as why:
+            print(f"REFUSED: {why}", file=sys.stderr)
+            return 2
     cuts = QUICK if a.quick else CUTS
     iters = 10 if a.quick else 14
     rows = []
@@ -156,8 +189,13 @@ def main(argv=None):
     print("  'interp only' is the ROM against its own generator (linear interpolation error alone);")
     print("  'worst' adds the measured-vs-linearised gap, which is the truncation in the loop.")
     if a.json:
-        with open(a.json, "w") as fh:
-            json.dump(rows, fh, indent=1)
+        try:
+            with open(a.json, "w") as fh:
+                json.dump(rows, fh, indent=1)
+        except OSError as why:
+            print(f"REFUSED: the table above was swept, but --json {a.json} could not be "
+                  f"written ({why})", file=sys.stderr)
+            return 2
     return 0
 
 

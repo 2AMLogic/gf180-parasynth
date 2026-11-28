@@ -301,6 +301,24 @@ def run(amap: dict = None) -> dict:
     }
 
 
+def check_json_destination(name: str) -> None:
+    """Make `--json`'s parent directory, or REFUSE the path.
+
+    Called before anything is fitted, so a path that names a directory, or
+    whose parent cannot be made, is refused in seconds. It used to raise at the
+    write instead, after the fit and every hold-out: exit 1 and a traceback,
+    with the record lost (#2097). A parent that is there but not writable
+    passes here -- `mkdir(exist_ok=True)` cannot see permission -- and is
+    REFUSED at the write."""
+    p = pathlib.Path(name)
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as why:
+        raise Refused(f"--json {name}: its parent cannot be made ({why})") from why
+    if p.is_dir():
+        raise Refused(f"--json {name} is a directory, not a file to write")
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--json", default=None)
@@ -315,6 +333,8 @@ def main(argv=None) -> int:
             return 2
         amap = dict(zip("ABC", v))
     try:
+        if a.json:
+            check_json_destination(a.json)                 # before anything is fitted
         r = run(amap)
     except Refused as e:
         print(f"REFUSED: {e}", file=sys.stderr)
@@ -347,7 +367,12 @@ def main(argv=None) -> int:
               f"   bias {h['bias']:+.4f}  rms {h['rms']:.4f}  worst {h['max_abs']:.4f}"
               + (f"  median rel {100*h['median_rel']:+.1f} %" if h["median_rel"] is not None else ""))
     if a.json:
-        pathlib.Path(a.json).write_text(json.dumps(r, indent=1), encoding="utf-8")
+        try:
+            pathlib.Path(a.json).write_text(json.dumps(r, indent=1), encoding="utf-8")
+        except OSError as why:
+            print(f"REFUSED: the report above was fitted, but --json {a.json} could not be "
+                  f"written ({why})", file=sys.stderr)
+            return 2
         print(f"\nwrote {a.json}")
     return 0
 
