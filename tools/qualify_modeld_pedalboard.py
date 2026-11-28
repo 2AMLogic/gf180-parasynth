@@ -31,7 +31,11 @@ into an isolated venv, and on this dispatch worker the refusal is now `Moog Mode
 D is not installed at ...` rather than `no pedalboard on this machine`. **The
 remaining blocker is the licensed plugin binary alone.** The third refusal --
 a bundle that exists but will not load -- used to escape as a TRACEBACK; see
-docs/pedalboard-rig.md, "A bundle that exists is not a plugin".
+docs/pedalboard-rig.md, "A bundle that exists is not a plugin". A refusal of a
+different kind, found 2026-11-28 (#1919): a rig that QUALIFIES and then renders
+a clip that is not finite. `write_clip` refuses to freeze it, and that refusal
+-- raised after the measurement, not before it -- escaped the same way, because
+the write sat outside the `try` at the top of `main`.
 
 WHAT A NON-ZERO EXIT MEANS FOR THE REST OF THE WORK
 ---------------------------------------------------
@@ -195,13 +199,19 @@ def main(argv=None) -> int:
         print(f"  {len(y)} frames  peak {float(np.abs(y).max()):.6f}  "
               f"note {dev.note}  block {dev.block}  sr {dev.sr}")
         if a.wav:
-            rp.write_clip(pathlib.Path(a.wav), y, dev.sr)
-            print(f"  wrote {a.wav}")
-        print("\nNEXT: record the verdict in tools/refprofile.py "
-              "RIG_VERDICTS['modeld-pedalboard'] (qualified=True, with this run's "
-              "environment tuple), fill in the readback column of "
-              "ModelDPedalboardRig.PINS from `pinned_readback` above, update "
-              "docs/pedalboard-rig.md, and only then extend to the 8 Mono anchors.")
+            try:
+                rp.write_clip(pathlib.Path(a.wav), y, dev.sr)
+                print(f"  wrote {a.wav}")
+            except rp.Refused as why:
+                print(f"REFUSED  {why}")
+                rec["outcome"], rec["why"] = "REFUSED", str(why)
+                code = REFUSED
+        if code == OK:
+            print("\nNEXT: record the verdict in tools/refprofile.py "
+                  "RIG_VERDICTS['modeld-pedalboard'] (qualified=True, with this run's "
+                  "environment tuple), fill in the readback column of "
+                  "ModelDPedalboardRig.PINS from `pinned_readback` above, update "
+                  "docs/pedalboard-rig.md, and only then extend to the 8 Mono anchors.")
     elif a.wav:
         print("\nNOT writing --wav: the rig did not qualify, so its audio is not "
               "evidence.")
