@@ -20,8 +20,8 @@ was applied to the shorter take as though it were the whole one. The numbers
 came back looking exactly like data.
 
 Every `..._refuses...` test below was written first and watched fail against
-the unguarded readers; what they returned instead is quoted under RED FIRST.
-The `..._still_...` tests were green there as well, on purpose: the committed
+the unguarded readers; what they returned instead is under RED FIRST. The
+`..._still_...` tests were green there as well, on purpose: the committed
 audio, a file that ends exactly where its last window ends, and the file cut
 AFTER that. The last is a guard's blind spot, pinned so that closing it
 cannot happen unnoticed (`docs/verification-rules.md`, rule 8): an M1A
@@ -33,11 +33,41 @@ What no guard here can see, stated rather than caught: a record edited to
 agree with the cut (`sha256` and the length field both rewritten), and a file
 cut and padded back to length. Each checks the WAV against its record, not the
 record against the render; git history is the only binding on the record.
+
+RED FIRST -- 23 failed, 11 passed, on origin/main @ 8eb04e5b, every cut with
+its record's hash rewritten to match the file. What the unguarded readers
+returned:
+
+  manifest.load_render, raw.wav of 2400 samples
+      cut to 2376 / 1200, padded to 2880, truncated on disk to 1400
+          LOADED 2376 samples; the record says n_samples=2400      (and so on)
+      n_samples deleted / null / "2400" / 2400.0 / true
+          LOADED 2400 samples; the record says n_samples='<absent>' (and so on)
+
+  measure_osc_drift_reference, control-osc1_open.wav (359,956 frames)
+      at 75 %, one frame short of its last window, and at 3.125 s
+         m1a/osc1_open/n0-midi36   REFUSED   TOO_FEW_PERIODS: 12 clean periods < 24
+         m1a/osc1_open/n1-midi43   STABLE    rms  0.0108 c  p2p  0.0473 c ...
+         m1a/osc1_open/n2-midi36   REFUSED   TOO_FEW_PERIODS: 0.0 periods < 24
+      the first two lines are the committed ones; the third is the committed
+      refusal at 75 % and "0.0 periods" once the cut has taken the window
+  measure_osc_drift_reference, m5a-miniv3-raw.wav at 80 %, and intact with
+  its record's `samples` deleted / null / a string / a float
+         m5a/seg0-saw/n0-midi84    STABLE    rms  0.0047 c  p2p  0.0142 c ...
+      four such lines: the committed numbers, on 80 % of the audio
+
+  envelope_history_337, saw-isolated84-0.wav at 5 % and
+  saw-repeat84_gap5-0.wav cut 960 frames short
+      saw   isolated84       resid   -120.0 dB  attack5ms   7.33  attack1ms   7.40
+      saw   repeat84_gap5    resid   -120.0 dB  attack5ms   3.56  attack1ms   1.94
+      both the committed rows; the same render at 45 % returned
+      REFUSED no measurable held level -- a refusal that blames the instrument
 """
 from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 import sys
 import wave
@@ -294,14 +324,18 @@ def _by(reports, prefix):
 
 
 def _window_lines(reports, prefix) -> str:
-    """Each window's outcome as `main()` prints it."""
+    """The window lines `main()` prints for these reports, in its own format."""
     lines = []
     for r in _by(reports, prefix):
+        head = f"   {r['label']:<40} {r['verdict']:<9}"
         if r["verdict"] == "REFUSED":
-            lines.append(f"{r['label']:<34} REFUSED {r['refusal']}: {r.get('refusal_detail', '')}")
+            lines.append(f"{head} {r['refusal']}: {r.get('refusal_detail', '')[:70]}")
         else:
-            lines.append(f"{r['label']:<34} {r['verdict']:<9} rms {r['drift_rms_cents']:7.4f} c  "
-                         f"p2p {r['drift_p2p_cents']:7.4f} c  f0 {r['f0_offset_cents']:+7.4f} c")
+            lines.append(head + (f" rms {r['drift_rms_cents']:7.4f} c  "
+                                 f"p2p {r['drift_p2p_cents']:7.4f} c  "
+                                 f"floor {r['floor_cents']:7.4f} c  "
+                                 f"f0 {r['f0_offset_cents']:+7.4f} c  "
+                                 f"ripple {r['env_ripple_db']:5.2f} dB"))
     return "\n".join(lines)
 
 
@@ -364,7 +398,7 @@ def test_the_console_prints_a_refusal_where_a_cut_clip_printed_numbers(scorecard
     mod.main([])
     printed = [line for line in capsys.readouterr().out.splitlines() if line.startswith("   m5a/")]
     assert len(printed) == 4, "\n".join(printed)
-    assert all("REFUSED CLIP_LENGTH" in line for line in printed), "\n".join(printed)
+    assert all(re.search(r"REFUSED\s+CLIP_LENGTH: ", line) for line in printed), "\n".join(printed)
     assert all(f"{kept} frames" in line and f"{had} samples" in line for line in printed), \
         "\n".join(printed)
 
