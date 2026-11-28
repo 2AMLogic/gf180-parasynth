@@ -26,6 +26,9 @@ these prints "NO VERDICT: <reason>" and exits 3, distinct from a verdict:
 
   * missing input (dump, manifest, drc.rpt, names file, hash record)
   * hash of any manifest-listed input mismatched (incl. the dump itself)
+  * manifest that does not list every member derive() reads (the dump, the
+    names file, the DRC digest record): the hash check covers what a
+    manifest LISTS, so a member it never named is not bound by it
   * drc.rpt identity drift: grep -n DPREG of drc.rpt != drc_dpreg_names.txt
     (the bytes recorded in drc_rpt.sha256 are NOT byte-reproducible --
     report_drc embeds a run timestamp -- so the DPREG-4 body of the local
@@ -77,6 +80,13 @@ MANDATORY_PROPS = ("SITE", "AREG", "BREG", "CREG", "DREG",
                    "MREG", "PREG", "OPMODEREG", "USE_DPORT")
 OPMODE_BITS = frozenset(range(7))
 
+# every evidence member derive() reads, and nothing else: the analyser reads
+# neither routed_dcp.sha256 nor vivado_extract.log, and the committed
+# vivado-2025.1 manifest carries no routed_dcp.sha256. The publisher checks
+# the checkpoint digest for its own reasons (publish_arty.DSP_MANIFEST_PINNED).
+REQUIRED_MEMBERS = ("dsp_cells_dump.txt", "drc_dpreg_names.txt",
+                    "drc_rpt.sha256")
+
 
 class Refused(refusal.Refused, Exception):
     """The apparatus is not in a state to answer. NO VERDICT, not a pass."""
@@ -87,11 +97,16 @@ def sha256(path):
 
 
 def verify_manifest(evidence):
-    """Every file the evidence manifest lists must exist and hash-match."""
+    """Every file the evidence manifest lists must exist and hash-match.
+
+    Returns the names it bound. This is a check of what the manifest LISTS
+    only; that it lists everything a consumer reads is that consumer's own
+    precondition (derive: verify_required_members)."""
     man = evidence / "MANIFEST.sha256"
     if not man.exists():
         raise Refused(f"missing evidence manifest: {man.name}")
     checked = 0
+    pinned = set()
     for line in man.read_text().splitlines():
         if not line.strip():
             continue
@@ -103,8 +118,22 @@ def verify_manifest(evidence):
         if sha256(p) != h:
             raise Refused(f"hash mismatch for {name}: recorded {h}")
         checked += 1
+        pinned.add(name)
     if checked == 0:
         raise Refused("evidence manifest lists no files")
+    return pinned
+
+
+def verify_required_members(pinned):
+    """The manifest must bind every member derive() reads.
+
+    verify_manifest() checks what a manifest LISTS. One that named only
+    routed_dcp.sha256 left the dump unhashed and the standalone CLI still
+    dismissed all 13 cells (#1589); the publisher was never exposed (it has
+    its own DSP_MANIFEST_PINNED), the CLI was."""
+    missing = [n for n in REQUIRED_MEMBERS if n not in pinned]
+    if missing:
+        raise Refused(f"evidence manifest does not pin {missing}")
 
 
 def verify_drc_identity(evidence, drc):
@@ -353,7 +382,7 @@ def derive(evidence=None, drc=None):
     evidence = evidence or EVIDENCE
     dump = evidence / DUMP.name
     drc = drc or evidence.parent / DRC_RPT.name
-    verify_manifest(evidence)
+    verify_required_members(verify_manifest(evidence))
     verify_drc_identity(evidence, drc)
     if not dump.exists():
         raise Refused(f"missing extraction dump: {dump}")
