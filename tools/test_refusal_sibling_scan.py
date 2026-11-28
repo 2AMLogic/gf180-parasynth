@@ -1982,6 +1982,81 @@ def main(argv=None):
     return apply(helper, "y")           # ...and this one passes helper as a VALUE
 '''
 
+PATH_PARAM_SHADOWS_DEF = '''
+def helper(p):
+    return mod_a.load(p)              # never called: run_cb's `helper` is its PARAMETER
+
+def run_cb(helper):
+    try:
+        return helper("x")
+    except refusal.Refused:
+        return 2
+
+def main(argv=None):
+    return run_cb(lambda x: 0)
+'''
+
+PATH_PARAM_SHADOWS_TABLE = '''
+def cmd_measure():
+    return mod_a.load("x")            # never reached: run_cb's COMMANDS is its PARAMETER
+
+COMMANDS = {"a": cmd_measure}
+
+def run_cb(COMMANDS):
+    try:
+        return COMMANDS["a"]()
+    except refusal.Refused:
+        return 2
+
+def main(argv=None):
+    return run_cb({"a": lambda: 0})
+'''
+
+PATH_COMPREHENSION_TARGET_IS_NOT_A_LOCAL = '''
+def helper(p):
+    return mod_a.load(p)
+
+def apply(fn, p):
+    return fn(p)
+
+def main(argv=None):
+    _ = [helper for helper in ()]     # the target is the comprehension's own
+    try:
+        helper("x")
+    except refusal.Refused:
+        pass
+    return apply(helper, "y")         # a value read of the def: an unseen path
+'''
+
+PATH_COMPREHENSION_TARGET_ONLY = '''
+def helper(p):
+    return mod_a.load(p)
+
+def main(argv=None):
+    _ = [helper for helper in ()]     # the target is the comprehension's own
+    try:
+        return helper("x")            # still `def helper`: guarded by this try
+    except refusal.Refused:
+        return 2
+'''
+
+PATH_EXCEPT_AS_IS_A_LOCAL = '''
+def verdict(p):
+    return mod_a.load(p)
+
+def check():
+    try:
+        return 0
+    except ValueError as verdict:     # binds `verdict` in check() only
+        return str(verdict)
+
+def main(argv=None):
+    try:
+        return verdict("y")
+    except refusal.Refused:
+        return 2
+'''
+
 PATH_LOCAL_VARIABLE_NAMED_LIKE_A_FUNCTION = '''
 def site(p):
     return mod_a.load(p)              # the site, below the def that shares a name
@@ -2500,6 +2575,46 @@ def test_an_unresolvable_caller_beside_a_guarded_one_is_an_unguarded_path(tmp_pa
         got, _ = _path_scan(tmp_path, body, PATH_ENTER_MAIN)
         s = _one(got, "helper", "mod_a.load")
         assert s["classification"] == "candidate-escape", (body, s)
+
+
+def test_a_parameter_named_like_a_def_stops_the_name_lookup(tmp_path):
+    """#1688 review: `run_cb(helper)` calls its PARAMETER, so the module-level
+    `def helper` is unreached. A lookup that ignores non-def locals fell
+    through to the def and read it covered(cli-base) via run_cb's try."""
+    got, _ = _path_scan(tmp_path, PATH_PARAM_SHADOWS_DEF, PATH_ENTER_MAIN)
+    s = _one(got, "helper", "mod_a.load")
+    assert s["classification"] == "candidate-escape", s
+
+
+def test_a_parameter_named_like_a_sealed_table_does_not_follow_the_table(tmp_path):
+    """Same defect on a dispatch table: `COMMANDS` inside run_cb is the
+    parameter, so `cmd_measure` is never reached through it."""
+    got, _ = _path_scan(tmp_path, PATH_PARAM_SHADOWS_TABLE, PATH_ENTER_MAIN)
+    s = _one(got, "cmd_measure", "mod_a.load")
+    assert s["classification"] == "candidate-escape", s
+
+
+def test_a_comprehension_target_is_not_a_local_of_the_enclosing_def(tmp_path):
+    """Python 3 scopes a comprehension: `[helper for helper in ()]` binds
+    nothing in main(), so `apply(helper, "y")` IS a value read of the def and
+    its unseen path withholds the credit its guarded call would give."""
+    got, _ = _path_scan(tmp_path, PATH_COMPREHENSION_TARGET_IS_NOT_A_LOCAL, PATH_ENTER_MAIN)
+    s = _one(got, "helper", "mod_a.load")
+    assert s["classification"] == "candidate-escape", s
+    # and with no value read, the guarded call still reaches the def: a
+    # target leaked into main()'s locals would resolve it to nothing
+    got, _ = _path_scan(tmp_path, PATH_COMPREHENSION_TARGET_ONLY, PATH_ENTER_MAIN)
+    s = _one(got, "helper", "mod_a.load")
+    assert s["classification"].startswith("covered(cli"), s
+
+
+def test_an_except_as_name_is_a_local_of_its_def_only(tmp_path):
+    """`except ValueError as verdict` in a sibling check() binds `verdict`
+    THERE; it is no read of `def verdict`, whose guarded call stays covered.
+    Red when `except ... as` is not collected as a binding."""
+    got, _ = _path_scan(tmp_path, PATH_EXCEPT_AS_IS_A_LOCAL, PATH_ENTER_MAIN)
+    s = _one(got, "verdict", "mod_a.load")
+    assert s["classification"].startswith("covered(cli"), s
 
 
 def test_a_function_the_entry_never_reaches_is_credited_nothing(tmp_path):

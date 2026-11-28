@@ -107,10 +107,11 @@ is decided by tracing the caller with a known-answer input, as #1160 and
     the code (within one module; see the cross-module caveat below): it follows bare-name calls resolved by lexical scope and
     sealed dispatch tables, nothing else. Not followed, so never credited:
     a method reached through an instance, a call written in a lambda, a
-    call from another module, `getattr`. Where such a call reaches a def the
-    graph DOES reach by another path, it counts as an unguarded path to it
-    (credit is withheld); a cross-module caller of a credited def is NOT
-    seen, so the credit is per module. `try*` grants nothing. A function whose name is read as a
+    call from another module, `getattr`. A lambda or method frame the entry
+    cannot reach that CALLS a def the graph reaches by another path counts as
+    an unguarded path to it (credit is withheld); `getattr(...)("y")` and a
+    cross-module caller make no edge at all, so they lose credit only for a
+    callee with no resolvable in-edge -- the credit is per module. `try*` grants nothing. A function whose name is read as a
     VALUE anywhere in the module (`apply(helper, x)`, `pool.map(worker, ..)`)
     has a path no call site shows, so it is credited nowhere even where a
     bare-name call to it is guarded; a LOCAL of the same name reads nothing
@@ -180,6 +181,7 @@ FUNCTION_NODES = (ast.FunctionDef, ast.AsyncFunctionDef)
 # credit of #1656 is computed for. A class body is no frame of its own: it
 # runs whoever executes the `class` statement.
 CALLER_NODES = FUNCTION_NODES + (ast.Lambda,)
+COMP_NODES = (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
 
 
 # ---------------------------------------------------------------------------
@@ -219,18 +221,40 @@ def _local_bindings(scope: ast.AST) -> set[str]:
     decides a name is local: bound by ANY statement of the body -- a
     parameter, an assignment or an augmented one, a loop or `with` target,
     an import, a nested def or class, an `except ... as`, a walrus, a
-    comprehension target, a `match` capture, a `del`. `global`/`nonlocal`
-    unbinds it here. A nested scope's own names are not ours: only the
-    name of the def itself is, and a lambda's are nothing."""
+    `match` capture, a `del`. `global`/`nonlocal` unbinds it here. A nested
+    scope's own names are not ours: only the name of the def itself is, a
+    lambda's are nothing, and a comprehension's targets are its own (Python 3
+    scopes them) -- only a walrus inside one binds HERE. A lambda or a
+    comprehension passed as `scope` binds its parameters / its targets."""
     out: set[str] = set()
     a = getattr(scope, "args", None)
     if a is not None:
         out.update(x.arg for x in (*a.posonlyargs, *a.args, *a.kwonlyargs))
         out.update(x.arg for x in (a.vararg, a.kwarg) if x)
+    if isinstance(scope, COMP_NODES):
+        for g in scope.generators:
+            out.update(t.id for t in ast.walk(g.target) if isinstance(t, ast.Name))
+        return out
     lifted: set[str] = set()
     todo: list[ast.AST] = list(scope.body) if isinstance(scope.body, list) else [scope.body]
     while todo:
         n = todo.pop()
+        if isinstance(n, COMP_NODES):
+            # its targets are its own; a walrus anywhere inside binds here
+            inner = list(ast.iter_child_nodes(n))
+            while inner:
+                m = inner.pop()
+                if isinstance(m, ast.NamedExpr) and isinstance(m.target, ast.Name):
+                    out.add(m.target.id)
+                if not isinstance(m, ast.Lambda):
+                    inner.extend(ast.iter_child_nodes(m))
+            continue
+        if isinstance(n, ast.ExceptHandler) and n.name:
+            out.add(n.name)
+        elif isinstance(n, (ast.MatchAs, ast.MatchStar)) and n.name:
+            out.add(n.name)
+        elif isinstance(n, ast.MatchMapping) and n.rest:
+            out.add(n.rest)
         if isinstance(n, ast.Import):
             out.update(x.asname or x.name.split(".")[0] for x in n.names)
         elif isinstance(n, ast.ImportFrom):
@@ -409,10 +433,12 @@ class ModInfo:
         still binds the body's name; one inside a nested def or class binds
         that scope's), the dispatch tables, and every name read as a VALUE
         outside a sealed one."""
-        scopes, dicts = [], []
+        scopes, dicts, small = [], [], []
         for n in ast.walk(self.tree):          # one walk, three indexes
             if isinstance(n, SCOPE_NODES):
                 scopes.append(n)
+            elif isinstance(n, (ast.Lambda, *COMP_NODES)):
+                small.append(n)
             elif isinstance(n, ast.Dict):
                 dicts.append(n)
             if isinstance(n, ast.Name):
@@ -427,7 +453,7 @@ class ModInfo:
                     continue                  # a scope of its own: its defs are not ours
                 todo.extend(ast.iter_child_nodes(n))
             self.direct_defs[scope] = own
-        self.local_names = {s: _local_bindings(s) for s in scopes}
+        self.local_names = {s: _local_bindings(s) for s in (*scopes, *small)}
         self._read_tables(dicts)
         for n in itertools.chain.from_iterable(self.names.values()):
             if (isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)
@@ -444,16 +470,33 @@ class ModInfo:
         cymbal_tone_knob's `check()` holds a `verdict` from a tuple-unpack
         while `def verdict` sits at module level, and a `main` parameter of
         run_case's is not its `def main`."""
-        cur, innermost = self.parents.get(n), True
-        while cur is not None:
-            if isinstance(cur, SCOPE_NODES + (ast.Lambda,)):
-                if not isinstance(cur, ast.Lambda) and not (
-                        isinstance(cur, ast.ClassDef) and not innermost):
-                    if n.id in self.local_names[cur]:
-                        return bool(self.direct_defs.get(cur, {}).get(n.id))
-                innermost = False
-            cur = self.parents.get(cur)
+        scope = self._binding_scope(n.id, n)
+        if scope is not None:
+            return bool(self.direct_defs.get(scope, {}).get(n.id))
         return bool(self.direct_defs[self.tree].get(n.id))
+
+    def _binding_scope(self, name: str, at: ast.AST) -> ast.AST | None:
+        """The innermost enclosing scope that binds `name` as its own local,
+        or None when only the module can. Every scope counts: a def, a class
+        (visible only to code written directly in it), a lambda (its
+        parameters) and a comprehension (its targets; the FIRST iterable is
+        evaluated outside it). A parameter, a loop variable, an `except as`
+        or a function-local import therefore stops the lookup exactly as it
+        stops Python's."""
+        cur, prev, prev2, innermost = self.parents.get(at), at, None, True
+        while cur is not None:
+            if isinstance(cur, SCOPE_NODES + (ast.Lambda, *COMP_NODES)):
+                outside = (
+                    (isinstance(cur, COMP_NODES) and prev is cur.generators[0]
+                     and prev2 is prev.iter)               # first iterable
+                    or (isinstance(cur, ast.Lambda) and prev is cur.args))  # defaults
+                if not outside:
+                    if not (isinstance(cur, ast.ClassDef) and not innermost):
+                        if name in self.local_names[cur]:
+                            return cur
+                    innermost = False
+            cur, prev, prev2 = self.parents.get(cur), cur, prev
+        return None
 
     def _read_tables(self, dicts: list[ast.Dict]) -> None:
         """A DISPATCH TABLE -- `{"compare": cmd_compare, ...}[cmd]()` -- is a
@@ -540,17 +583,9 @@ class ModInfo:
         instance) reaches no edge, and a class binding the name shadows an
         outer def instead of falling through to it. A class body's names are
         visible only to code written directly in it."""
-        cur, innermost = self.parents.get(at), True
-        while cur is not None:
-            if isinstance(cur, SCOPE_NODES + (ast.Lambda,)):
-                if not (isinstance(cur, ast.ClassDef) and not innermost):
-                    own = self.direct_defs.get(cur, {}).get(name, [])
-                    if own:
-                        return [d for d in own if isinstance(d, FUNCTION_NODES)]
-                innermost = False
-            cur = self.parents.get(cur)
-        return [d for d in self.direct_defs[self.tree].get(name, [])
-                if isinstance(d, FUNCTION_NODES)]
+        scope = self._binding_scope(name, at)
+        own = self.direct_defs.get(self.tree if scope is None else scope, {}).get(name, [])
+        return [d for d in own if isinstance(d, FUNCTION_NODES)]
 
     def resolve_call(self, call: ast.Call) -> list[ast.AST]:
         """The function defs `call` reaches: by bare name, or through a
@@ -560,6 +595,8 @@ class ModInfo:
             return self._resolve_name(f.id, call)
         if isinstance(f, ast.Subscript) and isinstance(f.value, (ast.Dict, ast.Name)):
             table = f.value if isinstance(f.value, ast.Dict) else f.value.id
+            if isinstance(table, str) and self._binding_scope(table, call) is not None:
+                return []                 # a parameter or local of that name, not the table
             return list(self.tables.get(table, []))
         return []
 
