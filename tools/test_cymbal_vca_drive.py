@@ -16,7 +16,8 @@ Three kinds of test, in the order they carry weight:
      a defect it has no business seeing. A known answer nobody has seen fail is
      not a control.
   3. REFUSALS. The pinned scan, and the committed balance record this module's
-     headline is quoted against.
+     headline is quoted against -- each refusing from `main()` with the declared
+     REFUSED status, never with a status a runner reads as a measured FAIL (#1789).
 """
 
 from __future__ import annotations
@@ -39,6 +40,7 @@ import cymbal_candidate as cc          # noqa: E402
 import cymbal_vca_drive as vd          # noqa: E402
 import tone_stage_schematic as ts      # noqa: E402
 import werner_fig4 as wf               # noqa: E402
+from exit_contract import PASS, REFUSED  # noqa: E402
 
 GRID = np.geomspace(300.0, 30000.0, 601)
 
@@ -260,18 +262,57 @@ def test_verify_source_refuses_on_a_hash_mismatch(tmp_path):
     assert "not the pinned scan" in str(exc.value)
 
 
+def _verified_source(path) -> dict:
+    """What `verify_source` returns for a file that IS the pinned scan."""
+    return {"path": path, "sha256": vd.SN_PDF_SHA256, "crops": []}
+
+
 def test_require_source_is_reachable_from_the_command_line(tmp_path, capsys):
     """The gate step 9 documented and `main()` never read (#369 step 9, W-t-R 7).
 
-    Same tree, same absent scan: exit 0 without the flag, exit 1 with it, and
+    Same tree, same absent scan: PASS without the flag, REFUSED with it
+    (#1789 -- it was exit 1, which `tools/run_all.py` reads as a RESULT), and
     the refusal must name the scan rather than failing incidentally.
     """
     assert vd.main(["--check"]) == 0
     capsys.readouterr()
     rc = vd.main(["--check", "--require-source", str(tmp_path / "absent.pdf")])
     out = capsys.readouterr().out
-    assert rc == 1
+    assert rc == REFUSED
     assert "REFUSED (--require-source)" in out
+    assert "GATE:" not in out
+
+
+def test_a_refused_balance_record_exits_refused_not_fail(tmp_path, capsys, monkeypatch):
+    """#1789, the second REFUSED path in `main()`: `balance_targets()`
+    refusing. The scan is made to verify -- patched, because the pinned scan
+    is a third-party download and deliberately not a test dependency (README
+    §1) -- so the `--require-source` guard is behind us and it is the balance
+    record's refusal that is measured. Nothing renders: it is raised before
+    any mode runs."""
+    monkeypatch.setattr(vd, "verify_source", _verified_source)
+    monkeypatch.setattr(vd, "BALANCE_ARTIFACT", tmp_path / "no-such-balance.json")
+    rc = vd.main(["--check", "--require-source", str(tmp_path / "sn.pdf")])
+    out = capsys.readouterr().out
+    assert rc == REFUSED
+    assert f"REFUSED: {tmp_path / 'no-such-balance.json'} is absent" in out
+    assert "REFUSED (--require-source)" not in out
+    assert "GATE:" not in out
+
+
+def test_control_with_both_preconditions_met_the_same_call_passes(tmp_path, capsys,
+                                                                 monkeypatch):
+    """The injected defect for the two tests above: a guard that always
+    returned REFUSED would satisfy them. Same argv as the balance-record
+    refusal, both preconditions met -- the scan verifies, the committed
+    balance record is where it always was -- and `main()` runs through to
+    PASS, reports its gate, and prints no refusal."""
+    monkeypatch.setattr(vd, "verify_source", _verified_source)
+    rc = vd.main(["--check", "--require-source", str(tmp_path / "sn.pdf")])
+    out = capsys.readouterr().out
+    assert rc == PASS
+    assert "REFUSED" not in out
+    assert "GATE: green" in out
 
 
 def test_verify_source_exits_three_from_the_command_line(tmp_path, capsys):

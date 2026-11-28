@@ -22,6 +22,14 @@ carried in prose -- `print("REFUSED: ...")` beside a bare `return 1` outside
 any handler -- which the handler pass cannot see.  It is reported, never
 pinned; its controls live here, and were run RED against a stub that saw
 nothing before the detector landed.
+
+Issue #1789 emptied sites_outside_set: the two exit-1 refusal handlers it
+held -- both in tools/cymbal_vca_drive.py's main() -- now refuse with the
+declared status, so nothing outside the declared set is accepted any more.
+The #868 controls are about a pin's KEYING, which outlives its contents, so
+they now state the one-exception pin they test against
+(`documented_exception_pin`) instead of borrowing whatever the tree holds;
+the removed sites are fed to the REAL pin, where they must be RED.
 """
 from __future__ import annotations
 
@@ -30,15 +38,30 @@ import pathlib
 import sys
 import textwrap
 
+import pytest
+
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import refusal_exit_census as census_mod                     # noqa: E402
 
-# The documented exception sites, as (file, enclosing function, line) --
-# the shape handler_census produces.  The PIN is keyed on
-# (file, function, status, count) since #868, so the line here is
-# informational; the function is what the pin reads.
+# The two exit-1 refusal handlers in tools/cymbal_vca_drive.py's main() that
+# #804 pinned as documented exceptions and #1789 moved to the declared REFUSED
+# status, as (file, enclosing function, line) -- the shape handler_census
+# produces.  A pin is keyed on (file, function, status, count) since #868, so
+# the line here is informational; the function is what a pin reads.
 VCA_SITES = [("tools/cymbal_vca_drive.py", "main", 1525),
              ("tools/cymbal_vca_drive.py", "main", 1531)]
+# #804's pin for them, as sites_outside_set held it until #1789: one entry.
+DOCUMENTED_EXCEPTION_PIN = [["tools/cymbal_vca_drive.py", "main", 1, 2]]
+
+
+@pytest.fixture
+def documented_exception_pin(monkeypatch):
+    """Restore #804's one-exception pin for one test.  The real pin is empty
+    since #1789, and the controls on the pin MECHANISM below are about its
+    keying, not its contents -- so they name the pin they test against."""
+    monkeypatch.setattr(census_mod, "EXPECTED",
+                        {**census_mod.EXPECTED,
+                         "sites_outside_set": DOCUMENTED_EXCEPTION_PIN})
 
 
 def _result(no_evidence, handler_sites=None, constant_sites=None) -> dict:
@@ -102,13 +125,30 @@ def test_emptying_the_pin_does_not_accept_an_undeclared_site(monkeypatch):
     assert not ok
 
 
-def test_the_documented_exceptions_satisfy_the_pin(monkeypatch):
-    """Positive control for the one above: with the pin intact, exactly the
-    two documented sites is what --check expects."""
+def test_the_exit_one_refusals_1789_removed_turn_check_red(monkeypatch):
+    """#1789. The two exit-1 refusal handlers in cymbal_vca_drive.py's main()
+    were #804's pinned, documented exceptions; they now refuse with the
+    declared status and the pin is empty, so the census they made -- fed back
+    in -- must be RED.  GREEN against the old pin before it was emptied
+    (docs/verification-rules.md rule 1): this is what says the gate notices a
+    refusal rendered as FAIL coming back."""
     monkeypatch.setattr(census_mod, "census",
                         lambda: _result([2, 3, 126], handler_sites={1: VCA_SITES}))
-    ok, _ = census_mod.check()
-    assert ok
+    ok, lines = census_mod.check()
+    assert not ok
+    assert any("outside the declared set" in ln for ln in lines)
+
+
+def test_control_a_listed_exception_is_still_admitted(documented_exception_pin,
+                                                     monkeypatch):
+    """Control for the one above: with #804's one-exception pin restored, the
+    same two sites are green -- the red comes from the pin being empty, not
+    from a census that rejects every exception.  A pin still admits exactly
+    what it lists; an exception is a decision recorded in one place."""
+    monkeypatch.setattr(census_mod, "census",
+                        lambda: _result([2, 3, 126], handler_sites={1: VCA_SITES}))
+    ok, lines = census_mod.check()
+    assert ok, "\n".join(lines)
 
 
 # ---------------------------------------------------------------- issue #868
@@ -116,13 +156,17 @@ def test_the_documented_exceptions_satisfy_the_pin(monkeypatch):
 # edit ABOVE the pinned lines in tools/cymbal_vca_drive.py reds --check with
 # the exit contract intact.  These controls pin the behaviour the re-keyed
 # pin must have; Control A was run RED against the line-keyed pin first
-# (docs/verification-rules.md rule 1).
+# (docs/verification-rules.md rule 1).  Since #1789 the real pin is empty, so
+# these controls state #804's one-exception pin through the fixture.
 
-def test_control_a_line_shift_above_the_sites_stays_green(monkeypatch):
+def test_control_a_line_shift_above_the_sites_stays_green(documented_exception_pin,
+                                                         monkeypatch):
     """Control A (issue #868): an unrelated edit above the pinned sites --
     one inserted comment line shifts both down one -- must leave --check
     green.  On the line-keyed pin this exact census was RED while the exit
-    contract was untouched: the defect this issue repairs."""
+    contract was untouched: the defect this issue repairs.  The pin under
+    test is #804's, supplied by the fixture: this control is about a pin's
+    keying, not its contents."""
     shifted = [("tools/cymbal_vca_drive.py", "main", 1526),
                ("tools/cymbal_vca_drive.py", "main", 1532)]
     monkeypatch.setattr(census_mod, "census",
@@ -131,10 +175,12 @@ def test_control_a_line_shift_above_the_sites_stays_green(monkeypatch):
     assert ok, "\n".join(lines)
 
 
-def test_control_b_new_undeclared_site_elsewhere_turns_check_red(monkeypatch):
+def test_control_b_new_undeclared_site_elsewhere_turns_check_red(documented_exception_pin,
+                                                               monkeypatch):
     """Control B (issue #868): a new undeclared exit-4 refusal in another
     function and file must still turn --check red -- re-keying the pin must
-    not open a hole the old pin did not have."""
+    not open a hole the old pin did not have.  The two listed sites are
+    admitted by the fixture's pin, so it is the exit-4 alone that reds."""
     monkeypatch.setattr(census_mod, "census",
                         lambda: _result([2, 3, 126],
                                         handler_sites={1: VCA_SITES,
@@ -144,7 +190,8 @@ def test_control_b_new_undeclared_site_elsewhere_turns_check_red(monkeypatch):
     assert any("outside the declared set" in ln for ln in lines)
 
 
-def test_control_b_third_refusal_in_the_pinned_function_turns_check_red(monkeypatch):
+def test_control_b_third_refusal_in_the_pinned_function_turns_check_red(
+        documented_exception_pin, monkeypatch):
     """Control B (issue #868): a THIRD exit-1 refusal inside the same pinned
     function must turn --check red -- the count is part of the pin."""
     monkeypatch.setattr(census_mod, "census",
@@ -453,7 +500,7 @@ def test_render_lists_label_sites_as_file_line():
 def test_check_reports_label_sites_without_pinning_them(monkeypatch):
     """Reported, not pinned: label/status sites leave --check green, and
     their count prints so drift is visible in every run."""
-    res = _result([2, 3, 126], handler_sites={1: VCA_SITES})
+    res = _result([2, 3, 126], handler_sites={1: []})
     res["codes"][1]["label_sites"] = [("tools/x.py", "main", 12), ("tools/y.py", "main", 3)]
     monkeypatch.setattr(census_mod, "census", lambda: res)
     ok, lines = census_mod.check()
@@ -499,3 +546,41 @@ def test_shared_trees_parse_each_file_once_and_change_no_result(tmp_path, monkey
              census_mod.label_census(files, contract, frozenset({2})))
     assert shared == alone
     assert shared[0] and shared[1], "the fixture must exercise handler and constant passes"
+
+
+def test_leaf_skipping_walkers_equal_the_full_walk_on_deeply_nested_input():
+    """The walkers skip leaf node types (`_LEAF_TYPES`) for speed (#1827
+    review).  The input that would defeat that is a site or an import buried
+    under every statement/expression nesting: an `exit_contract` import inside
+    a def's `if`/`try`, a handler under `with`/`for`, a REFUSED print inside a
+    conditional expression's call.  The skip must find each one, i.e. agree
+    with an unpruned ast.walk reference."""
+    src = textwrap.dedent('''
+        def outer():
+            if True:
+                try:
+                    from exit_contract import REFUSED as R, PASS
+                except ImportError:
+                    pass
+            def inner():
+                with open("x") as f:
+                    for _ in range(1):
+                        try:
+                            pass
+                        except refusal.Refused:
+                            return 2
+                x = (print("REFUSED: nested") if f else None)
+                return 2
+    ''')
+    tree = ast.parse(src)
+    ref = {}
+    for n in ast.walk(tree):
+        if isinstance(n, ast.ImportFrom) and n.module == "exit_contract":
+            for a in n.names:
+                ref[a.asname or a.name] = a.name
+    assert census_mod._exit_contract_imports(tree) == ref == {"R": "REFUSED", "PASS": "PASS"}
+    handlers = census_mod._handlers_in_scope(tree)
+    ref_handlers = [n for n in ast.walk(tree) if isinstance(n, ast.ExceptHandler)]
+    assert {id(h) for _, h in handlers} == {id(h) for h in ref_handlers}
+    sites = census_mod.label_sites(tree, {}, {}, {"REFUSED": 2}, frozenset())
+    assert [(s[0], s[1]) for s in sites] == [(2, "inner")], sites

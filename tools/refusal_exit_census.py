@@ -270,11 +270,29 @@ def _runner_honours_contract(runner_tree: ast.Module) -> None:
 def _exit_contract_imports(tree: ast.Module) -> dict[str, str]:
     """`from exit_contract import X [as Y]` bindings: local name -> contract name."""
     out: dict[str, str] = {}
-    for st in ast.walk(tree):
-        if isinstance(st, ast.ImportFrom) and st.module == "exit_contract":
-            for a in st.names:
+    stack: list[ast.AST] = [tree]
+    while stack:                       # ast.walk minus the leaves (_LEAF_TYPES)
+        node = stack.pop()
+        if isinstance(node, ast.ImportFrom) and node.module == "exit_contract":
+            for a in node.names:
                 out[a.asname or a.name] = a.name
+        stack.extend(c for c in ast.iter_child_nodes(node) if type(c) not in _LEAF_TYPES)
     return out
+
+
+# Node types whose subtree can hold no def, handler, print, return or raise:
+# the expression contexts (Load/Store/Del -- one per Name/Attribute, roughly
+# 40% of every node the walkers below visit), the operator tokens, and the
+# leaves.  Skipping them changes no result and is the label pass's cost cut
+# (#1827 review: parsing was not the dominant cost, the walk is).
+_LEAF_TYPES = frozenset({
+    ast.Load, ast.Store, ast.Del, ast.Constant, ast.Name,
+    ast.And, ast.Or, ast.Not, ast.Invert, ast.UAdd, ast.USub,
+    ast.Add, ast.Sub, ast.Mult, ast.MatMult, ast.Div, ast.Mod, ast.Pow,
+    ast.LShift, ast.RShift, ast.BitOr, ast.BitXor, ast.BitAnd, ast.FloorDiv,
+    ast.Eq, ast.NotEq, ast.Lt, ast.LtE, ast.Gt, ast.GtE, ast.Is, ast.IsNot,
+    ast.In, ast.NotIn, ast.Pass, ast.Break, ast.Continue,
+})
 
 
 def _handlers_in_scope(tree: ast.Module) -> list[tuple[str, ast.ExceptHandler]]:
@@ -291,7 +309,7 @@ def _handlers_in_scope(tree: ast.Module) -> list[tuple[str, ast.ExceptHandler]]:
             elif isinstance(child, ast.ExceptHandler):
                 out.append((func, child))
                 visit(child, func)
-            else:
+            elif type(child) not in _LEAF_TYPES:
                 visit(child, func)
 
     visit(tree, MODULE_LEVEL)
@@ -464,6 +482,8 @@ def label_sites(tree: ast.Module, local: dict[str, int], imported: dict[str, str
             elif isinstance(child, ast.ExceptHandler):
                 is_refusal = bool(set(_handled_classes(child)) & REFUSAL_CLASSES)
                 visit(child, func, in_refusal_handler or is_refusal)
+            elif type(child) in _LEAF_TYPES:
+                continue
             else:
                 if func is not None:
                     if isinstance(child, ast.Call) and isinstance(child.func, ast.Name) \
@@ -621,17 +641,21 @@ EXPECTED = {
 # (_handlers_in_scope), the same machinery that reads the contract; a site
 # with no enclosing def keys as "<module>".  A NEW site outside the set still
 # turns --check red -- a future tool refusing with an undeclared status
-# changes the key set, a third refusal in this function changes the count.
+# changes the key set, a refusal added to a listed function changes the count.
 # Known residual, accepted: swapping one `return 1` for another inside the
 # same function is not caught; the exit-code contract does not care which
 # statement refuses, only which statuses exist outside the declared set.
-# Both pinned sites are in tools/cymbal_vca_drive.py's main() and both are
-# deliberate: the --require-source exit 1 is in that tool's argparse help and
-# in docs/scorecard/cymbal-369/vca-drive/README.md; #804 scoped them out
-# rather than quietly change a documented contract.
-EXPECTED["sites_outside_set"] = [
-    ["tools/cymbal_vca_drive.py", "main", 1, 2],
-]
+#
+# EMPTY since #1789.  Until then it held exactly one entry,
+# ["tools/cymbal_vca_drive.py", "main", 1, 2]: that tool's `--require-source`
+# on a scan that does not verify, and balance_targets() refusing.  #804
+# pinned them as deliberate rather than quietly change a contract that was
+# documented as "exit 1" (the tool's argparse help and its README); #1789
+# moved both to the declared REFUSED status and changed that documentation
+# with them, at which point the census table held no status outside
+# {2, 3, 126}.  Listing a site here is a documented decision with its reason
+# written above it, never a way to make a red --check pass.
+EXPECTED["sites_outside_set"] = []
 
 
 def check() -> tuple[bool, list[str]]:
