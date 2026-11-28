@@ -30,6 +30,17 @@ FOUR OUTCOMES, NOT TWO
     FAIL            the reading contradicted the known answer, or the
                     estimator refused where the fixture is inside its domain
 
+WHAT THE EXIT STATUS COUNTS (#1458)
+-----------------------------------
+`check` exits 0 only when at least one outcome in `GREEN` or `RED` was
+recorded and nothing failed; 1 when anything failed -- an estimator row in
+`RED`, or an axis, inventory or conversion check -- with its diagnostics; and
+2 / NO VERDICT when no estimator was exercised and nothing failed. SKIP and
+NOT-MEASURED rows are printed and counted in the table but are not outcomes,
+and neither is a passing bookkeeping check. `--estimator` with a name that
+matches nothing is accepted without a word and selects nothing; before #1458
+that printed `All checks passed.` and exited 0 under `make verify`.
+
 THE AMBIGUITY RULE (#517 acceptance criterion 4, #115)
 ------------------------------------------------------
 A record holding more than one decay constant -- a beating pair with
@@ -2506,9 +2517,21 @@ def cmd_check(args) -> int:
               FAIL, AMBIGUOUS):
         if counts.get(k):
             print(f"  {k:14s} {counts[k]:5d}")
+    # EXERCISED, not merely present (#1458): an outcome in GREEN or RED is an
+    # estimator having answered a fixture, a refusal on purpose included.
+    # SKIP, NOT-MEASURED and any status this vocabulary does not know are rows
+    # of the record and not outcomes, and the axis, inventory and conversion
+    # checks are bookkeeping. None of them says an estimator was exercised, so
+    # none of them may satisfy the verdict; `len(verdicts)` would.
+    exercised = sum(counts.get(s, 0) for s in GREEN + RED)
+    not_outcomes = ", ".join(f"{n} {s}" for s, n in sorted(counts.items())
+                             if s not in GREEN + RED) or "none"
+    noun = "outcome" if exercised == 1 else "outcomes"
     bad = len(reds) + len(inv_bad) + len(conv_bad) + len(axis_bad)
     if bad:
-        print(f"\n{bad} check(s) FAILED:")
+        # A failure outranks no verdict, with nothing exercised as well.
+        print(f"\n{exercised} estimator {noun} exercised; "
+              f"{bad} check(s) FAILED:")
         for a in axis_bad:
             print(f"  - axis not swept: {a}")
         for n in inv_bad:
@@ -2519,7 +2542,15 @@ def cmd_check(args) -> int:
             print(f"  - {v.status} {v.estimator} on {v.kind} [{v.label}]: "
                   f"{v.detail}")
         return 1
-    print("\nAll checks passed.")
+    if exercised == 0:
+        print("\n  No estimator outcome was exercised this run. Rows present but")
+        print(f"  not outcomes: {not_outcomes}.")
+        print("  The axis, inventory and conversion checks recorded no failures.")
+        print("  Check the --estimator / --kind selection.")
+        print(f"{exercised} estimator {noun} exercised "
+              f"-- NO VERDICT (NO ESTIMATOR EXERCISED)")
+        return 2
+    print(f"\n{exercised} estimator {noun} exercised -- All checks passed.")
     return 0
 
 
