@@ -17,6 +17,9 @@ Repeated-note context follows PR #195's history contrast: the attack of a
 note with history (event 3, MIDI 36 re-struck after 43) minus the same note
 without it (event 1, MIDI 36 from silence), model and reference.
 
+A grid without `base_patch`, or a board record without `diagnostics`, is
+REFUSED rather than read by `KeyError` (#1604, #1622).
+
 Exit 0 done, 2 refused.
 """
 from __future__ import annotations
@@ -34,6 +37,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
 import mono_m1a_score as bass                                        # noqa: E402
+import manifest as mf                                                # noqa: E402
 import measure_m1a_volume_mapping as volume                           # noqa: E402
 
 OUT = ROOT / "docs/scorecard/mono-m1a-miniv3/attack-sweep"
@@ -52,6 +56,7 @@ def load_grid():
     if git("status", "--porcelain", "--", rel) or not git("ls-files", rel):
         raise bass.Refused("grid.json is not committed and clean; state the grid first")
     grid = json.loads(GRID.read_text())
+    mf.require_keys(grid, "base_patch", f"the attack-sweep grid at {GRID}", refused=bass.Refused)
     if grid["base_patch"] != bass.SELECTED_PATCH:
         raise bass.Refused("grid was stated for a different base patch")
     return grid
@@ -175,6 +180,7 @@ def evaluate(row, selected):
 def summarize():
     grid = load_grid()
     selected = json.loads(RECORD.read_text())
+    mf.require_keys(selected, "diagnostics", f"the M1A record at {RECORD}", refused=bass.Refused)
     if selected["diagnostics"]["configuration"].get("patch_id") != bass.SELECTED_PATCH:
         raise bass.Refused("board record is not the selected patch")
     rows = {}

@@ -1,6 +1,8 @@
 """Known answers for the #337 phase-aware M1A rules. Each guard is shown to fire
 on the input it exists to stop, and the inputs that legitimately pass it are
 checked too. No render: the renders are the instrument's job."""
+import copy
+import json
 import math
 
 import pytest
@@ -247,3 +249,80 @@ def test_other_nan_guards_refuse():
     with pytest.raises(m.Refused):
         m.included("h4", {"h4": NAN})
     assert m.included("h4", {"h4": -math.inf}) is False       # exact cancellation is a real exclusion
+
+
+# ---- a record main() reads with [] and cannot read is REFUSED (exit 2), not a
+# KeyError traceback (exit 1) (#1604, #1622). One control per key, through the
+# tool's own main(), on doctored copies of the committed records.
+def _main(monkeypatch, tmp_path, capsys, **records):
+    """main() with each named module path (RECORD, PHASE_REPORT, ...) pointing
+    at a scratch copy of its committed record, doctored by the caller."""
+    monkeypatch.setattr(m, "OUT", tmp_path / "out")
+    monkeypatch.setattr(m.sys, "argv", ["phase_aware_m1a.py"])
+    for name, record in records.items():
+        path = tmp_path / f"{name}.json"
+        path.write_text(json.dumps(record))
+        monkeypatch.setattr(m, name, path)
+    rc = m.main()
+    return rc, capsys.readouterr().out
+
+
+PHASE_KEYS = ("capture_sha256", "summaries", "reference")
+
+
+@pytest.mark.parametrize("key", PHASE_KEYS)
+def test_a_phase_cycle_report_without_a_key_is_refused(monkeypatch, tmp_path, capsys, key):
+    phase = json.loads(m.PHASE_REPORT.read_text())
+    del phase[key]
+    rc, printed = _main(monkeypatch, tmp_path, capsys, PHASE_REPORT=phase)
+    assert rc == 2 and "REFUSED" in printed and repr(key) in printed
+    assert not (tmp_path / "out").exists()
+
+
+def test_an_m1a_record_without_diagnostics_is_refused(monkeypatch, tmp_path, capsys):
+    record = json.loads(m.RECORD.read_text())
+    del record["diagnostics"]
+    rc, printed = _main(monkeypatch, tmp_path, capsys, RECORD=record)
+    assert rc == 2 and "REFUSED" in printed and "'diagnostics'" in printed
+    assert not (tmp_path / "out").exists()
+
+
+@pytest.mark.parametrize("phase, why", [({}, "'capture_sha256'"), ([], "not a JSON object"),
+                                        (None, "not a JSON object")])
+def test_a_phase_cycle_report_that_is_not_an_object_is_refused(monkeypatch, tmp_path, capsys, phase, why):
+    rc, printed = _main(monkeypatch, tmp_path, capsys, PHASE_REPORT=phase)
+    assert rc == 2 and "REFUSED" in printed and why in printed
+
+
+def test_a_phase_cycle_report_with_a_null_key_is_refused(monkeypatch, tmp_path, capsys):
+    phase = json.loads(m.PHASE_REPORT.read_text())
+    phase["summaries"] = None
+    rc, printed = _main(monkeypatch, tmp_path, capsys, PHASE_REPORT=phase)
+    assert rc == 2 and "REFUSED" in printed and "'summaries'" in printed and "null" in printed
+
+
+def test_a_diagnosis_report_without_renders_is_refused(monkeypatch, tmp_path, capsys):
+    """The read sits behind selection, about a minute of rendering upstream.
+    That stretch is replaced, as test_matched_render_refuses_psi_miss replaces
+    its renders, so the control reaches the read in under a second."""
+    import numpy as np
+    phase = json.loads(m.PHASE_REPORT.read_text())
+    model = phase["summaries"]["model"]["partials"]
+    record = json.loads(m.RECORD.read_text())
+    properties = {name: dict(prop) for name, prop in record["diagnostics"]["properties"].items()}
+    row = {"max_error_db": 1., "worst_partial": "h3", "mean_error_db": 1., "odd_range_mean_db": 1.,
+           "_mp": {"partials": {h: {"range_db": model[h]["range_db"]} for h in m.ap.ODD}},
+           "_measured": {"properties": properties}}
+    monkeypatch.setattr(m.dx, "render_phrase", lambda patch, n: np.zeros(4, dtype=np.int16))
+    monkeypatch.setattr(m.dx, "pcm_sha", lambda pcm: "sha")
+    monkeypatch.setattr(m.bass, "compare_audio", lambda pcm, reference: {
+        "properties": properties, "events": [{"rms_dbfs": {"model": 0.}}]})
+    monkeypatch.setattr(m, "development_row", lambda *a, **k: copy.deepcopy(row))
+    monkeypatch.setattr(m, "select", lambda rows: (m.CANDIDATES[0], {}))
+    monkeypatch.setattr(m, "reference_confirmation", lambda: (None, None, []))
+    monkeypatch.setattr(m, "matched_render", lambda drive, vol, ref_rows: [{"pcm_sha256": "sha"}])
+    diag = json.loads(m.DIAG_REPORT.read_text())
+    del diag["renders"]
+    rc, printed = _main(monkeypatch, tmp_path, capsys, DIAG_REPORT=diag)
+    assert rc == 2 and "REFUSED" in printed and "'renders'" in printed
+    assert not (tmp_path / "out").exists()

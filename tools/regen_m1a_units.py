@@ -13,6 +13,10 @@ re-render through the plugin host or pick up changed DSP by accident.
 Every numeric field must be unchanged; only the label and the provenance
 that names this run may differ. The script exits nonzero without writing
 if any number moved.
+
+A published record that cannot be read -- not a JSON object, or without
+`diagnostics` -- is REFUSED (exit 2) before the reanalysis starts, where the
+reanalysis raised `KeyError` and the process exited 1 (#1604, #1622).
 """
 from __future__ import annotations
 
@@ -24,6 +28,7 @@ ROOT = __import__("os").path.dirname(HERE)
 sys.path.insert(0, HERE)
 
 import mono_m1a_score as bass                       # noqa: E402
+import manifest as mf                               # noqa: E402
 import refusal                                      # noqa: E402
 import run_case                                     # noqa: E402
 import run_all                                      # noqa: E402
@@ -77,6 +82,8 @@ def main() -> int:
     old = json.loads(RECORD.read_text())
     case = next(c for c in run_case.load_cases() if c["case_id"] == "M1A")
     try:
+        mf.require_keys(old, "diagnostics", f"the published M1A record at {RECORD}",
+                        refused=refusal.Refused)
         new = bass.run(case, keep_audio=True, cached_record=old)
     except refusal.Refused as exc:
         print(f"REFUSED: {exc}")

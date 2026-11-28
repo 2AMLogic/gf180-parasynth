@@ -11,6 +11,10 @@ measured (1) on the #219 moving-phase condition, with psi from its own
 isolated open-filter renders, and (2) on the complete original M1A phrase
 through the scorer's `compare_audio`, exactly as `mono_m1a_score.run` renders
 it. Nothing is promoted; the patch, scorer and rubric are unchanged.
+
+A record that cannot be read -- the #219 phase-cycle report without
+`reference` or `summaries`, or the M1A record without `diagnostics` -- is
+REFUSED (exit 2) before any render (#1604, #1622).
 """
 from __future__ import annotations
 
@@ -25,6 +29,7 @@ from scipy.io import wavfile
 
 import analyse_m1a_phase_cycle as ap
 import mono_m1a_score as bass
+import manifest as mf
 import refusal
 import run_all
 
@@ -156,7 +161,10 @@ def main():
     try:
         manifest, reference = bass.load_reference()
         record = json.loads(RECORD.read_text())
+        mf.require_keys(record, "diagnostics", f"the M1A record at {RECORD}", refused=Refused)
         phase = json.loads(PHASE_REPORT.read_text())
+        mf.require_keys(phase, ("reference", "summaries"), f"the phase-cycle report at {PHASE_REPORT}",
+                        refused=Refused)
         cents = float(np.mean([v["octave_offset_cents"] for v in phase["reference"].values()]))
         n = len(reference)
         rows, measured_by = {}, {}

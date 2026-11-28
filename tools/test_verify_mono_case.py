@@ -132,3 +132,23 @@ def test_a_verified_line_that_is_not_the_whole_phrase_is_refused(tmp_path, monke
     assert VERIFIED not in text and "M5A path verified" in text
     assert _verify(monkeypatch, tmp_path, text) == 2
     assert "end-to-end pass" in capsys.readouterr().err
+
+
+def test_a_record_without_provenance_is_refused_by_the_scorer_before_the_reader_reads_it(
+        tmp_path, monkeypatch, capsys):
+    """Class record for #1622, not a repair: `main()` reads `record["provenance"]`
+    with [] twice, and neither read is reachable with the key absent --
+    `scorecard.evaluate` answers `no verdict` first and main() leaves at its
+    "not scoreable" branch (exit 2). Pinned so a scorer that stops requiring
+    provenance turns this red instead of arming a KeyError."""
+    record = json.loads(COMMITTED.read_text())
+    del record["provenance"]
+    out = tmp_path / "build/scorecard/m5a-verification-results"
+    out.mkdir(parents=True)
+    (out / "M5A.json").write_text(json.dumps(record))
+    rerun = subprocess.CompletedProcess([], 0, "", "")
+    monkeypatch.setattr(vm, "ROOT", tmp_path)
+    monkeypatch.setattr(vm.subprocess, "run", lambda *args, **kwargs: rerun)
+    assert vm.main() == 2
+    err = capsys.readouterr().err
+    assert "not scoreable" in err and "provenance" in err

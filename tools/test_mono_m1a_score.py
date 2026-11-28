@@ -293,3 +293,46 @@ def test_qualification_refuses_a_stale_attack_suite(monkeypatch):
     monkeypatch.setattr(bass, "sha", lambda p: "0" * 64 if str(p).endswith("attack_fit_v3.py") else real(p))
     with pytest.raises(bass.Refused, match="stale"):
         bass.qualify_envelope_basis()
+
+
+# ---- a qualification record that cannot be read REFUSES, not a KeyError
+# (#1604, #1622). `_qualified_attack_report()` reads `suite["sources_sha256"]`,
+# `report["v3"]` and `report["bound_ms"]` with []; before #1622 any of them
+# missing escaped every CLI that reaches this module as exit 1. One control per
+# key; the committed files are copied to scratch so none is ever written.
+QUALIFICATION_KEYS = (("suite-v3.json", "sources_sha256"), ("qualification.json", "v3"),
+                      ("qualification.json", "bound_ms"))
+
+
+def _qualification(monkeypatch, tmp_path, **replaced):
+    for name in ("suite-v3.json", "qualification.json"):
+        record = replaced.get(name, json.loads((bass.QUALIFICATION / name).read_text()))
+        (tmp_path / name).write_text(json.dumps(record))
+    monkeypatch.setattr(bass, "QUALIFICATION", tmp_path)
+
+
+@pytest.mark.parametrize("name, key", QUALIFICATION_KEYS)
+def test_a_qualification_record_without_a_key_refuses(monkeypatch, tmp_path, name, key):
+    record = json.loads((bass.QUALIFICATION / name).read_text())
+    del record[key]
+    _qualification(monkeypatch, tmp_path, **{name: record})
+    with pytest.raises(bass.Refused, match=repr(key)):
+        bass.qualified_attack_domain()
+
+
+@pytest.mark.parametrize("name, record, why", [
+    ("suite-v3.json", {}, "'sources_sha256'"), ("suite-v3.json", [], "not a JSON object"),
+    ("qualification.json", None, "not a JSON object")])
+def test_a_qualification_record_that_is_not_an_object_refuses(monkeypatch, tmp_path, name, record, why):
+    _qualification(monkeypatch, tmp_path, **{name: record})
+    with pytest.raises(bass.Refused, match=why):
+        bass.qualify_envelope_basis()
+
+
+def test_a_qualification_record_with_a_null_key_refuses(monkeypatch, tmp_path):
+    record = json.loads((bass.QUALIFICATION / "qualification.json").read_text())
+    record["v3"] = None
+    _qualification(monkeypatch, tmp_path, **{"qualification.json": record})
+    with pytest.raises(bass.Refused, match="'v3'") as info:
+        bass.qualified_attack_domain()
+    assert "null" in str(info.value)

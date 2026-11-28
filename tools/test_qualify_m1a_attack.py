@@ -149,3 +149,44 @@ def test_v3_reports_its_search_boundary():
     r = attack_fit_v3.attack_fit_v3(x, kaa.SR, kaa.note_hz(43), on, off)
     assert r["search_boundary"] == "minimum"
     assert math.isclose(r["ramp_ms"], 32 / 48)
+
+
+# ---- a suite record that cannot be read is REFUSED (exit 2) through
+# main(['domain']), not a KeyError traceback (exit 1) (#1604, #1622). One
+# control per key (`rows`), over scratch copies of the committed suite records.
+def _domain(tmp_path, monkeypatch, capsys, **replaced):
+    for est in ("v2", "v3"):
+        name = f"suite-{est}.json"
+        record = replaced.get(name, json.loads((qual.OUT / name).read_text()))
+        (tmp_path / name).write_text(json.dumps(record))
+    monkeypatch.setattr(qual, "OUT", tmp_path)
+    rc = qual.main(["domain"])
+    return rc, capsys.readouterr().out
+
+
+def test_domain_publishes_the_committed_domain(tmp_path, monkeypatch, capsys):
+    """The guard must be satisfiable against the suite records that ship."""
+    committed = json.loads((qual.OUT / "qualification.json").read_text())
+    rc, printed = _domain(tmp_path, monkeypatch, capsys)
+    assert rc == 0 and "REFUSED" not in printed
+    published = json.loads((tmp_path / "qualification.json").read_text())
+    assert {k: v for k, v in published.items() if k != "source_commit"} == {
+        k: v for k, v in committed.items() if k != "source_commit"}
+
+
+@pytest.mark.parametrize("est", ["v2", "v3"])
+def test_a_suite_record_without_rows_is_refused(tmp_path, monkeypatch, capsys, est):
+    name = f"suite-{est}.json"
+    record = json.loads((qual.OUT / name).read_text())
+    del record["rows"]
+    rc, printed = _domain(tmp_path, monkeypatch, capsys, **{name: record})
+    assert rc == 2 and "REFUSED" in printed and "'rows'" in printed
+    assert not (tmp_path / "qualification.json").exists()
+
+
+@pytest.mark.parametrize("record, why", [({}, "'rows'"), ([], "not a JSON object"),
+                                         (None, "not a JSON object")])
+def test_a_suite_record_that_is_not_an_object_is_refused(tmp_path, monkeypatch, capsys, record, why):
+    rc, printed = _domain(tmp_path, monkeypatch, capsys, **{"suite-v3.json": record})
+    assert rc == 2 and "REFUSED" in printed and why in printed
+    assert not (tmp_path / "qualification.json").exists()

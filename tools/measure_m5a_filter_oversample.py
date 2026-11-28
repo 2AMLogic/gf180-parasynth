@@ -5,6 +5,11 @@ All configurations use the same frozen reference, oscillator mode, patch,
 controls, and seven-property judge. The two reconstructed paths use rate-matched
 g/k ROMs, Kaiser input reconstruction, and Kaiser output decimation. `pulse479`
 is a model-only challenger with no RTL waveform encoding.
+
+A frozen manifest that cannot be read -- not a JSON object, or without
+`audio` -- is REFUSED (exit 2) before any render. Before #1622 run() first read
+the manifest at its end, so one without `audio` exited 1 by `KeyError` inside
+the first `measure()` instead (#1604, #1622).
 """
 from __future__ import annotations
 
@@ -24,6 +29,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
 import mono_m5a_score as m5a
+import manifest as mf
 import refusal
 from exit_contract import REFUSED
 import voice_fx as vf
@@ -248,6 +254,8 @@ def _linear_response(mode: str, cutoff: int = 8_000) -> dict:
 
 def run(out_dir: pathlib.Path) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
+    ref = json.loads(m5a.MANIFEST.read_text())
+    mf.require_keys(ref, "audio", f"the frozen M5A manifest at {m5a.MANIFEST}", refused=m5a.Refused)
     configurations = {}
     for mode in ("production_2x_sample_hold", "reconstructed_2x", "reconstructed_4x"):
         configurations[mode] = {}
@@ -288,7 +296,6 @@ def run(out_dir: pathlib.Path) -> dict:
                                     check=True, capture_output=True, text=True).stdout.strip())
     except (OSError, subprocess.CalledProcessError):
         commit, dirty = "unknown", True
-    ref = json.loads(m5a.MANIFEST.read_text())
     report = {
         "experiment": "M5A ladder rate conversion 2x versus 4x",
         "schema": "m5a-filter-rate-v1",

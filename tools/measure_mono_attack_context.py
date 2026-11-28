@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Measure attack context using the frozen Mini V3 patch, without retuning it."""
+"""Measure attack context using the frozen Mini V3 patch, without retuning it.
+
+A resumed report that cannot be read -- not a JSON object, or without
+`identity`, `provenance` or `renders` -- is REFUSED (exit 2) before any
+render, where it exited 1 by `KeyError` (#1604, #1622).
+"""
 from __future__ import annotations
 import argparse
 import json
@@ -11,6 +16,7 @@ from scipy.io import wavfile
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
+import manifest as mf
 import measure_mono_m5a_reference as ref
 
 CONDITIONS = {
@@ -70,6 +76,8 @@ def main(argv=None):
         rows = []
         if a.resume:
             prior = json.loads(a.resume.read_text())
+            mf.require_keys(prior, ("identity", "provenance", "renders"),
+                            f"the resumed capture report at {a.resume}", refused=ref.Refused)
             if prior["identity"] != identity:
                 raise ref.Refused("plugin/host identity differs from prior capture")
             for name, digest in prior["provenance"]["files_sha256"].items():

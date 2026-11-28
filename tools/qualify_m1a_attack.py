@@ -24,6 +24,10 @@ The rule (fixed before applying it to any M1A audio):
 * the published domain is the whole table (every floor with its range and
   measured bound); a reading is qualified if ANY row covers it, and it
   inherits that row's measured bound.
+
+`domain` reads the two suite records the `suite` step wrote. One that cannot
+be read -- not a JSON object, or without `rows` -- is REFUSED (exit 2) and no
+qualification is written, where it exited 1 by `KeyError` (#1604, #1622).
 """
 from __future__ import annotations
 
@@ -38,7 +42,14 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
 import attack_known_answer as kaa                                    # noqa: E402
+import manifest as mf                                                # noqa: E402
+import refusal                                                       # noqa: E402
 import run_all                                                       # noqa: E402
+
+
+class Refused(refusal.Refused, Exception):
+    """A suite record that cannot be read is not a qualification (#1604, #1622)."""
+
 
 OUT = ROOT / "docs/scorecard/mono-m1a-miniv3/attack-qualification"
 BOUND_MS = 1.0          # the v2 gate's refusal level, unchanged
@@ -167,13 +178,19 @@ def main(argv=None):
         return 0
     report = {"schema": "m1a-attack-qualification-v1", "bound_ms": BOUND_MS,
               "min_cases": MIN_CASES, "source_commit": git("rev-parse", "HEAD")}
-    for est in ("v2", "v3"):
-        doc = json.loads((OUT / f"suite-{est}.json").read_text())
-        rows = doc["rows"]
-        report[est] = {"cases": len(rows),
-                       "search_boundary_hits": sum(1 for r in rows if r.get("search_boundary")),
-                       "domain": derive_domain(rows),
-                       "breakdown": breakdown(rows)}
+    try:
+        for est in ("v2", "v3"):
+            path = OUT / f"suite-{est}.json"
+            doc = json.loads(path.read_text())
+            mf.require_keys(doc, "rows", f"the {est} known-answer suite at {path}", refused=Refused)
+            rows = doc["rows"]
+            report[est] = {"cases": len(rows),
+                           "search_boundary_hits": sum(1 for r in rows if r.get("search_boundary")),
+                           "domain": derive_domain(rows),
+                           "breakdown": breakdown(rows)}
+    except Refused as exc:
+        print(f"REFUSED: {exc}")
+        return 2
     write_json(OUT / "qualification.json", report)
     for est in ("v2", "v3"):
         print(est, "boundary hits", report[est]["search_boundary_hits"])

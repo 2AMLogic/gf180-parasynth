@@ -77,3 +77,43 @@ def test_off_grid_value_refuses():
     with pytest.raises(sweep.bass.Refused, match="grid"):
         sweep.render_point(7.0)
     assert sweep.nominal_vca_10_90_ms(10.0) == pytest.approx(8.0)
+
+
+# ---- a record the sweep reads with [] and cannot read is REFUSED (exit 2),
+# not a KeyError traceback (exit 1) (#1604, #1622). One control per key, through
+# main(['summarize']). load_grid() insists the grid is a committed, clean file
+# under ROOT, so ROOT and git are replaced for the scratch copy.
+def _summarize(monkeypatch, tmp_path, capsys, **records):
+    monkeypatch.setattr(sweep, "ROOT", tmp_path)
+    monkeypatch.setattr(sweep, "git",
+                        lambda *args: "tracked" if args[0] == "ls-files" else "")
+    (tmp_path / "out").mkdir()
+    monkeypatch.setattr(sweep, "OUT", tmp_path / "out")
+    for name in ("GRID", "RECORD"):
+        path = tmp_path / f"{name}.json"
+        path.write_text(json.dumps(
+            records.get(name, json.loads(getattr(sweep, name).read_text()))))
+        monkeypatch.setattr(sweep, name, path)
+    rc = sweep.main(["summarize"])
+    return rc, capsys.readouterr().out
+
+
+@pytest.mark.parametrize("name, key", [("GRID", "base_patch"),
+                                       ("RECORD", "diagnostics")])
+def test_a_sweep_input_without_a_key_is_refused(monkeypatch, tmp_path, capsys,
+                                                name, key):
+    record = json.loads(getattr(sweep, name).read_text())
+    del record[key]
+    rc, printed = _summarize(monkeypatch, tmp_path, capsys, **{name: record})
+    assert rc == 2 and "REFUSED" in printed and repr(key) in printed
+    assert not (tmp_path / "out" / "report.json").exists()
+
+
+@pytest.mark.parametrize("grid, why", [({}, "'base_patch'"),
+                                       ([], "not a JSON object"),
+                                       (None, "not a JSON object")])
+def test_a_grid_that_is_not_an_object_is_refused(monkeypatch, tmp_path, capsys,
+                                                 grid, why):
+    rc, printed = _summarize(monkeypatch, tmp_path, capsys, GRID=grid)
+    assert rc == 2 and "REFUSED" in printed and why in printed
+    assert not (tmp_path / "out" / "report.json").exists()

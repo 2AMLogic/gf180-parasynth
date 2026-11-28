@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Compare unchanged selected-model attack in the frozen note-history contexts."""
+"""Compare unchanged selected-model attack in the frozen note-history contexts.
+
+A frozen report that cannot be read -- not a JSON object, or without `renders`
+or `summary` -- is REFUSED (exit 2) before any model audio is written, where it
+exited 1 by `KeyError` (#1604, #1622).
+"""
 from __future__ import annotations
 import json
 from pathlib import Path
@@ -8,6 +13,7 @@ import numpy as np
 from scipy.io import wavfile
 import measure_mono_attack_context as context
 import mono_m5a_score as lead
+import manifest as mf
 import refusal
 from exit_contract import REFUSED
 
@@ -17,6 +23,8 @@ ROOT = lead.ROOT
 def compare():
     source = ROOT / "docs/scorecard/mono-attack-context/report.json"
     frozen = json.loads(source.read_text())
+    mf.require_keys(frozen, ("renders", "summary"), f"the frozen attack-context report at {source}",
+                    refused=lead.Refused)
     for row in frozen["renders"]:
         if context.ref.sha256(source.parent / row["wav"]) != row["sha256"]:
             raise lead.Refused("attack-context reference audio hash mismatch")

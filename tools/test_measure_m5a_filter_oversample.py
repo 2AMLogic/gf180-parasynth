@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 import measure_m5a_filter_oversample as experiment
@@ -77,3 +79,37 @@ def test_incremental_gate_uses_declared_materiality_deadbands_not_case_limits():
     candidate["metrics"]["Gain"]["error"] = 0.2
     result = experiment._compare_incremental(baseline, candidate)
     assert result["accepts_incremental_improvement"] is False
+
+
+# ---- a frozen manifest that cannot be read is REFUSED (exit 2) through main(),
+# not a KeyError traceback (exit 1) (#1604, #1622). One control per key
+# (`audio`), on a scratch copy of the committed manifest; the refusal fires
+# before any render.
+def _run_main(tmp_path, monkeypatch, capsys, manifest):
+    damaged = tmp_path / "manifest.json"
+    damaged.write_text(json.dumps(manifest))
+    monkeypatch.setattr(experiment.m5a, "MANIFEST", damaged)
+    monkeypatch.setattr(experiment, "ROOT", tmp_path)
+    out = tmp_path / "report.json"
+    rc = experiment.main(["--out", str(out)])
+    return rc, capsys.readouterr().out, out
+
+
+def test_a_frozen_manifest_without_audio_is_refused(tmp_path, monkeypatch, capsys):
+    manifest = json.loads(experiment.m5a.MANIFEST.read_text())
+    del manifest["audio"]
+    rc, printed, out = _run_main(tmp_path, monkeypatch, capsys, manifest)
+    assert rc == 2 and "REFUSED" in printed and "'audio'" in printed
+    assert not out.exists()
+    # nothing rendered: the directory main() creates is still empty
+    assert not any((tmp_path / "build/scorecard/m5a-filter-rate-audio").iterdir())
+
+
+@pytest.mark.parametrize("manifest, why", [({}, "'audio'"),
+                                           ([], "not a JSON object"),
+                                           (None, "not a JSON object")])
+def test_a_frozen_manifest_that_is_not_an_object_is_refused(tmp_path, monkeypatch,
+                                                            capsys, manifest, why):
+    rc, printed, out = _run_main(tmp_path, monkeypatch, capsys, manifest)
+    assert rc == 2 and "REFUSED" in printed and why in printed
+    assert not out.exists()

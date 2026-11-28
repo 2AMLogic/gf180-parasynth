@@ -14,6 +14,7 @@ from scipy.io import wavfile
 import mono_m5a_score as lead
 import measure_mono_m1a_reference as reference
 import attack_fit_v3
+import manifest as mf
 
 ROOT, SR = lead.ROOT, lead.SR
 ATTACK_TOLERANCE_MS = 5.0
@@ -123,15 +124,23 @@ ANALYSIS_VERSION = "m1a-envelope-score-v3"
 
 
 def _qualified_attack_report():
-    """qualification.json, after the checks qualified_attack_domain() names."""
+    """qualification.json, after the checks qualified_attack_domain() names.
+
+    A suite without `sources_sha256`, or a qualification without `v3` or
+    `bound_ms`, REFUSES: before #1622 it raised `KeyError` through every CLI
+    that reaches this module, which rendered as exit 1 (#1604, #1622)."""
     try:
         suite = json.loads((QUALIFICATION / "suite-v3.json").read_text())
         report = json.loads((QUALIFICATION / "qualification.json").read_text())
     except (OSError, ValueError) as exc:
         raise Refused(f"attack qualification unavailable: {exc}") from exc
+    mf.require_keys(suite, "sources_sha256",
+                    f"the attack known-answer suite at {QUALIFICATION / 'suite-v3.json'}", refused=Refused)
     for rel, digest in suite["sources_sha256"].items():
         if sha(ROOT / rel) != digest:
             raise Refused(f"attack qualification is stale: {rel} changed since the suite ran")
+    mf.require_keys(report, ("v3", "bound_ms"),
+                    f"the attack qualification at {QUALIFICATION / 'qualification.json'}", refused=Refused)
     domain = report["v3"]["domain"]
     if not domain or any(r["max_abs_error_ms"] > report["bound_ms"] for r in domain):
         raise Refused("attack qualification has no row within its error bound")

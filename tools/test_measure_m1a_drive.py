@@ -1,6 +1,8 @@
 """Known answers for the drive experiment's pre-declared rules: the volume
 compensation, the regression detector and the choice rule. Each check is also
 shown to fire on an injected defect."""
+import json
+
 import pytest
 
 import measure_m1a_drive as m
@@ -48,3 +50,49 @@ def test_choice_rule():
     assert m.choose({.75: base, .5: _row([], 19.5, 8.)}, base) is None          # < 0.5 dB better
     assert m.choose({.75: base, .5: _row([], 18.0, 10.5)}, base) is None        # odd range not reduced
     assert m.choose({.75: base}, base) is None                                   # baseline never chosen
+
+
+# ---- a record main() reads with [] and cannot read is REFUSED (exit 2), not a
+# KeyError traceback (exit 1) (#1604, #1622). One control per key, through the
+# tool's own main(), on doctored copies of the committed records.
+def _main(monkeypatch, tmp_path, capsys, **records):
+    """main() with each named module path (RECORD, PHASE_REPORT) pointing at a
+    scratch copy of its committed record, doctored by the caller."""
+    monkeypatch.setattr(m, "OUT", tmp_path / "out")
+    for name, record in records.items():
+        path = tmp_path / f"{name}.json"
+        path.write_text(json.dumps(record))
+        monkeypatch.setattr(m, name, path)
+    rc = m.main()
+    return rc, capsys.readouterr().out
+
+
+@pytest.mark.parametrize("key", ("reference", "summaries"))
+def test_a_phase_cycle_report_without_a_key_is_refused(monkeypatch, tmp_path, capsys, key):
+    phase = json.loads(m.PHASE_REPORT.read_text())
+    del phase[key]
+    rc, printed = _main(monkeypatch, tmp_path, capsys, PHASE_REPORT=phase)
+    assert rc == 2 and "REFUSED" in printed and repr(key) in printed
+    assert not (tmp_path / "out").exists()
+
+
+def test_an_m1a_record_without_diagnostics_is_refused(monkeypatch, tmp_path, capsys):
+    record = json.loads(m.RECORD.read_text())
+    del record["diagnostics"]
+    rc, printed = _main(monkeypatch, tmp_path, capsys, RECORD=record)
+    assert rc == 2 and "REFUSED" in printed and "'diagnostics'" in printed
+    assert not (tmp_path / "out").exists()
+
+
+@pytest.mark.parametrize("phase, why", [({}, "'reference'"), ([], "not a JSON object"),
+                                        (None, "not a JSON object")])
+def test_a_phase_cycle_report_that_is_not_an_object_is_refused(monkeypatch, tmp_path, capsys, phase, why):
+    rc, printed = _main(monkeypatch, tmp_path, capsys, PHASE_REPORT=phase)
+    assert rc == 2 and "REFUSED" in printed and why in printed
+
+
+def test_a_phase_cycle_report_with_a_null_key_is_refused(monkeypatch, tmp_path, capsys):
+    phase = json.loads(m.PHASE_REPORT.read_text())
+    phase["summaries"] = None
+    rc, printed = _main(monkeypatch, tmp_path, capsys, PHASE_REPORT=phase)
+    assert rc == 2 and "REFUSED" in printed and "'summaries'" in printed and "null" in printed

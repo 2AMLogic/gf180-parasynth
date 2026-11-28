@@ -37,6 +37,9 @@ The known-answer control is ``synthetic_control``: synthetic phrases whose
 answer is known by construction -- a persistent partial deficit, pure
 interference, and a genuine amplitude change that produces the same mixed-
 signal swing as interference -- run through the same classifier.
+
+A record that cannot be read -- the M1A record without `diagnostics` -- is
+REFUSED (exit 2) before any diagnostic render (#1604, #1622).
 """
 from __future__ import annotations
 
@@ -51,6 +54,7 @@ import numpy as np
 from scipy.io import wavfile
 
 import mono_m1a_score as bass
+import manifest as mf
 import refusal
 
 ROOT, SR = bass.ROOT, bass.SR
@@ -521,6 +525,7 @@ def _run() -> int:
     manifest, ref, controls = reference_audio()     # float32 full scale 1.0
     n_ref = len(ref)
     record = json.loads(RECORD.read_text())
+    mf.require_keys(record, "diagnostics", f"the M1A record at {RECORD}", refused=Refused)
     selected, detuned = _patch(), _patch(json.loads((DETUNE_DIR / "detune-diagnostic.json")
                                                     .read_text())["patch"]["detune"][1])
     renders = {}
