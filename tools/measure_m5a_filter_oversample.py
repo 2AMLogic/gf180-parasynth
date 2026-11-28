@@ -63,6 +63,20 @@ def _error_magnitude(metric: dict) -> float:
     return abs(float(metric["error"]))
 
 
+def _partial_error(value, where: str) -> float:
+    """|error| of one recorded harmonic partial, or REFUSED.
+
+    `float()` raises OverflowError for a JSON integer beyond float range,
+    TypeError for a null and ValueError for a string that is not a number.
+    Left uncaught, each was a traceback -- exit 1, FAIL -- for a record the
+    comparator should decline (#1680).
+    """
+    try:
+        return abs(float(value))
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise m5a.Refused(f"{where} cannot be read as a float") from exc
+
+
 def _case_passes(row: dict) -> bool:
     """Strict case gate: every measured M5A property meets its fixed limit."""
     if set(row.get("metrics", {})) != set(m5a.TOLERANCES):
@@ -104,9 +118,10 @@ def _compare_incremental(baseline: dict, candidate: dict) -> dict:
         if not isinstance(bpart, dict) or not bpart or set(bpart) != set(cpart or {}):
             raise m5a.Refused("baseline/candidate partial evidence is incomplete or differs")
         for partial in sorted(bpart):
+            where = f"{identity[0]}/{identity[1]} harmonic partial {partial}"
             components[f"partial:{index}:{identity[0]}:{identity[1]}:{partial}"] = {
-                "baseline_error": abs(float(bpart[partial])),
-                "candidate_error": abs(float(cpart[partial])),
+                "baseline_error": _partial_error(bpart[partial], f"baseline {where}"),
+                "candidate_error": _partial_error(cpart[partial], f"candidate {where}"),
             }
 
     regressions, improvements = [], []

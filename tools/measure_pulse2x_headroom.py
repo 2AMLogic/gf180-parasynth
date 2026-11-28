@@ -34,10 +34,16 @@ import numpy as np
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "model"), str(ROOT / "tools")]
 import voice_fx as vf  # noqa: E402
+import exit_contract  # noqa: E402
+import refusal  # noqa: E402
 
 BASE_Q15 = vf._OS2_SUBSTEP_GAIN_Q15
 SHAPES = ("pulse479", "square", "pulse29", "pulse25", "pulse15", "saw")
 SR = 48_000
+
+
+class Refused(refusal.Refused, RuntimeError):
+    """A `probe_points` row that holds no measurement to read (#1628)."""
 
 
 def q15(g: float) -> int:
@@ -177,22 +183,57 @@ def fine_sweep(gains, lo=90.0, hi=127.0, step=0.125, n=48_000) -> dict:
             "candidates": out}
 
 
+#: the numbers `probe_points` reports from a row's output stage
+OUTPUT_FIELDS = ("unwanted_dbfs", "unwanted_rel_db", "intended_dbfs", "upper_wanted_rel_db")
+
+
+def _measured_numbers(row: dict, where: str) -> dict:
+    """The five numbers `probe_points` reports for one `measure_point` row, or
+    `Refused` naming `where` -- never a number the row does not hold.
+
+    `mono_artifact_probe.measure_point` answers a render it cannot analyse
+    with a verdict row, not an exception (other callers consume that row), so
+    no handler sees it: a silent output is `FAIL-ACTIVITY` with no stages, and
+    a note the analysis window cannot resolve is `MEASURED` with every stage
+    `{"refused": ...}`. Indexing either was `KeyError: 'output'` /
+    `'unwanted_dbfs'` -- an implementation error where a stated refusal
+    belongs (tools/exit_contract.py) -- and a verdict check alone stops only
+    the first. So each number is refused unless the row holds it: the verdict
+    first, then the output stage (quoting its own refusal), then the rail
+    count."""
+    verdict = row.get("verdict")
+    if verdict != "MEASURED":
+        level = (row.get("activity") or {}).get("output_level_dbfs")
+        reason = f": {row['reason']}" if row.get("reason") else ""
+        detail = (f"silences the output ({level} dBFS)" if verdict == "FAIL-ACTIVITY" and level is not None
+                  else f"did not measure (verdict {verdict}{reason})")
+        raise Refused(f"{where} {detail}")
+    stage = (row.get("stages") or {}).get("output")
+    missing = [f for f in OUTPUT_FIELDS if not isinstance(stage, dict) or f not in stage]
+    if missing:
+        why = stage["refused"] if isinstance(stage, dict) and "refused" in stage else "no " + ", ".join(missing)
+        raise Refused(f"{where} output stage not measured: {why}")
+    clip = row.get("clip")
+    if not isinstance(clip, dict) or "oscillator_rail_samples" not in clip:
+        raise Refused(f"{where} row not measured: no clip.oscillator_rail_samples")
+    return {"osc_rail": clip["oscillator_rail_samples"], **{f: stage[f] for f in OUTPUT_FIELDS}}
+
+
 def probe_points(gain: float, notes=(36, 60, 84, 96, 108, 114, 120, 127)) -> dict:
     """Stage/output artifact numbers (mono_artifact_probe) for the reachable
     rectangles on the pulse2x engine, as built (0.85) and with the candidate
-    rectangle gain: unwanted energy, upper wanted power and oscillator rail."""
+    rectangle gain: unwanted energy, upper wanted power and oscillator rail.
+    Refuses, naming the first point that did not measure, if a candidate gain
+    silences the rectangles or a note is below the analysis window."""
     import mono_artifact_probe as mp
     res = {}
     for shape in ("square", "pulse29", "pulse25", "pulse15"):
         for nt in notes:
             row = {}
-            for label, g in (("0.850", None), (f"{gain:.3f}", q15(gain))):
+            for label, g, kind in (("0.850", None, "gain"), (f"{gain:.3f}", q15(gain), "candidate gain")):
                 with candidate(g, "rect"):
                     r = mp.measure_point("pulse2x", nt, mp.held_patch(waves=(shape,) * 3))
-                o = r["stages"]["output"]
-                row[label] = {"osc_rail": r["clip"]["oscillator_rail_samples"],
-                              "unwanted_dbfs": o["unwanted_dbfs"], "unwanted_rel_db": o["unwanted_rel_db"],
-                              "intended_dbfs": o["intended_dbfs"], "upper_wanted_rel_db": o["upper_wanted_rel_db"]}
+                row[label] = _measured_numbers(r, f"{shape} MIDI {nt}: {kind} {label}")
             res[f"{shape}/{nt}"] = row
             a, b = row["0.850"], row[f"{gain:.3f}"]
             print(f"{shape:8s} n{nt:3d} osc rail {a['osc_rail']:5d}->{b['osc_rail']:5d}  unwanted rel "
@@ -286,23 +327,31 @@ def main(argv=None) -> int:
                     help="phrases: pulse segments' drive x this for the candidate gains (not the baseline)")
     ap.add_argument("--out", type=pathlib.Path, required=True)
     a = ap.parse_args(argv)
-    if a.mode == "decimator":
-        res = decimator_sweep(a.gains)
-    elif a.mode == "probe":
-        res = probe_points(a.gains[0])
-    elif a.mode == "fine":
-        res = fine_sweep(a.gains)
-    elif a.mode == "mix":
-        res = mix_check([g for g in a.gains if q15(g) != BASE_Q15], a.scope)
-    else:
-        res = phrases([g for g in a.gains if q15(g) != BASE_Q15], a.scope, a.pulse_drive_comp)
-    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
-    dirty = subprocess.run(["git", "diff", "--quiet", "HEAD", "--", "tools/measure_pulse2x_headroom.py",
-                            "model/voice_fx.py"], cwd=ROOT).returncode != 0
-    a.out.parent.mkdir(parents=True, exist_ok=True)
-    a.out.write_text(json.dumps({"mode": a.mode, "scope": a.scope, "base_gain_q15": BASE_Q15,
-                                 "commit": head, "sources_dirty": dirty, "results": res},
-                                indent=1) + "\n")
+    try:
+        if a.mode == "decimator":
+            res = decimator_sweep(a.gains)
+        elif a.mode == "probe":
+            res = probe_points(a.gains[0])
+        elif a.mode == "fine":
+            res = fine_sweep(a.gains)
+        elif a.mode == "mix":
+            res = mix_check([g for g in a.gains if q15(g) != BASE_Q15], a.scope)
+        else:
+            res = phrases([g for g in a.gains if q15(g) != BASE_Q15], a.scope, a.pulse_drive_comp)
+        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
+        dirty = subprocess.run(["git", "diff", "--quiet", "HEAD", "--", "tools/measure_pulse2x_headroom.py",
+                                "model/voice_fx.py"], cwd=ROOT).returncode != 0
+        a.out.parent.mkdir(parents=True, exist_ok=True)
+        a.out.write_text(json.dumps({"mode": a.mode, "scope": a.scope, "base_gain_q15": BASE_Q15,
+                                     "commit": head, "sources_dirty": dirty, "results": res},
+                                    indent=1) + "\n")
+    except refusal.Refused as why:
+        # The CLI boundary (#1613): every mode's scorer raises its own module's
+        # `Refused` (mono_m5a_score.measure, mono_artifact_probe), all subclasses
+        # of the base. Catches refusals only -- an unexpected exception is an
+        # execution error and still exits 1.
+        print(f"REFUSED  {why}")
+        return exit_contract.REFUSED
     print(f"wrote {a.out}")
     return 0
 

@@ -65,6 +65,7 @@ import run_all  # noqa: E402
 
 OUT_DIR = ROOT / "docs" / "scorecard" / "clap-d12a"
 RECORD = ROOT / "docs" / "scorecard" / "results" / "D12A.json"
+COMMITTED_RECORD_FIELDS = ("metrics", "windowing", "diagnostics", "source_commit", "analysis_run", "audio")
 
 
 def write_json(path, obj, default=None) -> None:
@@ -378,6 +379,10 @@ def known_answer() -> dict:
 # ---------------------------------------------------------------------------
 def reproduce(refdir) -> tuple:
     committed = json.loads(RECORD.read_text())
+    missing = [f for f in COMMITTED_RECORD_FIELDS if f not in committed]
+    if missing:
+        raise Refused(f"the committed D12A record {RECORD} lacks {', '.join(missing)} -- "
+                      f"a partial record; nothing was compared")
     res = rc.run_drum_case(dict(case_id="D12A", subject="Clap / anchor",
                                 required_measurements="Burst timing; burst/tail ratio; decay"),
                            refdir, "", keep_audio=False)

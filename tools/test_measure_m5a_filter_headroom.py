@@ -73,3 +73,27 @@ def test_in_repo_out_named_through_a_symlink_from_outside_is_written_in_repo(tmp
     assert headroom.main(["--out", str(alias / "build" / "report.json")]) == 0
     assert (tmp_path / "repo" / "build" / "report.json").is_file()
     assert json.loads(capsys.readouterr().out)["report"] == "build/report.json"
+
+
+@pytest.mark.parametrize("value", [10**400, None, "not-a-number"],
+                         ids=["beyond-float", "null", "non-numeric-string"])
+def test_recompare_report_refuses_a_partial_that_float_cannot_read(tmp_path, monkeypatch, capsys, value):
+    """#1680, the second shipped path: `--recompare-report` hands JSON-loaded
+    rows straight to `_compare_incremental`, with no record gate in front, so
+    its unguarded `float()` left as a traceback -- exit 1 -- here too. The
+    reason is asserted because any refusal would give the exit code."""
+    shipped = headroom.ROOT / "docs/scorecard/mono-m5a-miniv3/filter-headroom-v1.json"
+    report = json.loads(shipped.read_text())
+    row = report["configurations"]["pulse29"]["headroom"]
+    row["event_diagnostics"][0]["harmonic_error_db_model_minus_reference"]["h2"] = value
+    # The report must live inside the repository root or the output guard
+    # refuses first; stand tmp_path in for the root after reading the shipped file.
+    monkeypatch.setattr(headroom, "ROOT", tmp_path.resolve())
+    path = tmp_path / "report.json"
+    path.write_text(json.dumps(report))
+
+    assert headroom.main(["--recompare-report", str(path)]) == 2
+
+    assert ("REFUSED: candidate saw/84 harmonic partial h2 cannot be read as a float"
+            in capsys.readouterr().out)
+    assert path.read_text() == json.dumps(report)
