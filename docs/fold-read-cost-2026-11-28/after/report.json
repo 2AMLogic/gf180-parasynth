@@ -1,0 +1,2187 @@
+{
+ "schema": "fold-read-profile/1",
+ "environment": {
+  "python": "3.12.16",
+  "numpy": "2.5.5",
+  "scipy": "1.18.1",
+  "pytest": "9.2.0",
+  "platform": "Linux-7.0.0-1020-azure-x86_64-with-glibc2.39",
+  "cpu": "AMD EPYC 7763 64-Core Processor",
+  "cpu_count": 4,
+  "usable_cpus": 4,
+  "loadavg_start": [
+   2.10498046875,
+   0.7939453125,
+   0.28759765625
+  ],
+  "thread_env": {},
+  "source": {
+   "commit": "7f5a3e95",
+   "described": "node/D-drums-bitexact-4051-g7f5a3e95",
+   "branch": "throwaway/fold-read-profile-2112-after",
+   "dirty": false,
+   "uncommitted_sha256": "e3b0c44298fc1c14",
+   "untracked_files": 0
+  },
+  "started": "2026-11-28T18:12:34Z"
+ },
+ "smoke": false,
+ "repeat": 3,
+ "scoped": false,
+ "problems": [],
+ "candidates": {
+  "self-tests": {
+   "id": "self-tests",
+   "file": "model/discrimination_features.py",
+   "kind": "pytest",
+   "ci": true,
+   "repeats": 3,
+   "wall_s": 19.30422950100001,
+   "read_at_s": 2.6981112059998225,
+   "share": 0.13754344112653338,
+   "share_min": 0.1369156388791169,
+   "share_max": 0.13976787863302462,
+   "calls": 952,
+   "kernel_pos": 5458307,
+   "index_pos": 0,
+   "bare_wall_s": 19.30777207699998,
+   "by_caller": {
+    "_fold_at<-jitter_features@16": {
+     "calls": 91,
+     "positions": 985693,
+     "s": 0.48843422766659234
+    },
+    "_fold_at<-mpd_features@16": {
+     "calls": 840,
+     "positions": 4353542,
+     "s": 2.11836775233319
+    },
+    "_fold_at<-test_a_fixed_stride_fold_is_not_a_drift_measure@16": {
+     "calls": 6,
+     "positions": 68612,
+     "s": 0.023049237666668887
+    },
+    "_fold_at<-test_the_fold_reduces_to_indexing_on_a_whole_period@16": {
+     "calls": 3,
+     "positions": 31704,
+     "s": 0.01057844200000583
+    },
+    "test_the_kernel_is_tabulated_not_evaluated_per_position@1": {
+     "calls": 2,
+     "positions": 3126,
+     "s": 0.0016201836666643505
+    },
+    "test_the_kernel_is_tabulated_not_evaluated_per_position@16": {
+     "calls": 2,
+     "positions": 3126,
+     "s": 0.0016371059999992592
+    },
+    "test_the_kernel_is_tabulated_not_evaluated_per_position@2": {
+     "calls": 2,
+     "positions": 3126,
+     "s": 0.002539592999994511
+    },
+    "test_the_kernel_is_tabulated_not_evaluated_per_position@32": {
+     "calls": 2,
+     "positions": 3126,
+     "s": 0.030275418333317816
+    },
+    "test_the_kernel_is_tabulated_not_evaluated_per_position@4": {
+     "calls": 2,
+     "positions": 3126,
+     "s": 0.004071594999989732
+    },
+    "test_the_kernel_is_tabulated_not_evaluated_per_position@8": {
+     "calls": 2,
+     "positions": 3126,
+     "s": 0.007167647333323164
+    }
+   },
+   "material": false
+  },
+  "test_discrimination": {
+   "id": "test_discrimination",
+   "file": "model/test_discrimination.py",
+   "kind": "pytest",
+   "ci": true,
+   "repeats": 3,
+   "wall_s": 46.50056854099995,
+   "read_at_s": 0.192571920999967,
+   "share": 0.004151828774617359,
+   "share_min": 0.004115129413693393,
+   "share_max": 0.004299866502143271,
+   "calls": 62,
+   "kernel_pos": 255084,
+   "index_pos": 0,
+   "bare_wall_s": 46.511047228999985,
+   "by_caller": {
+    "_fold_at<-jitter_features@16": {
+     "calls": 2,
+     "positions": 21168,
+     "s": 0.016185169666651216
+    },
+    "_fold_at<-mpd_features@16": {
+     "calls": 60,
+     "positions": 233916,
+     "s": 0.17872357900001626
+    }
+   },
+   "material": false
+  },
+  "test_fold_rate_sweep": {
+   "id": "test_fold_rate_sweep",
+   "file": "tools/probes/test_fold_rate_sweep.py",
+   "kind": "pytest",
+   "ci": true,
+   "repeats": 3,
+   "wall_s": 7.187795101000006,
+   "read_at_s": 0.8185272950004219,
+   "share": 0.11417716925318876,
+   "share_min": 0.11358293233867547,
+   "share_max": 0.11462756915345845,
+   "calls": 271,
+   "kernel_pos": 1727261,
+   "index_pos": 0,
+   "bare_wall_s": 7.179431882000017,
+   "by_caller": {
+    "_fold_at<-<genexpr>@16": {
+     "calls": 18,
+     "positions": 205836,
+     "s": 0.09296846266659031
+    },
+    "_fold_at<-jitter_features@16": {
+     "calls": 25,
+     "positions": 273739,
+     "s": 0.12457091333338137
+    },
+    "_fold_at<-mpd_features@16": {
+     "calls": 228,
+     "positions": 1247686,
+     "s": 0.6021408066672317
+    }
+   },
+   "material": false
+  },
+  "test_dphase_floor_census": {
+   "id": "test_dphase_floor_census",
+   "file": "tools/test_dphase_floor_census.py",
+   "kind": "pytest",
+   "ci": true,
+   "repeats": 3,
+   "wall_s": 4.119178218999991,
+   "read_at_s": 0.8125209860007772,
+   "share": 0.19650640805532696,
+   "share_min": 0.1935304577265211,
+   "share_max": 0.19837076318545194,
+   "calls": 273,
+   "kernel_pos": 1533420,
+   "index_pos": 0,
+   "bare_wall_s": 4.132884004000061,
+   "by_caller": {
+    "_fold_at<-jitter_features@16": {
+     "calls": 21,
+     "positions": 222264,
+     "s": 0.10397801100001895
+    },
+    "_fold_at<-mpd_features@16": {
+     "calls": 252,
+     "positions": 1311156,
+     "s": 0.7038347619998149
+    }
+   },
+   "material": false
+  },
+  "test_promoted_bands": {
+   "id": "test_promoted_bands",
+   "file": "tools/test_promoted_bands.py",
+   "kind": "pytest",
+   "ci": true,
+   "repeats": 3,
+   "wall_s": 2.5135199039999634,
+   "read_at_s": 0.025366105999978572,
+   "share": 0.010091865976319295,
+   "share_min": 0.01008637633543505,
+   "share_max": 0.010165201458564154,
+   "calls": 1,
+   "kernel_pos": 8140,
+   "index_pos": 0,
+   "bare_wall_s": 2.4640337470000304,
+   "by_caller": {
+    "_fold_at<-jitter_features@16": {
+     "calls": 1,
+     "positions": 8140,
+     "s": 0.025454544333304813
+    }
+   },
+   "material": false
+  },
+  "fold_rate_sweep": {
+   "id": "fold_rate_sweep",
+   "file": "tools/probes/fold_rate_sweep.py",
+   "kind": "script",
+   "ci": false,
+   "repeats": 3,
+   "wall_s": 190.329337129,
+   "read_at_s": 31.141413779999652,
+   "share": 0.16361856900122998,
+   "share_min": 0.16319144287765208,
+   "share_max": 0.1737159744462298,
+   "calls": 16072,
+   "kernel_pos": 81037500,
+   "index_pos": 13506250,
+   "bare_wall_s": 190.55839778799998,
+   "by_caller": {
+    "_fold_at<-<genexpr>@0": {
+     "calls": 6,
+     "positions": 68612,
+     "s": 0.00035561566668699623
+    },
+    "_fold_at<-<genexpr>@1": {
+     "calls": 6,
+     "positions": 68612,
+     "s": 0.01227846266654827
+    },
+    "_fold_at<-<genexpr>@16": {
+     "calls": 6,
+     "positions": 68612,
+     "s": 0.031517450666494064
+    },
+    "_fold_at<-<genexpr>@2": {
+     "calls": 6,
+     "positions": 68612,
+     "s": 0.013836039000011624
+    },
+    "_fold_at<-<genexpr>@32": {
+     "calls": 6,
+     "positions": 68612,
+     "s": 0.0563374843333501
+    },
+    "_fold_at<-<genexpr>@4": {
+     "calls": 6,
+     "positions": 68612,
+     "s": 0.01676078666673675
+    },
+    "_fold_at<-<genexpr>@8": {
+     "calls": 6,
+     "positions": 68612,
+     "s": 0.022249101333462324
+    },
+    "_fold_at<-jitter_features@0": {
+     "calls": 178,
+     "positions": 1957686,
+     "s": 0.015594067665991437
+    },
+    "_fold_at<-jitter_features@1": {
+     "calls": 178,
+     "positions": 1957686,
+     "s": 0.3701386436681939
+    },
+    "_fold_at<-jitter_features@16": {
+     "calls": 178,
+     "positions": 1957686,
+     "s": 0.9328399856667223
+    },
+    "_fold_at<-jitter_features@2": {
+     "calls": 178,
+     "positions": 1957686,
+     "s": 0.44601592800105055
+    },
+    "_fold_at<-jitter_features@32": {
+     "calls": 178,
+     "positions": 1957686,
+     "s": 1.5940217723332732
+    },
+    "_fold_at<-jitter_features@4": {
+     "calls": 178,
+     "positions": 1957686,
+     "s": 0.520175080000134
+    },
+    "_fold_at<-jitter_features@8": {
+     "calls": 178,
+     "positions": 1957686,
+     "s": 0.6622249886662909
+    },
+    "_fold_at<-mpd_features@0": {
+     "calls": 2112,
+     "positions": 11479952,
+     "s": 0.08028401933002745
+    },
+    "_fold_at<-mpd_features@1": {
+     "calls": 2112,
+     "positions": 11479952,
+     "s": 2.133661548334544
+    },
+    "_fold_at<-mpd_features@16": {
+     "calls": 2112,
+     "positions": 11479952,
+     "s": 5.6541175553339444
+    },
+    "_fold_at<-mpd_features@2": {
+     "calls": 2112,
+     "positions": 11479952,
+     "s": 2.3808698803352777
+    },
+    "_fold_at<-mpd_features@32": {
+     "calls": 2112,
+     "positions": 11479952,
+     "s": 9.754661798332677
+    },
+    "_fold_at<-mpd_features@4": {
+     "calls": 2112,
+     "positions": 11479952,
+     "s": 3.0451651183308286
+    },
+    "_fold_at<-mpd_features@8": {
+     "calls": 2112,
+     "positions": 11479952,
+     "s": 4.109494518333993
+    }
+   },
+   "material": true
+  },
+  "rate_tol_sweep": {
+   "id": "rate_tol_sweep",
+   "file": "tools/probes/rate_tol_sweep.py",
+   "kind": "script",
+   "ci": false,
+   "repeats": 3,
+   "wall_s": 72.52490714799978,
+   "read_at_s": 13.130507594988785,
+   "share": 0.18133581801770843,
+   "share_min": 0.1766434384381122,
+   "share_max": 0.19903214887373452,
+   "calls": 4397,
+   "kernel_pos": 25796513,
+   "index_pos": 0,
+   "bare_wall_s": 72.37976396699992,
+   "by_caller": {
+    "_fold_at<-jitter_features@16": {
+     "calls": 341,
+     "positions": 3749787,
+     "s": 1.8285624163327914
+    },
+    "_fold_at<-mpd_features@16": {
+     "calls": 4056,
+     "positions": 22046726,
+     "s": 11.74027936633532
+    }
+   },
+   "material": true
+  },
+  "dphase_floor_sweep": {
+   "id": "dphase_floor_sweep",
+   "file": "tools/dphase_floor_sweep.py",
+   "kind": "script",
+   "ci": false,
+   "repeats": 3,
+   "wall_s": 12.622116769000058,
+   "read_at_s": 0.5615473200000451,
+   "share": 0.04448915584264015,
+   "share_min": 0.044480034324357876,
+   "share_max": 0.045864516404490775,
+   "calls": 102,
+   "kernel_pos": 1101198,
+   "index_pos": 0,
+   "bare_wall_s": 12.671586769999976,
+   "by_caller": {
+    "_fold_at<-jitter_features@16": {
+     "calls": 102,
+     "positions": 1101198,
+     "s": 0.5697338829991168
+    }
+   },
+   "material": false
+  }
+ },
+ "headline": "fold_rate_sweep",
+ "runs": {
+  "self-tests": [
+   {
+    "id": "self-tests",
+    "file": "model/discrimination_features.py",
+    "kind": "pytest",
+    "ci": true,
+    "control": 0,
+    "bare": false,
+    "rc": 0,
+    "wall_s": 19.79771223499999,
+    "read_at_s": 2.7106164189999333,
+    "share": 0.1369156388791169,
+    "calls": 952,
+    "kernel_pos": 5458307,
+    "index_pos": 0,
+    "by_caller": {
+     "_fold_at<-mpd_features@16": {
+      "calls": 840,
+      "positions": 4353542,
+      "s": 2.136096511999966
+     },
+     "_fold_at<-jitter_features@16": {
+      "calls": 91,
+      "positions": 985693,
+      "s": 0.4923280459999262
+     },
+     "_fold_at<-test_the_fold_reduces_to_indexing_on_a_whole_period@16": {
+      "calls": 3,
+      "positions": 31704,
+      "s": 0.010813623000018424
+     },
+     "test_the_kernel_is_tabulated_not_evaluated_per_position@1": {
+      "calls": 2,
+      "positions": 3126,
+      "s": 0.0016686949999922263
+     },
+     "test_the_kernel_is_tabulated_not_evaluated_per_position@2": {
+      "calls": 2,
+      "positions": 3126,
+      "s": 0.0026931540000134646
+     },
+     "test_the_kernel_is_tabulated_not_evaluated_per_position@4": {
+      "calls": 2,
+      "positions": 3126,
+      "s": 0.0042022000000088156
+     },
+     "test_the_kernel_is_tabulated_not_evaluated_per_position@8": {
+      "calls": 2,
+      "positions": 3126,
+      "s": 0.007216536999990808
+     },
+     "test_the_kernel_is_tabulated_not_evaluated_per_position@16": {
+      "calls": 2,
+      "positions": 3126,
+      "s": 0.0016545080000156531
+     },
+     "test_the_kernel_is_tabulated_not_evaluated_per_position@32": {
+      "calls": 2,
+      "positions": 3126,
+      "s": 0.03118005899999332
+     },
+     "_fold_at<-test_a_fixed_stride_fold_is_not_a_drift_measure@16": {
+      "calls": 6,
+      "positions": 68612,
+      "s": 0.022763085000008232
+     }
+    },
+    "rebinds": 0,
+    "unwrapped": [],
+    "modules": [
+     "discrimination_features",
+     "model.discrimination_features"
+    ],
+    "overhead_s": 0.0021198812319997273,
+    "tests": {
+     "collected": 35,
+     "passed": 35,
+     "failed": 0,
+     "errors": 0,
+     "skipped": 0
+    },
+    "pytest_s": 19.73,
+    "tail": [
+     "...................................                                      [100%]",
+     "35 passed in 19.73s"
+    ],
+    "process_s": 20.113878674999995,
+    "loadavg_end": [
+     2.1337890625,
+     1.01123046875,
+     0.39013671875
+    ]
+   },
+   {
+    "id": "self-tests",
+    "file": "model/discrimination_features.py",
+    "kind": "pytest",
+    "ci": true,
+    "control": 0,
+    "bare": false,
+    "rc": 0,
+    "wall_s": 19.30422950100001,
+    "read_at_s": 2.6981112059998225,
+    "share": 0.13976787863302462,
+    "calls": 952,
+    "kernel_pos": 5458307,
+    "index_pos": 0,
+    "by_caller": {
+     "_fold_at<-mpd_features@16": {
+      "calls": 840,
+      "positions": 4353542,
+      "s": 2.1267285329999197
+     },
+     "_fold_at<-jitter_features@16": {
+      "calls": 91,
+      "positions": 985693,
+      "s": 0.49120758799989517
+     },
+     "_fold_at<-test_the_fold_reduces_to_indexing_on_a_whole_period@16": {
+      "calls": 3,
+      "positions": 31704,
+      "s": 0.01043395299998906
+     },
+     "test_the_kernel_is_tabulated_not_evaluated_per_position@1": {
+      "calls": 2,
+      "positions": 3126,
+      "s": 0.0015835650000042278
+     },
+     "test_the_kernel_is_tabulated_not_evaluated_per_position@2": {
+      "calls": 2,
+      "positions": 3126,
+      "s": 0.002462592000000541
+     },
+     "test_the_kernel_is_tabulated_not_evaluated_per_position@4": {
+      "calls": 2,
+      "positions": 3126,
+      "s": 0.004011122000008527
+     },
+     "test_the_kernel_is_tabulated_not_evaluated_per_position@8": {
+      "calls": 2,
+      "positions": 3126,
+      "s": 0.007206445999997868
+     },
+     "test_the_kernel_is_tabulated_not_evaluated_per_position@16": {
+      "calls": 2,
+      "positions": 3126,
+      "s": 0.0016179909999891606
+     },
+     "test_the_kernel_is_tabulated_not_evaluated_per_position@32": {
+      "calls": 2,
+      "positions": 3126,
+      "s": 0.029893797999989147
+     },
+     "_fold_at<-test_a_fixed_stride_fold_is_not_a_drift_measure@16": {
+      "calls": 6,
+      "positions": 68612,
+      "s": 0.022965618000029053
+     }
+    },
+    "rebinds": 0,
+    "unwrapped": [],
+    "modules": [
+     "discrimination_features",
+     "model.discrimination_features"
+    ],
+    "overhead_s": 0.0020733546120040957,
+    "tests": {
+     "collected": 35,
+     "passed": 35,
+     "failed": 0,
+     "errors": 0,
+     "skipped": 0
+    },
+    "pytest_s": 19.23,
+    "tail": [
+     "...................................                                      [100%]",
+     "35 passed in 19.23s"
+    ],
+    "process_s": 19.623609501000004,
+    "loadavg_end": [
+     3.494140625,
+     1.48388671875,
+     0.57275390625
+    ]
+   },
+   {
+    "id": "self-tests",
+    "file": "model/discrimination_features.py",
+    "kind": "pytest",
+    "ci": true,
+    "control": 0,
+    "bare": false,
+    "rc": 0,
+    "wall_s": 19.299327995999988,
+    "read_at_s": 2.6544959839994817,
+    "share": 0.13754344112653338,
+    "calls": 952,
+    "kernel_pos": 5458307,
+    "index_pos": 0,
+    "by_caller": {
+     "_fold_at<-mpd_features@16": {
+      "calls": 840,
+      "positions": 4353542,
+      "s": 2.092278211999684
+     },
+     "_fold_at<-jitter_features@16": {
+      "calls": 91,
+      "positions": 985693,
+      "s": 0.4817670489999557
+     },
+     "_fold_at<-test_the_fold_reduces_to_indexing_on_a_whole_period@16": {
+      "calls": 3,
+      "positions": 31704,
+      "s": 0.01048775000001001
+     },
+     "test_the_kernel_is_tabulated_not_evaluated_per_position@1": {
+      "calls": 2,
+      "positions": 3126,
+      "s": 0.0016082909999965977
+     },
+     "test_the_kernel_is_tabulated_not_evaluated_per_position@2": {
+      "calls": 2,
+      "positions": 3126,
+      "s": 0.0024630329999695277
+     },
+     "test_the_kernel_is_tabulated_not_evaluated_per_position@4": {
+      "calls": 2,
+      "positions": 3126,
+      "s": 0.004001462999951855
+     },
+     "test_the_kernel_is_tabulated_not_evaluated_per_position@8": {
+      "calls": 2,
+      "positions": 3126,
+      "s": 0.007079958999980818
+     },
+     "test_the_kernel_is_tabulated_not_evaluated_per_position@16": {
+      "calls": 2,
+      "positions": 3126,
+      "s": 0.0016388189999929637
+     },
+     "test_the_kernel_is_tabulated_not_evaluated_per_position@32": {
+      "calls": 2,
+      "positions": 3126,
+      "s": 0.02975239799997098
+     },
+     "_fold_at<-test_a_fixed_stride_fold_is_not_a_drift_measure@16": {
+      "calls": 6,
+      "positions": 68612,
+      "s": 0.023419009999969376
+     }
+    },
+    "rebinds": 0,
+    "unwrapped": [],
+    "modules": [
+     "discrimination_features",
+     "model.discrimination_features"
+    ],
+    "overhead_s": 0.0020962506880061937,
+    "tests": {
+     "collected": 35,
+     "passed": 35,
+     "failed": 0,
+     "errors": 0,
+     "skipped": 0
+    },
+    "pytest_s": 19.23,
+    "tail": [
+     "...................................                                      [100%]",
+     "35 passed in 19.23s"
+    ],
+    "process_s": 19.616659285999987,
+    "loadavg_end": [
+     3.45849609375,
+     1.7353515625,
+     0.6982421875
+    ]
+   }
+  ],
+  "test_discrimination": [
+   {
+    "id": "test_discrimination",
+    "file": "model/test_discrimination.py",
+    "kind": "pytest",
+    "ci": true,
+    "control": 0,
+    "bare": false,
+    "rc": 0,
+    "wall_s": 46.38243324899997,
+    "read_at_s": 0.192571920999967,
+    "share": 0.004151828774617359,
+    "calls": 62,
+    "kernel_pos": 255084,
+    "index_pos": 0,
+    "by_caller": {
+     "_fold_at<-mpd_features@16": {
+      "calls": 60,
+      "positions": 233916,
+      "s": 0.17641516299997306
+     },
+     "_fold_at<-jitter_features@16": {
+      "calls": 2,
+      "positions": 21168,
+      "s": 0.016156757999993943
+     }
+    },
+    "rebinds": 0,
+    "unwrapped": [],
+    "modules": [
+     "discrimination_features",
+     "model.discrimination_features"
+    ],
+    "overhead_s": 8.688444399973604e-05,
+    "tests": {
+     "collected": 28,
+     "passed": 28,
+     "failed": 0,
+     "errors": 0,
+     "skipped": 0
+    },
+    "pytest_s": 46.31,
+    "tail": [
+     "............................                                             [100%]",
+     "28 passed in 46.31s"
+    ],
+    "process_s": 46.70335275199997,
+    "loadavg_end": [
+     1.58203125,
+     1.5478515625,
+     0.73876953125
+    ]
+   },
+   {
+    "id": "test_discrimination",
+    "file": "model/test_discrimination.py",
+    "kind": "pytest",
+    "ci": true,
+    "control": 0,
+    "bare": false,
+    "rc": 0,
+    "wall_s": 46.70766546499999,
+    "read_at_s": 0.19220808799997258,
+    "share": 0.004115129413693393,
+    "calls": 62,
+    "kernel_pos": 255084,
+    "index_pos": 0,
+    "by_caller": {
+     "_fold_at<-mpd_features@16": {
+      "calls": 60,
+      "positions": 233916,
+      "s": 0.17628946399997858
+     },
+     "_fold_at<-jitter_features@16": {
+      "calls": 2,
+      "positions": 21168,
+      "s": 0.015918623999993997
+     }
+    },
+    "rebinds": 0,
+    "unwrapped": [],
+    "modules": [
+     "discrimination_features",
+     "model.discrimination_features"
+    ],
+    "overhead_s": 8.634668700028669e-05,
+    "tests": {
+     "collected": 28,
+     "passed": 28,
+     "failed": 0,
+     "errors": 0,
+     "skipped": 0
+    },
+    "pytest_s": 46.63,
+    "tail": [
+     "............................                                             [100%]",
+     "28 passed in 46.63s"
+    ],
+    "process_s": 47.028621517999966,
+    "loadavg_end": [
+     1.17529296875,
+     1.43310546875,
+     0.78271484375
+    ]
+   },
+   {
+    "id": "test_discrimination",
+    "file": "model/test_discrimination.py",
+    "kind": "pytest",
+    "ci": true,
+    "control": 0,
+    "bare": false,
+    "rc": 0,
+    "wall_s": 46.50056854099995,
+    "read_at_s": 0.19994623700006287,
+    "share": 0.004299866502143271,
+    "calls": 62,
+    "kernel_pos": 255084,
+    "index_pos": 0,
+    "by_caller": {
+     "_fold_at<-mpd_features@16": {
+      "calls": 60,
+      "positions": 233916,
+      "s": 0.18346611000009716
+     },
+     "_fold_at<-jitter_features@16": {
+      "calls": 2,
+      "positions": 21168,
+      "s": 0.016480126999965705
+     }
+    },
+    "rebinds": 0,
+    "unwrapped": [],
+    "modules": [
+     "discrimination_features",
+     "model.discrimination_features"
+    ],
+    "overhead_s": 8.626370000035877e-05,
+    "tests": {
+     "collected": 28,
+     "passed": 28,
+     "failed": 0,
+     "errors": 0,
+     "skipped": 0
+    },
+    "pytest_s": 46.42,
+    "tail": [
+     "............................                                             [100%]",
+     "28 passed in 46.42s"
+    ],
+    "process_s": 46.81545613899999,
+    "loadavg_end": [
+     1.6904296875,
+     1.50732421875,
+     0.8759765625
+    ]
+   }
+  ],
+  "test_fold_rate_sweep": [
+   {
+    "id": "test_fold_rate_sweep",
+    "file": "tools/probes/test_fold_rate_sweep.py",
+    "kind": "pytest",
+    "ci": true,
+    "control": 0,
+    "bare": false,
+    "rc": 0,
+    "wall_s": 7.189405628000031,
+    "read_at_s": 0.8165937730004202,
+    "share": 0.11358293233867547,
+    "calls": 271,
+    "kernel_pos": 1727261,
+    "index_pos": 0,
+    "by_caller": {
+     "_fold_at<-mpd_features@16": {
+      "calls": 228,
+      "positions": 1247686,
+      "s": 0.5983672460004641
+     },
+     "_fold_at<-jitter_features@16": {
+      "calls": 25,
+      "positions": 273739,
+      "s": 0.12470104300001594
+     },
+     "_fold_at<-<genexpr>@16": {
+      "calls": 18,
+      "positions": 205836,
+      "s": 0.0935254839999402
+     }
+    },
+    "rebinds": 0,
+    "unwrapped": [],
+    "modules": [
+     "discrimination_features",
+     "model.discrimination_features"
+    ],
+    "overhead_s": 0.0005947528599963334,
+    "tests": {
+     "collected": 8,
+     "passed": 8,
+     "failed": 0,
+     "errors": 0,
+     "skipped": 0
+    },
+    "pytest_s": 7.11,
+    "tail": [
+     "........                                                                 [100%]",
+     "8 passed in 7.11s"
+    ],
+    "process_s": 7.517755178000016,
+    "loadavg_end": [
+     2.17138671875,
+     1.62841796875,
+     0.9267578125
+    ]
+   },
+   {
+    "id": "test_fold_rate_sweep",
+    "file": "tools/probes/test_fold_rate_sweep.py",
+    "kind": "pytest",
+    "ci": true,
+    "control": 0,
+    "bare": false,
+    "rc": 0,
+    "wall_s": 7.168922651999992,
+    "read_at_s": 0.8185272950004219,
+    "share": 0.11417716925318876,
+    "calls": 271,
+    "kernel_pos": 1727261,
+    "index_pos": 0,
+    "by_caller": {
+     "_fold_at<-mpd_features@16": {
+      "calls": 228,
+      "positions": 1247686,
+      "s": 0.5995310570002061
+     },
+     "_fold_at<-jitter_features@16": {
+      "calls": 25,
+      "positions": 273739,
+      "s": 0.12513483900022493
+     },
+     "_fold_at<-<genexpr>@16": {
+      "calls": 18,
+      "positions": 205836,
+      "s": 0.0938613989999908
+     }
+    },
+    "rebinds": 0,
+    "unwrapped": [],
+    "modules": [
+     "discrimination_features",
+     "model.discrimination_features"
+    ],
+    "overhead_s": 0.0005998159529983696,
+    "tests": {
+     "collected": 8,
+     "passed": 8,
+     "failed": 0,
+     "errors": 0,
+     "skipped": 0
+    },
+    "pytest_s": 7.1,
+    "tail": [
+     "........                                                                 [100%]",
+     "8 passed in 7.10s"
+    ],
+    "process_s": 7.48613480299997,
+    "loadavg_end": [
+     3.02001953125,
+     1.84326171875,
+     1.0087890625
+    ]
+   },
+   {
+    "id": "test_fold_rate_sweep",
+    "file": "tools/probes/test_fold_rate_sweep.py",
+    "kind": "pytest",
+    "ci": true,
+    "control": 0,
+    "bare": false,
+    "rc": 0,
+    "wall_s": 7.187795101000006,
+    "read_at_s": 0.8239194800007681,
+    "share": 0.11462756915345845,
+    "calls": 271,
+    "kernel_pos": 1727261,
+    "index_pos": 0,
+    "by_caller": {
+     "_fold_at<-mpd_features@16": {
+      "calls": 228,
+      "positions": 1247686,
+      "s": 0.6085241170010249
+     },
+     "_fold_at<-jitter_features@16": {
+      "calls": 25,
+      "positions": 273739,
+      "s": 0.12387685799990322
+     },
+     "_fold_at<-<genexpr>@16": {
+      "calls": 18,
+      "positions": 205836,
+      "s": 0.09151850499983993
+     }
+    },
+    "rebinds": 0,
+    "unwrapped": [],
+    "modules": [
+     "discrimination_features",
+     "model.discrimination_features"
+    ],
+    "overhead_s": 0.0005959363170047141,
+    "tests": {
+     "collected": 8,
+     "passed": 8,
+     "failed": 0,
+     "errors": 0,
+     "skipped": 0
+    },
+    "pytest_s": 7.12,
+    "tail": [
+     "........                                                                 [100%]",
+     "8 passed in 7.12s"
+    ],
+    "process_s": 7.510793434999982,
+    "loadavg_end": [
+     3.453125,
+     1.998046875,
+     1.0732421875
+    ]
+   }
+  ],
+  "test_dphase_floor_census": [
+   {
+    "id": "test_dphase_floor_census",
+    "file": "tools/test_dphase_floor_census.py",
+    "kind": "pytest",
+    "ci": true,
+    "control": 0,
+    "bare": false,
+    "rc": 0,
+    "wall_s": 4.134832008999979,
+    "read_at_s": 0.8125209860007772,
+    "share": 0.19650640805532696,
+    "calls": 273,
+    "kernel_pos": 1533420,
+    "index_pos": 0,
+    "by_caller": {
+     "_fold_at<-mpd_features@16": {
+      "calls": 252,
+      "positions": 1311156,
+      "s": 0.7084094610006559
+     },
+     "_fold_at<-jitter_features@16": {
+      "calls": 21,
+      "positions": 222264,
+      "s": 0.10411152500012122
+     }
+    },
+    "rebinds": 0,
+    "unwrapped": [],
+    "modules": [
+     "discrimination_features",
+     "model.discrimination_features"
+    ],
+    "overhead_s": 0.0005995918110053821,
+    "tests": {
+     "collected": 10,
+     "passed": 10,
+     "failed": 0,
+     "errors": 0,
+     "skipped": 0
+    },
+    "pytest_s": 4.05,
+    "tail": [
+     "..........                                                               [100%]",
+     "10 passed in 4.05s"
+    ],
+    "process_s": 4.472248089999994,
+    "loadavg_end": [
+     3.5771484375,
+     2.04833984375,
+     1.0947265625
+    ]
+   },
+   {
+    "id": "test_dphase_floor_census",
+    "file": "tools/test_dphase_floor_census.py",
+    "kind": "pytest",
+    "ci": true,
+    "control": 0,
+    "bare": false,
+    "rc": 0,
+    "wall_s": 4.10164278700006,
+    "read_at_s": 0.7937928059988053,
+    "share": 0.1935304577265211,
+    "calls": 273,
+    "kernel_pos": 1533420,
+    "index_pos": 0,
+    "by_caller": {
+     "_fold_at<-mpd_features@16": {
+      "calls": 252,
+      "positions": 1311156,
+      "s": 0.6894955349989687
+     },
+     "_fold_at<-jitter_features@16": {
+      "calls": 21,
+      "positions": 222264,
+      "s": 0.10429727099983666
+     }
+    },
+    "rebinds": 0,
+    "unwrapped": [],
+    "modules": [
+     "discrimination_features",
+     "model.discrimination_features"
+    ],
+    "overhead_s": 0.0005953597650063216,
+    "tests": {
+     "collected": 10,
+     "passed": 10,
+     "failed": 0,
+     "errors": 0,
+     "skipped": 0
+    },
+    "pytest_s": 4.03,
+    "tail": [
+     "..........                                                               [100%]",
+     "10 passed in 4.03s"
+    ],
+    "process_s": 4.420532353999988,
+    "loadavg_end": [
+     3.1806640625,
+     2.01318359375,
+     1.0927734375
+    ]
+   },
+   {
+    "id": "test_dphase_floor_census",
+    "file": "tools/test_dphase_floor_census.py",
+    "kind": "pytest",
+    "ci": true,
+    "control": 0,
+    "bare": false,
+    "rc": 0,
+    "wall_s": 4.119178218999991,
+    "read_at_s": 0.817124526999919,
+    "share": 0.19837076318545194,
+    "calls": 273,
+    "kernel_pos": 1533420,
+    "index_pos": 0,
+    "by_caller": {
+     "_fold_at<-mpd_features@16": {
+      "calls": 252,
+      "positions": 1311156,
+      "s": 0.71359928999982
+     },
+     "_fold_at<-jitter_features@16": {
+      "calls": 21,
+      "positions": 222264,
+      "s": 0.10352523700009897
+     }
+    },
+    "rebinds": 0,
+    "unwrapped": [],
+    "modules": [
+     "discrimination_features",
+     "model.discrimination_features"
+    ],
+    "overhead_s": 0.0006032846820112354,
+    "tests": {
+     "collected": 10,
+     "passed": 10,
+     "failed": 0,
+     "errors": 0,
+     "skipped": 0
+    },
+    "pytest_s": 4.05,
+    "tail": [
+     "..........                                                               [100%]",
+     "10 passed in 4.05s"
+    ],
+    "process_s": 4.447762395000041,
+    "loadavg_end": [
+     3.30712890625,
+     2.0791015625,
+     1.1240234375
+    ]
+   }
+  ],
+  "test_promoted_bands": [
+   {
+    "id": "test_promoted_bands",
+    "file": "tools/test_promoted_bands.py",
+    "kind": "pytest",
+    "ci": true,
+    "control": 0,
+    "bare": false,
+    "rc": 0,
+    "wall_s": 2.472930527000017,
+    "read_at_s": 0.025137836999988394,
+    "share": 0.010165201458564154,
+    "calls": 1,
+    "kernel_pos": 8140,
+    "index_pos": 0,
+    "by_caller": {
+     "_fold_at<-jitter_features@16": {
+      "calls": 1,
+      "positions": 8140,
+      "s": 0.025137836999988394
+     }
+    },
+    "rebinds": 0,
+    "unwrapped": [],
+    "modules": [
+     "discrimination_features",
+     "model.discrimination_features"
+    ],
+    "overhead_s": 1.970521499970346e-06,
+    "tests": {
+     "collected": 63,
+     "passed": 63,
+     "failed": 0,
+     "errors": 0,
+     "skipped": 0
+    },
+    "pytest_s": 2.4,
+    "tail": [
+     "...............................................................          [100%]",
+     "63 passed in 2.40s"
+    ],
+    "process_s": 2.792205175000049,
+    "loadavg_end": [
+     3.1220703125,
+     2.06103515625,
+     1.123046875
+    ]
+   },
+   {
+    "id": "test_promoted_bands",
+    "file": "tools/test_promoted_bands.py",
+    "kind": "pytest",
+    "ci": true,
+    "control": 0,
+    "bare": false,
+    "rc": 0,
+    "wall_s": 2.5135199039999634,
+    "read_at_s": 0.025366105999978572,
+    "share": 0.010091865976319295,
+    "calls": 1,
+    "kernel_pos": 8140,
+    "index_pos": 0,
+    "by_caller": {
+     "_fold_at<-jitter_features@16": {
+      "calls": 1,
+      "positions": 8140,
+      "s": 0.025366105999978572
+     }
+    },
+    "rebinds": 0,
+    "unwrapped": [],
+    "modules": [
+     "discrimination_features",
+     "model.discrimination_features"
+    ],
+    "overhead_s": 1.4284599999996317e-06,
+    "tests": {
+     "collected": 63,
+     "passed": 63,
+     "failed": 0,
+     "errors": 0,
+     "skipped": 0
+    },
+    "pytest_s": 2.43,
+    "tail": [
+     "...............................................................          [100%]",
+     "63 passed in 2.43s"
+    ],
+    "process_s": 2.8383919749999222,
+    "loadavg_end": [
+     2.95166015625,
+     2.04296875,
+     1.1220703125
+    ]
+   },
+   {
+    "id": "test_promoted_bands",
+    "file": "tools/test_promoted_bands.py",
+    "kind": "pytest",
+    "ci": true,
+    "control": 0,
+    "bare": false,
+    "rc": 0,
+    "wall_s": 2.563823630999991,
+    "read_at_s": 0.025859689999947477,
+    "share": 0.01008637633543505,
+    "calls": 1,
+    "kernel_pos": 8140,
+    "index_pos": 0,
+    "by_caller": {
+     "_fold_at<-jitter_features@16": {
+      "calls": 1,
+      "positions": 8140,
+      "s": 0.025859689999947477
+     }
+    },
+    "rebinds": 0,
+    "unwrapped": [],
+    "modules": [
+     "discrimination_features",
+     "model.discrimination_features"
+    ],
+    "overhead_s": 1.3971619999892937e-06,
+    "tests": {
+     "collected": 63,
+     "passed": 63,
+     "failed": 0,
+     "errors": 0,
+     "skipped": 0
+    },
+    "pytest_s": 2.48,
+    "tail": [
+     "...............................................................          [100%]",
+     "63 passed in 2.48s"
+    ],
+    "process_s": 2.895768321999981,
+    "loadavg_end": [
+     2.794921875,
+     2.025390625,
+     1.12109375
+    ]
+   }
+  ],
+  "fold_rate_sweep": [
+   {
+    "id": "fold_rate_sweep",
+    "file": "tools/probes/fold_rate_sweep.py",
+    "kind": "script",
+    "ci": false,
+    "control": 0,
+    "bare": false,
+    "rc": 0,
+    "wall_s": 190.329337129,
+    "read_at_s": 31.141413779999652,
+    "share": 0.16361856900122998,
+    "calls": 16072,
+    "kernel_pos": 81037500,
+    "index_pos": 13506250,
+    "by_caller": {
+     "_fold_at<-mpd_features@0": {
+      "calls": 2112,
+      "positions": 11479952,
+      "s": 0.08051600900000722
+     },
+     "_fold_at<-jitter_features@0": {
+      "calls": 178,
+      "positions": 1957686,
+      "s": 0.015654185999210313
+     },
+     "_fold_at<-mpd_features@1": {
+      "calls": 2112,
+      "positions": 11479952,
+      "s": 2.1440252079995616
+     },
+     "_fold_at<-jitter_features@1": {
+      "calls": 178,
+      "positions": 1957686,
+      "s": 0.3689081120000992
+     },
+     "_fold_at<-mpd_features@2": {
+      "calls": 2112,
+      "positions": 11479952,
+      "s": 2.3765866970035177
+     },
+     "_fold_at<-jitter_features@2": {
+      "calls": 178,
+      "positions": 1957686,
+      "s": 0.4474342330009904
+     },
+     "_fold_at<-mpd_features@4": {
+      "calls": 2112,
+      "positions": 11479952,
+      "s": 3.0106521189994737
+     },
+     "_fold_at<-jitter_features@4": {
+      "calls": 178,
+      "positions": 1957686,
+      "s": 0.507434451000222
+     },
+     "_fold_at<-mpd_features@8": {
+      "calls": 2112,
+      "positions": 11479952,
+      "s": 3.902753324998116
+     },
+     "_fold_at<-jitter_features@8": {
+      "calls": 178,
+      "positions": 1957686,
+      "s": 0.658585847999575
+     },
+     "_fold_at<-mpd_features@16": {
+      "calls": 2112,
+      "positions": 11479952,
+      "s": 5.4230548029993315
+     },
+     "_fold_at<-jitter_features@16": {
+      "calls": 178,
+      "positions": 1957686,
+      "s": 0.9329263740006581
+     },
+     "_fold_at<-mpd_features@32": {
+      "calls": 2112,
+      "positions": 11479952,
+      "s": 9.522748303998583
+     },
+     "_fold_at<-jitter_features@32": {
+      "calls": 178,
+      "positions": 1957686,
+      "s": 1.6026323970005478
+     },
+     "_fold_at<-<genexpr>@0": {
+      "calls": 6,
+      "positions": 68612,
+      "s": 0.0003414890001067761
+     },
+     "_fold_at<-<genexpr>@1": {
+      "calls": 6,
+      "positions": 68612,
+      "s": 0.0119369139997616
+     },
+     "_fold_at<-<genexpr>@2": {
+      "calls": 6,
+      "positions": 68612,
+      "s": 0.01367815400010386
+     },
+     "_fold_at<-<genexpr>@4": {
+      "calls": 6,
+      "positions": 68612,
+      "s": 0.015997127999980876
+     },
+     "_fold_at<-<genexpr>@8": {
+      "calls": 6,
+      "positions": 68612,
+      "s": 0.021213194999859297
+     },
+     "_fold_at<-<genexpr>@16": {
+      "calls": 6,
+      "positions": 68612,
+      "s": 0.030861072999869066
+     },
+     "_fold_at<-<genexpr>@32": {
+      "calls": 6,
+      "positions": 68612,
+      "s": 0.0534737610000775
+     }
+    },
+    "rebinds": 0,
+    "unwrapped": [],
+    "modules": [
+     "discrimination_features",
+     "model.discrimination_features"
+    ],
+    "overhead_s": 0.035299865775870784,
+    "tests": null,
+    "pytest_s": null,
+    "tail": [
+     "square, and is the constraint that bounds the dial from above.",
+     "",
+     "  taps  rate_gap   mpd_gap  n_over  refused  walks  sees_jit",
+     "    -1    0.1855    0.0526     326        0      6    0.0207",
+     "     0    0.1960    0.8912      98        0      6    0.0217",
+     "     1    0.1269    0.8726      63        0      6    0.0153",
+     "     2    0.0667    0.2939      38        0      6    0.0122",
+     "     4    0.0373    0.1826      15        0      6    0.0134",
+     "     8    0.0229    0.1307       5        0      6    0.0142",
+     "    16    0.0182    0.1313       2        0      6    0.0146",
+     "    32    0.0184    0.1531       2        0      6    0.0148",
+     ""
+    ],
+    "process_s": 190.66423804199997,
+    "loadavg_end": [
+     4.66015625,
+     3.97412109375,
+     2.32763671875
+    ]
+   },
+   {
+    "id": "fold_rate_sweep",
+    "file": "tools/probes/fold_rate_sweep.py",
+    "kind": "script",
+    "ci": false,
+    "control": 0,
+    "bare": false,
+    "rc": 0,
+    "wall_s": 189.78332145900004,
+    "read_at_s": 30.971014063007487,
+    "share": 0.16319144287765208,
+    "calls": 16072,
+    "kernel_pos": 81037500,
+    "index_pos": 13506250,
+    "by_caller": {
+     "_fold_at<-mpd_features@0": {
+      "calls": 2112,
+      "positions": 11479952,
+      "s": 0.08056656599910639
+     },
+     "_fold_at<-jitter_features@0": {
+      "calls": 178,
+      "positions": 1957686,
+      "s": 0.015726884999594404
+     },
+     "_fold_at<-mpd_features@1": {
+      "calls": 2112,
+      "positions": 11479952,
+      "s": 2.1144103310048195
+     },
+     "_fold_at<-jitter_features@1": {
+      "calls": 178,
+      "positions": 1957686,
+      "s": 0.37196710300213454
+     },
+     "_fold_at<-mpd_features@2": {
+      "calls": 2112,
+      "positions": 11479952,
+      "s": 2.3337996470002054
+     },
+     "_fold_at<-jitter_features@2": {
+      "calls": 178,
+      "positions": 1957686,
+      "s": 0.44794940000133465
+     },
+     "_fold_at<-mpd_features@4": {
+      "calls": 2112,
+      "positions": 11479952,
+      "s": 2.9256965819927245
+     },
+     "_fold_at<-jitter_features@4": {
+      "calls": 178,
+      "positions": 1957686,
+      "s": 0.5331141439983185
+     },
+     "_fold_at<-mpd_features@8": {
+      "calls": 2112,
+      "positions": 11479952,
+      "s": 3.8811073239994585
+     },
+     "_fold_at<-jitter_features@8": {
+      "calls": 178,
+      "positions": 1957686,
+      "s": 0.6636681340007726
+     },
+     "_fold_at<-mpd_features@16": {
+      "calls": 2112,
+      "positions": 11479952,
+      "s": 5.449775163000595
+     },
+     "_fold_at<-jitter_features@16": {
+      "calls": 178,
+      "positions": 1957686,
+      "s": 0.9394615100002284
+     },
+     "_fold_at<-mpd_features@32": {
+      "calls": 2112,
+      "positions": 11479952,
+      "s": 9.486090667007602
+     },
+     "_fold_at<-jitter_features@32": {
+      "calls": 178,
+      "positions": 1957686,
+      "s": 1.5793961410008706
+     },
+     "_fold_at<-<genexpr>@0": {
+      "calls": 6,
+      "positions": 68612,
+      "s": 0.000381303999802185
+     },
+     "_fold_at<-<genexpr>@1": {
+      "calls": 6,
+      "positions": 68612,
+      "s": 0.012097667999796613
+     },
+     "_fold_at<-<genexpr>@2": {
+      "calls": 6,
+      "positions": 68612,
+      "s": 0.013542013999995106
+     },
+     "_fold_at<-<genexpr>@4": {
+      "calls": 6,
+      "positions": 68612,
+      "s": 0.016343580000238944
+     },
+     "_fold_at<-<genexpr>@8": {
+      "calls": 6,
+      "positions": 68612,
+      "s": 0.0217507170002591
+     },
+     "_fold_at<-<genexpr>@16": {
+      "calls": 6,
+      "positions": 68612,
+      "s": 0.030663240999501795
+     },
+     "_fold_at<-<genexpr>@32": {
+      "calls": 6,
+      "positions": 68612,
+      "s": 0.053505942000128925
+     }
+    },
+    "rebinds": 0,
+    "unwrapped": [],
+    "modules": [
+     "discrimination_features",
+     "model.discrimination_features"
+    ],
+    "overhead_s": 0.03530921967961694,
+    "tests": null,
+    "pytest_s": null,
+    "tail": [
+     "square, and is the constraint that bounds the dial from above.",
+     "",
+     "  taps  rate_gap   mpd_gap  n_over  refused  walks  sees_jit",
+     "    -1    0.1855    0.0526     326        0      6    0.0207",
+     "     0    0.1960    0.8912      98        0      6    0.0217",
+     "     1    0.1269    0.8726      63        0      6    0.0153",
+     "     2    0.0667    0.2939      38        0      6    0.0122",
+     "     4    0.0373    0.1826      15        0      6    0.0134",
+     "     8    0.0229    0.1307       5        0      6    0.0142",
+     "    16    0.0182    0.1313       2        0      6    0.0146",
+     "    32    0.0184    0.1531       2        0      6    0.0148",
+     ""
+    ],
+    "process_s": 190.11183793500004,
+    "loadavg_end": [
+     4.24951171875,
+     4.2099609375,
+     3.0068359375
+    ]
+   },
+   {
+    "id": "fold_rate_sweep",
+    "file": "tools/probes/fold_rate_sweep.py",
+    "kind": "script",
+    "ci": false,
+    "control": 0,
+    "bare": false,
+    "rc": 0,
+    "wall_s": 192.52905092699984,
+    "read_at_s": 33.44537169099158,
+    "share": 0.1737159744462298,
+    "calls": 16072,
+    "kernel_pos": 81037500,
+    "index_pos": 13506250,
+    "by_caller": {
+     "_fold_at<-mpd_features@0": {
+      "calls": 2112,
+      "positions": 11479952,
+      "s": 0.07976948299096875
+     },
+     "_fold_at<-jitter_features@0": {
+      "calls": 178,
+      "positions": 1957686,
+      "s": 0.015401131999169593
+     },
+     "_fold_at<-mpd_features@1": {
+      "calls": 2112,
+      "positions": 11479952,
+      "s": 2.142549105999251
+     },
+     "_fold_at<-jitter_features@1": {
+      "calls": 178,
+      "positions": 1957686,
+      "s": 0.36954071600234784
+     },
+     "_fold_at<-mpd_features@2": {
+      "calls": 2112,
+      "positions": 11479952,
+      "s": 2.4322232970021105
+     },
+     "_fold_at<-jitter_features@2": {
+      "calls": 178,
+      "positions": 1957686,
+      "s": 0.4426641510008267
+     },
+     "_fold_at<-mpd_features@4": {
+      "calls": 2112,
+      "positions": 11479952,
+      "s": 3.1991466540002875
+     },
+     "_fold_at<-jitter_features@4": {
+      "calls": 178,
+      "positions": 1957686,
+      "s": 0.5199766450018615
+     },
+     "_fold_at<-mpd_features@8": {
+      "calls": 2112,
+      "positions": 11479952,
+      "s": 4.544622906004406
+     },
+     "_fold_at<-jitter_features@8": {
+      "calls": 178,
+      "positions": 1957686,
+      "s": 0.6644209839985251
+     },
+     "_fold_at<-mpd_features@16": {
+      "calls": 2112,
+      "positions": 11479952,
+      "s": 6.089522700001908
+     },
+     "_fold_at<-jitter_features@16": {
+      "calls": 178,
+      "positions": 1957686,
+      "s": 0.9261320729992804
+     },
+     "_fold_at<-mpd_features@32": {
+      "calls": 2112,
+      "positions": 11479952,
+      "s": 10.255146423991846
+     },
+     "_fold_at<-jitter_features@32": {
+      "calls": 178,
+      "positions": 1957686,
+      "s": 1.6000367789984011
+     },
+     "_fold_at<-<genexpr>@0": {
+      "calls": 6,
+      "positions": 68612,
+      "s": 0.0003440540001520276
+     },
+     "_fold_at<-<genexpr>@1": {
+      "calls": 6,
+      "positions": 68612,
+      "s": 0.012800806000086595
+     },
+     "_fold_at<-<genexpr>@2": {
+      "calls": 6,
+      "positions": 68612,
+      "s": 0.014287948999935907
+     },
+     "_fold_at<-<genexpr>@4": {
+      "calls": 6,
+      "positions": 68612,
+      "s": 0.017941651999990427
+     },
+     "_fold_at<-<genexpr>@8": {
+      "calls": 6,
+      "positions": 68612,
+      "s": 0.023783392000268577
+     },
+     "_fold_at<-<genexpr>@16": {
+      "calls": 6,
+      "positions": 68612,
+      "s": 0.03302803800011134
+     },
+     "_fold_at<-<genexpr>@32": {
+      "calls": 6,
+      "positions": 68612,
+      "s": 0.06203274999984387
+     }
+    },
+    "rebinds": 0,
+    "unwrapped": [],
+    "modules": [
+     "discrimination_features",
+     "model.discrimination_features"
+    ],
+    "overhead_s": 0.035004237407963046,
+    "tests": null,
+    "pytest_s": null,
+    "tail": [
+     "square, and is the constraint that bounds the dial from above.",
+     "",
+     "  taps  rate_gap   mpd_gap  n_over  refused  walks  sees_jit",
+     "    -1    0.1855    0.0526     326        0      6    0.0207",
+     "     0    0.1960    0.8912      98        0      6    0.0217",
+     "     1    0.1269    0.8726      63        0      6    0.0153",
+     "     2    0.0667    0.2939      38        0      6    0.0122",
+     "     4    0.0373    0.1826      15        0      6    0.0134",
+     "     8    0.0229    0.1307       5        0      6    0.0142",
+     "    16    0.0182    0.1313       2        0      6    0.0146",
+     "    32    0.0184    0.1531       2        0      6    0.0148",
+     ""
+    ],
+    "process_s": 192.9080451450002,
+    "loadavg_end": [
+     3.59814453125,
+     4.13330078125,
+     3.41943359375
+    ]
+   }
+  ],
+  "rate_tol_sweep": [
+   {
+    "id": "rate_tol_sweep",
+    "file": "tools/probes/rate_tol_sweep.py",
+    "kind": "script",
+    "ci": false,
+    "control": 0,
+    "bare": false,
+    "rc": 0,
+    "wall_s": 74.18383846799998,
+    "read_at_s": 14.764968781988046,
+    "share": 0.19903214887373452,
+    "calls": 4397,
+    "kernel_pos": 25796513,
+    "index_pos": 0,
+    "by_caller": {
+     "_fold_at<-mpd_features@16": {
+      "calls": 4056,
+      "positions": 22046726,
+      "s": 12.880136047985616
+     },
+     "_fold_at<-jitter_features@16": {
+      "calls": 341,
+      "positions": 3749787,
+      "s": 1.8848327340024298
+     }
+    },
+    "rebinds": 0,
+    "unwrapped": [],
+    "modules": [
+     "discrimination_features",
+     "model.discrimination_features"
+    ],
+    "overhead_s": 0.009720337975065151,
+    "tests": null,
+    "pytest_s": null,
+    "tail": [
+     "      0.087467 440Hz@44k                cqt3225Hz.seg0               db         6.9974    80.0000",
+     "      0.087451 440Hz@44k                cqt3225Hz.seg1               db         6.9961    80.0000",
+     "      0.087449 523Hz@44k                cqt3225Hz.seg1               db         6.9205    79.1380",
+     "      0.087449 525Hz@44k                cqt3225Hz.seg1               db         6.9205    79.1380",
+     "      0.087449 523Hz@44k                cqt3225Hz.seg0               db         6.9205    79.1380",
+     "      0.087449 525Hz@44k                cqt3225Hz.seg0               db         6.9205    79.1380",
+     "      0.084054 550Hz@44k                cqt3225Hz.seg1               db         6.7243    80.0000",
+     "      0.084046 550Hz@44k                cqt3225Hz.seg0               db         6.7237    80.0000",
+     "      0.082090 600Hz@44k                cqt3225Hz.seg0               db         6.5672    80.0000",
+     "      0.082051 600Hz@44k                cqt3225Hz.seg1               db         6.5641    80.0000",
+     "      0.081454 990Hz@48k                ms4ms.200-700Hz.seg0         db         4.5402    55.7394",
+     ""
+    ],
+    "process_s": 74.55128898800012,
+    "loadavg_end": [
+     4.54248046875,
+     4.19775390625,
+     3.544921875
+    ]
+   },
+   {
+    "id": "rate_tol_sweep",
+    "file": "tools/probes/rate_tol_sweep.py",
+    "kind": "script",
+    "ci": false,
+    "control": 0,
+    "bare": false,
+    "rc": 0,
+    "wall_s": 72.40989529000012,
+    "read_at_s": 13.130507594988785,
+    "share": 0.18133581801770843,
+    "calls": 4397,
+    "kernel_pos": 25796513,
+    "index_pos": 0,
+    "by_caller": {
+     "_fold_at<-mpd_features@16": {
+      "calls": 4056,
+      "positions": 22046726,
+      "s": 11.303921507993437
+     },
+     "_fold_at<-jitter_features@16": {
+      "calls": 341,
+      "positions": 3749787,
+      "s": 1.8265860869953485
+     }
+    },
+    "rebinds": 0,
+    "unwrapped": [],
+    "modules": [
+     "discrimination_features",
+     "model.discrimination_features"
+    ],
+    "overhead_s": 0.009618402323832128,
+    "tests": null,
+    "pytest_s": null,
+    "tail": [
+     "      0.087467 440Hz@44k                cqt3225Hz.seg0               db         6.9974    80.0000",
+     "      0.087451 440Hz@44k                cqt3225Hz.seg1               db         6.9961    80.0000",
+     "      0.087449 523Hz@44k                cqt3225Hz.seg1               db         6.9205    79.1380",
+     "      0.087449 525Hz@44k                cqt3225Hz.seg1               db         6.9205    79.1380",
+     "      0.087449 523Hz@44k                cqt3225Hz.seg0               db         6.9205    79.1380",
+     "      0.087449 525Hz@44k                cqt3225Hz.seg0               db         6.9205    79.1380",
+     "      0.084054 550Hz@44k                cqt3225Hz.seg1               db         6.7243    80.0000",
+     "      0.084046 550Hz@44k                cqt3225Hz.seg0               db         6.7237    80.0000",
+     "      0.082090 600Hz@44k                cqt3225Hz.seg0               db         6.5672    80.0000",
+     "      0.082051 600Hz@44k                cqt3225Hz.seg1               db         6.5641    80.0000",
+     "      0.081454 990Hz@48k                ms4ms.200-700Hz.seg0         db         4.5402    55.7394",
+     ""
+    ],
+    "process_s": 72.75618965100011,
+    "loadavg_end": [
+     4.369140625,
+     4.28076171875,
+     3.67431640625
+    ]
+   },
+   {
+    "id": "rate_tol_sweep",
+    "file": "tools/probes/rate_tol_sweep.py",
+    "kind": "script",
+    "ci": false,
+    "control": 0,
+    "bare": false,
+    "rc": 0,
+    "wall_s": 72.52490714799978,
+    "read_at_s": 12.811048971027503,
+    "share": 0.1766434384381122,
+    "calls": 4397,
+    "kernel_pos": 25796513,
+    "index_pos": 0,
+    "by_caller": {
+     "_fold_at<-mpd_features@16": {
+      "calls": 4056,
+      "positions": 22046726,
+      "s": 11.036780543026907
+     },
+     "_fold_at<-jitter_features@16": {
+      "calls": 341,
+      "positions": 3749787,
+      "s": 1.774268428000596
+     }
+    },
+    "rebinds": 0,
+    "unwrapped": [],
+    "modules": [
+     "discrimination_features",
+     "model.discrimination_features"
+    ],
+    "overhead_s": 0.009784591336398307,
+    "tests": null,
+    "pytest_s": null,
+    "tail": [
+     "      0.087467 440Hz@44k                cqt3225Hz.seg0               db         6.9974    80.0000",
+     "      0.087451 440Hz@44k                cqt3225Hz.seg1               db         6.9961    80.0000",
+     "      0.087449 523Hz@44k                cqt3225Hz.seg1               db         6.9205    79.1380",
+     "      0.087449 525Hz@44k                cqt3225Hz.seg1               db         6.9205    79.1380",
+     "      0.087449 523Hz@44k                cqt3225Hz.seg0               db         6.9205    79.1380",
+     "      0.087449 525Hz@44k                cqt3225Hz.seg0               db         6.9205    79.1380",
+     "      0.084054 550Hz@44k                cqt3225Hz.seg1               db         6.7243    80.0000",
+     "      0.084046 550Hz@44k                cqt3225Hz.seg0               db         6.7237    80.0000",
+     "      0.082090 600Hz@44k                cqt3225Hz.seg0               db         6.5672    80.0000",
+     "      0.082051 600Hz@44k                cqt3225Hz.seg1               db         6.5641    80.0000",
+     "      0.081454 990Hz@48k                ms4ms.200-700Hz.seg0         db         4.5402    55.7394",
+     ""
+    ],
+    "process_s": 72.89318968199996,
+    "loadavg_end": [
+     4.6708984375,
+     4.447265625,
+     3.82568359375
+    ]
+   }
+  ],
+  "dphase_floor_sweep": [
+   {
+    "id": "dphase_floor_sweep",
+    "file": "tools/dphase_floor_sweep.py",
+    "kind": "script",
+    "ci": false,
+    "control": 0,
+    "bare": false,
+    "rc": 0,
+    "wall_s": 12.589239161000023,
+    "read_at_s": 0.5599697899988314,
+    "share": 0.044480034324357876,
+    "calls": 102,
+    "kernel_pos": 1101198,
+    "index_pos": 0,
+    "by_caller": {
+     "_fold_at<-jitter_features@16": {
+      "calls": 102,
+      "positions": 1101198,
+      "s": 0.5599697899988314
+     }
+    },
+    "rebinds": 0,
+    "unwrapped": [],
+    "modules": [
+     "discrimination_features",
+     "model.discrimination_features"
+    ],
+    "overhead_s": 0.00022448129398844685,
+    "tests": null,
+    "pytest_s": null,
+    "tail": [
+     "      200 detune+8Hz          82772.31    13739.72    0.9582  no",
+     "      200 jitter0.1%          14534.04     2410.20    0.6772  no",
+     "      200 jitter0.5%           9917.47     3292.21    0.5966  no",
+     "      200 jitter2%            44374.26    11245.70    0.6416  no",
+     "      200 glide               33833.59     2730.77    1.0000  no",
+     "     2000 detune+0.5Hz           54.53        4.56    0.0000  yes",
+     "     2000 detune+2Hz          17473.00     2141.14    1.0000  no",
+     "     2000 detune+8Hz          82772.31    13739.72    0.9582  no",
+     "     2000 jitter0.1%          14534.04     2410.20    0.6772  no",
+     "     2000 jitter0.5%           9917.47     3292.21    0.5966  no",
+     "     2000 jitter2%            44374.26    11245.70    0.6416  no",
+     "     2000 glide               33833.59     2730.77    1.0000  no"
+    ],
+    "process_s": 12.93509369100002,
+    "loadavg_end": [
+     4.4951171875,
+     4.42138671875,
+     3.83642578125
+    ]
+   },
+   {
+    "id": "dphase_floor_sweep",
+    "file": "tools/dphase_floor_sweep.py",
+    "kind": "script",
+    "ci": false,
+    "control": 0,
+    "bare": false,
+    "rc": 0,
+    "wall_s": 12.622116769000058,
+    "read_at_s": 0.5615473200000451,
+    "share": 0.04448915584264015,
+    "calls": 102,
+    "kernel_pos": 1101198,
+    "index_pos": 0,
+    "by_caller": {
+     "_fold_at<-jitter_features@16": {
+      "calls": 102,
+      "positions": 1101198,
+      "s": 0.5615473200000451
+     }
+    },
+    "rebinds": 0,
+    "unwrapped": [],
+    "modules": [
+     "discrimination_features",
+     "model.discrimination_features"
+    ],
+    "overhead_s": 0.00022378641900832008,
+    "tests": null,
+    "pytest_s": null,
+    "tail": [
+     "      200 detune+8Hz          82772.31    13739.72    0.9582  no",
+     "      200 jitter0.1%          14534.04     2410.20    0.6772  no",
+     "      200 jitter0.5%           9917.47     3292.21    0.5966  no",
+     "      200 jitter2%            44374.26    11245.70    0.6416  no",
+     "      200 glide               33833.59     2730.77    1.0000  no",
+     "     2000 detune+0.5Hz           54.53        4.56    0.0000  yes",
+     "     2000 detune+2Hz          17473.00     2141.14    1.0000  no",
+     "     2000 detune+8Hz          82772.31    13739.72    0.9582  no",
+     "     2000 jitter0.1%          14534.04     2410.20    0.6772  no",
+     "     2000 jitter0.5%           9917.47     3292.21    0.5966  no",
+     "     2000 jitter2%            44374.26    11245.70    0.6416  no",
+     "     2000 glide               33833.59     2730.77    1.0000  no"
+    ],
+    "process_s": 12.960504994000075,
+    "loadavg_end": [
+     4.51904296875,
+     4.4345703125,
+     3.857421875
+    ]
+   },
+   {
+    "id": "dphase_floor_sweep",
+    "file": "tools/dphase_floor_sweep.py",
+    "kind": "script",
+    "ci": false,
+    "control": 0,
+    "bare": false,
+    "rc": 0,
+    "wall_s": 12.813490364000245,
+    "read_at_s": 0.5876845389984737,
+    "share": 0.045864516404490775,
+    "calls": 102,
+    "kernel_pos": 1101198,
+    "index_pos": 0,
+    "by_caller": {
+     "_fold_at<-jitter_features@16": {
+      "calls": 102,
+      "positions": 1101198,
+      "s": 0.5876845389984737
+     }
+    },
+    "rebinds": 0,
+    "unwrapped": [],
+    "modules": [
+     "discrimination_features",
+     "model.discrimination_features"
+    ],
+    "overhead_s": 0.00022461720898900238,
+    "tests": null,
+    "pytest_s": null,
+    "tail": [
+     "      200 detune+8Hz          82772.31    13739.72    0.9582  no",
+     "      200 jitter0.1%          14534.04     2410.20    0.6772  no",
+     "      200 jitter0.5%           9917.47     3292.21    0.5966  no",
+     "      200 jitter2%            44374.26    11245.70    0.6416  no",
+     "      200 glide               33833.59     2730.77    1.0000  no",
+     "     2000 detune+0.5Hz           54.53        4.56    0.0000  yes",
+     "     2000 detune+2Hz          17473.00     2141.14    1.0000  no",
+     "     2000 detune+8Hz          82772.31    13739.72    0.9582  no",
+     "     2000 jitter0.1%          14534.04     2410.20    0.6772  no",
+     "     2000 jitter0.5%           9917.47     3292.21    0.5966  no",
+     "     2000 jitter2%            44374.26    11245.70    0.6416  no",
+     "     2000 glide               33833.59     2730.77    1.0000  no"
+    ],
+    "process_s": 13.147857730999931,
+    "loadavg_end": [
+     4.62353515625,
+     4.46533203125,
+     3.88330078125
+    ]
+   }
+  ]
+ },
+ "bare": {
+  "self-tests": {
+   "wall_s": 19.30777207699998,
+   "walls": [
+    19.311128075,
+    19.277184957999992,
+    19.30777207699998
+   ],
+   "rc": 0
+  },
+  "test_discrimination": {
+   "wall_s": 46.511047228999985,
+   "walls": [
+    46.62815931900002,
+    46.511047228999985,
+    46.299128059
+   ],
+   "rc": 0
+  },
+  "test_fold_rate_sweep": {
+   "wall_s": 7.179431882000017,
+   "walls": [
+    7.225452128000029,
+    7.175281213999995,
+    7.179431882000017
+   ],
+   "rc": 0
+  },
+  "test_dphase_floor_census": {
+   "wall_s": 4.132884004000061,
+   "walls": [
+    4.379929989000061,
+    4.132884004000061,
+    4.125437539000018
+   ],
+   "rc": 0
+  },
+  "test_promoted_bands": {
+   "wall_s": 2.4640337470000304,
+   "walls": [
+    2.566308898999978,
+    2.4202916479999885,
+    2.4640337470000304
+   ],
+   "rc": 0
+  },
+  "fold_rate_sweep": {
+   "wall_s": 190.55839778799998,
+   "walls": [
+    191.24311672500005,
+    190.55839778799998,
+    189.4739881439998
+   ],
+   "rc": 0
+  },
+  "rate_tol_sweep": {
+   "wall_s": 72.37976396699992,
+   "walls": [
+    74.37312826800007,
+    72.37976396699992,
+    72.2575913390001
+   ],
+   "rc": 0
+  },
+  "dphase_floor_sweep": {
+   "wall_s": 12.671586769999976,
+   "walls": [
+    12.695470883000326,
+    12.601078740000048,
+    12.671586769999976
+   ],
+   "rc": 0
+  }
+ },
+ "excluded": {
+  "tools/dphase_floor_census.py": "needs the Fischer corpus, GF180_TR808_REFS, and computes its rows in a process pool, so a wrapper in the parent would time none of its folds and would read exactly like a free kernel; its per-row cost is the extra_features component instead",
+  "tools/fold_read_profile.py": "this instrument: its own calls are the toy workload",
+  "tools/test_fold_read_profile.py": "this instrument's controls, on workloads of about a second"
+ },
+ "component": {
+  "wall_s": 0.14304647819999444,
+  "read_at_s": 0.0448856980000528,
+  "share": 0.31378401317435956,
+  "calls": 13,
+  "kernel_pos": 72836
+ },
+ "control": {
+  "repeat": 10,
+  "record": {
+   "wall_s": 400.3142890700001,
+   "read_at_s": 263.3509958460131,
+   "share": 0.6578605936296289,
+   "calls": 16072,
+   "kernel_pos": 81037500
+  },
+  "problems": []
+ },
+ "verdict": "CONTROL"
+}
