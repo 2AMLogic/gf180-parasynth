@@ -498,6 +498,162 @@ def test_a_caught_control_report_from_the_board_binds_both_sidecars(name):
 
 
 # --------------------------------------------------------------------------- #
+# one capture in a REUSED control report, not two (#1580)
+# --------------------------------------------------------------------------- #
+_COMMITTED = pathlib.Path(score.ROOT) / "docs/scorecard/ensemble-e1a/rtl"
+#: What one run of a caught control prints: a backend declaration, no PASS
+#: verdict (the bench was red) and one WAV digest.
+SINGLE_CAUGHT = {"simulator backend declaration": 1, "PASS verdict": 0,
+                 "decoded I2S WAV digest": 1}
+#: The two callers of `_reusable_control_run`, and the folder and part each
+#: keeps its control run in: the mix comparison, and one stop's timing.
+_CALLERS = {"mix": (f"control-{score.CONTROL_INJECT}", "mix"),
+            "stop:BD": (f"control-{score.CONTROL_INJECT}-timing", "stop:BD")}
+_BD_ROWS = [{"intended_frame": 2400, "landed_frame": 2403, "latency_frames": 3,
+             "accent": 1.4, "i2s_period": 2404}]
+
+
+def _control_schedule(part):
+    return _schedule(part, stops={"BD": _BD_ROWS}) if part.startswith("stop:") else None
+
+
+def _caught_control(folder, part):
+    """A caught control run of `part` under `folder`, bound to its own sidecars."""
+    folder.mkdir(parents=True, exist_ok=True)
+    return _control_bundle(folder, part, samples=-np.ones(CASE_FRAMES, dtype=np.int64),
+                           schedule=_control_schedule(part))
+
+
+def _reuse_control(caller, tmp_path):
+    """Each caller's `--reuse` path over whatever sits in its control folder."""
+    folder, part = _CALLERS[caller]
+    if caller == "mix":
+        return score.control_report("E1A", {"mix": {"samples": np.ones(CASE_FRAMES)}}, {},
+                                    tmp_path, simulator="verilator", timeout_s=1, reuse=True)
+    return score._injected_event_timing("E1A", "BD", tmp_path / folder,
+                                         simulator="verilator", timeout_s=1, reuse=True)
+
+
+def _caught_then_escaped(tmp_path, caller, *, drop_backend=False):
+    """`caller`'s control folder holding ONE report of two runs of its part:
+    run 1 caught (the bench red), then run 2 with the same mutation compiled in
+    whose wire matched (`PASS --`, `NEGATIVE CONTROL NOT CAUGHT`), and run 2's
+    WAV and schedule beside it. `run_part` overwrites a report, so this is a
+    concatenated capture offered under `--reuse`. Returns the report."""
+    folder, part = _CALLERS[caller]
+    _, caught, *_ = _caught_control(tmp_path / "run1", part)
+    escaped_samples = np.zeros(CASE_FRAMES, dtype=np.int64)
+    escaped_samples[10] = 100
+    (tmp_path / "run2").mkdir()
+    escaped_paths, escaped, *_ = _part_files(
+        tmp_path / "run2", part, samples=escaped_samples, schedule=_control_schedule(part),
+        extra=(f"verify_synth_top: selected legacy single-rate waveform; compile defines: "
+               f"INJECT_BUG_{score.CONTROL_INJECT}\n"
+               "verify_synth_top: NEGATIVE CONTROL NOT CAUGHT (status 0)"))
+    assert f"negative control {score.CONTROL_INJECT} CAUGHT" in caught
+    assert f"negative control {score.CONTROL_INJECT} CAUGHT" not in escaped
+    assert "NEGATIVE CONTROL NOT CAUGHT" in escaped
+    if drop_backend:
+        stripped = "\n".join(line for line in escaped.splitlines()
+                             if "simulator backend" not in line) + "\n"
+        assert stripped != escaped
+        escaped = stripped
+    (tmp_path / folder).mkdir()
+    paths = score.part_paths(tmp_path / folder, part)
+    paths["report"].write_text(caught + escaped)
+    paths["wav"].write_bytes(escaped_paths["wav"].read_bytes())
+    paths["schedule"].write_bytes(escaped_paths["schedule"].read_bytes())
+    return caught + escaped
+
+
+@pytest.mark.parametrize("drop_backend", [False, True],
+                         ids=["two backend declarations", "one backend, two digests"])
+@pytest.mark.parametrize("caller", sorted(_CALLERS))
+def test_control_reuse_reruns_a_report_whose_latest_run_escaped(
+        tmp_path, monkeypatch, caller, drop_backend):
+    """START RED (#1580). The reuse predicate reads a control report by
+    substring and never asked the shared gate -- a control report is never a
+    clean PASS. Offered a caught run FOLLOWED BY an escaped one, with the
+    escaped run's sidecars beside it, both callers reused it: the mix path
+    reported the control caught with the FIRST run's `FAIL -- of` line, and
+    the timing path measured the escaped run's WAV as the injected render."""
+    text = _caught_then_escaped(tmp_path, caller, drop_backend=drop_backend)
+    counts = score.i2s_transcript.record_counts(text)
+    assert counts["decoded I2S WAV digest"] == 2
+    assert counts["simulator backend declaration"] == (1 if drop_backend else 2)
+
+    monkeypatch.setattr(score, "run_part", _intercept_rerun)
+    try:
+        reused = _reuse_control(caller, tmp_path)
+    except _RerunRequested:
+        return
+    pytest.fail("reused a control report whose latest run escaped: " + str(
+        {k: reused.get(k) for k in ("caught", "measured", "valid", "exit_status",
+                                    "periods_differing_from_the_model")}))
+
+
+@pytest.mark.parametrize("caller", sorted(_CALLERS))
+def test_a_single_caught_control_is_still_reused(tmp_path, monkeypatch, caller):
+    """The positive control for the refusal above: one caught run bound to its
+    own sidecars is reused, so the count rule must take a report with NO PASS
+    verdict -- the bench was red -- and one of each other record."""
+    folder, part = _CALLERS[caller]
+    paths, text, *_ = _caught_control(tmp_path / folder, part)
+    assert score.i2s_transcript.record_counts(text) == SINGLE_CAUGHT
+    assert score._reusable_control_run(paths, "E1A", part)
+
+    monkeypatch.setattr(score, "run_part", _intercept_rerun)
+    reused = _reuse_control(caller, tmp_path)
+    assert reused["exit_status"] == 0
+    if caller == "mix":
+        assert reused["caught"]
+        assert reused["periods_differing_from_the_model"] == CASE_FRAMES
+    else:
+        assert reused["measured"]
+
+
+@pytest.mark.parametrize("gone", ["wav", "schedule"])
+def test_control_reuse_reruns_when_a_bound_file_is_missing(tmp_path, monkeypatch, gone):
+    paths, *_ = _caught_control(tmp_path / _CALLERS["mix"][0], "mix")
+    paths[gone].unlink()
+
+    monkeypatch.setattr(score, "run_part", _intercept_rerun)
+    with pytest.raises(_RerunRequested):
+        _reuse_control("mix", tmp_path)
+
+
+@pytest.mark.parametrize("caller, name, schedule", [
+    ("mix", "E1A-control-DRUM_BUS_STALE.txt", "mix-schedule.json"),
+    ("stop:BD", "E1A-control-DRUM_BUS_STALE-stop-BD.txt", "stop-BD-schedule.json")])
+def test_a_committed_control_report_stays_reusable(tmp_path, monkeypatch, caller, name, schedule):
+    """A count rule has to stay satisfiable by what the bench really prints.
+    Each committed E1A control report is board output and holds ONE run's
+    records. Reused here in full: its committed schedule -- the very bytes the
+    run digested -- beside it, a fixture WAV standing in for the untracked
+    one, and the one WAV digest line rebound to that fixture. Every other line
+    is the board's own, and neither caller may ask for a run."""
+    committed = (_COMMITTED / name).read_text()
+    assert score.i2s_transcript.record_counts(committed) == SINGLE_CAUGHT
+
+    folder, part = _CALLERS[caller]
+    (tmp_path / folder).mkdir()
+    paths = score.part_paths(tmp_path / folder, part)
+    sidecar = (_COMMITTED / schedule).read_bytes()
+    assert f"ensemble schedule sha256 {hashlib.sha256(sidecar).hexdigest()}" in committed
+    paths["schedule"].write_bytes(sidecar)
+    wav_sha = _write_wav(paths["wav"], -np.ones(CASE_FRAMES, dtype=np.int64))
+    rebound, n_wav = re.subn(r"(verify_synth_top: decoded I2S WAV sha256 )[0-9a-f]{64}",
+                             rf"\g<1>{wav_sha}", committed)
+    assert n_wav == 1
+    paths["report"].write_text(rebound)
+
+    monkeypatch.setattr(score, "run_part", _intercept_rerun)
+    reused = _reuse_control(caller, tmp_path)
+    assert reused["exit_status"] == 0
+    assert reused["caught"] if caller == "mix" else reused["measured"]
+
+
+# --------------------------------------------------------------------------- #
 # one capture in the report, not two (#1562)
 # --------------------------------------------------------------------------- #
 TWO_RUNS = ("mix: ambiguous transcript: it holds 2 simulator backend declarations, "
