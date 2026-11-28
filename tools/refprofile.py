@@ -792,6 +792,41 @@ def level_refusal(what: str, pk: float) -> str:
     return why
 
 
+#: The finding at every site in this file, and in `f1_level_capture.worker`, where
+#: a plugin's render holds no sample at all (#2066). One sentence, so a same-shape
+#: search for `EMPTY_RENDER_WHY` finds every site that refuses one.
+#:
+#: WHY IT IS ITS OWN CASE, and not covered by the finiteness check before it or
+#: the level floor after it: `require_finite` asks whether every sample is a
+#: number, and an empty buffer has no sample that is not one, so it passes; the
+#: next line, `np.abs(y).max()`, then raises `ValueError` on zero samples. An
+#: empty buffer is also not silent. Silence has samples and they are all zero --
+#: a fault of the patch, in `level_refusal`'s terms -- and an empty buffer has
+#: no sample to be at any level, which is a fault of the apparatus: the host
+#: returned nothing. `audio_measure.is_silent` answers True for an empty buffer
+#: (its `peak` is 0.0 when there is nothing to peak), which is exactly how the
+#: two get collapsed if a site reads only that.
+#:
+#: WHAT THIS GUARD DOES NOT CATCH (rule 8): what satisfies it while violating
+#: its intent is a buffer with at least one sample that is not a render -- one
+#: sample of value 0.5 passes it, clears the level floor, and would be frozen
+#: as a one-frame clip. The length a render must have is not known here (it is
+#: the stimulus's, and each clip's stimulus differs), so no minimum is stated;
+#: `load_clip` reads `frames` back from the profile, which is written from the
+#: same render, and so cannot see it either. A measured short-render case is
+#: what would reopen that.
+EMPTY_RENDER_WHY = ("the host returned an empty buffer (0 frames): there is no "
+                    "sample to be at any level, which is a fault of the apparatus "
+                    "and not a silent render")
+
+
+def is_empty_render(y) -> bool:
+    """True when a render holds no sample at all (#2066). `.size` and not
+    `len()`: `np.abs(y).max()` raises on zero ELEMENTS, and a `(2, 0)` array
+    has a length."""
+    return np.asarray(y).size == 0
+
+
 #: The estimator floors this profile's clips are read through, stated here so a
 #: consumer can refuse a row inside one. Issue #92: a floor that is published
 #: and not actually constant is worse than none.
@@ -1335,6 +1370,19 @@ def check_pins_post_render(dev) -> tuple[list, list]:
     return bad, aliased
 
 
+def _probed(y) -> dict:
+    """What one of `disqualification_probe`'s renders measured (#2066): `peak`
+    and `silent` when there is a sample to measure, and `empty` told apart
+    from both. An empty buffer has no peak and is not silent --
+    `audio_measure.is_silent` answers True for it, because its peak is 0.0
+    when there is nothing to peak -- so it gets `None` for the two and `True`
+    for its own."""
+    if is_empty_render(y):
+        return {"peak": None, "silent": None, "empty": True}
+    return {"peak": float(np.abs(y).max()), "silent": bool(am.is_silent(y)),
+            "empty": False}
+
+
 def disqualification_probe() -> dict:
     """The measurements behind the `qualified: false` verdicts, taken here so
     they are evidence in a committed file rather than lore in a docstring.
@@ -1342,7 +1390,13 @@ def disqualification_probe() -> dict:
     Each of these is a plugin that BUILDS -- its pinned settings hold, the rig
     does not refuse it -- and is still unusable. A rig that qualifies is not the
     same as a reference that works, and the gap between the two is where a
-    silent wrong answer lives."""
+    silent wrong answer lives.
+
+    A recorder, not a decision path: a render that comes back EMPTY is recorded
+    as what it is, beside `rig_builds: True` (#2066). Until that, the
+    `.max()` on an empty buffer raised inside each `try` and the handler wrote
+    `rig_builds: False` with the error text -- a rig that did not build, which
+    is not what happened. `render` refuses the same buffer; this records it."""
     import audio_measure as am
     import reference_rigs as rr
     out = {}
@@ -1357,17 +1411,32 @@ def disqualification_probe() -> dict:
         md.note = 48
         y = md.render(np.zeros(1), 2.0)
         ring = md.ring(0.75, 0.95, 1.5)
+        note, self_osc = _probed(y), _probed(ring)
+        # The verdict is a measurement too, so it may not say "exact silence"
+        # about a buffer that has no sample. For any render WITH samples it is
+        # the committed sentence, unchanged.
+        if note["empty"] or self_osc["empty"]:
+            with_what = " and ".join(
+                what for what, m in (("the oscillator on", note),
+                                     ("the filter self-oscillating", self_osc))
+                if m["empty"])
+            opening = (f"returns NO SAMPLES UNDER DAWDREAMER 0.9.0, with {with_what}: "
+                       f"{EMPTY_RENDER_WHY}. ")
+        else:
+            opening = ("renders exact silence UNDER DAWDREAMER 0.9.0, with the "
+                       "oscillator on AND with the filter self-oscillating. ")
         out["modeld"] = {
             "rig_builds": True,
-            "osc1_on_note48_peak": float(np.abs(y).max()),
-            "osc1_on_note48_silent": bool(am.is_silent(y)),
-            "self_oscillation_peak": float(np.abs(ring).max()),
-            "self_oscillation_silent": bool(am.is_silent(ring)),
-            "verdict": "renders exact silence UNDER DAWDREAMER 0.9.0, with the "
-                       "oscillator on AND with the filter self-oscillating. This "
-                       "verdict is about the (plugin, host) pair and not about the "
-                       "plugin: see `modeld-pedalboard`, which is NOT silent under "
-                       "pedalboard. Not usable as a reference under this host.",
+            "osc1_on_note48_peak": note["peak"],
+            "osc1_on_note48_silent": note["silent"],
+            "osc1_on_note48_empty": note["empty"],
+            "self_oscillation_peak": self_osc["peak"],
+            "self_oscillation_silent": self_osc["silent"],
+            "self_oscillation_empty": self_osc["empty"],
+            "verdict": opening + ("This verdict is about the (plugin, host) pair "
+                                  "and not about the plugin: see `modeld-pedalboard`, "
+                                  "which is NOT silent under pedalboard. Not usable "
+                                  "as a reference under this host."),
         }
         del md
     except Exception as e:                                       # pragma: no cover
@@ -1389,10 +1458,22 @@ def disqualification_probe() -> dict:
             mv.set(mv.I['emphasis'], 0.0)
             mv.note = 48
             y = mv.render(np.zeros(1), 1.5)[int(0.3 * SR):]
+            # #2066: the trim above can leave NOTHING. A render shorter than
+            # 0.3 s slices to an empty buffer -- the shape
+            # `render_midi_note`'s latency trim has, once the reported latency
+            # reaches the render length -- and `dominant_frequency` calls that
+            # "silent" (`is_silent` of an empty buffer is True) whereupon the
+            # `.max()` below raised, and the rig was recorded as not built.
+            if is_empty_render(y):
+                got[label] = {"peak": None, "f0_hz": None, "empty": True,
+                              "f0_why": "nothing left after the 0.3 s trim: the render "
+                                        f"is shorter than the trim. {EMPTY_RENDER_WHY}"}
+                continue
             f = am.dominant_frequency(y, 10.0, 4000.0)
             got[label] = {"peak": float(np.abs(y).max()),
                           "f0_hz": (float(f.value) if f.ok else None),
-                          "f0_why": (None if f.ok else f.reason)}
+                          "f0_why": (None if f.ok else f.reason),
+                          "empty": False}
         out["miniv3"] = {
             "rig_builds": True, "note": 48, "note_hz": float(vf.note_hz(48)),
             "measured": got,
@@ -1546,6 +1627,14 @@ def render(probe_disqualified: bool = True) -> dict:
             am.require_finite(y, f"{cid}'s render")
         except am.NonFiniteAudio as why:
             raise Refused(f"{cid}: refusing to freeze it -- {why}") from why
+        # #2066: and BETWEEN finiteness and the floor, "is there a sample at
+        # all". An empty buffer is finite -- no sample in it is non-finite --
+        # so the check above passed it, and the `.max()` below raised
+        # `ValueError` on zero samples: a traceback where a refusal belongs.
+        # The floor check after it handles a SILENT render correctly; only the
+        # empty buffer was missing (`EMPTY_RENDER_WHY`).
+        if is_empty_render(y):
+            raise Refused(f"{cid}: refusing to freeze it -- {EMPTY_RENDER_WHY}")
         pk = float(np.abs(y).max())
         # `not (pk > LEVEL_FLOOR)` rather than `pk <= LEVEL_FLOOR`: the two
         # differ ONLY for a non-finite `pk`, which is exactly the case that
