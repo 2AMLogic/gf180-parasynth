@@ -246,7 +246,7 @@ def test_fixture_answers_every_marker_line_exactly():
     marked = _marked(A_READER)
     assert len(marked) == 18, "the fixture lost a marker"
     got = _by_line("tools/a_reader.py")
-    assert {n: s.guard is None for n, s in got.items()} == {
+    assert {n: s.guard is not None for n, s in got.items()} == {
         line: g for line, g in marked.values() if g is not None}
     assert not set(got) & {line for line, g in marked.values() if g is None}
     # the read that made each site, read off the node and not the marker
