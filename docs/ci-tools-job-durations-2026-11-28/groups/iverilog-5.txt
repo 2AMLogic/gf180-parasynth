@@ -1,0 +1,5 @@
+tools/test_check_f1_rtl_record.py
+tools/test_check_iverilog_generate_case_string.py
+tools/test_run_controls.py
+tools/test_score_f1_rtl.py
+tools/test_trial.py
