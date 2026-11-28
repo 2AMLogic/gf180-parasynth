@@ -284,6 +284,16 @@ def compare_writes(writes: list, rtl_out: str) -> int:
                 count_off=abs(len(got) - n), count_seen=len(got), count_sent=n,
                 late=len(late), cyc_seen=len(cycs), compared=compared, total=n)
     if bad == 0 and not count_bad and not late:
+        # #1466: the PASS line prints the drain window's range. With no write
+        # sent and none seen, or no row carrying a cycle, this branch was
+        # entered over an empty `cycs` and died on `min(cycs)` -- a traceback
+        # where a verdict belongs. A pass needs a population, and a return 2
+        # leaves `LAST` empty per this function's contract above.
+        if not cycs:
+            LAST.clear()
+            print(f"verify_ctl: NO VERDICT -- {n} write(s) sent, {compared} compared, none with a "
+                  f"cycle at the port: the drain window was never measured")
+            return 2
         print(f"verify_ctl: PASS -- all {n} writes reached the register port exactly as sent, "
               f"every one in the drain window (cycles {min(cycs)}..{max(cycs)}, before `go` at {GO_CYCLE})")
         return 0
@@ -390,6 +400,10 @@ def main(argv=None) -> int:
     a.outdir = os.path.abspath(a.outdir)
     os.makedirs(a.outdir, exist_ok=True)
     writes = stimulus()
+    if not writes:
+        # #1466: an empty stimulus leaves nothing to drive or compare.
+        print("verify_ctl: NO VERDICT -- stimulus produced 0 writes: nothing to drive")
+        return 2
     nd = sum(1 for w in writes if w[1] == SEC_DRUM)
     wide_a = sum(1 for w in writes if w[1] == SEC_DRUM and (w[2] & 0xFF) > 0x7F)
     wide_d = sum(1 for w in writes if (w[3] & 0xFFFFFFFF) > 0xFFFFFF)

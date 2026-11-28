@@ -8,6 +8,16 @@ the estimator, and differences that are NOT permitted must still move it.
     python3 tools/probes/permitted_differences.py --false-alarm-rate 50
     python3 tools/probes/permitted_differences.py --safety-sweep 20
 
+WHAT THE EXIT STATUS COUNTS (#1466). A row's verdict is the worst of its
+trials, so a row that ran none is REFUSED, never PASS; an empty `CASES` table,
+`--trials` below 1, `--cal-trials` below 1 under `--calibrate`, or
+`--false-alarm-rate` / `--safety-sweep` below 1 are NO VERDICT (exit 2) before
+any mode runs. Before that, `--trials 0` printed `FAIL 0 REFUSED 0 PASS 18`, a
+0.0000 % false-alarm rate and `observed red (none)` under an injection,
+`--false-alarm-rate -1` exited 0 over -18 comparisons, and `CASES = []` printed
+`FAIL 0 REFUSED 0 PASS 0` on exit 0. `--policies` is a listing and runs no
+comparison on purpose.
+
 #158: "**A detector that fires on every difference is useless.** Leading
 silence must not move an onset-relative decay; polarity reversal must not move
 spectral magnitude or estimated frequency; gain must not move a level-normalised
@@ -1342,6 +1352,11 @@ class RowResult:
 
 
 def run_case(c: Case, trials: int, seed_base: int, inject: str | None) -> RowResult:
+    if trials <= 0:
+        # #1466: a row's verdict is the worst of its trials, and with no trial
+        # there is no worst. `--trials 0` reached this and every row read PASS
+        # (`exceed` 0, and `0 > 0` is False) -- eighteen passes over nothing.
+        return RowResult(c, REFUSED, trials, 0, 0, [], [f"{trials} trial(s) requested: nothing was measured"])
     res, reasons, exceed, refus = [], [], 0, 0
     for i in range(trials):
         t = run_trial(c, seed_base, i, inject)
@@ -2013,9 +2028,9 @@ def main(argv=None) -> int:
     ap.add_argument("--cal-trials", type=int, default=CAL_TRIALS)
     ap.add_argument("--controls", action="store_true",
                     help="run every injected control and check its declared red set")
-    ap.add_argument("--false-alarm-rate", type=int, default=0, metavar="N",
+    ap.add_argument("--false-alarm-rate", type=int, default=None, metavar="N",
                     help="re-run the suite N times on fresh seeds and report the rate")
-    ap.add_argument("--safety-sweep", type=int, default=0, metavar="N",
+    ap.add_argument("--safety-sweep", type=int, default=None, metavar="N",
                     help=f"re-derive the calibrated thresholds at 0.5-8x and "
                          f"measure each table's false-alarm rate over N suite "
                          f"runs -- why SAFETY is {SAFETY:g}")
@@ -2033,6 +2048,28 @@ def main(argv=None) -> int:
     if a.policies:
         print_policies()
         return 0
+    # #1466: no trial, no rep, or no case -> no verdict. `--trials 0` ran every
+    # mode on an empty record and exited 0 three ways (the suite,
+    # --false-alarm-rate, --inject); `--false-alarm-rate -1` ran zero reps and
+    # exited 0; `CASES = []` printed `FAIL 0 REFUSED 0 PASS 0` and exited 0.
+    # Refused here once, before any mode, so each mode's own exit mapping is
+    # untouched. --policies above is a listing and legitimately runs no
+    # comparison; --calibrate reads --cal-trials, not --trials.
+    if not CASES:
+        print("\n   NO VERDICT -- CASES is empty: no row is declared to judge")
+        return 2
+    if not a.calibrate and a.trials < 1:
+        print(f"\n   NO VERDICT -- --trials {a.trials}: no trial would run, so no row could be judged")
+        return 2
+    if a.calibrate and a.cal_trials < 1:
+        print(f"\n   NO VERDICT -- --cal-trials {a.cal_trials}: no calibration draw would run")
+        return 2
+    if a.false_alarm_rate is not None and a.false_alarm_rate < 1:
+        print(f"\n   NO VERDICT -- --false-alarm-rate {a.false_alarm_rate}: no suite run would execute")
+        return 2
+    if a.safety_sweep is not None and a.safety_sweep < 1:
+        print(f"\n   NO VERDICT -- --safety-sweep {a.safety_sweep}: no suite run would execute")
+        return 2
     if a.calibrate:
         return calibrate(a.cal_trials)
     if a.margins:
@@ -2047,13 +2084,13 @@ def main(argv=None) -> int:
             a.json.parent.mkdir(parents=True, exist_ok=True)
             a.json.write_text(json.dumps(report, indent=2))
         return rc
-    if a.safety_sweep:
+    if a.safety_sweep is not None:
         rc, report["safety_sweep"] = safety_sweep(a.safety_sweep, a.trials)
         if a.json:
             a.json.parent.mkdir(parents=True, exist_ok=True)
             a.json.write_text(json.dumps(report, indent=2))
         return rc
-    if a.false_alarm_rate:
+    if a.false_alarm_rate is not None:
         rc, report["false_alarm"] = false_alarm_rate(a.false_alarm_rate, a.trials)
         if a.json:
             a.json.parent.mkdir(parents=True, exist_ok=True)

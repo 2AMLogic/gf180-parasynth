@@ -687,7 +687,13 @@ def _int_or_none(v):
 
 
 def analyze(run):
-    """Check a run against the contract. Returns (ok, comparison, detail)."""
+    """Boolean pass result used by the deadline, replay and reference tools."""
+    state, comp, detail = analyze_verdict(run)
+    return state == "PASS", comp, detail
+
+
+def analyze_verdict(run):
+    """Return the child state, its measurements and diagnostics."""
     planned, reset_frames = run["planned"], run["reset_frames"]
     items = [it for body in run["bodies"] for it in body]       # shifted dues included
     rows_flat = [r for rows in planned for r in rows]
@@ -700,7 +706,7 @@ def analyze(run):
     if len(segs) != len(planned):
         comp["segment_mismatch"] = (len(segs), len(planned))
         detail.append(f"bench reported {len(segs)} segments, planned {len(planned)}")
-        return False, comp, detail
+        return "NO VERDICT", comp, detail
     origins = [s[1] >> 8 for s in segs]                  # absolute frames per segment
 
     wr = _rows(run["files"]["wrs"])
@@ -818,6 +824,7 @@ def analyze(run):
 
     # scenario-specific expectations ----------------------------------------
     ok_specific = True
+    missing = []
     sc = run["scenario"]
     if sc == "overflow":
         want_drops = 6
@@ -829,6 +836,8 @@ def analyze(run):
         if err_codes[uh.ERR_CHECKSUM] != 1 or errs != 1:
             ok_specific = False
             detail.append(f"expected exactly one ERR(bad checksum), got {dict(err_codes)}")
+    elif sc == "reset-mid" and (not reset_frames or not origins):
+        missing.append("reset-mid needs a reset frame and a segment origin")
     elif sc == "reset-mid":
         if boots < len(reset_frames):
             ok_specific = False
@@ -849,8 +858,7 @@ def analyze(run):
     elif sc == "noff-full":
         gate_offs = [e for e in expected if e[4] is not None and e[3] == 0x21]
         if not gate_offs:
-            ok_specific = False
-            detail.append("scenario bug: no gate-off in the expected list")
+            missing.append("noff-full needs a gate-off in the expected list")
     if errs and sc not in ("overflow", "drop-byte", "corrupt-byte"):
         ok_specific = False
         detail.append(f"unexpected device errors: {dict(err_codes)}")
@@ -902,8 +910,10 @@ def analyze(run):
                 continue
             mi = p - p0
             if mi >= len(exp_i2s):
+                coverage_gaps.append(f"seg {s}: model ended before period {mi}")
                 break
             e = int(exp_i2s[mi])
+            total_periods += 1
             if nbl != 32 or nbr != 32:
                 comp["width"] += 1
             if left != e:
@@ -913,7 +923,6 @@ def analyze(run):
                                   f"error {left - e:+d} LSB")
             if right != left:
                 comp["swap"] += 1
-        total_periods += len(periods)
         # the core's own stream, as a diagnostic; X counts as bad, never as pass
         for r in samp:
             try:
@@ -926,6 +935,8 @@ def analyze(run):
                     comp["core_bad"] += 1
     comp["periods"] = total_periods
     comp["periods_required"] = required_periods
+    if total_periods == 0 and not coverage_gaps:
+        coverage_gaps.append("no I2S period was compared")
     comp["i2s_incomplete"] = bool(coverage_gaps)
     if coverage_gaps:
         detail[:0] = ["I2S coverage INCOMPLETE (no verdict on missing periods): "
@@ -936,23 +947,23 @@ def analyze(run):
     mb, mt = RE_BUSY.search(report), RE_TXB.search(report)
     if not (mw and ms and mb and mt):
         comp["report_missing"] = True
-        detail.append("the bench did not report its frame budget")
-        return False, comp, detail
-    comp["collisions"] = int(mw.group(2))
-    comp["busy_at_tick"] = int(mb.group(1))
-    comp["overrun"] = int(mb.group(2))
-    comp["overflow"] = int(mb.group(3))
-    comp["frames_no_sample"] = int(ms.group(2))
-    comp["worst_strobe_cycle"] = int(ms.group(3))
+        missing.append("the bench did not report its full frame budget")
+    if mw:
+        comp["collisions"] = int(mw.group(2))
+    if mb:
+        comp["busy_at_tick"], comp["overrun"], comp["overflow"] = map(int, mb.groups())
+    if ms:
+        comp["frames_no_sample"] = int(ms.group(2))
+        comp["worst_strobe_cycle"] = int(ms.group(3))
 
     # envelope floor: after the release the model must actually reach it
-    if sc == "held":
-        import synth_top_model as stm2
-        exp_all = expected
+    if sc == "held" and (not expected or not origins):
+        missing.append("held needs planned writes and a segment origin to check the release tail")
+    elif sc == "held":
         origin = origins[0]
-        model_writes = [(e[0] - origin, e[1], e[2], e[3], e[4]) for e in exp_all]
+        model_writes = [(e[0] - origin, e[1], e[2], e[3], e[4]) for e in expected]
         n = max(f for f, *_ in model_writes) + 500
-        m = config_model(stm2).run(model_writes, n)
+        m = config_model(stm).run(model_writes, n)
         tail_peak = int(np.abs(m["sample"][-400:]).max())
         comp["release_tail_peak"] = tail_peak
         if tail_peak > 1024:
@@ -960,20 +971,26 @@ def analyze(run):
             detail.append(f"release tail peak {tail_peak} LSB: the envelope "
                           f"did not decay to its floor; the floor claim is unmet")
 
-    clean = (comp["writes_bad"] == 0 and comp["frame_pred_bad"] == 0
-             and comp["frame_no_pred"] == 0 and comp["x_bad"] == 0
-             and comp["wire_mismatch"] == 0 and comp["swap"] == 0
-             and comp["width"] == 0 and comp["core_bad"] == 0
-             and comp["collisions"] == 0 and comp["busy_at_tick"] == 0
-             and comp["overrun"] == 0 and comp["overflow"] == 0
-             and comp["frames_no_sample"] == 0
-             and 0 < comp["worst_strobe_cycle"] < 256
-             and comp["ack_missing"] == 0 and comp["status_bad"] == 0
-             and ok_specific and not comp["i2s_incomplete"])
-    if not clean:
+    # A measured fault decides the child even if another comparison could not
+    # run. Missing evidence alone cannot establish either a pass or a defect.
+    faults = ("writes_bad", "frame_pred_bad", "frame_no_pred", "x_bad",
+              "wire_mismatch", "swap", "width", "core_bad", "collisions",
+              "busy_at_tick", "overrun", "overflow", "frames_no_sample",
+              "ack_missing", "status_bad")
+    late_strobe = ms is not None and not 0 < comp["worst_strobe_cycle"] < 256
+    if late_strobe:
+        detail.append(f"worst strobe cycle {comp['worst_strobe_cycle']} outside 1..255")
+    if any(comp.get(k) for k in faults) or late_strobe or not ok_specific:
+        state = "FAIL"
+    elif coverage_gaps or missing:
+        state = "NO VERDICT"
+    else:
+        state = "PASS"
+    detail.extend(missing)
+    if state != "PASS":
         for d in detail:
             print("    " + d)
-    return clean, comp, detail
+    return state, comp, detail
 
 
 def truncation_control(run, keep_fraction: float = 0.5) -> dict:
@@ -985,7 +1002,10 @@ def truncation_control(run, keep_fraction: float = 0.5) -> dict:
     import contextlib as _cl
     src = Path(run["files"]["i2s"])
     rows = src.read_text().splitlines()
-    keep = max(1, int(len(rows) * keep_fraction))
+    keep = min(len(rows), max(1, int(len(rows) * keep_fraction)))
+    if keep == len(rows):
+        return {"caught": False, "kept_rows": keep, "of_rows": len(rows),
+                "reason": "truncation removed no rows"}
     cut = src.with_name(src.stem + f".trunc{keep}.txt")
     cut.write_text("\n".join(rows[:keep]) + "\n")
     r2 = dict(run)
@@ -998,7 +1018,7 @@ def truncation_control(run, keep_fraction: float = 0.5) -> dict:
             "periods_required": comp.get("periods_required")}
 
 
-def record_for(run, comp, ok):
+def record_for(run, comp, state):
     """verification.json content. The clean phrase run carries the same keys
     fpga/build_arty.py's gate reads."""
     resolved = [(n, p) for n, p in top.resolve_sources(None) if n != "tb_top_bx.v"]
@@ -1012,7 +1032,7 @@ def record_for(run, comp, ok):
     for path in roms():
         hashed[str(path.relative_to(ROOT))] = hashlib.sha256(path.read_bytes()).hexdigest()
     transcript = (Path(run["outdir"]) / "transcript.txt").read_bytes()
-    return {"state": "PASS" if ok else "FAIL", "exit_code": 0 if ok else 1,
+    return {"state": state, "exit_code": EXIT_CODE[state],
             "inject": run["inject"], "scenario": run["scenario"],
             "configuration": CONFIG,
             "scope": ("Arty wrapper UART-bridge digital check: device-scheduled "
@@ -1061,14 +1081,16 @@ def _main(a) -> int:
                        uart_hier=False)
         if run is None:
             return 2
-        ok, comp, detail = analyze(run)
-        rec = record_for(run, comp, ok)
+        state, comp, detail = analyze_verdict(run)
+        rec = record_for(run, comp, state)
         (outdir / "start-red" / "verification.json").write_text(
             json.dumps(rec, indent=2) + "\n")
         print(f"verify_uart_bridge: start-red run state {rec['state']} "
               f"(writes_seen {comp.get('writes_seen')} of {comp.get('writes_sent')}, "
               f"wire_mismatch {comp.get('wire_mismatch')}, periods {comp.get('periods')})")
-        if ok:
+        if state == "NO VERDICT":
+            return REFUSED
+        if state == "PASS":
             print("verify_uart_bridge: FAIL -- the stub PASSED; the bench cannot "
                   "be trusted and must not be used")
             return 1
@@ -1082,15 +1104,16 @@ def _main(a) -> int:
         run = simulate_replay(str(a.replay), outdir / name)
         if run is None:
             return 2
-        ok, comp, detail = analyze(run)
-        rec = record_for(run, comp, ok)
+        state, comp, detail = analyze_verdict(run)
+        if state == "PASS":
+            truncation = truncation_control(run)
+            if not truncation["caught"]:
+                state = "NO VERDICT"
+        else:
+            truncation = {"caught": False, "reason": f"baseline {state}"}
+        rec = record_for(run, comp, state)
         rec["capture"] = str(a.replay)
-        rec["comparison"]["periods_required"] = comp.get("periods_required")
-        rec["comparison"]["i2s_incomplete"] = comp.get("i2s_incomplete")
-        rec["truncation_control"] = truncation_control(run)
-        if comp.get("i2s_incomplete") or not rec["truncation_control"]["caught"]:
-            rec["state"] = "NO VERDICT"
-            rec["exit_code"] = EXIT_CODE["NO VERDICT"]
+        rec["truncation_control"] = truncation
         (outdir / name / "verification.json").write_text(
             json.dumps(rec, indent=2) + "\n")
         print(f"verify_uart_bridge[{name}]: {rec['state']} -- "
@@ -1103,9 +1126,7 @@ def _main(a) -> int:
         print(f"verify_uart_bridge[{name}]: I2S coverage {comp.get('periods')}/"
               f"{comp.get('periods_required')} required periods; truncation control "
               f"{'CAUGHT' if rec['truncation_control']['caught'] else 'MISSED'}")
-        if rec["state"] == "NO VERDICT":
-            return 2
-        return 0 if rec["state"] == "PASS" else 1
+        return rec["exit_code"]
 
     work = []
     if a.scenario == "all":
@@ -1123,11 +1144,11 @@ def _main(a) -> int:
         (outdir / name / "verification.json").unlink(missing_ok=True)
         run = simulate(sc, inject, outdir / name)
         if run is None:
-            return name, None, False, {}
-        ok, comp, detail = analyze(run)
-        rec = record_for(run, comp, ok)
+            return name, None
+        state, comp, detail = analyze_verdict(run)
+        rec = record_for(run, comp, state)
         (outdir / name / "verification.json").write_text(json.dumps(rec, indent=2) + "\n")
-        tag = "PASS" if ok else "FAIL"
+        tag = rec["state"]
         print(f"verify_uart_bridge[{name}]: {tag} -- "
               f"writes {comp.get('writes_seen')}/{comp.get('writes_sent')}, "
               f"timing bad {comp.get('frame_pred_bad')}, corrupt {comp.get('writes_bad')}, "
@@ -1135,7 +1156,7 @@ def _main(a) -> int:
               f"errs {comp.get('errs_seen')} {comp.get('err_codes')}", flush=True)
         for d in detail[:4]:
             print(f"verify_uart_bridge[{name}]:   {d}")
-        return name, rec, ok, comp
+        return name, rec
 
     from concurrent.futures import ThreadPoolExecutor
     with ThreadPoolExecutor(max_workers=a.jobs) as pool:
@@ -1143,11 +1164,10 @@ def _main(a) -> int:
 
     if a.inject:
         rec = results[0][1]
-        ok = results[0][2]
-        comp = results[0][3]
-        if rec is None:
-            return 2
-        if ok or rec["state"] == "PASS":
+        if rec is None or rec["state"] == "NO VERDICT":
+            return REFUSED
+        comp = rec["comparison"]
+        if rec["state"] == "PASS":
             print(f"verify_uart_bridge: NEGATIVE CONTROL NOT CAUGHT ({a.inject})")
             return 1
         # a control must fail for ITS recorded reason, not any failure
@@ -1172,8 +1192,10 @@ def _main(a) -> int:
               f"corrupt {comp.get('writes_bad')}, timing bad {comp.get('frame_pred_bad')})")
         return 0
 
-    summary = {name: (rec or {}).get("state", "REFUSED") for name, rec, _, _ in results}
-    state = ("REFUSED" if any(s not in VERDICTS for s in summary.values())
+    summary = {name: (rec or {}).get("state", "REFUSED") for name, rec in results}
+    if not summary:
+        print("verify_uart_bridge: NO VERDICT -- no scenario to run: nothing was simulated")
+    state = ("REFUSED" if not summary or any(s not in VERDICTS for s in summary.values())
              else "FAIL" if any(s != "PASS" for s in summary.values()) else "PASS")
     result = {"state": state, "runs": summary}
     (outdir / "controls.json").write_text(json.dumps(result, indent=2) + "\n")

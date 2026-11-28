@@ -51,6 +51,12 @@ red can mean anything on a suite that is already red. The refusal names the
 status and the tests that are red before any injection, and prints pytest's
 tail.
 
+A suite with no control declared has measured nothing either (#1466): an
+empty `INJECTS` printed "every control fired" and exited 0, because `bad` and
+`refused` were both zero over a loop that never ran. The verdict line now
+counts the controls it fired, and zero declared is NO VERDICT (exit 2) before
+the baseline copy is made.
+
 Both this probe and the sound probe require a recorded test to fail at its
 intended assertion (#1136, #1400). A setup error, another assertion in the
 same test, or an exception inside the code under test cannot earn credit.
@@ -324,6 +330,13 @@ def baseline() -> Baseline:
 
 
 def main() -> int:
+    # #1466: with no control declared there is nothing for the baseline to
+    # precondition, and the verdict below would print "every control fired"
+    # over zero controls. Refused before the tree is copied.
+    if not INJECTS:
+        print("NO VERDICT -- no control is declared (INJECTS is empty): "
+              "a pass over zero controls has shown nothing")
+        return 2
     base = baseline()
     if base.report is None:
         print(f"BASELINE: REFUSED -- {base.reason}")
@@ -361,7 +374,7 @@ def main() -> int:
         print(f"{refused} control(s) refused -- the reasons are above; "
               f"nothing was measured")
         return 2
-    print("every control fired")
+    print(f"every control fired ({len(INJECTS)})")
     return 0
 
 

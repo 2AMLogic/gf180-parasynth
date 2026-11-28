@@ -37,7 +37,7 @@ import verify_arty_controls as vac
 import verify_pads_top as vp
 import verify_uart_bridge as vub
 
-EXIT = {"PASS": 0, "FAIL": 1, "REFUSED": 2}
+EXIT = {"PASS": 0, "FAIL": 1, "REFUSED": 2, "NO VERDICT": 2}
 
 
 def _controls(outdir: Path) -> dict:
@@ -276,7 +276,7 @@ def test_pads_refused_retry_invalidates_prior_pass_records(monkeypatch, tmp_path
 
 def _uart(monkeypatch, outdir: Path, outcomes) -> int:
     """Run the UART suite with each scenario standing for one child outcome:
-    "pass", "fail" or "none" (no simulator, a compile error, a timeout)."""
+    "pass", "fail", "empty" (zero comparisons) or "none" (no simulation)."""
     def simulate(scenario, inject, path, **_kwargs):
         if outcomes[scenario] == "none":
             return None
@@ -284,11 +284,12 @@ def _uart(monkeypatch, outdir: Path, outcomes) -> int:
         (Path(path) / "transcript.txt").write_text("")
         return {"outdir": path, "inject": inject, "scenario": scenario}
 
-    def analyze(run):
-        return outcomes[run["scenario"]] == "pass", {}, []
+    def analyze_verdict(run):
+        state = {"empty": "NO VERDICT", "pass": "PASS", "fail": "FAIL"}[outcomes[run["scenario"]]]
+        return state, {}, []
 
     monkeypatch.setattr(vub, "simulate", simulate)
-    monkeypatch.setattr(vub, "analyze", analyze)
+    monkeypatch.setattr(vub, "analyze_verdict", analyze_verdict)
     return vub.main(["--outdir", str(outdir), "--scenario", "all", "--jobs", "1"])
 
 
@@ -310,6 +311,8 @@ UART_CASES = [
      _uart_states(overflow="REFUSED"), "REFUSED", 2),
     ("a_real_fail_beside_a_sibling_that_did_not_run", _uart_runs(overflow="none", phrase="fail"),
      _uart_states(overflow="REFUSED", phrase="FAIL"), "REFUSED", 2),
+    ("a_real_fail_beside_a_sibling_with_zero_comparisons", _uart_runs(phrase="empty", overflow="fail"),
+     _uart_states(phrase="NO VERDICT", overflow="FAIL"), "REFUSED", 2),
     ("every_scenario_ran_and_one_failed", _uart_runs(phrase="fail"),
      _uart_states(phrase="FAIL"), "FAIL", 1),
 ]
@@ -330,7 +333,7 @@ def test_uart_record_ships_the_whole_comparison(tmp_path):
     that a narrowed copy would have to anticipate one key at a time."""
     (tmp_path / "transcript.txt").write_text("")
     comp = {"periods": 900, "writes_sent": 5, "periods_required": 900}
-    rec = vub.record_for({"outdir": tmp_path, "inject": None, "scenario": "held"}, comp, True)
+    rec = vub.record_for({"outdir": tmp_path, "inject": None, "scenario": "held"}, comp, "PASS")
     assert rec["comparison"] is comp
     assert (rec["state"], rec["exit_code"]) == ("PASS", 0)
 
@@ -377,8 +380,8 @@ def test_uart_replay_no_verdict_sets_exit_code_two(monkeypatch, tmp_path):
         return {"outdir": Path(path), "inject": None, "scenario": "replay"}
 
     monkeypatch.setattr(vub, "simulate_replay", fake_replay)
-    monkeypatch.setattr(vub, "analyze", lambda _run: (
-        True, {"periods": 10, "periods_required": 900, "i2s_incomplete": True}, []))
+    monkeypatch.setattr(vub, "analyze_verdict", lambda _run: (
+        "NO VERDICT", {"periods": 10, "periods_required": 900, "i2s_incomplete": True}, []))
     monkeypatch.setattr(vub, "truncation_control", lambda _run: {"caught": True})
     assert vub.main(["--outdir", str(tmp_path), "--replay", str(tmp_path / "cap"),
                      "--replay-name", "phrase"]) == 2

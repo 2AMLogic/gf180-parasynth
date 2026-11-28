@@ -108,7 +108,7 @@
         "role": "testbench",
         "path": "rtl-sketch/verify_ctl.py",
         "passed": true,
-        "content_hash": "sha256:1707771a21accced7df9d90a301143284990b8077d7ace5055140c9446d7924d"
+        "content_hash": "sha256:43d0a2209db68a337449067e684d89d396805bcc179190877bda69348914cd02"
       },
       {
         "check": "present",
@@ -143,7 +143,7 @@
         "role": "testbench",
         "path": "rtl-sketch/verify_synth_top.py",
         "passed": true,
-        "content_hash": "sha256:8bbb2cb27314f7a3f9cf9a1095c447b5108f8dcc5b77086eebe8ba757eb8a1c0"
+        "content_hash": "sha256:85c92f5f5cf152b2448b30be425342c667e73bb02fe1c8f935d94728b8b11d7e"
       },
       {
         "check": "present",

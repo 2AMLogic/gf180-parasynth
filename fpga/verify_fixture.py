@@ -165,6 +165,11 @@ def main(argv=None) -> int:
 def _run(a) -> int:
     a.outdir = os.path.abspath(a.outdir)
     os.makedirs(a.outdir, exist_ok=True)
+    if a.frames is not None and a.frames <= 0:
+        # #1466: `--frames 0` was silently dropped by `a.frames or ...` and
+        # negative values crashed after running the simulation.
+        print(f"verify_fixture: NO VERDICT -- --frames {a.frames} leaves no frame to compare")
+        return 2
     link = LINKS[a.link]
 
     # ---- the music, and what it claims to contain ---------------------------
@@ -328,10 +333,8 @@ def _run(a) -> int:
     nper = min(len(i2s), n)
     mism = swap = width = 0
     first = None
-    for r in i2s[:nper]:
-        p_, left, right, nbl, nbr = (int(r[0]), int(r[1]), int(r[2]), int(r[3]), int(r[4]))
-        if p_ >= n:
-            break
+    # Completeness above proves the first nper indices are exactly 0..nper-1.
+    for p_, left, right, nbl, nbr in i2s[:nper]:
         if nbl != 32 or nbr != 32:
             width += 1
         e = int(exp_i2s[p_])
@@ -342,8 +345,9 @@ def _run(a) -> int:
         if right != left:
             swap += 1
     sm = vst.rows(out["samp"])
-    core_bad = sum(1 for r in sm if int(r[0]) < n and int(r[1]) != int(exp_s[int(r[0])]))
-    LAST.update(periods=nper, wire_mismatch=mism, swap=swap, width=width, core_bad=core_bad)
+    core_bad = sum(1 for r in sm if 0 <= int(r[0]) < n and int(r[1]) != int(exp_s[int(r[0])]))
+    LAST.update(periods=nper, periods_compared=nper,
+                wire_mismatch=mism, swap=swap, width=width, core_bad=core_bad)
 
     if mism == 0 and swap == 0 and width == 0 and core_bad == 0:
         print(f"verify_fixture: PASS -- {nper} I2S periods "

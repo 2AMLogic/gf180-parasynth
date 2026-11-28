@@ -1311,6 +1311,11 @@ def main(argv=None) -> int:
     if a.filter2x or a.pulse2x:
         a.osc2x = True
     a.outdir = os.path.abspath(a.outdir); os.makedirs(a.outdir, exist_ok=True)
+    if a.frames is not None and a.frames <= 0:
+        # #1466: `--frames 0` was silently dropped by `a.frames or ...` and
+        # negative values crashed after running the simulation.
+        print(f"verify_synth_top: NO VERDICT -- --frames {a.frames} leaves no frame to compare")
+        return 2
     if a.rtl:
         a.rtl = os.path.abspath(a.rtl)
         if not os.path.isdir(a.rtl):
@@ -1386,6 +1391,10 @@ def main(argv=None) -> int:
         if not (cover["drum_reset"] and cover["voice_reset"]):
             print("verify_synth_top: REFUSED -- the stimulus does not reset both pages during activity")
             return 2
+    if not cmds:
+        # #1466: a stimulus with zero writes leaves nothing to drive or model.
+        print("verify_synth_top: NO VERDICT -- stimulus produced 0 writes: nothing to drive")
+        return 2
     write_cmds(os.path.join(a.outdir, "top_bx_cmds.txt"), cmds)
     print(f"verify_synth_top: {len(cmds)} writes over the pins "
           f"({sum(1 for c in cmds if c[2] == SEC_V)} voice, {sum(1 for c in cmds if c[2] == SEC_D)} drum), "
@@ -1590,11 +1599,16 @@ def main(argv=None) -> int:
     if focused and [int(r[0]) for r in i2s[:n]] != list(range(n)):
         print("verify_synth_top: REFUSED -- M5A I2S periods are not a complete, ordered 0..N-1 timeline")
         return 2
-    mism = swap = width = xs = 0
+    mism = swap = width = xs = compared = 0
     first = None
     for r in i2s[:nper]:
         p, left, right, nbl, nbr = (int(r[0]), int(r[1]), int(r[2]), int(r[3]), int(r[4]))
-        if p >= n: break
+        if p < 0:
+            print(f"verify_synth_top: NO VERDICT -- negative I2S period {p} in the wire capture")
+            return 2
+        if p >= n:
+            break
+        compared += 1
         if nbl != 32 or nbr != 32:
             width += 1
         e = int(exp_i2s[p])
@@ -1650,9 +1664,9 @@ def main(argv=None) -> int:
         print(f"verify_synth_top: decoded I2S WAV sha256 {wav_sha256}")
     # the DUT's own stream, as a DIAGNOSTIC only
     sm = rows(out["samp"])
-    core_bad = sum(1 for r in sm if int(r[0]) < n and int(r[1]) != int(exp_s[int(r[0])]))
+    core_bad = sum(1 for r in sm if 0 <= int(r[0]) < n and int(r[1]) != int(exp_s[int(r[0])]))
     core_first = next(((int(r[0]), int(exp_s[int(r[0])]), int(r[1])) for r in sm
-                       if int(r[0]) < n and int(r[1]) != int(exp_s[int(r[0])])), None)
+                       if 0 <= int(r[0]) < n and int(r[1]) != int(exp_s[int(r[0])])), None)
     peak = int(np.abs(exp_s).max())
     clipped = int(np.sum(np.abs(exp_s) == 32767) + np.sum(exp_s == -32768))
     print(f"verify_synth_top: model peak |sample| {peak} of 32768 ({clipped} frames at the rail); "
@@ -1687,7 +1701,8 @@ def main(argv=None) -> int:
         print(f"verify_synth_top: REFUSED -- the simultaneous-hit section never reached the rail "
               f"(model peak {peak} of 32768): the master clamp is not exercised by this stimulus")
         return 2
-    LAST.update(wire_mismatch=mism, swap=swap, width=width, core_bad=core_bad, periods=nper)
+    LAST.update(wire_mismatch=mism, swap=swap, width=width, core_bad=core_bad,
+                periods=nper, periods_compared=compared)
     if a.f1cal_smoke:
         wire = np.asarray([int(r[1]) for r in i2s[:nper]], dtype=np.int64)
         LAST.update(f1cal_wire_sha256=hashlib.sha256(wire.tobytes()).hexdigest(),
@@ -1702,7 +1717,13 @@ def main(argv=None) -> int:
               f"{mism} differ from the model of the requested image")
         return 1
     if mism == 0 and swap == 0 and width == 0 and core_bad == 0:
-        print(f"verify_synth_top: PASS -- {nper} I2S periods decoded from the wire, every one identical "
+        if compared == 0:
+            # #1466: `i2s` was non-empty, but every row fell outside `0..n-1`
+            # (`if p >= n: break`), so zero periods were actually compared.
+            print(f"verify_synth_top: NO VERDICT -- 0 of {nper} decoded I2S period(s) fell inside "
+                  f"the modelled 0..{n - 1} window: nothing was compared against the model")
+            return 2
+        print(f"verify_synth_top: PASS -- {compared} I2S periods decoded from the wire, every one identical "
               f"to the model; both channels agree; every slot 32 BCLK; the core's own stream matches too")
         if a.m5a:
             print(f"verify_synth_top: {case_id} path verified from SPI pins through the production voice and I2S pins")
