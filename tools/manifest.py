@@ -158,7 +158,10 @@ def load_json_refused(path, what: str) -> dict:
     the file and say how it is restored rather than look like a bug in the
     reader."""
     try:
-        return json.loads(path.read_text())
+        # Decode as UTF-8 explicitly: a bare `read_text()` lets the host locale
+        # choose, so a Latin-1 locale ACCEPTED non-UTF-8 bytes (#1774 review) and
+        # a C locale refused valid UTF-8.
+        return json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as e:
         raise Refused(
             f"{what} at {path} is not valid JSON ({e.msg} at line {e.lineno}, "
@@ -211,6 +214,20 @@ def require_keys(record, required, what: str, *, refused: Callable[[str], Except
         VALUE -- `measurement()`'s `value=None` is an explicit refusal -- must
         not be listed in `required`: read it with `.get()` and say what the
         `null` means.
+
+    What is NOT checked is the value's TYPE. Presence and non-`null` are all
+    this asserts; that is a decision (#1639), not an oversight. The `null`
+    argument above applies verbatim to a value the reader cannot dereference:
+    `{"takes": 5}` passes here and then fails in the reader, where
+    `record["takes"].items()` is an `AttributeError` -- a traceback and
+    exit 1, the outcome an absent or `null` key is refused to prevent. It is
+    left so because a mistyped record is an authoring error rather than the
+    truncated write this guard exists for, and each caller alone knows the
+    type it dereferences. The limit is pinned -- so that closing it cannot
+    happen unnoticed -- by
+    `test_require_keys_pins_the_limit_that_a_values_type_is_not_checked`
+    in test_manifest.py: a type check is a deliberate change that turns that
+    test red and rewrites this paragraph.
 
     Names every offending key, not only the first (as `validate_measurement`
     does), so a record is not regenerated once per key. A bare string in

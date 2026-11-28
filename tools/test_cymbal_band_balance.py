@@ -525,6 +525,203 @@ def test_resolving_the_tone_term_made_the_gaps_bigger_not_smaller(figs):
     assert moved["short"] == pytest.approx(1.56, abs=0.02), moved
 
 
+# ---- #1928: a NON-FINITE figure-route bound or gap used to pass rule-bind
+#
+# `rule-bind` takes `max()` over the three bands' gaps and over the FIGURE
+# route's bounds, and Python's `max()` drops a NaN that is not its first
+# argument. A non-finite FIGURE bound in the `decay` band shrank "the widest
+# bound anyone has offered for the tone term" from 21.3 dB to 14.7 dB and the
+# magnitude claim passed against that smaller number; an infinite gap
+# satisfied `biggest > widest` outright. The figure route's numbers come from
+# `werner_fig9.extrapolation_bound`, which no record loader guards. Measured
+# through `properties()` on `origin/main` @ `dd0449e0`, before the guards: 12
+# of the 18 `rule-bind` rows below PASSED and the other 6 FAILED printing the
+# non-finite value where a bound belongs (`widest FIGURE tone bound nan`);
+# `figure_tone_term` returned every one of its 39 rows as a level.
+
+#: `isnan` alone is blind to the two infinities (#134).
+NON_FINITE_FIGURE = (("nan", float("nan")), ("+inf", float("inf")),
+                     ("-inf", float("-inf")))
+
+
+def _wrap(monkeypatch, name, alter):
+    """`bb.<name>` := `alter(real, *args, **kwargs)`. The real function is
+    handed to `alter`, so every call it leaves alone is still the real one."""
+    real = getattr(bb, name)
+
+    def wrapped(*args, **kwargs):
+        return alter(real, *args, **kwargs)
+
+    monkeypatch.setattr(bb, name, wrapped)
+
+
+def _bound_with(monkeypatch, bands, **override):
+    """`extrapolation_bound`'s result for `bands`, as `_bound_cached` returns
+    it, with `override` on top -- a copy, so the real `_BOUND_CACHE` is never
+    poisoned."""
+    def alter(real, band, hz, db, f):
+        got = real(band, hz, db, f)
+        return {**got, **override} if band in bands else got
+    _wrap(monkeypatch, "_bound_cached", alter)
+
+
+def _figure_term_with(monkeypatch, bands, **override):
+    """`figure_tone_term`'s result for `bands` with `override` on top: the
+    term function itself bypassed, which is what a mock -- or any future
+    caller -- handing `rule-bind` a non-finite bound looks like."""
+    def alter(real, band, fig9, **kwargs):
+        got = real(band, fig9, **kwargs)
+        return {**got, **override} if band in bands else got
+    _wrap(monkeypatch, "figure_tone_term", alter)
+
+
+def _gap_with(monkeypatch, bands, **override):
+    """`gap_db`'s SCHEMATIC-route result for `bands` with `override` on top.
+    The figure-route call passes through: `rule-bind` reads only `bound_db`
+    from it, and the gap it compares is the schematic route's."""
+    def alter(real, fig9, corner_hz, **kwargs):
+        got = real(fig9, corner_hz, **kwargs)
+        if kwargs.get("route", None) in (None, bb.ROUTE_SCHEMATIC):
+            got = {**got, **{b: {**got[b], **override} for b in bands}}
+        return got
+    _wrap(monkeypatch, "gap_db", alter)
+
+
+@pytest.mark.parametrize("value", [v for _, v in NON_FINITE_FIGURE],
+                         ids=[n for n, _ in NON_FINITE_FIGURE])
+@pytest.mark.parametrize("field", ("lo_db", "hi_db"))
+@pytest.mark.parametrize("band", bb.BANDS)
+def test_figure_tone_term_refuses_a_non_finite_bound_naming_band_and_field(
+        figs, monkeypatch, band, field, value):
+    """Injected where the figure route's numbers come from: the output of
+    `werner_fig9.extrapolation_bound`, which no record guard reads."""
+    fig9, _ = figs
+    _bound_with(monkeypatch, (band,), **{field: value})
+    with pytest.raises(bb.Refused) as e:
+        bb.figure_tone_term(band, fig9)
+    assert f"{band} band" in str(e.value), str(e.value)
+    assert f"{field} = " in str(e.value), str(e.value)
+
+
+@pytest.mark.parametrize("value", [v for _, v in NON_FINITE_FIGURE],
+                         ids=[n for n, _ in NON_FINITE_FIGURE])
+@pytest.mark.parametrize("field", ("hz", "db"))
+@pytest.mark.parametrize("band", bb.BANDS)
+def test_figure_tone_term_refuses_a_non_finite_frequency_or_level(
+        figs, monkeypatch, band, field, value):
+    """`hz` is the frequency asked for and `db` is `tone_db`'s answer; neither
+    passes through the bound, so a guard on the bound alone returns both."""
+    fig9, _ = figs
+    ask = {"at_hz": value} if field == "hz" else {}
+    if field == "db":
+        _wrap(monkeypatch, "tone_db", lambda real, *a, **k: np.array([value]))
+    with pytest.raises(bb.Refused) as e:
+        bb.figure_tone_term(band, fig9, **ask)
+    assert f"{band} band" in str(e.value), str(e.value)
+    assert f"{field} = " in str(e.value), str(e.value)
+
+
+@pytest.mark.parametrize("band", bb.BANDS)
+def test_figure_tone_term_refuses_a_width_that_overflows_two_finite_bounds(
+        figs, monkeypatch, band):
+    """`width_db` is `hi_db - lo_db`, and two FINITE bounds can differ by more
+    than a float holds. Only `width_db` is non-finite here, so a guard over
+    `lo_db` / `hi_db` alone returns `inf` as a bound."""
+    fig9, _ = figs
+    _bound_with(monkeypatch, (band,), lo_db=-1e308, hi_db=1e308)
+    with pytest.raises(bb.Refused) as e:
+        bb.figure_tone_term(band, fig9)
+    assert "width_db = inf" in str(e.value), str(e.value)
+    assert "lo_db = " not in str(e.value) and "hi_db = " not in str(e.value)
+
+
+@pytest.mark.parametrize("value", [v for _, v in NON_FINITE_FIGURE],
+                         ids=[n for n, _ in NON_FINITE_FIGURE])
+@pytest.mark.parametrize("band", bb.BANDS)
+def test_the_gate_refuses_a_non_finite_figure_bound_from_its_source(
+        figs, monkeypatch, band, value):
+    """The issue's rows through the gate that ships. Before #1928 the bound
+    reached `rule-bind`'s `max()` unguarded, and the property PASSED for
+    `decay` (on a widest bound of 14.7 dB) and for `short`."""
+    fig9, corner = figs
+    _bound_with(monkeypatch, (band,), lo_db=value, hi_db=value)
+    with pytest.raises(bb.Refused) as e:
+        bb.properties(fig9, corner)
+    assert f"{band} band" in str(e.value), str(e.value)
+    assert "lo_db = " in str(e.value), str(e.value)
+
+
+#: `(lo_db, hi_db)` handed to one band's figure term, and the width each
+#: propagates to that band's `bound_db`: (nan, nan) a NaN width, (-inf, +inf)
+#: a +inf width, (+inf, -inf) a -inf width.
+POISONED_BOUNDS = (("nan", float("nan"), float("nan")),
+                   ("+inf", float("-inf"), float("inf")),
+                   ("-inf", float("inf"), float("-inf")))
+
+
+@pytest.mark.parametrize("lo, hi", [(lo, hi) for _, lo, hi in POISONED_BOUNDS],
+                         ids=[n for n, _, _ in POISONED_BOUNDS])
+@pytest.mark.parametrize("band", bb.BANDS)
+def test_rule_bind_refuses_a_non_finite_figure_bound_even_from_a_bypassed_term(
+        figs, monkeypatch, band, lo, hi):
+    """The issue's table row by row, with the term function mocked directly so
+    `figure_tone_term`'s own guard is not what refuses. `rule-bind`'s `max()`
+    is then the last thing that can see the non-finite bound -- and it
+    dropped it: `low` is the reference, so poisoning it poisons all three."""
+    fig9, corner = figs
+    _figure_term_with(monkeypatch, (band,), lo_db=lo, hi_db=hi)
+    reached = bb.gap_db(fig9, corner, route=bb.ROUTE_FIGURE)[band]["bound_db"]
+    assert not math.isfinite(reached), f"the poison never reached {band}'s bound_db: {reached}"
+    ok, detail = bb.properties(fig9, corner)["rule-bind"]
+    assert ok is not True, detail
+    assert f"figure {band} bound_db = " in detail, detail
+
+
+@pytest.mark.parametrize("value", [v for _, v in NON_FINITE_FIGURE],
+                         ids=[n for n, _ in NON_FINITE_FIGURE])
+@pytest.mark.parametrize("band", bb.BANDS)
+def test_rule_bind_refuses_a_non_finite_gap_even_from_a_bypassed_gap_db(
+        figs, monkeypatch, band, value):
+    """`biggest = max(abs(v["gap_db"]) ...)`. A NaN in `decay` or `short` was
+    dropped -- the short band's 39.8 dB gap left the claim -- and an infinite
+    gap in ANY band satisfied `biggest > widest` outright."""
+    fig9, corner = figs
+    _gap_with(monkeypatch, (band,), gap_db=value)
+    reached = bb.gap_db(fig9, corner)[band]["gap_db"]
+    assert not math.isfinite(reached), f"the poison never reached {band}'s gap_db: {reached}"
+    ok, detail = bb.properties(fig9, corner)["rule-bind"]
+    assert ok is not True, detail
+    assert f"schematic {band} gap_db = " in detail, detail
+
+
+def test_the_unmodified_figure_route_still_passes_in_the_same_harness(figs, monkeypatch):
+    """The control row: every wrapper installed and altering nothing. The
+    committed artifacts pass every property THROUGH the harness, and
+    `rule-bind` still reads the widest FIGURE bound at 21.3 dB."""
+    fig9, corner = figs
+    _bound_with(monkeypatch, ())
+    _figure_term_with(monkeypatch, ())
+    _gap_with(monkeypatch, ())
+    got = bb.properties(fig9, corner)
+    assert all(ok is True for ok, _ in got.values()), got
+    assert got["rule-bind"][1].endswith("widest FIGURE tone bound 21.3"), got["rule-bind"][1]
+
+
+@pytest.mark.parametrize("mode", ["--check", "--json"])
+@pytest.mark.parametrize("band", ("decay", "short"))
+def test_cli_refuses_a_non_finite_figure_bound(mode, band, monkeypatch, tmp_path, capsys):
+    """What a CI step runs: exit 2 with `REFUSED:` naming the band and the
+    field, and no evidence record written. Before #1928 both of these bands
+    printed `gate: PASS` and exited 0."""
+    _bound_with(monkeypatch, (band,), lo_db=float("nan"), hi_db=float("nan"))
+    dest = tmp_path / "evidence.json"
+    args = [mode, str(dest)] if mode == "--json" else [mode]
+    assert bb.main(args) == 2
+    out = capsys.readouterr().out
+    assert out.startswith("REFUSED:") and f"{band} band" in out and "lo_db = nan" in out, out
+    assert not dest.exists()
+
+
 # ---- the ablation's level solver ------------------------------------------
 
 
