@@ -110,6 +110,7 @@ _REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
 if _REFUSAL_TOOLS not in sys.path:
     sys.path.append(_REFUSAL_TOOLS)
 import refusal  # noqa: E402
+import manifest as mf  # noqa: E402
 
 SR = dx.SR
 FS = 32768.0                                     # int16 full scale
@@ -1318,6 +1319,7 @@ def report_k_sweep(path=None):
                              capture_output=True, text=True)
     if st.returncode != 0 or st.stdout.strip() or tracked.returncode != 0:
         raise Refused(f"{K_PLAN.name} is not committed and clean: the grid must precede the points")
+    mf.require_keys(plan, "grid", f"the sweep plan at {K_PLAN}", refused=Refused)
     grid = [int(v) for v in plan["grid"]]
     base, nb = render("CY", dx.COUPLE_OFF)
     phi = dc_fraction(base)
