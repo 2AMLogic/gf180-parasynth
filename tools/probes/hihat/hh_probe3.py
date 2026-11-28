@@ -116,4 +116,8 @@ def main():
     say("\n(written hh_part3.json)")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except am.InsufficientEvidence as e:
+        say(f"REFUSED  {e}")
+        sys.exit(2)
