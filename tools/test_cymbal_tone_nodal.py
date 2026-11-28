@@ -428,3 +428,117 @@ def test_rev3_raw_fields_stay_out_of_the_serialised_record(tmp_path):
     for band in tn.BANDS:
         assert set(blob["rev3"][band]) == expected_keys
     assert "_raw" not in out.read_text()
+
+
+# ---------------------------------------------------------------------------
+# #1767: the exit status and the artefact agree on whether a realisation was
+# chosen
+# ---------------------------------------------------------------------------
+REFUSED_EXIT = 3  # this file's refusal status, the one main's handler returns
+
+
+@pytest.fixture
+def refusing_default(monkeypatch):
+    """Make the no-argument `config()` -- the configuration `main` runs -- the
+    `NO_LEVEL_STAGE` defect, so `chosen()` refuses for real (the short band has
+    no realisation inside the bound) rather than through an injected raise. A
+    `defect=` argument still reaches the real `config`, so `check()`'s
+    properties x defects matrix is unchanged."""
+    real = tn.config
+
+    def config(*, defect=None):
+        return real(defect="NO_LEVEL_STAGE" if defect is None else defect)
+    monkeypatch.setattr(tn, "config", config)
+
+
+def _refusal_reason():
+    with pytest.raises(tn.Refused) as exc:
+        tn.chosen(tn.config(defect="NO_LEVEL_STAGE"))
+    return str(exc.value)
+
+
+def test_a_refused_json_record_is_written_and_the_run_exits_refused(
+        tmp_path, refusing_default, capsys):
+    """`record()` keeps the refusal in band and the artefact is still written;
+    the exit status then says REFUSED instead of 0. On main it was 0, so
+    `run_all` rendered PASS for a run that chose nothing."""
+    import json
+    out = tmp_path / "nodal.json"
+    assert tn.main(["--json", str(out)]) == REFUSED_EXIT
+    rec = json.loads(out.read_text())
+    assert rec["chosen"] == {"refused": _refusal_reason()}
+    assert rec["budget"] is None
+    assert "REFUSED:" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("argv", [["--report"], []], ids=["report", "default-mode"])
+def test_a_refused_report_is_printed_and_the_run_exits_refused(
+        argv, refusing_default, capsys):
+    """`--report` (which is also the default mode) ended on `REFUSED: ...` and
+    exited 0. The report is unchanged; the exit status is 3."""
+    assert tn.main(argv) == REFUSED_EXIT
+    out = capsys.readouterr().out.splitlines()
+    assert out[0].startswith("anchor TONE")
+    assert out[-1] == f"REFUSED: {_refusal_reason()}"
+
+
+def test_a_refusal_through_budget_is_never_a_pass(tmp_path, monkeypatch, capsys):
+    """Rule 8. The record's `try` holds two calls, `chosen` then `budget`, so
+    a detector keyed on `chosen` alone is the input that would defeat this
+    repair. Injected, because `budget()` has no raise site on this tree. What
+    ships for a budget refusal is the ESCAPE, not the in-band record:
+    `properties()` calls `budget(ch)` outside any handler and `record()` calls
+    `properties()`, so --json reaches main's own handler -- exit 3, no
+    artefact (green before and after). `report()` does not call `properties()`,
+    so there the refusal is in band once `report()` shares the record's `try`:
+    the report is printed and ends on `REFUSED:` (before: exit 3 with nothing
+    printed). Either way 3, never 0."""
+    def budget(ch):
+        raise tn.Refused("injected: budget refuses")
+    monkeypatch.setattr(tn, "budget", budget)
+    out = tmp_path / "nodal.json"
+    assert tn.main(["--json", str(out)]) == REFUSED_EXIT
+    assert not out.exists()
+    assert "REFUSED: injected: budget refuses" in capsys.readouterr().err
+    assert tn.main(["--report"]) == REFUSED_EXIT
+    assert capsys.readouterr().out.splitlines()[-1:] == ["REFUSED: injected: budget refuses"]
+
+
+def test_a_failed_check_outranks_the_refusal(tmp_path, refusing_default):
+    """Precedence: a red gate (1) is a stronger statement than "no evidence"
+    (3). Green before and after by design; it is what a repair returning 3 on
+    every refusal, before it looks at the gate, turns red."""
+    import json
+    out = tmp_path / "nodal.json"
+    assert tn.main(["--check", "--json", str(out)]) == 1
+    assert json.loads(out.read_text())["chosen"] == {"refused": _refusal_reason()}
+    assert tn.main(["--check"]) == 1
+
+
+def test_the_clean_run_still_exits_zero_with_a_realisation(tmp_path, capsys):
+    """Clean control: the unmodified configuration is not refused, so the exit
+    status is 0 and `chosen` is the per-band realisation. Green before and
+    after by design."""
+    import json
+    out = tmp_path / "nodal.json"
+    assert tn.main(["--json", str(out)]) == 0
+    rec = json.loads(out.read_text())
+    assert set(rec["chosen"]) == set(tn.BANDS)
+    assert "refused" not in json.dumps(rec["chosen"])
+    assert rec["budget"]["modes"] == 20
+    assert "REFUSED" not in capsys.readouterr().err
+
+
+def test_a_refusal_outside_chosen_and_budget_is_the_handlers_not_the_records(
+        tmp_path, monkeypatch):
+    """What the detector deliberately does not cover: a refusal raised anywhere
+    but `chosen`/`budget` -- here `tone_gain_db`, which `record()`, `report()`
+    and `properties()` all call outside any handler -- reaches main's own
+    `except Refused`: exit 3 and NO artefact. Green before and after by
+    design."""
+    def gain(cfg=None, *, anchor=tn.ANCHOR):
+        raise tn.Refused("injected: gain refuses")
+    monkeypatch.setattr(tn, "tone_gain_db", gain)
+    out = tmp_path / "nodal.json"
+    assert tn.main(["--json", str(out)]) == REFUSED_EXIT
+    assert not out.exists()
