@@ -351,6 +351,42 @@ def pcm_sha(pcm):
     return hashlib.sha256(np.asarray(pcm).astype("<i2").tobytes()).hexdigest()
 
 
+# ------------------------------------------------- committed model audio
+def expected_committed_samples(manifest):
+    """Samples the committed M1A model audio must hold: the full render,
+    `round(SECONDS * SR)`, less the latency the apparatus trimmed from the
+    reference. `mono_m1a_score.run` writes the model WAV at the reference's
+    length, and `mono_m1a_score.load_reference` admits a reference only at
+    exactly this length. Both terms come from the apparatus; neither is read
+    from the file being checked (#2114)."""
+    latency_removed = manifest["renders"][0]["apparatus"]["latency_removed"]
+    return round(bass.reference.SECONDS * SR) - latency_removed
+
+
+def committed_model_audio(path, expected):
+    """The audio at `path`, REFUSED unless it holds exactly `expected`
+    samples. The count is asserted before anything hashes it: a file cut
+    short must not pass as a prefix of its own length. A file cut and padded
+    back to `expected` samples passes here and only the hash below refuses
+    it -- the pad-back class #2038 records, not closed."""
+    _, committed = wavfile.read(path)
+    if len(committed) != expected:
+        raise Refused(f"{Path(path).name} holds {len(committed)} samples, expected {expected}: "
+                      "not the whole render at the reference length")
+    return committed
+
+
+def reproduces_committed_model_audio(path):
+    """`render_events` under the locked patch reproduces the audio at `path`
+    bit-exactly over its whole expected extent; REFUSED when the file does not
+    hold that extent."""
+    manifest, _ = bass.load_reference()
+    expected = expected_committed_samples(manifest)
+    committed = committed_model_audio(path, expected)
+    check = render_events(model_patch(12.), bass.reference.EVENTS, bass.reference.SECONDS)
+    return pcm_sha(check[:expected]) == pcm_sha(committed)
+
+
 # ------------------------------------------------------------------ main
 def _read(path):
     rate, x = wavfile.read(path)
@@ -417,11 +453,10 @@ def main():
         drift = float(np.mean([m["drift_hz"] for m in ref.values()]))
         cents = float(np.mean([m["octave_offset_cents"] for m in ref.values()]))
 
-        # the render function must reproduce the committed model audio first
-        rate, committed = wavfile.read(d.MODEL_WAV)
-        locked = model_patch(12.)
-        check = render_events(locked, bass.reference.EVENTS, bass.reference.SECONDS)[:len(committed)]
-        if pcm_sha(check) != pcm_sha(committed):
+        # the render function must reproduce the committed model audio first:
+        # all of it, at the length the apparatus fixes -- never a prefix cut
+        # to whatever length the file on disk happens to hold (#2114)
+        if not reproduces_committed_model_audio(d.MODEL_WAV):
             raise Refused("render_events does not reproduce the committed M1A model audio")
         patch = model_patch(12. + cents / 100)
         events = ({"note": NOTE, "on_s": MODEL_ON_S, "gate_s": MODEL_GATE_S},)
