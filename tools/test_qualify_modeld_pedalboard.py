@@ -314,8 +314,9 @@ def _bundle_at(root, binary_dir):
     return b
 
 
+@pytest.mark.parametrize("asked_for_wav", [False, True], ids=["json only", "json and wav"])
 def test_a_rig_that_qualifies_with_no_hashable_binary_is_REFUSED_not_a_traceback(
-        monkeypatch, capsys, tmp_path):
+        monkeypatch, capsys, tmp_path, asked_for_wav):
     """Issue #1980. `report(dev, qual)` sat in main()'s `else:` clause, which
     the `except rp.Refused` above it does not cover, and `report` refuses
     through `rp.environment_tuple` when `plugin_identity` finds no binary to
@@ -324,10 +325,13 @@ def test_a_rig_that_qualifies_with_no_hashable_binary_is_REFUSED_not_a_traceback
 
     The fake host loads anything, so a bundle with no binary at all reaches
     the record step -- and the record must come back as a REFUSAL, with the
-    sweep table still on stdout because the rig DID qualify."""
+    sweep table still on stdout because the rig DID qualify. With `--wav`, no
+    clip is written: one nobody can attribute to a binary is not evidence, and
+    the reason given must be THAT, not "the rig did not qualify"."""
     with_host(monkeypatch, _bundle_at(tmp_path, None))
-    out = tmp_path / "rec.json"
-    code = qmp.main(["--json", str(out)])
+    out, wav = tmp_path / "rec.json", tmp_path / "clip.wav"
+    argv = ["--json", str(out)] + (["--wav", str(wav)] if asked_for_wav else [])
+    code = qmp.main(argv)
     text = capsys.readouterr().out
     assert code == rp.REFUSED
     assert "REFUSED  " in text and "no binary hash" in text
@@ -344,6 +348,11 @@ def test_a_rig_that_qualifies_with_no_hashable_binary_is_REFUSED_not_a_traceback
     # was refused is the RECORD, and this file's third note says so.
     assert "REOPENS" not in text
     assert "NO-VERDICT" in text
+    assert not wav.exists()
+    if asked_for_wav:
+        assert "NOT writing --wav" in text
+        assert "record was refused" in text
+        assert "did not qualify" not in text
 
 
 def test_a_plain_AssertionError_out_of_report_still_escapes(
