@@ -14,14 +14,15 @@ import subprocess
 import sys
 
 import numpy as np
-from scipy.io import wavfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
 import audio_measure as am
 import mono_m5a_score as m5a
+import refusal
 import repo_output_path
+from exit_contract import REFUSED
 import voice_fx as vf
 
 
@@ -32,26 +33,12 @@ def _q15_to_full_scale(samples) -> np.ndarray:
 
 def _selected_candidate_voice(*, blep: bool = True):
     """Match score_m5a_i2s._candidate_factory exactly."""
-    ladder_cfg = {**vf.LADDER_CFG, "oversample": 2}
-    return vf.VoiceFx(blep=blep, oversample_2x=True, ladder_cfg=ladder_cfg,
-                      rate_converted_ladder=True,
-                      preserve_filter_headroom=True, causal_filter=True)
+    return m5a._voice_for_engine(m5a.engine_configuration("selected"), blep=blep)
 
 
 def measure(cutoffs: list[int], drives: list[float], *, blep: bool = True) -> dict:
-    manifest = json.loads(m5a.MANIFEST.read_text())
-    audio_meta = manifest["audio"]
-    ref_path = m5a.MANIFEST.parent / audio_meta["file"]
-    raw = ref_path.read_bytes()
-    reference_sha = hashlib.sha256(raw).hexdigest()
-    if reference_sha != audio_meta["sha256"]:
-        raise RuntimeError("frozen M5A WAV hash does not match its manifest")
-    sr, ref = wavfile.read(ref_path)
-    if sr != m5a.SR or ref.dtype != np.float32 or ref.ndim != 1:
-        raise RuntimeError("reference must be mono float32 at 48 kHz")
-    ref = ref.astype(np.float64)
-    if len(ref) != audio_meta["samples"] or not np.isfinite(ref).all():
-        raise RuntimeError("reference length or finite-sample check failed")
+    reference = m5a.load_reference("M5A")
+    manifest, ref, sr = reference.manifest, reference.pcm, m5a.SR
 
     segment = next(s for s in manifest["timeline"]["segments"] if s["wave"] == "saw")
     base_patch = m5a._patch_for_wave(m5a._voice_patch(manifest), "saw")
@@ -79,7 +66,7 @@ def measure(cutoffs: list[int], drives: list[float], *, blep: bool = True) -> di
             ref_segment = ref[offset:offset + int(segment["samples"])]
             common = min(len(ref_segment), len(pcm))
             if abs(len(ref_segment) - len(pcm)) > 128:
-                raise RuntimeError("model and reference saw segment lengths differ by >128 samples")
+                raise m5a.Refused("model and reference saw segment lengths differ by >128 samples")
             ref_segment = ref_segment[:common]
             events = []
             for ev in segment["midi_events"]:
@@ -90,32 +77,27 @@ def measure(cutoffs: list[int], drives: list[float], *, blep: bool = True) -> di
                 xref = ref_segment[a:b]
                 fref = am.refine_f0(xref, vf.note_hz(note), sr)
                 if not fref.ok:
-                    raise RuntimeError(f"reference MIDI {note} f0 refused: {fref.reason}")
+                    raise m5a.Refused(f"reference MIDI {note} f0 refused: {fref.reason}")
                 ref_sig = am.harmonic_signature(xref, sr, f0=fref.value, kmax=12)
                 ref_alias = am.foldback_alias_db(xref, fref.value, sr)
                 if not ref_alias.ok:
-                    raise RuntimeError(f"reference MIDI {note} alias estimate refused")
+                    raise m5a.Refused(f"reference MIDI {note} alias estimate refused")
                 stages = {}
                 for name, values in arrays.items():
                     x = np.asarray(values[a:b], dtype=np.float64)
                     f0 = am.refine_f0(x, vf.note_hz(note), sr)
                     if not f0.ok:
-                        raise RuntimeError(f"{name} MIDI {note} f0 refused: {f0.reason}")
+                        raise m5a.Refused(f"{name} MIDI {note} f0 refused: {f0.reason}")
                     sig = am.harmonic_signature(x, sr, f0=f0.value, kmax=12)
-                    comparisons = {f"h{k}": m5a._harmonic_error(sig, ref_sig, k)
-                                   for k in range(2, 13)
-                                   if k * max(f0.value, fref.value) < sr / 2}
-                    diffs = {key: (round(float(error), 4) if error is not None else None)
-                             for key, (error, _status) in comparisons.items()}
-                    statuses = {key: status for key, (_error, status) in comparisons.items()}
-                    measured = [abs(v) for v in diffs.values() if v is not None]
+                    compared = m5a.harmonic_summary(sig, ref_sig, f0.value, fref.value, sr,
+                                                    context=f"{name} MIDI {note}")
                     alias = am.foldback_alias_db(x, f0.value, sr)
                     if not alias.ok:
-                        raise RuntimeError(f"{name} MIDI {note} alias estimate refused")
+                        raise m5a.Refused(f"{name} MIDI {note} alias estimate refused")
                     stages[name] = {
-                        "harmonic_error_db_model_minus_reference": diffs,
-                        "harmonic_comparison": statuses,
-                        "max_common_partial_error_db": round(max(measured), 4),
+                        "harmonic_error_db_model_minus_reference": compared.errors,
+                        "harmonic_comparison": compared.statuses,
+                        "max_common_partial_error_db": round(compared.max_abs_error, 4),
                         "alias_db": round(float(alias.value), 4),
                         "excess_alias_db": round(m5a._excess_alias_db(alias.value, ref_alias.value), 4),
                         "alias_band_power_dbfs": round(alias.detail["alias_band_power_dbfs"], 4),
@@ -151,8 +133,8 @@ def measure(cutoffs: list[int], drives: list[float], *, blep: bool = True) -> di
         "source_commit": commit,
         "source_sha256": source_hashes["tools/measure_m5a_signal_path.py"],
         "source_hashes": source_hashes,
-        "reference_sha256": reference_sha,
-        "manifest_sha256": hashlib.sha256(m5a.MANIFEST.read_bytes()).hexdigest(),
+        "reference_sha256": reference.audio_sha256,
+        "manifest_sha256": reference.manifest_sha256,
         "window": "on + 120 ms through note-off - 80 ms (same as M5A scorer)",
         "oscillator_config": f"2x candidate saw; PolyBLEP {'enabled' if blep else 'disabled'}; remaining Mini V3 oscillators disabled",
         "filter_config": "selected production candidate: causal reconstructed 2x ladder with headroom preserved",
@@ -179,7 +161,11 @@ def main(argv=None) -> int:
     if out is None:
         print("measure_m5a_signal_path: REFUSED -- output must stay inside the repository")
         return 2
-    report = measure(args.cutoff, args.drive, blep=not args.disable_polyblep)
+    try:
+        report = measure(args.cutoff, args.drive, blep=not args.disable_polyblep)
+    except refusal.Refused as exc:
+        print(f"REFUSED: {exc}")
+        return REFUSED
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps({"report": str(out.relative_to(ROOT)),

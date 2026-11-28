@@ -1,6 +1,12 @@
+import hashlib
+import json
+
+import numpy as np
 import pytest
+from scipy.io import wavfile
 
 import measure_m5a_attack_bias as ab
+import refusal
 
 
 def test_five_ms_rms_bias_is_measured_against_known_m5a_attack():
@@ -20,3 +26,64 @@ def test_frozen_reference_has_a_patch_matched_attack_spread():
     assert reference["amp_attack_readback"] == 0.05
     assert reference["event_attack_spread_ms"] > 4.0
     assert reference["audio_sha256"] == "a808cd22448ecea1c639f9311578eb72399f69bda373e9036174c2ca208a1f0a"
+
+
+def _damaged_m5a_record(tmp_path, monkeypatch, damage):
+    """An M5A record whose WAV passes both the manifest hash and the tool's
+    pinned hash, and fails a later gate (#1570). Without re-pinning, the pin
+    would refuse first and the missing gate could never be reached."""
+    manifest = json.loads(ab.MANIFEST.read_text())
+    samples = int(manifest["audio"]["samples"])
+    pcm = (np.full(samples, np.nan, dtype=np.float32) if damage == "nan"
+           else np.zeros(samples, dtype=np.int16))
+    audio = tmp_path / "damaged.wav"
+    wavfile.write(audio, ab.SR, pcm)
+    digest = hashlib.sha256(audio.read_bytes()).hexdigest()
+    manifest["audio"] = {**manifest["audio"], "file": audio.name, "sha256": digest}
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(manifest))
+    monkeypatch.setattr(ab, "EXPECTED_AUDIO_SHA256", digest)
+    return path
+
+
+@pytest.mark.parametrize(("damage", "reason"), [
+    ("nan", "finite-sample"),
+    ("int16", "not mono float32"),
+])
+def test_attack_bias_preconditions_refuse_audio_that_passes_both_hashes(
+        tmp_path, monkeypatch, damage, reason):
+    manifest = _damaged_m5a_record(tmp_path, monkeypatch, damage)
+    with pytest.raises(refusal.Refused, match=reason):
+        ab._reference_preconditions(manifest)
+
+
+def test_attack_bias_preconditions_refuse_a_foreign_case_manifest(tmp_path):
+    manifest = json.loads(ab.MANIFEST.read_text())
+    manifest["case_id"] = "M5B"
+    audio = tmp_path / manifest["audio"]["file"]
+    audio.symlink_to(ab.MANIFEST.parent / manifest["audio"]["file"])
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(manifest))
+    # The genuine audio sits beside the manifest and matches the pin, so only
+    # the case gate can refuse here.
+    with pytest.raises(refusal.Refused, match="identifies as 'M5B', expected M5A"):
+        ab._reference_preconditions(path)
+
+
+def test_attack_bias_cli_maps_a_shared_refusal_to_exit_two(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(ab, "ROOT", tmp_path)
+    manifest = _damaged_m5a_record(tmp_path, monkeypatch, "nan")
+    assert ab.main(["--manifest", str(manifest), "--out", "never-written.json"]) == 2
+    assert "finite-sample" in capsys.readouterr().out
+    assert not (tmp_path / "never-written.json").exists()
+
+
+def test_attack_bias_reports_the_digest_of_the_manifest_it_parsed(tmp_path, monkeypatch):
+    # #1586 review: the report's manifest hash must not be a second read of the path.
+    import hashlib
+    manifest = json.loads(ab.MANIFEST.read_text())
+    (tmp_path / manifest["audio"]["file"]).symlink_to(ab.MANIFEST.parent / manifest["audio"]["file"])
+    path = tmp_path / "manifest.json"
+    path.write_bytes(b"\xef\xbb\xbf" + ab.MANIFEST.read_bytes())
+    parsed = ab._reference_preconditions(path)
+    assert parsed[3] == hashlib.sha256(path.read_bytes()).hexdigest()
