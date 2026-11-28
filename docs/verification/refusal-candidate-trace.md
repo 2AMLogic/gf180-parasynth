@@ -13,8 +13,10 @@ known refusing input, and what the process did is in
 **12 let a refusal out as an exit-1 traceback**, 3 are caught by a handler the
 scanner cannot see, 4 are shadowed by an earlier site, and 18 have no refusing
 input on their entry point's input space. One of the twelve is #1569's known
-defect. Seven repair issues are filed, one per entry point: #1610, #1611,
-#1612, #1613, #1614, #1615, #1616. Nothing was repaired here.
+defect, which PR #1574 repaired on `main` while this trace was being
+written; the row is the tree before that repair. Seven repair issues are
+filed, one per entry point: #1610, #1611, #1612, #1613, #1614, #1615, #1616.
+Nothing was repaired here.
 
 <!-- claim: test=tools/test_refusal_candidate_trace.py::test_the_committed_record_names_what_it_traced -->
 
@@ -72,7 +74,7 @@ traceback -- a precondition reported as a FAIL.
 | `fpga/midi_session.py:355` | `--image r1` with `r1-kit.json`'s sound table drifted; also through `fpga/verify_live_midi.py` | `drums_fx.KitRefused` | #1614 |
 | `fpga/publish_binding_cases.py:116`, `:123` | an XDC with an unstated query (`:116`) or an unmodelled timing exception (`:123`) | `xdc_bindings.Refused` | #1615 |
 | `fpga/release/r1_candidate.py:279` | PR #1574's control shape: `uart_host.main` returns 1 | `release_manifest.Refused` | #1616 |
-| `fpga/release/r2_release.py:372` | the same control shape | same | #1569, PR #1574 |
+| `fpga/release/r2_release.py:372` | the same control shape | same | #1569, PR #1574 (merged) |
 
 What the trace adds to "it escapes" is *which clause was tried*:
 
@@ -106,6 +108,24 @@ input `kit_identity()` refuses first inside the same `build()`: the trace
 shows `r1_candidate.py check` exiting 2 cleanly and never reaching
 `commands()`. The row is an escape only for every OTHER reason a CLI command
 exits non-zero, which is what the stub stands for. #1616 says so.
+
+## After the trace: what `main` moved
+
+The record is the tree it names. Synced with `origin/main` before this PR
+opened (`d51d9d42`, 0 behind), a fresh scan reports 85 candidates against the
+record's 90, and three of the moves are rows this document discusses:
+
+- PR #1574 added an `import` to `fpga/release/r2_release.py`, so its rows
+  moved by one line: `:110` is `:111` and `:302` is `:303`, both still
+  candidates; `:372` is `:373` and is now `covered(base)` -- the repair. The
+  committed calibration control is a differential and passes on the repaired
+  tree.
+- `tools/mono_m5a_score.py` changed under #1570 and #1586 (a shared harmonic
+  summary; hashes bound to the bytes measured). The two `:264` inputs were
+  re-run on the merged tree and escape exactly as recorded.
+- Four OLDER candidates left the census, none of them traced here:
+  `measure_m5a_pulse_duty.py:39` and `:112`, `measure_m5a_signal_path.py:56`
+  and `:104`.
 
 ## Covered, though the census lists them
 
