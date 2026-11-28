@@ -27,8 +27,11 @@ the engine says r1.
 
 Exit status follows `tools/exit_contract.py`: 0 when at least one drive was
 measured, 2 (REFUSED, one `REFUSED:` line on stdout, the report still
-written) when every drive refused, and 2 with no report for a drive
-outside the budget.
+written) when every drive refused, and 2 with no report for a drive outside
+the budget; for one whose calibrated volume does not fit the register or
+whose development note renders at zero or non-finite RMS; and for `--merge`
+over a set whose baseline row refused or is absent (#1936) -- the selection
+rule is relative to the baseline and cannot be applied without it.
 """
 from __future__ import annotations
 
@@ -59,7 +62,9 @@ PROBE_NOTES = (36, 48, 60, 72, 84, 96, 108, 120)
 
 
 class Refused(refusal.Refused, RuntimeError):
-    """A requested drive is outside the frozen candidate budget."""
+    """A requested drive cannot be used: it is outside the frozen candidate
+    budget, no volume restores its development note, or the selection has no
+    measured baseline to be relative to."""
 
 
 def voice(engine: str) -> vf.VoiceFx:
@@ -101,13 +106,24 @@ def held_rms(engine: str, drive: float, vol: float, note=CAL_NOTE, wave="saw") -
 
 def calibrate(engine: str, drive: float) -> float:
     """Volume factor restoring the development note's held-saw RMS. vol is a
-    16-bit Q0.15 register (max ~2.0); a factor that would overflow it refuses."""
+    16-bit Q0.15 register (max ~2.0); a factor that would overflow it refuses,
+    and so does a render whose RMS is not a finite number above zero -- no
+    volume restores silence. Until #1936 the first was a bare RuntimeError
+    and the second a ZeroDivisionError."""
     vol0 = 0.45 * 10 ** (-0.45428 / 20)           # the m5a-saw preset's volume
     target = held_rms(engine, BASE_DRIVE, vol0)
-    f = target / held_rms(engine, drive, vol0)
-    f *= target / held_rms(engine, drive, vol0 * f)   # one refinement for the tanh
+    at_drive = held_rms(engine, drive, vol0)
+    if not all(math.isfinite(v) and v > 0 for v in (target, at_drive)):
+        raise Refused(f"drive {drive}: the held saw's RMS must be finite and above zero to "
+                      f"calibrate a volume (drive {BASE_DRIVE}: {target}, drive {drive}: {at_drive})")
+    f = target / at_drive
+    refined = held_rms(engine, drive, vol0 * f)       # one refinement for the tanh
+    if not (math.isfinite(refined) and refined > 0):
+        raise Refused(f"drive {drive}: the held saw's RMS must be finite and above zero to "
+                      f"calibrate a volume (drive {drive} at vol {vol0 * f:.4f}: {refined})")
+    f *= target / refined
     if not 0 < vol0 * f < 65535 / 32768:
-        raise RuntimeError(f"drive {drive}: vol {vol0 * f:.3f} does not fit the register")
+        raise Refused(f"drive {drive}: vol {vol0 * f:.3f} does not fit the register")
     return f
 
 
@@ -143,15 +159,36 @@ def probe(engine: str, drive: float, vol_factor: float) -> dict:
     return out
 
 
+#: what `select` says of a candidate the merged set holds no row for
+NO_RECORD = "no record of this drive among the merged files"
+
+
+def require_baseline(rows: dict) -> dict:
+    """The baseline's row, or Refused: the selection rule is relative to it.
+    A baseline the per-drive handler recorded as `refused`, or one a merge
+    left out, was a KeyError until #1936. `measure_m5_saw_drive.select` ends
+    here too."""
+    base = rows.get(str(BASE_DRIVE))
+    if base is None:
+        raise Refused(f"the baseline (drive {BASE_DRIVE}) is not among the merged records; "
+                      "the selection rule is relative to it and cannot be applied")
+    if "refused" in base:
+        raise Refused(f"the baseline (drive {BASE_DRIVE}) refused: {base['refused']}; "
+                      "the selection rule is relative to it and cannot be applied")
+    return base
+
+
 def select(rows: dict) -> dict:
-    base = rows[str(BASE_DRIVE)]["M5A"]["errors"]
+    baseline = require_baseline(rows)
+    base = baseline["M5A"]["errors"]
     verdicts = {}
     for d in CANDIDATE_DRIVES:
-        if "refused" in rows[str(d)]:
+        r = rows.get(str(d))
+        if r is None or "refused" in r:
             verdicts[str(d)] = {"harmonic_shape": None, "admissible": False,
-                                "reasons": [f"REFUSED: {rows[str(d)]['refused']}"]}
+                                "reasons": [f"REFUSED: {r['refused'] if r else NO_RECORD}"]}
             continue
-        c = rows[str(d)]["M5A"]["errors"]
+        c = r["M5A"]["errors"]
         why = []
         if abs(abs(c["Gain"]) - abs(base["Gain"])) > 0.5:
             why.append(f"gain {c['Gain']:+.2f} vs {base['Gain']:+.2f}")
@@ -161,7 +198,7 @@ def select(rows: dict) -> dict:
             why.append("clipping")
         if c["Envelope attack"] - base["Envelope attack"] > 0.5:
             why.append(f"attack {c['Envelope attack']:.2f} vs {base['Envelope attack']:.2f}")
-        bp, cp = rows[str(BASE_DRIVE)]["probe"], rows[str(d)]["probe"]
+        bp, cp = baseline["probe"], r["probe"]
         darker = [k for k in ("saw/84", "saw/96", "pulse29/84", "pulse29/96")
                   if (cp[k]["upper_wanted_rel_db"] or 0) < (bp[k]["upper_wanted_rel_db"] or 0) - 0.05]
         if darker:

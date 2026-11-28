@@ -58,6 +58,15 @@ stage file under `--out` holds a row that answered. A stage whose rig
 RENDERED and whose estimator then refused every row counts as answered;
 that boundary is the estimator-refusal shape, out of scope on purpose.
 
+A rig that cannot be BUILT, cannot state a cutoff, or cannot ring for the
+`tracking` stage leaves every stage it was asked for `not_answerable` the
+way the guarded stages do (#1936). And `--report` NAMES a device whose stage
+did not answer -- the rig's refusal, or a rig that rendered and an estimator
+that refused every row -- in each section where its row would have stood,
+and goes on to the others. The status is still 0 when something else
+answered; a mixed directory is a result, which is why the unanswered device
+has to show in the text and not only in an exit code.
+
 The structural fingerprint, and the one thing to understand about it: h5
 relative to h3 at self-oscillation. h2 is useless because `tanh` is odd, so
 both candidate structures have none. But h5 - h3 is NOT settings-independent
@@ -402,6 +411,19 @@ def _answered(rows) -> bool:
     return any("not_answerable" not in r and not r.get("unacquired") for r in rows)
 
 
+def _stubbed(rows):
+    """Why a stage file holds nothing but `not_answerable` records -- the rows
+    `guard` writes when the rig cannot perform the stage -- or None when it
+    holds anything else. `report()` says this about a device instead of
+    reading the row shape as a measurement (#1936). Not `_answered`: a
+    response the rig returned no curve for (`unacquired`) still prints its own
+    per-cutoff REFUSED rows. The reasons are a set because `guard` writes one
+    row per stage and a hand-assembled file could hold more."""
+    if any("not_answerable" not in r for r in rows):
+        return None
+    return "; ".join(sorted({str(r["not_answerable"]) for r in rows})) or "no reason recorded"
+
+
 def _stage_files(out) -> list:
     """[(stage, device)] for every `<stage>-<device>.json` under `out`.
     `report()` prints from five of the seven stages `main` writes; the
@@ -452,7 +474,16 @@ def report(out):                                                  # noqa: C901
         rows = _load(out, "selfosc", d)
         if not rows:
             continue
+        stub = _stubbed(rows)
+        if stub:
+            print(f"{d:14s} {KIND[d]:24s} NOT ANSWERABLE: {stub}")
+            continue
         live = [r for r in rows if r.get("ok")]
+        if not live:
+            why = "; ".join(sorted({str(r["why"]) for r in rows if r.get("why")}))
+            print(f"{d:14s} {KIND[d]:24s} NO ROW ANSWERED: the estimator refused all "
+                  f"{len(rows)} self-oscillation row(s): {why}")
+            continue
         osc = [r for r in live if r.get("h3") is not None or r["rms"] > 2e-3]
         onset = min((r["res"] for r in osc), default=None)
         # h5 - h3 at each device's maximum resonance, and interpolated at the
@@ -470,6 +501,8 @@ def report(out):                                                  # noqa: C901
               f"{_f(top.get('h5'), 1, 7)} {_f(top.get('h7'), 1, 7)} {_f(sp, 1, 7)} {_f(at, 1, 8)}")
     print("  h2..h7 at each device's OWN maximum resonance, dB relative to the fundamental.")
     print("  '---' = the estimator refused: at or under that record's own measured floor.")
+    print("  NOT ANSWERABLE = the rig could not perform the stage for that device; NO ROW ANSWERED = it")
+    print("  rendered and the estimator refused every row. Neither is a zero, and neither is compared.")
     print("  '@h3=-42' is the fingerprint at MATCHED DRIVE -- h5-h3 interpolated to where every")
     print("  filter's limit cycle drives its nonlinearity equally hard. It is the only column of")
     print("  the four that is not confounded by how far past onset each device happens to sit.")
@@ -478,6 +511,10 @@ def report(out):                                                  # noqa: C901
     for d in ORDER:
         rows = _load(out, "tracking", d)
         if not rows:
+            continue
+        stub = _stubbed(rows)
+        if stub:
+            print(f"  {d:14s} NOT ANSWERABLE: {stub}")
             continue
         rs = [(r.get("commanded_hz") or r["want_hz"], r.get("f_osc")) for r in rows]
         ok = [(c, f) for c, f in rs if f]
@@ -502,6 +539,10 @@ def report(out):                                                  # noqa: C901
         rows = _load(out, "response", d)
         if not rows:
             continue
+        stub = _stubbed(rows)
+        if stub:
+            print(f"{d:14s} NOT ANSWERABLE: {stub}")
+            continue
         for r in rows:
             c, k, sl = r.get("cut_hz"), r.get("corner_hz"), r.get("slope_db_oct")
             if r.get("why"):
@@ -524,6 +565,10 @@ def report(out):                                                  # noqa: C901
         rows = _load(out, "peakdrive", d)
         if not rows:
             continue
+        stub = _stubbed(rows)
+        if stub:
+            print(f"{d:14s} NOT ANSWERABLE: {stub}")
+            continue
         cells = []
         for r in rows:
             if r.get("why"):
@@ -543,6 +588,10 @@ def report(out):                                                  # noqa: C901
     for d in ORDER:
         rows = _load(out, "bigdrive", d)
         if not rows:
+            continue
+        stub = _stubbed(rows)
+        if stub:
+            print(f"{d:14s} NOT ANSWERABLE: {stub}")
             continue
         lv = [r["level_dbfs"] for r in rows]
         h3 = [r.get("h3") for r in rows]
@@ -655,6 +704,71 @@ def stages_exit(asked, stage) -> int:
     return REFUSED
 
 
+class _Unbuildable:
+    """Stands in for a rig whose `build` raised NotImplementedError (#1936):
+    every method a stage or the cutoff lookup calls raises it again, so
+    `guard` records each requested stage `not_answerable` with the build's
+    own reason, and the run goes on to the next device."""
+
+    def __init__(self, exc):
+        self._why = f"build: {exc}"
+
+    def __getattr__(self, name):
+        def refuse(*a, **k):
+            raise NotImplementedError(self._why)
+        return refuse
+
+
+def at_command(dev, name, cache, hz, stage):
+    """`stage` run at the control value that commands `hz` on this device.
+    The lookup is the rig's to refuse as much as the stage is, so the two
+    run together under `guard`."""
+    cs, chz = cut_setting_for(dev, name, hz, cache)
+    return stage(dev, name, cs, chz if chz is not None else hz)
+
+
+def stage_response_sweep(dev, name, cache):
+    """Corner and slope at each commanded cutoff."""
+    pts = []
+    for hz in CUTOFFS_HZ:
+        cs, chz = cut_setting_for(dev, name, hz, cache)
+        pts.append((cs, chz if chz is not None else hz, res_lo(name)))
+    return stage_response(dev, name, pts)
+
+
+def stage_resonant_peak(dev, name, cache):
+    """The resonant peak versus resonance, at the 800 Hz command."""
+    cs, chz = cut_setting_for(dev, name, 800.0, cache)
+    pk = [(cs, chz if chz is not None else 800.0, r)
+          for r in ([0.2, 0.4, 0.6, 0.8, 0.9] if not name.startswith("ours")
+                    else [0.3, 0.5, 0.7, 0.85, 0.95])]
+    return stage_response(dev, name, pk)
+
+
+def stage_tracking(dev, name, cache):
+    """f_osc at each commanded cutoff."""
+    rows = []
+    res = res_grid(name)[-1]
+    for hz in CUTOFFS_HZ:
+        cs, chz = cut_setting_for(dev, name, hz, cache)
+        y = dev.ring(cs, res, seconds=0.8)
+        f = _tracking_f_osc(y)
+        rows.append(dict(device=name, commanded_hz=chz, want_hz=hz,
+                         cut_setting=cs, res=res, f_osc=f,
+                         rms=float(am.rms(y))))
+        print(f"  {name:12s} cut {hz:7.0f} (cmd {chz}) -> f_osc "
+              f"{f if f is None else round(f, 1)}", flush=True)
+    return rows
+
+
+def stage_drive_sweep(dev, name, cache):
+    """The harmonic signature versus input level, at the 800 Hz command."""
+    cs, chz = cut_setting_for(dev, name, 800.0, cache)
+    res = 0.6 if not name.startswith("ours") else 0.7
+    return stage_drive(dev, name, cs, chz if chz is not None else 800.0, res, 200.0,
+                       [-48, -36, -24, -18, -12, -6, -3, 0])
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -680,7 +794,10 @@ def main(argv=None) -> int:
     asked = []
     for name in devices:
         print(f"\n===== {name} =====", flush=True)
-        dev = build(name)
+        try:
+            dev = build(name)
+        except NotImplementedError as e:
+            dev = _Unbuildable(e)
         out = {}
         def guard(key, fn):
             try:
@@ -690,52 +807,27 @@ def main(argv=None) -> int:
                 print(f"  {name}: {key} NOT ANSWERABLE -- {e}", flush=True)
 
         try:
-            cs258, hz258 = cut_setting_for(dev, name, 261.6, cache)
             if "selfosc" in stages:
                 print(" -- self-oscillation fingerprint", flush=True)
-                guard("selfosc", lambda: stage_selfosc(dev, name, cs258, hz258 or 261.6))
+                guard("selfosc", lambda: at_command(dev, name, cache, 261.6, stage_selfosc))
             if "response" in stages:
                 print(" -- measured response: corner and slope", flush=True)
-                pts = []
-                for hz in CUTOFFS_HZ:
-                    cs, chz = cut_setting_for(dev, name, hz, cache)
-                    pts.append((cs, chz if chz is not None else hz, res_lo(name)))
-                guard("response", lambda: stage_response(dev, name, pts))
+                guard("response", lambda: stage_response_sweep(dev, name, cache))
                 print(" -- measured response: resonant peak versus resonance", flush=True)
-                cs, chz = cut_setting_for(dev, name, 800.0, cache)
-                pk = [(cs, chz if chz is not None else 800.0, r)
-                      for r in ([0.2, 0.4, 0.6, 0.8, 0.9] if not name.startswith("ours")
-                                else [0.3, 0.5, 0.7, 0.85, 0.95])]
-                guard("peak", lambda: stage_response(dev, name, pk))
+                guard("peak", lambda: stage_resonant_peak(dev, name, cache))
             if "tracking" in stages:
                 print(" -- self-oscillation pitch versus cutoff", flush=True)
-                rows = []
-                res = res_grid(name)[-1]
-                for hz in CUTOFFS_HZ:
-                    cs, chz = cut_setting_for(dev, name, hz, cache)
-                    y = dev.ring(cs, res, seconds=0.8)
-                    f = _tracking_f_osc(y)
-                    rows.append(dict(device=name, commanded_hz=chz, want_hz=hz,
-                                     cut_setting=cs, res=res, f_osc=f,
-                                     rms=float(am.rms(y))))
-                    print(f"  {name:12s} cut {hz:7.0f} (cmd {chz}) -> f_osc "
-                          f"{f if f is None else round(f, 1)}", flush=True)
-                out["tracking"] = rows
+                guard("tracking", lambda: stage_tracking(dev, name, cache))
             if "peakdrive" in stages:
                 print(" -- resonant peak versus drive, at 0.9 of each filter's own onset",
                       flush=True)
-                cs, chz = cut_setting_for(dev, name, 800.0, cache)
-                guard("peakdrive", lambda: stage_peakdrive(dev, name, cs, chz or 800.0))
+                guard("peakdrive", lambda: at_command(dev, name, cache, 800.0, stage_peakdrive))
             if "bigdrive" in stages:
                 print(" -- where the saturation engages", flush=True)
-                cs, chz = cut_setting_for(dev, name, 800.0, cache)
-                guard("bigdrive", lambda: stage_bigdrive(dev, name, cs, chz or 800.0))
+                guard("bigdrive", lambda: at_command(dev, name, cache, 800.0, stage_bigdrive))
             if "drive" in stages:
                 print(" -- drive", flush=True)
-                cs, chz = cut_setting_for(dev, name, 800.0, cache)
-                res = 0.6 if not name.startswith("ours") else 0.7
-                guard("drive", lambda: stage_drive(dev, name, cs, chz or 800.0, res, 200.0,
-                                                   [-48, -36, -24, -18, -12, -6, -3, 0]))
+                guard("drive", lambda: stage_drive_sweep(dev, name, cache))
         finally:
             del dev
         asked.extend((name, k, v) for k, v in out.items())

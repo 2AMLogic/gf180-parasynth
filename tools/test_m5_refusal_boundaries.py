@@ -129,6 +129,138 @@ def test_probe_refusal_at_calibration_reaches_cli(module, monkeypatch, tmp_path,
             in capsys.readouterr().out.splitlines())
 
 
+# ---------------------------------------------------------------- a baseline that did not measure (#1936)
+# `select` read the baseline row as measured before anything asked whether it
+# was: `rows["0.75"]["M5A"]` in both tools -- a KeyError when the per-drive
+# handler had recorded that drive as `refused`, or when a merge left it out.
+# `calibrate` raised a bare RuntimeError for a volume that does not fit the
+# register. Each reproduced by RUNNING on the #1934 head (2026-11-28) through
+# `main`, as exit 1 with a traceback. A development note rendering at zero RMS
+# at the drive was a ZeroDivisionError: found while running the register case,
+# same function, same shape.
+#
+# WHAT IS OWED: each is a REFUSED exit (2) with a one-line reason, through the
+# `except refusal.Refused` both `main`s already have, and no report -- the
+# selection rule is relative to the baseline, and a drive whose volume cannot
+# be calibrated is a drive that was not measured. The budget refusal above
+# leaves the same way.
+#
+# THE CONTROL: a measured baseline beside a refused candidate still selects.
+BASELINE, CANDIDATE = 0.75, 0.5
+#: each tool's frozen candidate budget, restated as literals
+CANDIDATES = {"measure_m5_operating_level": (0.5, 0.35, 0.25), "measure_m5_saw_drive": (0.5, 0.35, 0.3)}
+M5A_REFUSAL = "frozen M5A Mini V3 audio hash mismatch"
+REFUSED_BASE = {"0.75": {"drive": BASELINE, "vol_factor": 1.0, "refused": M5A_REFUSAL}}
+MEASURED_BASE = {"0.75": {"M5A": {"errors": {"Gain": 0.0, "Foldback energy": 0.0, "Clipping": 0,
+                                                "Envelope attack": 1.0, "Harmonic shape": 1.0}}}}
+VOL0 = 0.45 * 10 ** (-0.45428 / 20)      # the m5a-saw preset's volume, as `calibrate` states it
+
+
+def _merge(tmp_path, rows):
+    merged_from = tmp_path / "drives.json"
+    merged_from.write_text(json.dumps({"rows": rows}))
+    out = tmp_path / "selection.json"
+    return ["--merge", str(merged_from), "--out", str(out)], out
+
+
+@pytest.mark.parametrize("module", ["measure_m5_operating_level", "measure_m5_saw_drive"])
+@pytest.mark.parametrize("rows,why", [
+    (REFUSED_BASE, "the baseline (drive 0.75) refused: " + M5A_REFUSAL),
+    ({"0.5": {"drive": CANDIDATE}}, "the baseline (drive 0.75) is not among the merged records"),
+], ids=["refused-baseline", "no-baseline"])
+def test_merge_without_a_measured_baseline_exits_refused_not_a_keyerror(module, rows, why, tmp_path, capsys):
+    """Reproduced: `KeyError: 'M5A'` and `KeyError: '0.75'`, exit 1."""
+    tool = importlib.import_module(module)
+    argv, out = _merge(tmp_path, rows)
+    assert tool.main(argv) == 2
+    assert capsys.readouterr().out.splitlines() == [
+        f"REFUSED: {why}; the selection rule is relative to it and cannot be applied"]
+    assert not out.exists()
+
+
+@pytest.mark.parametrize("module", ["measure_m5_operating_level", "measure_m5_saw_drive"])
+def test_the_control_a_measured_baseline_beside_a_refused_candidate_still_selects(module, tmp_path, capsys):
+    """THE CONTROL. Widening the rule to "any refused row" turns this red."""
+    tool = importlib.import_module(module)
+    refused = {str(d): {"drive": d, "vol_factor": 1.0, "refused": M5A_REFUSAL} for d in CANDIDATES[module]}
+    argv, out = _merge(tmp_path, {**MEASURED_BASE, **refused})
+    assert tool.main(argv) == 0
+    verdicts = json.loads(out.read_text())["selection"]["verdicts"]
+    assert all(verdicts[str(d)]["admissible"] is False
+               and verdicts[str(d)]["reasons"] == ["REFUSED: " + M5A_REFUSAL] for d in CANDIDATES[module]), verdicts
+
+
+@pytest.mark.parametrize("module", ["measure_m5_operating_level", "measure_m5_saw_drive"])
+def test_merge_over_a_set_missing_a_candidate_row_still_selects(module, tmp_path, capsys):
+    """The other KeyError in the same read: a candidate row a per-drive job,
+    having refused, never wrote. Reproduced on operating_level
+    (`rows[str(d)]`); saw_drive already tolerated it."""
+    tool = importlib.import_module(module)
+    argv, out = _merge(tmp_path, MEASURED_BASE)
+    assert tool.main(argv) == 0
+    verdict = json.loads(out.read_text())["selection"]["verdicts"]["0.5"]
+    assert verdict["admissible"] is False, verdict
+    assert verdict["reasons"] == ["REFUSED: no record of this drive among the merged files"]
+
+
+def _held_rms(base, candidate):
+    """`held_rms` stood in for: the baseline note at `base`, the candidate
+    drive's note scaling linearly from `candidate` at the preset volume."""
+    def held_rms(engine, drive, vol, note=84, wave="saw"):
+        return base if drive == BASELINE else candidate * (vol / VOL0)
+    return held_rms
+
+
+@pytest.mark.parametrize("module", ["measure_m5_operating_level", "measure_m5_saw_drive"])
+def test_a_volume_that_does_not_fit_the_register_exits_refused_not_a_runtime_error(module, monkeypatch, tmp_path, capsys):
+    """0.3 over 0.05 is a factor of 6 on a 0.427 volume: 2.56, past the
+    register's 2.0. Reproduced: RuntimeError, exit 1 with a traceback."""
+    ol = importlib.import_module("measure_m5_operating_level")
+    monkeypatch.setattr(ol, "held_rms", _held_rms(0.3, 0.05))
+    tool = importlib.import_module(module)
+    out = tmp_path / "result"
+    assert tool.main(["--drives", str(CANDIDATE), "--out", str(out)]) == 2
+    assert capsys.readouterr().out.splitlines() == [
+        f"REFUSED: drive {CANDIDATE}: vol {VOL0 * 6:.3f} does not fit the register"]
+    assert not out.exists()
+
+
+@pytest.mark.parametrize("module", ["measure_m5_operating_level", "measure_m5_saw_drive"])
+@pytest.mark.parametrize("base,candidate", [(0.3, 0.0), (0.3, float("nan")), (0.0, 0.05)],
+                         ids=["silent-at-the-drive", "not-finite-at-the-drive", "silent-baseline"])
+def test_a_development_note_that_cannot_be_scaled_exits_refused(module, base, candidate, monkeypatch, tmp_path, capsys):
+    """Found while running the register case. Reproduced: ZeroDivisionError
+    for a note at zero RMS, and for a silent baseline a RuntimeError blaming
+    the volume (`vol 0.000 does not fit`)."""
+    ol = importlib.import_module("measure_m5_operating_level")
+    monkeypatch.setattr(ol, "held_rms", _held_rms(base, candidate))
+    tool = importlib.import_module(module)
+    out = tmp_path / "result"
+    assert tool.main(["--drives", str(CANDIDATE), "--out", str(out)]) == 2
+    assert capsys.readouterr().out.splitlines() == [
+        f"REFUSED: drive {CANDIDATE}: the held saw's RMS must be finite and above zero to "
+        f"calibrate a volume (drive {BASELINE}: {base}, drive {CANDIDATE}: {candidate})"]
+    assert not out.exists()
+
+
+def test_a_note_that_falls_silent_at_the_refined_volume_exits_refused(monkeypatch, tmp_path, capsys):
+    """The second render `calibrate` makes, at the first estimate's volume:
+    audible at the preset volume and silent at six times it -- a host that
+    mutes an out-of-range volume. Reproduced: ZeroDivisionError."""
+    ol = importlib.import_module("measure_m5_operating_level")
+
+    def held_rms(engine, drive, vol, note=84, wave="saw"):
+        return 0.3 if drive == BASELINE else (0.05 if vol == VOL0 else 0.0)
+
+    monkeypatch.setattr(ol, "held_rms", held_rms)
+    out = tmp_path / "result"
+    assert ol.main(["--drives", str(CANDIDATE), "--out", str(out)]) == 2
+    assert capsys.readouterr().out.splitlines() == [
+        f"REFUSED: drive {CANDIDATE}: the held saw's RMS must be finite and above zero to "
+        f"calibrate a volume (drive {CANDIDATE} at vol {VOL0 * 6:.4f}: 0.0)"]
+    assert not out.exists()
+
+
 @pytest.mark.parametrize(("option", "reason"), [
     ("--recompare-report", "recomparison requires an m5a-filter-headroom-v1 report"),
     ("--reuse-offline-report", "reuse report schema, reference, or pulse set does not match"),

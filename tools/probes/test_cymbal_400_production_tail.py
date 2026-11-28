@@ -560,7 +560,13 @@ def test_result_records_the_frozen_record_hash_not_just_its_path(tmp_path, capsy
     monkeypatch.setattr(pt.rc, "render_drum_solo", lambda *a, **k: (ref_long, SR))
     out_path = tmp_path / "result.json"
     code = pt.main(["measure", "--refs", str(tmp_path), "--frozen", str(f), "--out", str(out_path)])
-    assert code == 0
+    # #1936: this plant -- `strike(0.25, 2.0)` on both sides -- has every energy
+    # and decay verdict REFUSED in both windows (the production side's band sits
+    # 4.8 dB over its predicted leak, 6 needed). It asserted exit 0 for that run
+    # until then: the defect, pinned. The report is still written, so the
+    # record below exists; the answered control is
+    # test_the_control_a_run_with_an_answered_verdict_still_passes.
+    assert code == 2, (code, capsys.readouterr().out)
     res = json.loads(out_path.read_text())
     assert res["frozen_sha256"] == hashlib.sha256(f.read_bytes()).hexdigest(), res.get("frozen")
 
@@ -646,3 +652,67 @@ def test_frozen_record_declares_the_pre_measurement_commitments():
     assert not set(f["development_settings"]) & set(f["confirmation_settings"])
     assert all(p["status"] in ("measured", "inferred", "unverified") for p in f["stage_isolation"]["predictions"])
     json.dumps(f)
+
+
+# ---------------------------------------------------------------- nothing answered (#1936)
+# `cmd_measure` printed each window's verdicts and returned 0 whatever they
+# were. Reproduced by RUNNING the real CLI on origin/main @ e2d1bae7
+# (2026-11-28), production and reference both the leak-only plant (no separate
+# 0.9-2.8 kHz content): every energy and decay verdict REFUSED in both windows,
+# result.json written, rc 0 -- PASS, a RESULT, having compared nothing. The
+# committed README's own run is this shape: "NO VERDICT (REFUSED) on both
+# properties, both windows".
+#
+# WHAT IS OWED (`tools/exit_contract.py`, the convention #1857 settled): 0
+# when any window's energy or decay verdict answered, a partly refused run
+# being a result with its refusals on record; 2, one `REFUSED:` line after the
+# per-window lines and after result.json is written, when none did. The
+# confirmation settings count neither way: production cannot render them, and
+# their REFUSED rows are the contract, not a measurement.
+#
+# THE CONTROL: the same two sides carrying enough band content to clear the
+# leak margin answer MATCH on both properties, and the run is still 0.
+def _leak_only():
+    return lt.synth(tau_l=0.35, a_m=0.0, tau_h=0.2, a_h=0.6)[0]
+
+
+def _measure(tmp_path, capsys, monkeypatch, samples):
+    """(code, stdout lines, result.json or None) of the real CLI over a corpus
+    and a production render that both hold `samples`. cymbal_low_tail's own
+    controls are stood in for as passing; everything else is the real path."""
+    _require_clean_tree()
+    sha = _fake_corpus(tmp_path, samples)
+    monkeypatch.setattr(pt.lt, "check", lambda: (True, []))
+    monkeypatch.setattr(pt.rc, "render_drum_solo", lambda *a, **k: (samples, SR))
+    out_path = tmp_path / "result.json"
+    code = pt.main(["measure", "--refs", str(tmp_path), "--frozen", str(_frozen_for(tmp_path, sha)),
+                    "--out", str(out_path)])
+    return code, capsys.readouterr().out.splitlines(), \
+        json.loads(out_path.read_text()) if out_path.exists() else None
+
+
+def test_a_run_whose_every_window_verdict_is_refused_exits_refused_not_a_pass(tmp_path, capsys, monkeypatch):
+    """Reproduced: rc 0. `leak_only` on both sides is the estimator-refusal
+    shape -- each side's gate says the band is its neighbour's skirt."""
+    code, out, res = _measure(tmp_path, capsys, monkeypatch, _leak_only())
+    assert code == 2, (code, out)
+    assert res is not None, "the report is still written on a refused run, so the record exists"
+    windows = res["settings"]["CY5025"]
+    assert sorted(windows) == ["1.5s", "2s"]
+    assert all(r[k]["verdict"] == "REFUSED" for r in windows.values() for k in ("energy", "decay")), windows
+    rows = [ln for ln in out if ln.startswith("CY5025 ") and "energy REFUSED" in ln and "decay REFUSED" in ln]
+    assert len(rows) == 2, out
+    verdicts = [ln for ln in out if ln.startswith("REFUSED:")]
+    assert len(verdicts) == 1 and out[-1] == verdicts[0], out
+    assert "0 of 2 window(s) answered" in verdicts[0] and "CY5025" in verdicts[0], verdicts[0]
+
+
+def test_the_control_a_run_with_an_answered_verdict_still_passes(tmp_path, capsys, monkeypatch):
+    """THE CONTROL. Widening the rule to "any REFUSED verdict" turns this red."""
+    answered = strike(0.25, 3.0)      # clears the 6 dB leak margin on the production side too
+    code, out, res = _measure(tmp_path, capsys, monkeypatch, answered)
+    assert code == 0, (code, out)
+    assert not any(ln.startswith("REFUSED:") for ln in out), out
+    windows = res["settings"]["CY5025"]
+    assert all(r["energy"]["verdict"] == "MATCH" and r["decay"]["verdict"] == "MATCH"
+               for r in windows.values()), windows

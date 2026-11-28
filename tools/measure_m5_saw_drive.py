@@ -28,8 +28,11 @@ by > 1 dB, no output rail samples.
 
 Exit status follows `tools/exit_contract.py`: 0 when at least one drive was
 measured, 2 (REFUSED, one `REFUSED:` line on stdout, the report still
-written) when every drive refused, and 2 with no report for a drive
-outside the budget.
+written) when every drive refused, and 2 with no report for a drive outside
+the budget; for one whose calibrated volume does not fit the register or
+whose development note renders at zero or non-finite RMS; and for `--merge`
+over a set whose baseline row refused or is absent (#1936) -- the selection
+rule is relative to the baseline and cannot be applied without it.
 """
 from __future__ import annotations
 
@@ -128,13 +131,14 @@ def r1_binding(drive: float, f: float) -> dict:
 
 
 def select(rows):
-    b = rows[str(BASE_DRIVE)]
+    b = ol.require_baseline(rows)
     be = b["M5A"]["errors"]
     verdicts = {}
     for d in CANDIDATES:
         r = rows.get(str(d))
         if r is None or "refused" in r:
-            verdicts[str(d)] = {"admissible": False, "reasons": [f"REFUSED: {r and r.get('refused')}"]}
+            verdicts[str(d)] = {"admissible": False,
+                                "reasons": [f"REFUSED: {r['refused'] if r else ol.NO_RECORD}"]}
             continue
         c = r["M5A"]["errors"]
         why = []

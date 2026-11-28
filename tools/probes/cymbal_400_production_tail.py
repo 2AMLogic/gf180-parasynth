@@ -26,6 +26,14 @@ PROPERTIES ARE REPORTED SEPARATELY (energy, decay) and `joint` is True only if
 both are DISCREPANT. Outcomes are MATCH / DISCREPANT / REFUSED; REFUSED is a
 first-class outcome and is never folded into either of the others.
 
+EXIT STATUS follows `tools/exit_contract.py` (#1936). `measure` exits 0 when
+any window's energy or decay verdict answered -- a partly refused comparison
+is a result, its refusals on record beside the measurements -- and 2
+(REFUSED, one `REFUSED:` line on stdout, after result.json is written) when
+every verdict was REFUSED. The confirmation settings count neither way:
+production cannot render them, and their REFUSED rows are the contract, not a
+measurement.
+
 NO NEW NUMERIC DIAL. The discrepancy thresholds are run_case.TOLERANCE_POLICY's
 existing ones (energy ratio 3 dB; time 50 %), imported not re-chosen, so nothing
 is registered in tools/sensitivity.py by this probe. If a later stage-isolation
@@ -66,6 +74,7 @@ _REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
 if _REFUSAL_TOOLS not in sys.path:
     sys.path.append(_REFUSAL_TOOLS)
 import refusal  # noqa: E402
+from exit_contract import PASS, REFUSED  # noqa: E402
 
 
 class Refused(refusal.Refused, RuntimeError):
@@ -346,6 +355,27 @@ def cmd_freeze(a) -> int:
     return 0
 
 
+def verdicts_exit(res: dict) -> int:
+    """The run's exit status (`tools/exit_contract.py`).
+
+    A window answers when its energy or its decay verdict is MATCH or
+    DISCREPANT. PASS if any window of any supported setting answered: a partly
+    refused comparison is a result, its refusals on record beside the
+    measurements. REFUSED when none did (#1936): result.json has been written
+    by then, so the record exists, but it holds no verdict and a status of 0
+    would read as a RESULT. The confirmation settings are not windows and are
+    not counted: production cannot render them (FROZEN["confirmation_note"]),
+    and their REFUSED rows are the contract, not a measurement."""
+    asked = [(s, w, r) for s, windows in res["settings"].items() for w, r in windows.items()
+             if "energy" in r]
+    if any(r[k]["verdict"] != "REFUSED" for _, _, r in asked for k in ("energy", "decay")):
+        return PASS
+    deaf = "; ".join(f"{s} {w}: energy {r['energy']['verdict']}, decay {r['decay']['verdict']}"
+                     for s, w, r in asked)
+    print(f"REFUSED: measured nothing: 0 of {len(asked)} window(s) answered; {deaf}")
+    return REFUSED
+
+
 def cmd_measure(a) -> int:
     try:
         frozen = json.loads(pathlib.Path(a.frozen).read_text())
@@ -399,7 +429,7 @@ def cmd_measure(a) -> int:
         for k in ("energy", "decay"):
             if r[k]["verdict"] == "REFUSED":
                 print(f"  {k} REFUSED by {r[k]['reason']}")
-    return 0
+    return verdicts_exit(res)
 
 
 def main(argv=None) -> int:
