@@ -492,7 +492,7 @@ def e5_tom(seconds_full: float = 1.2) -> dict:
         try:
             e = rc._pitch_drop("LT")(y, s)
             out["per_property_pitch_drop_hz"][k] = (float(e.value) if e.ok else None)
-        except Exception as exc:                                  # pragma: no cover
+        except refusal.Refused as exc:
             out["per_property_pitch_drop_hz"][k] = f"refused: {exc}"
     # the floor, on the same signals and in the same units
     a, _ = render_lt(1.7, seconds_full)
