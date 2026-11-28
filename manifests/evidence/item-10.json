@@ -45,7 +45,7 @@
         "role": "hygiene",
         "path": ".github/workflows/moog-acceptance.yml",
         "passed": true,
-        "content_hash": "sha256:f4f2e939c5d0d82a9d936b7897c316f971be1ea02ba92bd30396193e2b12d9ba"
+        "content_hash": "sha256:86b272a0378adad604757de58d27fad6b5b64ebf678e505e09ac375aea2f6172"
       },
       {
         "check": "present",
