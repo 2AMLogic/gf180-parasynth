@@ -1,0 +1,12 @@
+control                  missing     extra duplicate   outcome   summary collectio     junit       key  baseline  verdict
+-------------------------------------------------------------------------------------------------------------------------
+clean                          -         -         -         -         -         -         -         -         -  PASS
+omit-one                   MOVED     BLIND     BLIND     BLIND     BLIND     BLIND     BLIND     BLIND     BLIND  FAIL
+extra-one                  BLIND     MOVED     BLIND     BLIND     BLIND     BLIND     BLIND     BLIND     BLIND  FAIL
+ran-twice                  BLIND     BLIND     MOVED     BLIND     BLIND     BLIND     BLIND     BLIND     BLIND  FAIL
+outcome-changed            BLIND     BLIND     BLIND     MOVED     BLIND     BLIND     BLIND     BLIND     BLIND  FAIL
+junit-edited               BLIND     BLIND     BLIND     BLIND     MOVED     BLIND     BLIND     BLIND     BLIND  REFUSED
+collection-truncated       BLIND     BLIND     BLIND     BLIND     BLIND     MOVED     BLIND     BLIND     BLIND  REFUSED
+junit-empty                BLIND     BLIND     BLIND     BLIND     BLIND     BLIND     MOVED     BLIND     BLIND  REFUSED
+key-ambiguous              BLIND     BLIND     BLIND     BLIND     BLIND     BLIND     BLIND     MOVED     BLIND  REFUSED
+baseline-incomplete        BLIND     BLIND     BLIND     BLIND     BLIND     BLIND     BLIND     BLIND     MOVED  REFUSED
