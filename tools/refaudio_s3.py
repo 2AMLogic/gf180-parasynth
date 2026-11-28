@@ -125,6 +125,8 @@ def main(argv: list[str]) -> int:
             parts = pathlib.PurePosixPath(m).parts
             if m.startswith("/") or ".." in parts or not parts:
                 raise Refused(f"member path must be a relative path inside the archive: {m!r}")
+        if not args.prefix:
+            rl.refuse_part_collisions(args.members)
         root, rec = preconditions(args.archive)
         z = download(root, args.archive, rec)
     except Refused as why:
@@ -145,6 +147,7 @@ def main(argv: list[str]) -> int:
                 if not members:
                     print(f"REFUSED  no member under any of {args.members!r}")
                     return REFUSED
+                rl.refuse_part_collisions(members)
             bad = 0
             for m in members:
                 want = None if sizes is None else sizes.get(m)
@@ -157,6 +160,9 @@ def main(argv: list[str]) -> int:
                           f"({'size matches index' if want is not None else 'archive SHA-256 verified'})")
         print(f"{len(members) - bad} fetched, {bad} failed")
         return FAIL if bad else FETCHED
+    except Refused as why:
+        print(f"REFUSED  {why}")
+        return REFUSED
     finally:
         if not args.keep_archive:
             z.unlink(missing_ok=True)
