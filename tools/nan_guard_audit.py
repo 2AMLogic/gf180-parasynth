@@ -95,6 +95,11 @@ BOUNDARIES = (
     ("model/reference_rigs.py", "render_midi_note",
      "the plugin host's output buffer -- a plugin in a wrong state (unlicensed, "
      "un-set-up, denormal-blowup) is exactly where non-finite audio comes from"),
+    ("model/reference_rigs.py", "_PedalboardPlugin.render",
+     "the OTHER plugin host's output buffer, the same boundary as "
+     "`render_midi_note` under `pedalboard` -- and the one that went unchecked "
+     "until #2106, so that a non-finite pedalboard render reached the rig's "
+     "battery unasserted"),
 )
 
 #: What a refusal looks like in this repository.

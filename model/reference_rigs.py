@@ -309,11 +309,57 @@ class OurLadder:
 # ===========================================================================
 # the plugin rigs
 # ===========================================================================
+class RenderRefusal(am.InsufficientEvidence):
+    """The host boundary will not vouch for the render it was handed: the host
+    returned no frames, or the plugin's REPORTED latency leaves nothing once
+    removed (#2106).
+
+    An `InsufficientEvidence` because that is the family `require_finite`
+    raises from this same boundary, and the harnesses already written around it
+    (`sound_report`, `reference_compare`, `render_miniv4_suite`) turn it into
+    the no-verdict they turn weak evidence into. Deliberately NOT a
+    `NonFiniteAudio`: the samples are numbers, and a caller that reports
+    "non-finite audio" for this would name the wrong defect. Nor a
+    `rq.RigRefusal`: that one says a precondition of the RIG failed and carries
+    a `Qualification`, which a single render cannot."""
+
+
+def _trim_latency(y, lat, what: str) -> np.ndarray:
+    """`y` with the plugin's reported latency removed, REFUSED rather than
+    empty when that would leave nothing (#2106).
+
+    `require_finite` on the FULL buffer is the caller's and comes first, so a
+    non-finite sample is reported as that and never masked by an empty trim.
+
+    Three refusals in three wordings, because they have three causes. A latency
+    at or above the render length is a reported-latency anomaly and the host
+    DID render -- it is not "the host returned 0 frames", and a record that
+    says so sends the next person to the host rather than to the latency
+    report. A NEGATIVE latency is refused because `y[lat:]` would then hand
+    back the END of the render: finite, non-empty and wrong, which is the input
+    that defeats a `lat >= len(y)` guard on its own."""
+    n, lat = int(y.size), int(lat)
+    if n == 0:
+        raise RenderRefusal(f"{what}: the host returned 0 frames. Nothing was "
+                            f"rendered, so this says nothing about the plugin")
+    if lat < 0:
+        raise RenderRefusal(f"{what}: the plugin reports a NEGATIVE latency of "
+                            f"{-lat} samples, which is not a latency")
+    if lat >= n:
+        raise RenderRefusal(
+            f"{what}: the plugin's reported latency is {lat} samples against a "
+            f"render of {n} samples -- reported latency >= render length -- so "
+            f"removing it leaves nothing. The host did render {n} frames: this "
+            f"is a reported-latency anomaly, not silence")
+    return y[lat:] if lat else y
+
+
 def render_midi_note(processor, engine, name, note, velocity, start, duration,
                      seconds):
     """Deliver one MIDI note to a DawDreamer PluginProcessor, render, and read
-    the first channel back: finite-checked (#134) and with the plugin's own
-    latency removed. Returns mono float64.
+    the first channel back: finite-checked (#134), with the plugin's own
+    latency removed, and REFUSED rather than empty when that removal leaves
+    nothing (#2106). Returns mono float64.
 
     Shared by `_Plugin.render` and `tools/render_miniv4_suite.py` so the host
     call that delivers the note exists once (#1403): the Mini V4 adapter called
@@ -324,9 +370,9 @@ def render_midi_note(processor, engine, name, note, velocity, start, duration,
     processor.add_midi_note(note, velocity, start, duration)
     engine.render(seconds)
     y = np.asarray(engine.get_audio())[0].astype(np.float64)
-    am.require_finite(y, f"{name}'s {seconds:.3f} s render")
-    lat = processor.get_latency_samples()
-    return y[lat:] if lat else y
+    what = f"{name}'s {seconds:.3f} s render"
+    am.require_finite(y, what)
+    return _trim_latency(y, processor.get_latency_samples(), what)
 
 
 class _Plugin:
@@ -1735,7 +1781,8 @@ class _PedalboardPlugin(_Plugin):
     # -- host ---------------------------------------------------------------
     def render(self, x, seconds, note_at=0.02, note_len=None):
         """`seconds` of audio with one note held, the plugin's reported latency
-        removed, mono (channel 0).
+        removed, mono (channel 0): finite-checked and refused rather than
+        empty, exactly as the dawdreamer boundary is (#134, #2106).
 
         `x` exists only to keep the signature identical to `_Plugin.render`, so
         code written against one host runs against the other. A pedalboard
@@ -1759,8 +1806,9 @@ class _PedalboardPlugin(_Plugin):
         y = np.asarray(a, dtype=np.float64)
         if y.ndim > 1:
             y = y[0]
-        lat = self.p.get_latency_samples()
-        return y[lat:] if lat else y
+        what = f"{self.name}'s {dur:.3f} s render"
+        am.require_finite(y, what)
+        return _trim_latency(y, self.p.get_latency_samples(), what)
 
     def silence_state(self, seconds=0.4):
         """Render with NO note, which under this host also makes the parameter
@@ -1860,16 +1908,29 @@ class _PedalboardPlugin(_Plugin):
         The record is built whatever the outcome and stored on
         `self.qualification` BEFORE anything is raised, so a rig that cannot be
         qualified is a finding with numbers in it. `RigRefusal` carries the same
-        record."""
+        record.
+
+        That includes a render the host boundary REFUSES (#2106) -- a reported
+        latency that leaves nothing, a non-finite buffer. Before the boundary
+        asserted those, an empty render reached the sweeps as silence and the
+        record blamed the plugin: "NOT correctable through this plugin's own
+        parameters", for a host anomaly. The refusal is a `render: REFUSED`
+        row in the boundary's own words, and nothing that needs audio is
+        claimed after it."""
         self.silence_state(0.05)
         checks = [self._pins_check(), self.written_pins_check()]
-        checks.extend(self.patch_checks())
-        battery = rq.qualify_voice(
-            rig=self.name, host=self.host, render_note=self.render_note,
-            render_cutoff=self.render_cutoff, note_hz=vf.note_hz, note=self.note,
-            sr=self.sr, expect_wave=self.EXPECT_WAVE, steady=self.steady,
-            cutoff_knobs=self.CUTOFF_KNOBS)
-        checks.extend(battery.checks)
+        try:
+            checks.extend(self.patch_checks())
+            checks.extend(rq.qualify_voice(
+                rig=self.name, host=self.host, render_note=self.render_note,
+                render_cutoff=self.render_cutoff, note_hz=vf.note_hz,
+                note=self.note, sr=self.sr, expect_wave=self.EXPECT_WAVE,
+                steady=self.steady, cutoff_knobs=self.CUTOFF_KNOBS).checks)
+        except am.InsufficientEvidence as why:
+            checks.append(rq.Check(
+                "render", rq.REFUSED,
+                f"the host boundary refused a render -- {why}. Nothing that "
+                f"needs audio was measured", {"refusal": type(why).__name__}))
         self.qualification = rq.Qualification(self.name, self.host, tuple(checks))
         self.qualification.require()
 
@@ -2025,6 +2086,12 @@ class ModelDPedalboardRig(_PedalboardPlugin):
         commanded note is rejected rather than accepted -- that is the exact
         failure mode this control has.
 
+        A row whose steady window is EMPTY is recorded as that -- `peak: None`,
+        `empty: True` -- and not as `peak: 0.0`, which is also what an
+        exact-silence render gives (#2106). The host boundary refuses a render
+        whose latency trim leaves nothing, so an empty window here is a trim
+        that left too little for the steady cut.
+
         Selection rule, stated before the sweep runs: among the positions
         inside `RANGE_MAX_CENTS`, the one whose measured fundamental is CLOSEST
         to the commanded note. Ties cannot occur (the metric is a float) and a
@@ -2042,9 +2109,10 @@ class ModelDPedalboardRig(_PedalboardPlugin):
                 # same reason every readback in this file is read back.
                 held = float(self.p.get_parameter(idx))
                 y = self.steady(self.render_note(self.note))
-                pk = float(np.abs(y).max()) if y.size else 0.0
+                empty = not y.size
+                pk = None if empty else float(np.abs(y).max())
                 row = {"raw": float(v), "raw_held": held, "text": self.text(idx),
-                       "peak": pk}
+                       "peak": pk, "empty": empty}
                 if y.size and pk > rq.SILENCE_FLOOR:
                     e = am.refine_f0(y, cmd, self.sr, max_cents=self.RANGE_MAX_CENTS)
                     row["f0_hz"] = float(e.value) if e.ok else None
@@ -2054,7 +2122,10 @@ class ModelDPedalboardRig(_PedalboardPlugin):
                     row["ok"] = bool(e.ok)
                 else:
                     row.update(f0_hz=None, cents=None, ok=False,
-                               why="the render is silent at this Range position")
+                               why=("the steady window of the render at this Range "
+                                    "position is EMPTY (0 frames): nothing was measured "
+                                    "here, which is not silence" if empty else
+                                    "the render is silent at this Range position"))
                 rows.append(row)
         finally:
             self.set(idx, was)
