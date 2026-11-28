@@ -148,3 +148,65 @@ def test_each_stale_control_as_the_candidate_is_fail(tmp_path, control):
     assert rec["verdict"] == trial.FAIL, rec["verdict_reasons"]
     ok, problems, _ = trial.check_receipt(run_dir / "receipt.json")
     assert ok, problems
+
+
+# ---- the checker under a control refusing is REFUSED at the exit (#1717) ----
+def _verdicts(capsys):
+    return [ln for ln in capsys.readouterr().out.splitlines() if ln.startswith(sc.PREFIX)]
+
+
+def test_a_sibling_refusal_from_the_manifest_checker_is_refused(tmp_path, monkeypatch, capsys):
+    """rm.check() -> build() raises r1_candidate.Refused, which this module's
+    `except Refused` did not match."""
+    import r1_candidate as r1c
+
+    def refuse():
+        raise r1c.Refused("the demo expectation is not the frozen R1 target: injected")
+    monkeypatch.setattr(rm, "build", refuse)
+    assert sc.main(["manifest", "--out", str(tmp_path / "out")]) == 2
+    assert _verdicts(capsys) == [
+        "stale_control: REFUSED -- the demo expectation is not the frozen R1 target: injected"]
+
+
+def test_missing_publication_record_in_the_manifest_checker_refuses(tmp_path, monkeypatch, capsys):
+    """The same call, reaching release_manifest's own class from
+    tree_drift() -> _need()."""
+    monkeypatch.setattr(rm, "build", lambda: {})
+    monkeypatch.setattr(rm, "_diff", lambda a, b, path="": [])
+    monkeypatch.setattr(rm, "PUB_DIR", tmp_path / "no-publication")
+    assert sc.main(["manifest", "--out", str(tmp_path / "out")]) == 2
+    v = _verdicts(capsys)
+    assert len(v) == 1 and v[0] == ("stale_control: REFUSED -- missing input: "
+                                    + str(tmp_path / "no-publication" / "publication.json"))
+
+
+def test_a_checker_exceeding_its_timeout_is_refused_naming_it(tmp_path, monkeypatch, capsys):
+    """The binding checker runs with timeout=300; a TimeoutExpired left
+    main() as a traceback."""
+    real = subprocess.run
+
+    def run(cmd, *a, **kw):
+        if any("check_arty_evidence_binding.py" in str(c) for c in cmd):
+            raise subprocess.TimeoutExpired(cmd, kw.get("timeout"))
+        return real(cmd, *a, **kw)
+    monkeypatch.setattr(sc.subprocess, "run", run)
+    assert sc.main(["binding", "--out", str(tmp_path / "out")]) == 2
+    v = _verdicts(capsys)
+    assert len(v) == 1 and v[0].startswith("stale_control: REFUSED -- ")
+    assert "check_arty_evidence_binding.py" in v[0] and "300" in v[0], v[0]
+
+
+def test_the_checker_timeout_never_leaves_its_runner(monkeypatch, tmp_path):
+    def hang(cmd, *a, **kw):
+        raise subprocess.TimeoutExpired(cmd, kw.get("timeout"))
+    monkeypatch.setattr(sc.subprocess, "run", hang)
+    with pytest.raises(sc.Refused, match="check_arty_evidence_binding.py"):
+        sc._run_checker(tmp_path)
+
+
+def test_control_an_execution_error_in_the_control_stays_an_error(tmp_path, monkeypatch):
+    def boom(out):
+        raise ValueError("an execution error")
+    monkeypatch.setattr(sc, "manifest_control", boom)
+    with pytest.raises(ValueError, match="execution error"):
+        sc.main(["manifest", "--out", str(tmp_path / "out")])

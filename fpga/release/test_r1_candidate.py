@@ -360,3 +360,85 @@ def test_control_a_key_dropped_from_the_derivation_is_stale_not_bound(monkeypatc
     assert verdict == "STALE", \
         f"a derivation that stopped emitting presets.default.calibration read {verdict}: {detail}"
     assert "presets.default.calibration" in detail, detail
+
+
+# ---- a refusal reaches the CLI's exit as REFUSED, never a traceback (#1717) ----
+def _sibling_refusal_in_the_capture(monkeypatch):
+    """release_manifest's `_capture` refuses: its Refused is not this
+    module's, so `except Refused` here did not match it."""
+    import release_manifest as rm
+
+    def refuse(argv, outdir):
+        raise rm.Refused(f"the CLI refused a supported command {argv}: injected")
+    monkeypatch.setattr(rm, "_capture", refuse)
+
+
+def test_a_sibling_refusal_under_write_is_refused_and_writes_nothing(tmp_path, monkeypatch, capsys):
+    _sibling_refusal_in_the_capture(monkeypatch)
+    rec = tmp_path / "r1-candidate.json"
+    assert r1c.main(["--write", "--record", str(rec)]) == 2
+    assert "r1_candidate: REFUSED -- the CLI refused a supported command" in capsys.readouterr().out
+    assert not rec.exists()
+
+
+def test_a_sibling_refusal_through_the_final_check_is_refused(monkeypatch, capsys):
+    """`check(a.record)` is called bare in main(); the refusal that reaches it
+    is the same sibling's, through check() -> build() (#1616)."""
+    _sibling_refusal_in_the_capture(monkeypatch)
+    assert r1c.main([]) == 2
+    assert "r1_candidate: REFUSED -- the CLI refused a supported command" in capsys.readouterr().out
+
+
+def test_the_modules_own_refusal_from_the_final_check_is_refused(monkeypatch, capsys):
+    """The class the census lists for that call site. Its hop (check() ->
+    tree_drift -> rtl_identity) sits behind an `x or f()` default check()
+    never takes -- it passes tree_drift a record -- so the refusal is
+    injected at tree_drift itself."""
+    def refuse(rtl=None):
+        raise r1c.Refused("cannot read rtl-sketch/voice_dp.v (injected)")
+    monkeypatch.setattr(r1c, "tree_drift", refuse)
+    assert r1c.main([]) == 2
+    assert "r1_candidate: REFUSED -- cannot read rtl-sketch/voice_dp.v" in capsys.readouterr().out
+
+
+def test_an_unreadable_freeze_is_refused_inside_the_check(monkeypatch, capsys):
+    """The input the issue names for r1_candidate.py:218. A `git show` the
+    clone cannot answer refuses under check()'s own handler, around build():
+    exit 2 on main already, which is why the test above is injected one hop
+    later."""
+    monkeypatch.setattr(r1c, "RTL_FROZEN_AT", "0" * 40)
+    assert r1c.main([]) == 2
+    out = capsys.readouterr().out
+    assert "r1_candidate: REFUSED -- cannot read" in out and "shallow clone" in out
+
+
+def test_control_an_execution_error_in_the_final_check_stays_an_error(monkeypatch):
+    def boom(rtl=None):
+        raise ValueError("an execution error")
+    monkeypatch.setattr(r1c, "tree_drift", boom)
+    with pytest.raises(ValueError, match="execution error"):
+        r1c.main([])
+
+
+def test_rolling_a_refusal_inside_the_case_loop_is_refused(tmp_path, monkeypatch):
+    """`check(run_cli(...))` in the case loop sits under no handler. The guard
+    above the loop checks FIXTURES; the loop also runs `bar808`, so a bar808
+    load image that is not the frozen R1 target raises r1_candidate.Refused
+    at intended() INSIDE the loop."""
+    real = uh.fixture_split
+    kaddr = {a for a, _ in r1c.frozen_kit()}
+
+    def split(fixture, image=uh.DEFAULT_IMAGE):
+        static, timed, n, host = real(fixture, image)
+        if fixture == "bar808":                  # its load image, one kit write short
+            i = next(i for i, w in enumerate(static) if w.sec == r1c.SEC_DRUM and w.addr in kaddr)
+            static = static[:i] + static[i + 1:]
+        return static, timed, n, host
+    monkeypatch.setattr(uh, "fixture_split", split)
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        rc = vrp.main(["--image", "r1", "--expect-image", "r1", "--outdir", str(tmp_path),
+                       "--epochs", "0"])
+    assert rc == 2, out.getvalue()
+    assert ("verify_rolling_playback: REFUSED -- the bar808 expectation is not the frozen R1 "
+            "target") in out.getvalue()

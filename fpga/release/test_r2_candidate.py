@@ -110,3 +110,23 @@ def test_the_freeze_is_an_ancestor_commit_in_this_clone():
     r = subprocess.run(["git", "-C", str(r2.ROOT), "cat-file", "-t", r2_release.R2_FROZEN_AT],
                        capture_output=True, text=True)
     assert r.stdout.strip() == "commit"
+
+
+# ---- a refusal from the final check reaches the exit as REFUSED (#1717) ----
+def test_the_modules_own_refusal_from_the_final_check_is_refused(monkeypatch, capsys):
+    """`check()` is called bare in main(). Its hop to this class
+    (tree_drift -> rtl) is behind an `x or f()` default check() never takes,
+    so the refusal is injected at tree_drift."""
+    def refuse(rtl_rec=None, tree=None):
+        raise r2.Refused("cannot read rtl-sketch/voice_dp.v (injected)")
+    monkeypatch.setattr(r2, "tree_drift", refuse)
+    assert r2.main([]) == 2
+    assert "r2_candidate: REFUSED -- cannot read rtl-sketch/voice_dp.v" in capsys.readouterr().out
+
+
+def test_control_an_execution_error_in_the_final_check_stays_an_error(monkeypatch):
+    def boom(rtl_rec=None, tree=None):
+        raise ValueError("an execution error")
+    monkeypatch.setattr(r2, "tree_drift", boom)
+    with pytest.raises(ValueError, match="execution error"):
+        r2.main([])

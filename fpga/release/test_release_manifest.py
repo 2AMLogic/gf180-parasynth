@@ -266,3 +266,49 @@ def test_control_a_key_dropped_from_the_derivation_is_stale_not_bound(monkeypatc
     assert verdict == "STALE", \
         f"a derivation that stopped emitting presets.default.calibration read {verdict}: {detail}"
     assert "presets.default.calibration" in detail, detail
+
+
+# ---- a refusal reaches the CLI's exit as REFUSED, never a traceback (#1717) ----
+def test_a_sibling_refusal_under_write_is_refused_and_writes_nothing(tmp_path, monkeypatch, capsys):
+    """build() -> evidence() -> rolling_binding() reaches
+    verify_rolling_playback.run_cli, which raises r1_candidate.Refused: not
+    this module's class, so `except Refused` did not match it."""
+    import r1_candidate as r1c
+    import verify_rolling_playback as vrp
+
+    def refuse(fixture, **kw):
+        raise r1c.Refused(f"the {fixture} expectation is not the frozen R1 target: injected")
+    monkeypatch.setattr(vrp, "run_cli", refuse)
+    path = tmp_path / "manifest.json"
+    assert rm.main(["--write", "--manifest", str(path)]) == 2
+    assert ("release_manifest: REFUSED -- the demo expectation is not the frozen R1 target"
+            in capsys.readouterr().out)
+    assert not path.exists()
+
+
+def _derivation_stubbed(tmp_path, monkeypatch):
+    """A derivation of `{}` that the diff cannot tell from a `{}` manifest, and
+    no publication record: the final check() gets past its own handler and
+    tree_drift() -> _need() is what refuses."""
+    m = tmp_path / "m.json"
+    m.write_text("{}")
+    monkeypatch.setattr(rm, "build", lambda: {})
+    monkeypatch.setattr(rm, "_diff", lambda a, b, path="": [])
+    monkeypatch.setattr(rm, "PUB_DIR", tmp_path / "no-publication")
+    return m
+
+
+def test_a_missing_publication_record_in_the_drift_report_is_refused(tmp_path, monkeypatch, capsys):
+    m = _derivation_stubbed(tmp_path, monkeypatch)
+    assert rm.main(["--manifest", str(m)]) == 2
+    assert "release_manifest: REFUSED -- missing input:" in capsys.readouterr().out
+
+
+def test_control_an_execution_error_in_the_final_check_stays_an_error(tmp_path, monkeypatch):
+    m = _derivation_stubbed(tmp_path, monkeypatch)
+
+    def boom():
+        raise ValueError("an execution error")
+    monkeypatch.setattr(rm, "tree_drift", boom)
+    with pytest.raises(ValueError, match="execution error"):
+        rm.main(["--manifest", str(m)])

@@ -31,6 +31,7 @@ NAMED = (
     "fpga/test_ext_io_timing.py",
     "fpga/test_play_song.py",
     "fpga/test_record_compare.py",
+    "fpga/test_sweep_live_midi.py",
     "fpga/test_uart_host_hold_refused.py",
     "fpga/test_uart_host_pty.py",
     "fpga/test_verify_flash.py",
