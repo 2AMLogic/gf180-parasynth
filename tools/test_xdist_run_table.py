@@ -12,6 +12,7 @@ line must say so (REFUSED), never print a blank cell that reads as zero.
 from __future__ import annotations
 import json
 import pathlib
+import subprocess
 import sys
 
 import pytest
@@ -177,3 +178,58 @@ def test_the_cli_writes_markdown(tmp_path, capsys):
     assert "| candidate |" in capsys.readouterr().out
     assert xt.main([]) == 2
     assert xt.main([str(tmp_path / "nope")]) == 2
+
+
+# ---- a jobs file that cannot be used is REFUSED (2), never a traceback (#2152).
+# read_jobs() ran before main()'s guard, so a missing or malformed jobs.json
+# reached a shell as "Traceback ... exit 1" -- the code that means FAIL. The
+# last five documents are rule 8's adversary for the issue's own tuple: valid
+# JSON of the wrong shape raises TypeError, and bytes that are not text raise
+# UnicodeDecodeError, so each still escaped with exit 1 until the guard named
+# them. read_jobs() only parses, so neither can be a bug of ours in disguise.
+@pytest.mark.parametrize("doc", [
+    None,
+    b"not json",
+    b"{}",
+    json.dumps({"jobs": [{"conclusion": "success"}]}).encode(),
+    b"\xff\xfe",
+    b"[]",
+    b"null",
+    b'{"jobs": 5}',
+    b'{"jobs": [[1]]}',
+], ids=["missing", "not-json", "no-jobs-key", "no-name-key", "not-utf8",
+        "top-level-list", "top-level-null", "jobs-not-a-list", "job-not-an-object"])
+def test_a_jobs_file_that_cannot_be_used_is_refused_not_a_traceback(tmp_path, capsys, doc):
+    d = write_run(tmp_path, "n1", 1)
+    jobs = tmp_path / "jobs.json"
+    if doc is not None:
+        jobs.write_bytes(doc)
+    assert xt.main([str(jobs), str(d)]) == 2
+    err = capsys.readouterr().err
+    assert err.startswith("REFUSED:"), err
+
+
+def test_a_jobs_path_that_is_a_directory_is_refused(tmp_path, capsys):
+    """Unreadable: read_text() on a directory. Chosen over chmod because a
+    test running as root can read anything."""
+    d = write_run(tmp_path, "n1", 1)
+    (tmp_path / "dir.json").mkdir()
+    assert xt.main([str(tmp_path / "dir.json"), str(d)]) == 2
+    assert capsys.readouterr().err.startswith("REFUSED:")
+
+
+@pytest.mark.parametrize("doc", [None, b"[]"], ids=["missing", "top-level-list"])
+def test_the_shipped_cli_exits_2_without_a_traceback(tmp_path, doc):
+    """What a shell sees. The tests above drive main(); this drives
+    ``python tools/xdist_run_table.py`` and reads the exit status and stderr,
+    which is where the traceback was."""
+    d = write_run(tmp_path, "n1", 1)
+    jobs = tmp_path / "jobs.json"
+    if doc is not None:
+        jobs.write_bytes(doc)
+    r = subprocess.run([sys.executable, str(pathlib.Path(xt.__file__)),
+                        str(jobs), str(d)],
+                       capture_output=True, text=True)
+    assert r.returncode == 2, r.stderr
+    assert "Traceback" not in r.stderr, r.stderr
+    assert "REFUSED:" in r.stderr, r.stderr
