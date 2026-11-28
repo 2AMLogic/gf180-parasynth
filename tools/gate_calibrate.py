@@ -185,6 +185,16 @@ def passes(d: dict, bar: dict) -> bool:
     return pg.verdict(d, bar)["verdict"] == "PASS"
 
 
+# Held-out comparisons are tri-state in both calibration formats. Only a
+# measured FAIL contributes False to Q4. JSON null records a refused take.
+HELD_OUT_PASS = {"PASS": True, "FAIL": False, "REFUSED": None}
+VALIDATION_STATUS = {
+    "PASS": "VALIDATED",
+    "FAIL": "VALIDATION-FAILED: best untouched take fails the bar",
+    "REFUSED": "VALIDATION-REFUSED: best untouched take lacks an applicable feature",
+}
+
+
 def choose_k(tabs: dict) -> dict:
     """Development only: the bar from the development group, tried on the
     calibration group's nearest sample. Returns per-k coverage and the choice.
@@ -255,67 +265,194 @@ def expected_takes(index: pathlib.Path = INDEX) -> dict:
     return out
 
 
-def evidence_refusal(tabs: dict, expected: dict | None = None) -> str | None:
-    """None if every declared sound's evidence is complete, else the reason.
+def keys_by_group(rels) -> dict[int, set[str]]:
+    """group (0, 1, 2) -> distinct keys derived from take paths by the frozen rule."""
+    out: dict[int, set[str]] = {0: set(), 1: set(), 2: set()}
+    for rel in rels:
+        k = key_of(rel)
+        out[group_of(k)].add(k)
+    return out
 
-    `choose_k` takes its coverage denominator from the sounds that happen to
-    have a development bar and a calibration take, so removing a sound's
-    evidence removes it from the denominator and the record gets MORE
-    permissive (15 sounds emptied: k=3 CALIBRATED on 1/1, where the full
-    corpus is REFUSED on 3/9). Two checks, both against `expected` (the index),
-    neither touching the coverage rule itself:
 
-      1. rows and missing are disjoint, free of duplicates, and together equal
-         the index's take set for the sound. One unreadable take stays
-         legitimate (it sits in `missing`).
-      2. where the INDEX populates both group 0 and group 1 (the sounds
-         `choose_k` can treat as eligible), `rows` still holds a readable take
-         in each. This is what stops `missing` absorbing a sound's evidence
-         while check 1 still sees the full union.
+def expected_v1_eligible(expected: dict) -> set[str]:
+    """Sounds whose index paths populate both development (0) and calibration (1)."""
+    return {s for s, exp in expected.items() if exp and (g := keys_by_group(exp))[0] and g[1]}
 
-    RESIDUAL (rule 8, stated not closed): selective `missing` entries that
-    leave one readable take in group 0 and in group 1 but change which
-    calibration take is nearest still pass. MEASURED (#1317): the selected
-    226-take construction reaches CALIBRATED k=3 at 9/9, and so does
-    DISTANCE-INDEPENDENT loss: 66 of 5000 seeded draws of 226 uniformly random
-    takes (1.3%) reach CALIBRATED, all at k=5, where the complete record is
-    REFUSED (3/9 at k=3); see docs/scorecard/gate-379/mars-calibration/
-    missing-random-1317.md. Blocking that needs a per-take
-    signal independent of the record (re-measuring). A forged `rows` plus a
-    forged index also passes; the index is a committed file at the same trust
-    level as the tables."""
-    if expected is None:
-        try:
-            expected = expected_takes()
-        except (OSError, KeyError, csv.Error, UnicodeDecodeError) as e:
-            return f"REFUSED: incomplete evidence: cannot read the file index {INDEX.name} ({type(e).__name__}); completeness is unchecked"
-    bad = []
+
+def expected_v2_pool_eligible(expected: dict, min_keys: int = 8) -> set[str]:
+    """Sounds whose index paths hold at least `min_keys` distinct group-0/1 keys."""
+    return {s for s, exp in expected.items() if len((g := keys_by_group(exp))[0] | g[1]) >= min_keys}
+
+
+def expected_validation_sounds(expected: dict, rule: str = "v1", min_keys: int = 8) -> set[str]:
+    """Sounds expected to emit a `validation` entry under the applicable bar rule.
+
+    v1 builds a bar iff group 1 is populated and validates iff total keys >= 3 and
+    group 2 is populated (MA has 2 keys total and stays naturally UNVALIDATED; OH
+    has no group-1 key and gets NO-BAR). v2 builds a pool bar iff distinct group-0/1
+    keys >= `min_keys` and validates iff group 2 is populated (voices below
+    `min_keys` stay WEAK-UNVALIDATED)."""
+    if rule == "v1":
+        return {
+            s for s, exp in expected.items()
+            if (g := keys_by_group(exp)) and len(g[0] | g[1] | g[2]) >= 3 and g[1] and g[2]
+        }
+    if rule == "v2":
+        return {
+            s for s, exp in expected.items()
+            if (g := keys_by_group(exp)) and len(g[0] | g[1]) >= min_keys and g[2]
+        }
+    raise ValueError(f"unknown calibration rule {rule!r}")
+
+
+def inventory_issues(tabs: dict, expected: dict) -> tuple[list[str], set[str]]:
+    if not tabs:
+        return ["no sound tables supplied"], set()
+    bad, skip = [], set()
     for s, t in tabs.items():
         exp = expected.get(s)
         if not exp:
             bad.append(f"{s}: no takes in the index")
+            skip.add(s)
             continue
         absent = [f for f in ("rows", "missing") if not isinstance(t.get(f), list)]
         if absent:
             # no default: an absent list would assert every take was readable
             bad.append(f"{s}: record has no '{absent[0]}' list (malformed table)")
+            skip.add(s)
             continue
         rows = [r["rel"] for r in t["rows"]]
         miss = [m["rel"] for m in t["missing"]]
         dup = sorted({r for r in rows + miss if (rows + miss).count(r) > 1})
         if dup:
             bad.append(f"{s}: {len(dup)} take(s) duplicated or in both rows and missing (e.g. {dup[0]})")
+            skip.add(s)
             continue
         have = set(rows) | set(miss)
         if have != exp:
-            bad.append(f"{s}: expected {len(exp)} takes, found {len(have)} ({len(exp - have)} absent, {len(have - exp)} not in the index)")
+            bad.append(
+                f"{s}: expected {len(exp)} takes, found {len(have)} "
+                f"({len(exp - have)} absent, {len(have - exp)} not in the index)"
+            )
+            skip.add(s)
+    return bad, skip
+
+
+def v1_selection_issues(tabs: dict, expected: dict, skip: set[str] | frozenset[str] = frozenset()) -> list[str]:
+    want = expected_v1_eligible(expected)
+    bad = []
+    for s in [k for k in tabs if k in want] + sorted(want - set(tabs)):
+        if s in skip:
             continue
-        idx_groups = {group_of(key_of(r)) for r in exp}
-        if {0, 1} <= idx_groups:
-            got = {group_of(key_of(r)) for r in rows}
-            lost = [GROUP_NAMES[g] for g in (0, 1) if g not in got]
-            if lost:
-                bad.append(f"{s}: no readable take in the {' and '.join(lost)} group ({len(rows)}/{len(exp)} readable)")
+        if s not in tabs:
+            bad.append(f"{s}: missing expected selection sound")
+            continue
+        got = keys_by_group(r["rel"] for r in tabs[s]["rows"])
+        lost = [GROUP_NAMES[g] for g in (0, 1) if not got[g]]
+        if lost:
+            bad.append(
+                f"{s}: no readable take in the {' and '.join(lost)} group "
+                f"({len(tabs[s]['rows'])}/{len(expected[s])} readable)"
+            )
+    return bad
+
+
+def v2_pool_issues(
+    tabs: dict, expected: dict, min_keys: int = 8, skip: set[str] | frozenset[str] = frozenset()
+) -> list[str]:
+    want = expected_v2_pool_eligible(expected, min_keys)
+    got_elig = {
+        s for s, t in tabs.items()
+        if s not in skip and len((g := keys_by_group(r["rel"] for r in t["rows"]))[0] | g[1]) >= min_keys
+    }
+    bad = []
+    for s in [k for k in tabs if k in want] + sorted(want - set(tabs)):
+        if s in skip:
+            continue
+        if s not in tabs:
+            bad.append(f"{s}: missing expected pool-eligible sound")
+        elif s not in got_elig:
+            idx_g = keys_by_group(expected[s])
+            got_g = keys_by_group(r["rel"] for r in tabs[s]["rows"])
+            bad.append(
+                f"{s}: {len(got_g[0] | got_g[1])}/{len(idx_g[0] | idx_g[1])} readable pool keys (need {min_keys})"
+            )
+    for s in sorted(got_elig - want):
+        bad.append(f"{s}: unexpected pool-eligible sound")
+    return bad
+
+
+def validation_evidence_issues(
+    tabs: dict,
+    expected: dict,
+    rule: str = "v1",
+    min_keys: int = 8,
+    skip: set[str] | frozenset[str] = frozenset(),
+) -> list[str]:
+    want = expected_validation_sounds(expected, rule=rule, min_keys=min_keys)
+    bad = []
+    for s in [k for k in tabs if k in want] + sorted(want - set(tabs)):
+        if s in skip:
+            continue
+        if s not in tabs:
+            bad.append(f"{s}: missing expected validation sound")
+            continue
+        got = keys_by_group(r["rel"] for r in tabs[s]["rows"])
+        n_read, n_exp = len(tabs[s]["rows"]), len(expected[s])
+        if not got[2]:
+            bad.append(f"{s}: no readable take in the validation group ({n_read}/{n_exp} readable)")
+        elif rule == "v1" and not got[1] and not keys_by_group(expected[s])[0]:
+            bad.append(f"{s}: no readable take in the calibration group ({n_read}/{n_exp} readable)")
+        elif rule == "v1" and len(got[0] | got[1] | got[2]) < 3:
+            bad.append(f"{s}: {len(got[0] | got[1] | got[2])} readable keys (need 3 for validation)")
+    return bad
+
+
+def evidence_refusal(
+    tabs: dict, expected: dict | None = None, *, rule: str = "v1", min_keys: int = 8
+) -> str | None:
+    """None if every expected sound's evidence is complete for `rule`, else why.
+
+    `choose_k`, `choose_p`, and Q4 each aggregate over the sounds that happen to
+    carry readable data, so removing a sound's evidence removes it from their
+    denominator (#1301, #1304). Three checks against `expected` (the committed
+    file index), none touching the frozen coverage thresholds:
+
+      1. rows and missing are disjoint, free of duplicates, and together equal
+         the index's take set for the sound.
+      2. selection participation matches the index: v1 keeps readable takes in
+         both group 0 and group 1 wherever the index populates both; v2 keeps at
+         least `min_keys` readable group-0/1 keys wherever the index does.
+      3. validation participation matches the index: every sound expected to
+         produce `validation` under `rule` keeps the readable takes needed to
+         emit a validation result.
+
+    RESIDUAL (rule 8, stated not closed): selective `missing` entries that
+    preserve selection and validation participation (e.g. >= `min_keys` pool keys
+    and >= 1 validation take) while changing which take is nearest still pass
+    (#1317). On the #1305 gate, 66 of 5000 seeded draws of 226 uniformly
+    random missing takes reached CALIBRATED at k=5. The complete record was
+    REFUSED (3/9 at k=3), and the selected 226-take control reached 9/9 at
+    k=3. See docs/scorecard/gate-379/mars-calibration/missing-random-1317.md.
+    Detecting a changed nearest take needs independent per-take evidence. Naturally weak or untestable sounds keep their existing
+    treatment; if all takes of a non-participating sound sit in `missing`, Q2's
+    `seeded_summary` spans one fewer bar without changing selection or Q4."""
+    if expected is None:
+        try:
+            expected = expected_takes()
+        except (OSError, KeyError, csv.Error, UnicodeDecodeError) as e:
+            return (
+                f"REFUSED: incomplete evidence: cannot read the file index {INDEX.name} "
+                f"({type(e).__name__}); completeness is unchecked"
+            )
+    bad, skip = inventory_issues(tabs, expected)
+    if rule == "v1":
+        bad.extend(v1_selection_issues(tabs, expected, skip))
+    elif rule == "v2":
+        bad.extend(v2_pool_issues(tabs, expected, min_keys, skip))
+    else:
+        return f"REFUSED: incomplete evidence: unknown calibration rule {rule!r}"
+    bad.extend(validation_evidence_issues(tabs, expected, rule, min_keys, skip))
     if bad:
         return "REFUSED: incomplete evidence for " + "; ".join(bad)
     return None
@@ -357,11 +494,12 @@ def calibrate(tabs: dict, force_k: int | None = None, expected: dict | None = No
         if len(t["keys"]) < 3 or not val:
             row["status"] = "UNVALIDATED: no untouched take to test the bar on"
         else:
-            res = [passes(r["d"], bar) for r in val]
-            row["validation"] = {"matched": [r["rel"] for r in val], "pass": res,
-                                 "best_passes": passes(val[0]["d"], bar),
-                                 "worst_ratio_best": pg.verdict(val[0]["d"], bar)["worst_ratio"]}
-            row["status"] = "VALIDATED" if row["validation"]["best_passes"] else "VALIDATION-FAILED: best untouched take fails the bar"
+            verdicts = [pg.verdict(r["d"], bar) for r in val]
+            passed = [HELD_OUT_PASS[v["verdict"]] for v in verdicts]
+            best = verdicts[0]
+            row["validation"] = {"matched": [r["rel"] for r in val], "pass": passed,
+                                 "best_passes": passed[0], "worst_ratio_best": best["worst_ratio"]}
+            row["status"] = VALIDATION_STATUS[best["verdict"]]
         out["sounds"][s] = row
     out["status"] = "DIAGNOSTIC-CALIBRATION" if diagnostic else "CALIBRATED"
     return out
@@ -377,10 +515,22 @@ def old_bar_context(tabs: dict, refs: pathlib.Path, ours: dict | None) -> dict:
         T = pg.Target(*pg.load_wav(refs / t["target"]), s, t["target"])
         b = pg.bar_for(s, refs, T)
         vs = [(pg.verdict(r["d"], b["bar"]), r["rel"]) for r in t["rows"]]
-        best = min(vs, key=lambda v: v[0]["worst_ratio"])
-        row = {"old_bar": b["kind"], "n_takes": len(vs), "mars_takes_passing_old_bar": sum(v[0]["verdict"] == "PASS" for v in vs),
-               "mars_best": {"rel": best[1], "worst_ratio": best[0]["worst_ratio"],
-                             "worst_feature": best[0]["worst_feature"], "failing": best[0]["failing"]}}
+        best = min(vs, key=lambda v: v[0]["worst_ratio"]) if vs else None
+        row = {
+            "old_bar": b["kind"],
+            "n_takes": len(vs),
+            "mars_takes_passing_old_bar": sum(v[0]["verdict"] == "PASS" for v in vs),
+            "mars_best": (
+                {
+                    "rel": best[1],
+                    "worst_ratio": best[0]["worst_ratio"],
+                    "worst_feature": best[0]["worst_feature"],
+                    "failing": best[0]["failing"],
+                }
+                if best
+                else None
+            ),
+        }
         if ours and s in ours:
             v = pg.verdict(T.distance(*ours[s], f"ours {s}"), b["bar"])
             row["ours"] = {"verdict": v["verdict"], "worst_ratio": v["worst_ratio"], "worst_feature": v["worst_feature"]}
@@ -390,7 +540,25 @@ def old_bar_context(tabs: dict, refs: pathlib.Path, ours: dict | None) -> dict:
 
 def load_bars(cal: dict) -> dict:
     """sound -> bar, only where a bar exists AND was not refused."""
-    return {s: r["bar"] for s, r in cal["sounds"].items() if "bar" in r}
+    return {s: r["bar"] for s, r in cal["sounds"].items() if r.get("bar") is not None}
+
+
+def summarize_validation(cal: dict) -> dict:
+    """Per-sound validation outcomes preserved by sound name before counting, so
+    `decide` compares participating sound identities against the index's expected
+    set rather than trusting reduced counts (#1304)."""
+    by_sound = {
+        s: r["validation"].get("best_passes")
+        for s, r in sorted(cal["sounds"].items())
+        if isinstance(r, dict)
+        and isinstance(r.get("validation"), dict)
+    }
+    return {
+        "rule": cal.get("rule", "v1"),
+        "by_sound": by_sound,
+        "sounds": len(by_sound),
+        "best_passes": sum(by_sound.values()) if all(isinstance(x, bool) for x in by_sound.values()) else None,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -436,7 +604,6 @@ def qualify(cal: dict, refs: pathlib.Path, ours: dict | None = None) -> dict:
         q["known_bad"]["shipped-cymbal"] = pg.verdict(T.distance(*ours["CY"], "ours CY"), bars["CY"])
     else:
         q["known_bad"]["shipped-cymbal"] = {"verdict": "REFUSED", "why": "no CY bar or no render supplied"}
-    val = [r for r in cal["sounds"].values() if "validation" in r]
     if ours:
         rk = {}
         for s, y in ours.items():
@@ -452,11 +619,59 @@ def qualify(cal: dict, refs: pathlib.Path, ours: dict | None = None) -> dict:
             except pg.Refused as e:
                 rk[s] = {"verdict": "REFUSED", "why": str(e)}
         q["ours"] = rk
-    q["validation"] = {"sounds": len(val), "best_passes": sum(r["validation"]["best_passes"] for r in val)}
+    q["validation"] = summarize_validation(cal)
     return q
 
 
-def decide(q: dict, injected_qualified: bool | None) -> dict:
+def validation_refusal_q4(
+    v: dict, rule: str, expected: dict | None = None, min_keys: int = 8
+) -> str | None:
+    """Compare validated sound identities against the index's expected set under
+    `rule` before Q4 reduces them to a pass ratio (#1304).
+
+    RESIDUAL (rule 8, stated not closed): verifies which sounds produced a
+    boolean validation verdict, not that each verdict's distance came from an
+    untampered `rows` table; a forged `by_sound` with all expected sounds True
+    satisfies Q4's identity check on a hand-crafted `q` dict."""
+    if rule not in ("v1", "v2"):
+        return f"REFUSED: incomplete validation evidence: unknown rule {rule!r}"
+    if isinstance(v, dict) and "rule" in v and v["rule"] != rule:
+        return f"REFUSED: incomplete validation evidence: rule mismatch ({v['rule']!r} vs {rule!r})"
+    by_sound = v.get("by_sound") if isinstance(v, dict) else None
+    if not isinstance(by_sound, dict):
+        return "REFUSED: incomplete validation evidence: per-sound validation results absent"
+    if expected is None:
+        try:
+            expected = expected_takes()
+        except (OSError, KeyError, csv.Error, UnicodeDecodeError) as e:
+            return (
+                f"REFUSED: incomplete validation evidence: cannot read the file index "
+                f"{INDEX.name} ({type(e).__name__})"
+            )
+    want = expected_validation_sounds(expected, rule=rule, min_keys=min_keys)
+    have = set(by_sound)
+    missing = sorted(want - have)
+    extra = sorted(have - want)
+    unreadable = sorted(s for s in want & have if not isinstance(by_sound[s], bool))
+    parts = []
+    if missing:
+        parts.append(f"missing {', '.join(missing)} ({len(have & want)}/{len(want)} expected)")
+    if extra:
+        parts.append(f"unexpected {', '.join(extra)}")
+    if unreadable:
+        parts.append(f"no readable held-out verdict for {', '.join(unreadable)}")
+    if parts:
+        return "REFUSED: incomplete validation evidence: " + "; ".join(parts)
+    return None
+
+
+def decide(
+    q: dict,
+    injected_qualified: bool | None,
+    *,
+    rule: str | None = None,
+    expected: dict | None = None,
+) -> dict:
     """The five named gates, each with its observed value. REFUSED if a control
     could not be run: an unrun control is not a pass."""
     have = len(q["sounds_with_bar"])
@@ -472,11 +687,23 @@ def decide(q: dict, injected_qualified: bool | None) -> dict:
     kb = q["known_bad"].get("shipped-cymbal", {}).get("verdict")
     g["Q3 shipped cymbal"] = (kb == "FAIL" if kb != "REFUSED" else None, f"shipped cymbal {kb}")
     clean_ok = [v for v in q["clean"].values()]
-    v = q["validation"]
-    vcov = (v["best_passes"] / v["sounds"]) if v["sounds"] else None
-    g["Q4 stays green"] = (bool(clean_ok) and all(c == "PASS" for c in clean_ok) and vcov is not None and vcov >= COVERAGE,
-                           f"self PASS {sum(c == 'PASS' for c in clean_ok)}/{len(clean_ok)}; untouched best take passes "
-                           f"{v['best_passes']}/{v['sounds']}")
+    v = q.get("validation") if isinstance(q.get("validation"), dict) else {}
+    eff_rule = v.get("rule", "v1") if rule is None else rule
+    v_why = validation_refusal_q4(v, eff_rule, expected)
+    if v_why:
+        g["Q4 stays green"] = (None, v_why)
+    else:
+        by_sound = v.get("by_sound")
+        n_val = len(by_sound) if isinstance(by_sound, dict) else v.get("sounds", 0)
+        n_pass = sum(by_sound.values()) if isinstance(by_sound, dict) else v.get("best_passes", 0)
+        vcov = (n_pass / n_val) if n_val else None
+        g["Q4 stays green"] = (
+            bool(clean_ok) and all(c == "PASS" for c in clean_ok) and vcov is not None and vcov >= COVERAGE,
+            (
+                f"self PASS {sum(c == 'PASS' for c in clean_ok)}/{len(clean_ok)}; "
+                f"untouched best take passes {n_pass}/{n_val}"
+            ),
+        )
     g["Q5 corrupted corpus"] = ((injected_qualified is False) if injected_qualified is not None else None,
                                 f"corrupted-corpus calibration qualified={injected_qualified}")
     unrun = [k for k, (ok, _) in g.items() if ok is None]
@@ -486,14 +713,16 @@ def decide(q: dict, injected_qualified: bool | None) -> dict:
             "unrun": unrun}
 
 
-def injected_outcome(qi: dict | None) -> tuple[bool | None, dict | None]:
+def injected_outcome(
+    qi: dict | None, *, expected: dict | None = None
+) -> tuple[bool | None, dict | None]:
     """The corrupted corpus's qualification as the three outcomes decide() needs:
     QUALIFIED -> True, a completed NOT QUALIFIED -> False, REFUSED/unrun -> None.
     Collapsing REFUSED into False would turn a control that could not run into a
     caught defect. Also returns the injected decision so its reasons are kept."""
     if not qi:
         return None, None
-    dec = decide(qi, False)
+    dec = decide(qi, False, expected=expected)
     return {"QUALIFIED": True, "NOT QUALIFIED": False}.get(dec["status"]), dec
 
 

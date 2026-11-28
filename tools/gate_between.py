@@ -76,8 +76,11 @@ import random
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import exit_contract  # noqa: E402
 import gate_calibrate as gc  # noqa: E402
 import perceptual_gate as pg  # noqa: E402
+import refusal  # noqa: E402
+from finite_number import is_finite_number  # noqa: E402
 
 P_GRID = (0.05, 0.10, 0.15, 0.20, 0.30, 0.50)
 #: Reported, never selected from: p values beyond the selectable grid, so the
@@ -155,11 +158,17 @@ def choose_p(tabs: dict) -> dict:
             "min_keys": MIN_KEYS, "splits": SPLITS}
 
 
-def calibrate(tabs: dict, force_p: float | None = None) -> dict:
+def calibrate(tabs: dict, force_p: float | None = None, expected: dict | None = None) -> dict:
     """Pure function of the per-take tables. Same output shape as
     gate_calibrate.calibrate (`sounds[s]["bar"]`) so `qualify`/`decide` run
-    unchanged."""
+    unchanged. `expected` is the index's take set per sound (default: the
+    committed file index); the evidence check runs unconditionally, `force_p`
+    included."""
     tabs = gc.regroup(tabs)
+    why = gc.evidence_refusal(tabs, expected, rule="v2", min_keys=MIN_KEYS)
+    if why:
+        return {"rule": "v2", "selection": None, "p": None, "sounds": {}, "twins": gc.twin_report(tabs),
+                "status": why, "diagnostic": None}
     sel = choose_p(tabs)
     p = sel["chosen"] if force_p is None else force_p
     out = {"rule": "v2", "selection": sel, "p": p, "sounds": {}, "twins": gc.twin_report(tabs),
@@ -182,18 +191,25 @@ def calibrate(tabs: dict, force_p: float | None = None) -> dict:
                 row["status"] = "UNVALIDATED: no untouched key"
             else:
                 v = pg.verdict(vr[0]["d"], bar)
-                row["validation"] = {"matched": vr[0]["rel"], "best_passes": v["verdict"] == "PASS",
+                row["validation"] = {"matched": vr[0]["rel"], "best_passes": gc.HELD_OUT_PASS[v["verdict"]],
                                      "worst_ratio_best": v["worst_ratio"], "worst_feature": v["worst_feature"]}
-                row["status"] = ("VALIDATED" if row["validation"]["best_passes"]
-                                 else "VALIDATION-FAILED: best untouched take fails the bar")
+                row["status"] = gc.VALIDATION_STATUS[v["verdict"]]
         else:
             rp = reps(t["rows"])[:MARS_WEAK_KEYS]
-            row.update(bar=gc.make_bar(rp, t["floor"]), kind=f"WEAK-MARS-nearest-{len(rp)}-keys",
-                       n_matched=len(rp), bar_from=[r["rel"] for r in rp],
-                       status="WEAK-UNVALIDATED: too few keys to hold any out")
+            bar = gc.make_bar(rp, t["floor"])
+            if bar is None:
+                row["status"] = "NO-BAR: no readable take"
+            else:
+                row.update(bar=bar, kind=f"WEAK-MARS-nearest-{len(rp)}-keys",
+                           n_matched=len(rp), bar_from=[r["rel"] for r in rp],
+                           status="WEAK-UNVALIDATED: too few keys to hold any out")
         out["sounds"][s] = row
     out["status"] = "DIAGNOSTIC-CALIBRATION" if force_p is not None else "CALIBRATED"
     return out
+
+
+class Refused(refusal.Refused, ValueError):
+    """The report lacks a readable comparison needed to rank a voice."""
 
 
 def rank_rows(old_bar_context: dict) -> list:
@@ -208,12 +224,15 @@ def rank_rows(old_bar_context: dict) -> list:
         if not o:
             rows.append({"sound": s, "ours": None})
             continue
-        m = r["mars_best"]["worst_ratio"]
+        mb = r.get("mars_best")
+        if not mb:
+            raise Refused(f"REFUSED: {s}: no readable MARS takes for old-bar ratio")
+        m = mb["worst_ratio"]
         # a NaN would pass `if m` below and make the sort order undefined (#134)
-        if not (math.isfinite(m) and math.isfinite(o["worst_ratio"])):
-            raise ValueError(f"REFUSED: {s}: non-finite worst ratio (ours {o['worst_ratio']}, MARS best {m})")
+        if not (is_finite_number(m) and is_finite_number(o["worst_ratio"])):
+            raise Refused(f"REFUSED: {s}: non-finite worst ratio (ours {o['worst_ratio']}, MARS best {m})")
         rows.append({"sound": s, "bar": r["old_bar"], "ours": o["worst_ratio"], "ours_feature": o["worst_feature"],
-                     "mars_best": m, "mars_feature": r["mars_best"]["worst_feature"],
+                     "mars_best": m, "mars_feature": mb["worst_feature"],
                      "n_takes": r["n_takes"], "mars_pass_old_bar": r["mars_takes_passing_old_bar"],
                      "ours_over_mars": (o["worst_ratio"] / m if m else math.inf)})
     # a missing render (None) sorts last; a perfect render (0.0) is a real, smallest gap, not an absence
@@ -236,11 +255,11 @@ def render_table(rows: list) -> str:
 CANDIDATE = "rejected-374-candidate"
 
 
-def decide(q: dict, injected: bool | None) -> dict:
+def decide(q: dict, injected: bool | None, *, expected: dict | None = None) -> dict:
     """gate_calibrate's five gates plus Q6: the rejected #374 candidate must FAIL.
     A candidate that PASSes fails the gate; one that is absent or REFUSED leaves
     the control unrun, so the decision is REFUSED, never QUALIFIED."""
-    dec = gc.decide(q, injected)
+    dec = gc.decide(q, injected, rule="v2", expected=expected)
     kb = q["known_bad"].get(CANDIDATE, {}).get("verdict")
     dec["gates"]["Q6 rejected #374 candidate"] = {
         "ok": (kb == "FAIL") if kb in ("FAIL", "PASS") else None,
@@ -256,8 +275,13 @@ def main(argv=None) -> int:
         argv = sys.argv[1:]
     if argv and argv[0] == "table":
         res = json.loads(pathlib.Path(argv[1]).read_text())
-        print(render_table(rank_rows(res["calibration"]["old_bar_context"])))
-        return 0
+        try:
+            rows = rank_rows(res["calibration"]["old_bar_context"])
+        except Refused as exc:
+            print(exc, file=sys.stderr)
+            return exit_contract.REFUSED
+        print(render_table(rows))
+        return exit_contract.PASS
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--refs", type=pathlib.Path, required=True)
     ap.add_argument("--tables", type=pathlib.Path, required=True)
