@@ -39,8 +39,9 @@ the output, never dropped.
 
 Exit: ``0`` analysed; ``3`` REFUSED, an input is missing or unusable (the DEF
 has no parsable net sections, the DRC report has no parsable records while
-the committed record says 24, the par response names no power nets) -- a
-half-answer is not published. ``1`` for usage.
+the committed record says 24, the par response names no power nets), or
+``--output`` names a directory or its parent cannot be made -- a half-answer
+is not published. ``1`` for usage.
 
 Usage
 -----
@@ -847,6 +848,13 @@ def main(argv: list[str] | None = None) -> int:
     power_nets, reason = read_par_power_nets(par_path)
     if reason:
         refusals.append(reason)
+    if Path(args.output).is_dir():
+        refusals.append(f"--output names a directory: {args.output}")
+    else:
+        try:
+            Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            refusals.append(f"--output: its directory cannot be created: {exc}")
     for refusal in refusals:
         print(f"REFUSED: {refusal}", file=sys.stderr)
     if refusals:
@@ -904,7 +912,11 @@ def main(argv: list[str] | None = None) -> int:
         "verdict_counts": dict(verdicts),
         "sites": sites,
     }
-    Path(args.output).write_text(json.dumps(result, indent=2) + "\n")
+    try:
+        Path(args.output).write_text(json.dumps(result, indent=2) + "\n")
+    except OSError as exc:
+        print(f"REFUSED: the analysis was not written to {args.output}: {exc}", file=sys.stderr)
+        return EXIT_REFUSED
     print(f"def_site_analysis: {args.output}")
     print(f"  sites analysed: {len(sites)}; verdicts: {dict(verdicts)}")
     print(f"  DEF parse: {json.dumps(result['def_parse'])}")

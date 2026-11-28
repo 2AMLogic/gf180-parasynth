@@ -22,7 +22,9 @@ VERDICTS (exit status):
              (an RTL/ROM/host/preset change that alters what ships): re-bind
              deliberately with --write, or cut a new release
   2 REFUSED  the selected artifacts DISAGREE with each other, or an input is
-             missing: no manifest can be bound
+             missing: no manifest can be bound; under --write, also a
+             --manifest path that names a directory, cannot be made or cannot
+             be written
 """
 from __future__ import annotations
 
@@ -562,12 +564,25 @@ def main(argv=None) -> int:
     ap.add_argument("--manifest", type=Path, default=MANIFEST)
     a = ap.parse_args(argv)
     if a.write:
+        if a.manifest.is_dir():
+            print(f"release_manifest: REFUSED -- --manifest {_rel(a.manifest)} names a directory")
+            return 2
+        try:
+            a.manifest.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            print(f"release_manifest: REFUSED -- --manifest {_rel(a.manifest)}: its directory "
+                  f"cannot be created: {exc}")
+            return 2
         try:
             m = build()
         except Refused as exc:
             print(f"release_manifest: REFUSED -- {exc}")
             return 2
-        a.manifest.write_text(json.dumps(m, indent=2, sort_keys=False) + "\n")
+        try:
+            a.manifest.write_text(json.dumps(m, indent=2, sort_keys=False) + "\n")
+        except OSError as exc:
+            print(f"release_manifest: REFUSED -- {_rel(a.manifest)} was not written: {exc}")
+            return 2
         print(f"release_manifest: wrote {a.manifest}")
     verdict, detail = check(a.manifest)
     print(f"release_manifest: {verdict} -- {detail}")

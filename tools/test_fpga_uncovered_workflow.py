@@ -1,7 +1,7 @@
 """The fpga-uncovered CI job's preconditions, asserted by its own suite (#853).
 
-The job runs the 16 fpga/ test files no other CI job collects -- fpga/release/
-by directory, nine more by name -- after installing spec/trial-environment.json,
+The job runs the 18 fpga/ test files no other CI job collects -- fpga/release/
+by directory, eleven more by name -- after installing spec/trial-environment.json,
 whose pins three of those files preflight (NO VERDICT on drift) and whose
 pyserial the pty harness refuses without. This file is the job's guard, run by
 the tools job's directory collection: the job still exists, the paths it names
@@ -35,6 +35,8 @@ NAMED = (
     "fpga/test_uart_host_pty.py",
     "fpga/test_verify_flash.py",
     "fpga/test_verify_live_midi_unwrap.py",
+    "fpga/test_verify_live_midi_output_path.py",
+    "fpga/test_pads_rom.py",
 )
 BANNED = ("--ignore", "--ignore-glob", "--deselect", "-k ")
 
@@ -93,7 +95,7 @@ def test_control_floor_helper_rejects_a_missing_or_double_floor():
 
 # -- the real workflow --------------------------------------------------------
 
-def test_paths_env_names_exactly_the_measured_16():
+def test_paths_env_names_exactly_the_measured_18():
     assert paths(real_job()) == (RELEASE_DIR, *NAMED)
 
 
@@ -135,7 +137,7 @@ def test_job_installs_the_spec_not_hand_written_pins():
     runs = "\n".join(s["run"] for s in real_job()["steps"]
                      if isinstance(s.get("run"), str))
     assert "tools/trial_env.py bootstrap --no-toolchain" in runs, (
-        "three of the 16 files preflight spec/trial-environment.json and the "
+        "three of the 18 files preflight spec/trial-environment.json and the "
         "pty harness refuses without pyserial -- the job must install from "
         "the spec, not from hand-written versions")
     assert "pip install numpy" not in runs, (
@@ -148,7 +150,7 @@ def test_no_ignores_or_deselects_in_the_job():
                      if isinstance(s.get("run"), str))
     for banned in BANNED:
         assert banned not in runs, (
-            f"{banned!r} found in a run step: all 16 files measured runnable, "
+            f"{banned!r} found in a run step: all 18 files measured runnable, "
             "so an exclusion here would be unjustified and silent")
 
 

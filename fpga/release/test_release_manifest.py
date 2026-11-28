@@ -266,3 +266,111 @@ def test_control_a_key_dropped_from_the_derivation_is_stale_not_bound(monkeypatc
     assert verdict == "STALE", \
         f"a derivation that stopped emitting presets.default.calibration read {verdict}: {detail}"
     assert "presets.default.calibration" in detail, detail
+
+
+# ---- the output path (#2096): --write --manifest under a missing directory ----------
+# THE DEFECT, red-first on main @ 8eb04e5b (2026-11-28): `--write --manifest
+# NEWDIR/m.json` built the manifest and then died at
+# `a.manifest.write_text(...)` on a FileNotFoundError -- a traceback and exit
+# 1, STALE's code, for a derivation that had succeeded and whose record was
+# lost.
+#
+# THE CONTRACT, the #2040 pattern: the destination is checked BEFORE `build`
+# runs (a directory given as the file, or a parent that cannot be made, is
+# REFUSED, exit 2, with nothing built); a missing parent is created; and an
+# OSError at the write itself is REFUSED (2), never a traceback.
+#
+# WHAT IS DOUBLED: `build` (it hashes the published artifacts and reads git)
+# and `check` (it compares against the committed manifest). Real: `main`, the
+# pre-flight, the write and the exit mapping.
+_MANIFEST_STUB = {"schema": "test double -- not a manifest", "release": "x"}
+
+
+def _double_the_derivation(monkeypatch, calls, *, after_build=None):
+    def build():
+        calls.append("build")
+        if after_build:
+            after_build()
+        return _MANIFEST_STUB
+
+    def check(manifest_path):
+        calls.append("check")
+        return "BOUND", "test double"
+
+    monkeypatch.setattr(rm, "build", build)
+    monkeypatch.setattr(rm, "check", check)
+
+
+def test_manifest_under_a_missing_directory_is_created_and_the_verdict_kept(
+        tmp_path, monkeypatch, capsys):
+    calls = []
+    _double_the_derivation(monkeypatch, calls)
+    m = tmp_path / "new" / "dir" / "m.json"
+    assert rm.main(["--write", "--manifest", str(m)]) == 0
+    assert json.loads(m.read_text()) == _MANIFEST_STUB
+    assert calls == ["build", "check"]
+    assert "release_manifest: BOUND -- test double" in capsys.readouterr().out
+
+
+READ_ONLY = pytest.param("read-only", marks=pytest.mark.skipif(
+    hasattr(os, "geteuid") and os.geteuid() == 0,
+    reason="root writes into a read-only directory, so nothing refuses"))
+
+
+def _lose_the_directory(parent, how):
+    """Between the pre-flight and the write: the directory is removed, or made
+    read-only -- the input that passes `mkdir(exist_ok=True)` (rule 8)."""
+    if how == "removed":
+        shutil.rmtree(parent, ignore_errors=True)
+    else:
+        parent.mkdir(parents=True, exist_ok=True)
+        parent.chmod(0o500)
+
+
+def _an_unwritable_destination(tmp_path, how):
+    if how == "directory":
+        return tmp_path
+    if how == "file-in-the-way":
+        (tmp_path / "file").write_text("not a directory")
+        return tmp_path / "file" / "m.json"
+    (tmp_path / "read-only").mkdir()
+    (tmp_path / "read-only").chmod(0o500)
+    return tmp_path / "read-only" / "new" / "m.json"
+
+
+@pytest.mark.parametrize("how", ["directory", "file-in-the-way", READ_ONLY],
+                         ids=["directory-given-as-the-file", "parent-uncreatable", "parent-read-only"])
+def test_an_unwritable_manifest_is_refused_before_the_derivation_runs(
+        tmp_path, monkeypatch, capsys, how):
+    m = _an_unwritable_destination(tmp_path, how)
+    calls = []
+    _double_the_derivation(monkeypatch, calls)
+    try:
+        assert rm.main(["--write", "--manifest", str(m)]) == 2
+    finally:
+        if how == "read-only":
+            (tmp_path / "read-only").chmod(0o700)
+    out = capsys.readouterr().out
+    assert "release_manifest: REFUSED --" in out, out
+    assert calls == []
+    assert how == "directory" or not m.exists()
+
+
+@pytest.mark.parametrize("how", ["removed", READ_ONLY], ids=["directory-removed", "parent-read-only"])
+def test_a_write_failure_after_the_derivation_is_refused_not_a_traceback(
+        tmp_path, monkeypatch, capsys, how):
+    """The destination is lost between the pre-flight and the write: the real
+    `write_text` then raises OSError, which must be REFUSED (2) -- not 1,
+    which says the manifest was compared and found stale."""
+    m = tmp_path / "dir" / "m.json"
+    calls = []
+    _double_the_derivation(monkeypatch, calls,
+                           after_build=lambda: _lose_the_directory(m.parent, how))
+    try:
+        assert rm.main(["--write", "--manifest", str(m)]) == 2
+        out = capsys.readouterr().out
+    finally:
+        if how == "read-only":
+            m.parent.chmod(0o700)
+    assert "release_manifest: REFUSED --" in out and str(m) in out, out
+    assert calls == ["build"]

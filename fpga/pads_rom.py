@@ -398,13 +398,26 @@ def main(argv=None) -> int:
     ap.add_argument("--write", action="store_true", help="regenerate fpga/rtl/pads_rom.v")
     ap.add_argument("--rom", type=Path, default=ROM_V)
     a = ap.parse_args(argv)
+    if a.write:
+        if a.rom.is_dir():
+            print(f"pads_rom: REFUSED -- --rom {a.rom} names a directory")
+            return 2
+        try:
+            a.rom.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            print(f"pads_rom: REFUSED -- --rom {a.rom}: its directory cannot be created: {exc}")
+            return 2
     try:
         text = render()
     except (Refused, dx.KitRefused) as exc:
         print(f"pads_rom: REFUSED -- {exc}")
         return 2
     if a.write:
-        a.rom.write_text(text)
+        try:
+            a.rom.write_text(text)
+        except OSError as exc:
+            print(f"pads_rom: REFUSED -- {a.rom} was not written: {exc}")
+            return 2
         print(f"pads_rom: wrote {a.rom}")
     try:
         check_rom(a.rom)

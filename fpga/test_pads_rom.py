@@ -4,6 +4,8 @@ The anchors here are external to the pads code: model/drums_fx.hit_writes (what
 a hit IS), fpga/release/r1-kit.json and uart_host.R1_KIT_SHA256 (what the kit
 IS), uart_host's packet builders (how long a packet IS)."""
 import json
+import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -157,3 +159,104 @@ def test_cycle_frame_boundary():
 
 def test_apply_frames_spill():
     assert pr.apply_frames([5, 5, 5, 5, 6, 9]) == [5, 5, 6, 6, 7, 9]
+
+
+# ---------------------------------------------------------------------------
+# the output path (#2096, a slice of the #2095 census from #2040)
+#
+# THE DEFECT, red-first on main @ 8eb04e5b (2026-11-28): `--write --rom
+# NEWDIR/pads_rom.v` with NEWDIR absent derived the ROM and then died at
+# `a.rom.write_text(text)` on a FileNotFoundError -- a traceback and exit 1,
+# which is STALE's code, for a derivation that had succeeded.
+#
+# THE CONTRACT, the #2040 pattern: the destination is checked BEFORE the ROM is
+# derived (a directory given as the file, or a parent that cannot be made, is
+# REFUSED, exit 2, with nothing derived); a missing parent is created; and an
+# OSError at the write itself is REFUSED (2), never a traceback.
+#
+# WHAT RUNS FOR REAL: `main`, `render`, `check_rom` and the comparison with a
+# fresh derivation. `render` is doubled only where the test must prove it never
+# ran, and once to remove the destination between the pre-flight and the write.
+# ---------------------------------------------------------------------------
+def test_write_under_a_missing_directory_creates_it_and_binds(tmp_path, capsys):
+    rom = tmp_path / "new" / "dir" / "pads_rom.v"
+    assert pr.main(["--write", "--rom", str(rom)]) == 0
+    assert rom.read_text() == pr.render()
+    assert "pads_rom: BOUND --" in capsys.readouterr().out
+
+
+def test_write_with_a_bare_filename_writes_into_the_cwd(tmp_path, monkeypatch):
+    """Green before and after the fix: it pins the empty-parent case
+    (`Path("x.v").parent` is the cwd) that the pre-flight must not break."""
+    monkeypatch.chdir(tmp_path)
+    assert pr.main(["--write", "--rom", "pads_rom.v"]) == 0
+    assert (tmp_path / "pads_rom.v").read_text() == pr.render()
+
+
+def _never_derive(monkeypatch):
+    def render():
+        raise AssertionError("the ROM was derived although the destination was refused")
+    monkeypatch.setattr(pr, "render", render)
+
+
+READ_ONLY = pytest.param("read-only", marks=pytest.mark.skipif(
+    hasattr(os, "geteuid") and os.geteuid() == 0,
+    reason="root writes into a read-only directory, so nothing refuses"))
+
+
+def _lose_the_directory(parent, how):
+    """Between the pre-flight and the write: the directory is removed, or made
+    read-only -- the input that passes `mkdir(exist_ok=True)` (rule 8)."""
+    if how == "removed":
+        shutil.rmtree(parent, ignore_errors=True)
+    else:
+        parent.mkdir(parents=True, exist_ok=True)
+        parent.chmod(0o500)
+
+
+def _an_unwritable_destination(tmp_path, how):
+    if how == "directory":
+        return tmp_path
+    if how == "file-in-the-way":
+        (tmp_path / "file").write_text("not a directory")
+        return tmp_path / "file" / "pads_rom.v"
+    (tmp_path / "read-only").mkdir()
+    (tmp_path / "read-only").chmod(0o500)
+    return tmp_path / "read-only" / "new" / "pads_rom.v"
+
+
+@pytest.mark.parametrize("how", ["directory", "file-in-the-way", READ_ONLY],
+                         ids=["directory-given-as-the-file", "parent-uncreatable", "parent-read-only"])
+def test_an_unwritable_rom_is_refused_before_the_rom_is_derived(
+        tmp_path, monkeypatch, capsys, how):
+    rom = _an_unwritable_destination(tmp_path, how)
+    try:
+        _never_derive(monkeypatch)
+        assert pr.main(["--write", "--rom", str(rom)]) == 2
+    finally:
+        if how == "read-only":
+            (tmp_path / "read-only").chmod(0o700)
+    assert "pads_rom: REFUSED --" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("how", ["removed", READ_ONLY], ids=["directory-removed", "parent-read-only"])
+def test_a_write_failure_after_the_derivation_is_refused_not_a_traceback(
+        tmp_path, monkeypatch, capsys, how):
+    """The destination is lost between the pre-flight and the write: the real
+    `write_text` then raises OSError, which must be REFUSED (2)."""
+    rom = tmp_path / "dir" / "pads_rom.v"
+    real = pr.render
+
+    def derive_then_lose_the_directory():
+        text = real()
+        _lose_the_directory(rom.parent, how)
+        return text
+
+    monkeypatch.setattr(pr, "render", derive_then_lose_the_directory)
+    try:
+        assert pr.main(["--write", "--rom", str(rom)]) == 2
+        out = capsys.readouterr().out
+    finally:
+        if how == "read-only":
+            rom.parent.chmod(0o700)
+    assert "pads_rom: REFUSED --" in out and str(rom) in out, out

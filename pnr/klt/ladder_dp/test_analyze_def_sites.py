@@ -47,7 +47,9 @@ half-answer.
 from __future__ import annotations
 
 import json
+import os
 import pathlib
+import shutil
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -996,3 +998,115 @@ def test_a_name_keyword_with_no_plus_never_becomes_a_via(name_kw: str) -> None:
     """
     geometry = _after_points(name_kw)
     assert _vias_00146(geometry) == [], geometry.nets["_00146_"]
+
+
+# ---- the output path (#2096): --output under a missing directory ----------------------
+# THE DEFECT, red-first on main @ 8eb04e5b (2026-11-28): ``--output
+# NEWDIR/sites.json`` parsed the DEF, analysed every site and then died at
+# ``Path(args.output).write_text(...)`` on a FileNotFoundError -- a traceback
+# and exit 1, USAGE's code, with the analysis lost. This tool refuses with
+# ``EXIT_REFUSED`` (3), and keeps that here.
+#
+# THE CONTRACT, the #2040 pattern: ``--output`` is checked before the DEF is
+# read (a directory given as the file, or a parent that cannot be made, joins
+# the other refusals: nothing is read); a missing parent is created; and an
+# OSError at the write is REFUSED, never a traceback.
+#
+# WHAT RUNS FOR REAL: ``main``, the DEF parser, ``analyse`` and the write, on
+# the synthetic mini-DEF above. ``DefGeometry`` is wrapped only to count the
+# reads, and ``analyse`` once to remove the destination after it ran.
+
+
+def _inputs(tmp_path: pathlib.Path) -> list[str]:
+    d, r, p = tmp_path / "x.def", tmp_path / "x.rpt", tmp_path / "par.json"
+    d.write_text(DEF)
+    r.write_text("violation type: Metal Spacing\n\tsrcs: _00146_ VSS\n"
+                 f"\tbbox = {SITE_PAD}\n\tLayer: Metal2\n")
+    p.write_text('{"power": {"power_net": "VDD", "ground_net": "VSS"}}')
+    return ["--def", str(d), "--drc-report", str(r), "--par-response", str(p)]
+
+
+def _count_def_reads(monkeypatch, calls: list) -> None:
+    real = ads.DefGeometry
+
+    def counted(text):
+        calls.append(text[:8])
+        return real(text)
+
+    monkeypatch.setattr(ads, "DefGeometry", counted)
+
+
+READ_ONLY = pytest.param("read-only", marks=pytest.mark.skipif(
+    hasattr(os, "geteuid") and os.geteuid() == 0,
+    reason="root writes into a read-only directory, so nothing refuses"))
+
+
+def _lose_the_directory(parent: pathlib.Path, how: str) -> None:
+    """Between the pre-flight and the write: the directory is removed, or made
+    read-only -- the input that passes ``mkdir(exist_ok=True)`` (rule 8)."""
+    if how == "removed":
+        shutil.rmtree(parent, ignore_errors=True)
+    else:
+        parent.mkdir(parents=True, exist_ok=True)
+        parent.chmod(0o500)
+
+
+def _an_unwritable_output(tmp_path: pathlib.Path, how: str) -> pathlib.Path:
+    if how == "directory":
+        return tmp_path
+    if how == "file-in-the-way":
+        (tmp_path / "file").write_text("not a directory")
+        return tmp_path / "file" / "sites.json"
+    (tmp_path / "read-only").mkdir()
+    (tmp_path / "read-only").chmod(0o500)
+    return tmp_path / "read-only" / "new" / "sites.json"
+
+
+def test_output_under_a_missing_directory_is_created(tmp_path: pathlib.Path, capsys) -> None:
+    out = tmp_path / "new" / "dir" / "sites.json"
+    assert ads.main(_inputs(tmp_path) + ["--output", str(out)]) == ads.EXIT_OK
+    assert json.loads(out.read_text())["verdict_counts"]
+    assert f"def_site_analysis: {out}" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("how", ["directory", "file-in-the-way", READ_ONLY],
+                         ids=["directory-given-as-the-file", "parent-uncreatable", "parent-read-only"])
+def test_an_unwritable_output_is_refused_before_the_def_is_read(
+        tmp_path: pathlib.Path, monkeypatch, capsys, how: str) -> None:
+    out = _an_unwritable_output(tmp_path, how)
+    calls: list = []
+    _count_def_reads(monkeypatch, calls)
+    try:
+        code = ads.main(_inputs(tmp_path) + ["--output", str(out)])
+        err = capsys.readouterr().err
+    finally:
+        if how == "read-only":
+            (tmp_path / "read-only").chmod(0o700)
+    assert code == ads.EXIT_REFUSED, err
+    assert "REFUSED" in err, err
+    assert calls == []
+    assert how == "directory" or not out.exists()
+
+
+@pytest.mark.parametrize("how", ["removed", READ_ONLY], ids=["directory-removed", "parent-read-only"])
+def test_a_write_failure_after_the_analysis_is_refused_not_a_traceback(
+        tmp_path: pathlib.Path, monkeypatch, capsys, how: str) -> None:
+    """The destination is lost between the pre-flight and the write: the real
+    ``write_text`` then raises OSError, which must be REFUSED."""
+    out = tmp_path / "dir" / "sites.json"
+    real = ads.analyse
+
+    def analyse_then_lose_the_directory(*args):
+        sites = real(*args)
+        _lose_the_directory(out.parent, how)
+        return sites
+
+    monkeypatch.setattr(ads, "analyse", analyse_then_lose_the_directory)
+    try:
+        code = ads.main(_inputs(tmp_path) + ["--output", str(out)])
+        err = capsys.readouterr().err
+    finally:
+        if how == "read-only":
+            out.parent.chmod(0o700)
+    assert code == ads.EXIT_REFUSED
+    assert "REFUSED" in err and str(out) in err, err
