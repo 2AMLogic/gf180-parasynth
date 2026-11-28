@@ -24,9 +24,14 @@ against a digitised figure, and it is why the render still has to be run.
   --json PATH  write the evidence record
 
 The gate has three answers, and they are three exit statuses: PASS (0); FAIL
-(1), a control was evaluated and moved nothing; NO VERDICT (2), a control
-REFUSED and nothing else failed. A control that cannot be evaluated is in
-neither denominator (#1853; verification rule 5's three conditions).
+(1), a control was evaluated and moved nothing; NO VERDICT (2), a control --
+or the clean run itself -- REFUSED and nothing else failed. A control that
+cannot be evaluated is in neither denominator (#1853; verification rule 5's
+three conditions).
+
+A refusal is never a traceback. The artifacts, the report's tables and the
+record's bands all refuse to the caller as `REFUSED: <reason>` and exit 2, and
+a measured FAIL beside a refusal still exits 1 (#1992).
 
 REFUSES rather than answering when a coefficient will not fit its register,
 when an artifact is absent, or when a band's realisation exceeds SHAPE_BOUND_DB.
@@ -454,14 +459,27 @@ def _image_bind(poles, *, defect=None):
 def check(poles, corner_hz, fig9) -> tuple[bool | None, list[str]]:
     """The gate: (verdict, lines), the verdict being True, False or None.
 
-    None is NO VERDICT: a control REFUSED, so it was not evaluated, and
-    nothing else failed. Such a control keeps its row and reason, is in
-    neither denominator, and is not the False of a control that was evaluated
-    and moved nothing (#1853; verification rule 5's three conditions). A
-    measured failure anywhere still gives False, whatever else refused.
+    None is NO VERDICT: a control -- or the clean run itself -- REFUSED, so it
+    was not evaluated, and nothing else failed. Such a control keeps its row
+    and reason, is in neither denominator, and is not the False of a control
+    that was evaluated and moved nothing (#1853; verification rule 5's three
+    conditions). A measured failure anywhere still gives False, whatever else
+    refused.
+
+    A refused clean run ends the gate there: no control is evaluated, so none
+    is caught and nothing failed (#1992). That handler takes the refusal base
+    class because `properties()` calls into other modules whose `Refused` is
+    this one's sibling, not its subclass; a handler against this module's own
+    class would let theirs escape as a traceback (#1160).
     """
     lines = []
-    clean = properties(poles, corner_hz, fig9)
+    try:
+        clean = properties(poles, corner_hz, fig9)
+    except refusal.Refused as exc:
+        lines.append(f"  {'clean':20s} REFUSED: {exc}")
+        lines.append("the clean run REFUSED; no control was evaluated (rule 5, condition 1): "
+                     "NO VERDICT, not a control that moved nothing")
+        return None, lines
     ok = all(v[0] for v in clean.values())
     for name in PROPERTIES:
         good, detail = clean[name]
@@ -543,6 +561,12 @@ def record(poles, corner_hz, fig9) -> dict:
     }
 
 
+def _outcome(rc, status):
+    """Two exit statuses as one: a measured FAIL (1) is never masked by a
+    refusal (2), and PASS (0) yields to either."""
+    return min(rc, status) if rc and status else rc or status
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--report", action="store_true")
@@ -559,18 +583,26 @@ def main(argv=None) -> int:
         return 2
     rc = 0
     if a.report:
-        print("\n".join(report(poles, corner)))
+        try:
+            print("\n".join(report(poles, corner)))
+        except refusal.Refused as exc:
+            print(f"REFUSED: {exc}")
+            rc = EXIT_STATUS["NO VERDICT"]
     if a.check:
         verdict, lines = check(poles, corner, fig9)
         print("\n".join(lines))
         print("gate:", VERDICT_NAME[verdict])
-        rc = EXIT_STATUS[VERDICT_NAME[verdict]]
+        rc = _outcome(rc, EXIT_STATUS[VERDICT_NAME[verdict]])
     if a.json:
         a.json.parent.mkdir(parents=True, exist_ok=True)
-        rec = record(poles, corner, fig9)
+        try:
+            rec = record(poles, corner, fig9)
+        except refusal.Refused as exc:
+            print(f"REFUSED: {exc}")
+            return _outcome(rc, EXIT_STATUS["NO VERDICT"])
         a.json.write_text(json.dumps(rec, indent=1, default=float) + "\n")
         print(f"wrote {a.json}")
-        rc = rc or EXIT_STATUS[rec["gate"]["verdict"]]
+        rc = _outcome(rc, EXIT_STATUS[rec["gate"]["verdict"]])
     return rc
 
 

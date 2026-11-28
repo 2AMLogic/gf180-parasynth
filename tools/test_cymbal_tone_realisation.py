@@ -15,7 +15,10 @@ Three kinds of test, and the middle kind is the one that matters:
     decorative;
   * controls that REFUSE: one that cannot be evaluated is NO VERDICT, booked in
     neither denominator and carried out of `check()` as None -- never the False
-    of a control that was evaluated and moved nothing (#1853).
+    of a control that was evaluated and moved nothing (#1853);
+  * a CLEAN run that REFUSES is the same NO VERDICT, and a refusal from the
+    report's tables or the record's bands reaches the caller as `REFUSED:` and
+    exit 2 -- never a traceback wearing the FAIL status (#1992).
 """
 from __future__ import annotations
 
@@ -433,3 +436,197 @@ def test_main_still_exits_1_when_a_control_moves_nothing_beside_a_refusal(monkey
            inert=("INERT",))
     assert ct.main(["--check"]) == 1
     assert "gate: FAIL" in capsys.readouterr().out
+
+
+# ---- a refusal from the CLEAN run is NO VERDICT, not an uncaught exception ----
+#
+# #1992. `check()` evaluated the clean run outside any handler and `main()` called
+# `check()` outside its own, so a Refused from the clean run escaped both as a
+# traceback: the shell saw exit 1, the status reserved for a control that was
+# evaluated and moved nothing. #1853's repair handled the control loop and
+# deliberately left this path alone. The refusal is planted INSIDE the real
+# `properties()`, for the `defect is None` call only, so the class raised is the
+# real one and every control would still be evaluable. What is returned is the
+# list of controls that reached the real function: on a refused clean run that
+# must be empty, because no control may then be reported as evaluated (rule 5,
+# conditions 1 and 2).
+
+CLEAN = "clean"
+CLEAN_REFUSAL = "REFUSED: planted: the clean run cannot be evaluated"
+UNFIT = "REFUSED: coefficient 2.100000 outside the Q2.24 register"
+
+
+def _plant_clean(monkeypatch, exc):
+    """Make the clean run's `properties()` -- the `defect is None` call only --
+    raise `exc`; return the list of controls that reached the real function."""
+    real_props = ct.properties
+    reached = []
+
+    def properties(poles, corner_hz, fig9, *, defect=None):
+        if defect is None:
+            raise exc
+        reached.append(defect)
+        return real_props(poles, corner_hz, fig9, defect=defect)
+
+    monkeypatch.setattr(ct, "properties", properties)
+    return reached
+
+
+def _plant_clean_fail(monkeypatch):
+    """A clean run that IS evaluated and does not pass: `tone-tilt` goes red."""
+
+    real_props = ct.properties
+
+    def properties(poles, corner_hz, fig9, *, defect=None):
+        got = real_props(poles, corner_hz, fig9, defect=defect)
+        if defect is None:
+            got = dict(got)
+            got["tone-tilt"] = (False, "planted: the clean run does not pass")
+        return got
+
+    monkeypatch.setattr(ct, "properties", properties)
+
+
+def _plant_unfit_short_pole(monkeypatch):
+    """The real raise site. `cc.real_pole_regs` declines a coefficient that will
+    not fit its register; made to do so for the short band's tone pole, so every
+    path that realises the CLEAN tone stage -- the gate's clean run, `report()`'s
+    tables, `record()`'s bands -- refuses through this module's `Refused`."""
+    real = cc.real_pole_regs
+    short = cc.TONE_REALISATION["short"]["extra_pole_hz"]
+
+    def unfit(hz):
+        if list(hz) == [short]:
+            raise ValueError("coefficient 2.100000 outside the Q2.24 register")
+        return real(hz)
+
+    monkeypatch.setattr(ct.cc, "real_pole_regs", unfit)
+
+
+def test_a_refused_clean_run_is_no_verdict_not_an_uncaught_exception(figs, monkeypatch):
+    """Red first on the #1876 head: the planted Refused escapes `check()`. After:
+    the row names the reason, no property and no control is reported as
+    evaluated, and the verdict is None -- not the False of a control that moved
+    nothing, and not a pass."""
+    fig9, poles, corner = figs
+    reached = _plant_clean(monkeypatch, ct.Refused("planted: the clean run cannot be evaluated"))
+    verdict, lines = ct.check(poles, corner, fig9)
+    assert reached == []
+    assert _row(CLEAN) + CLEAN_REFUSAL in lines, "\n".join(lines)
+    assert any(ln.startswith("the clean run REFUSED; no control was evaluated") for ln in lines), (
+        "\n".join(lines))
+    assert verdict is None
+    text = "\n".join(lines)
+    assert "PASS" not in text and "FAIL" not in text, text
+
+
+def test_main_exits_2_when_the_clean_run_refuses(figs, monkeypatch, capsys):
+    """End to end through the real `check()`: red first on the #1876 head, where
+    the Refused leaves `main()` as a traceback and the process as exit 1."""
+    reached = _plant_clean(monkeypatch, ct.Refused("planted: the clean run cannot be evaluated"))
+    assert ct.main(["--check"]) == 2
+    assert reached == []
+    out = capsys.readouterr().out
+    assert CLEAN_REFUSAL in out, out
+    assert "gate: NO VERDICT" in out, out
+    assert "gate: PASS" not in out and "gate: FAIL" not in out, out
+
+
+@pytest.mark.parametrize("argv", [["--json"], ["--check", "--json"]])
+def test_main_json_records_a_refused_clean_run_as_no_verdict(figs, tmp_path, capsys, monkeypatch,
+                                                            argv):
+    """`record()` reaches the gate through `check()`: the evidence record carries
+    the refusal as its verdict -- `pass` false, `verdict` NO VERDICT, the row with
+    its reason -- and the exit status is 2, not the 1 a traceback would give."""
+    _plant_clean(monkeypatch, ct.Refused("planted: the clean run cannot be evaluated"))
+    out = tmp_path / "rec.json"
+    assert ct.main(argv + [str(out)]) == 2
+    gate = json.loads(out.read_text())["gate"]
+    assert gate["verdict"] == "NO VERDICT" and gate["pass"] is False, gate
+    assert _row(CLEAN) + CLEAN_REFUSAL in gate["lines"]
+    assert f"wrote {out}" in capsys.readouterr().out
+
+
+def test_a_clean_run_that_fails_without_refusing_is_still_fail(figs, monkeypatch, capsys):
+    """Rule 8's input for the guard: a clean run that IS evaluated and does not
+    pass is a measured FAIL (exit 1). The refusal handler must not turn every
+    non-passing clean run into NO VERDICT."""
+    fig9, poles, corner = figs
+    _plant_clean_fail(monkeypatch)
+    verdict, lines = ct.check(poles, corner, fig9)
+    assert verdict is False
+    assert any(ln.startswith("the clean run does not pass; the controls below mean nothing")
+               for ln in lines), "\n".join(lines)
+    assert ct.main(["--check"]) == 1
+    out = capsys.readouterr().out
+    assert "gate: FAIL" in out and "NO VERDICT" not in out, out
+
+
+def test_an_execution_error_in_the_clean_run_is_not_relabelled_refused(figs, monkeypatch):
+    """Rule 8, as for a control (#1853): the handler is for refusals. An
+    implementation error raised by the clean run must propagate as itself --
+    never a REFUSED row, never a NO VERDICT."""
+    fig9, poles, corner = figs
+    _plant_clean(monkeypatch, ValueError("an implementation error, not a precondition"))
+    with pytest.raises(ValueError, match="an implementation error"):
+        ct.check(poles, corner, fig9)
+
+
+def test_a_sibling_modules_refusal_in_the_clean_run_is_still_no_verdict(figs, monkeypatch, capsys):
+    """Rule 8's other input, #1160's shape: each module's `Refused` subclasses
+    `refusal.Refused` and none subclasses another's, so a handler written against
+    THIS module's class catches none of a sibling's. `properties()` calls into
+    `werner_fig9`; a refusal raised there must read as refused, not escape as a
+    traceback because the guard named the wrong class."""
+    assert not issubclass(w9.Refused, ct.Refused)
+    _plant_clean(monkeypatch, w9.Refused("planted: Figure 9 cannot be read"))
+    assert ct.main(["--check"]) == 2
+    out = capsys.readouterr().out
+    assert "REFUSED: planted: Figure 9 cannot be read" in out and "gate: NO VERDICT" in out, out
+
+
+@pytest.mark.parametrize("argv", [[], ["--report"], ["--report", "--check"], ["--json"]])
+def test_a_refusal_outside_the_gate_reaches_the_caller_as_refused(figs, tmp_path, capsys,
+                                                                  monkeypatch, argv):
+    """`report()`'s tables and `record()`'s bands call `realisation()` outside
+    `check()`, and no arguments means `--report`. Red first on the #1876 head
+    (traceback, exit 1); after, the same `REFUSED:` line and exit 2 that `main()`
+    already gives an artifact it cannot read. No record is written."""
+    _plant_unfit_short_pole(monkeypatch)
+    rec = tmp_path / "rec.json"
+    assert ct.main(argv + ([str(rec)] if "--json" in argv else [])) == 2
+    out = capsys.readouterr().out
+    assert UNFIT in out, out
+    assert "gate: PASS" not in out and "gate: FAIL" not in out, out
+    assert not rec.exists()
+
+
+def test_a_measured_fail_outranks_a_refusal_beside_it(figs, tmp_path, capsys, monkeypatch):
+    """Rule 8's input for the exit status: a FAIL that was measured must not be
+    masked by a refusal beside it. The clean run fails; then the record's bands
+    refuse (exit 1, no record written), and the report refuses beside the gate
+    (the gate still prints, still 1). Both raises are planted at the `record()`
+    and `report()` boundaries, because no input refuses either without also
+    refusing the clean run -- that raise site belongs to
+    `test_a_refusal_outside_the_gate_reaches_the_caller_as_refused`."""
+    _plant_clean_fail(monkeypatch)
+
+    def record(poles, corner, fig9):
+        raise ct.Refused("planted: the bands cannot be built")
+
+    monkeypatch.setattr(ct, "record", record)
+    rec = tmp_path / "rec.json"
+    assert ct.main(["--check", "--json", str(rec)]) == 1
+    assert not rec.exists()
+    out = capsys.readouterr().out
+    assert "gate: FAIL" in out, out
+    assert "REFUSED: planted: the bands cannot be built" in out, out
+
+    def report(poles, corner):
+        raise ct.Refused("planted: the tables cannot be built")
+
+    monkeypatch.setattr(ct, "report", report)
+    assert ct.main(["--report", "--check"]) == 1
+    out = capsys.readouterr().out
+    assert "REFUSED: planted: the tables cannot be built" in out, out
+    assert "gate: FAIL" in out, out
