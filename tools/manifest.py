@@ -158,7 +158,10 @@ def load_json_refused(path, what: str) -> dict:
     the file and say how it is restored rather than look like a bug in the
     reader."""
     try:
-        return json.loads(path.read_text())
+        # Decode as UTF-8 explicitly: a bare `read_text()` lets the host locale
+        # choose, so a Latin-1 locale ACCEPTED non-UTF-8 bytes (#1774 review) and
+        # a C locale refused valid UTF-8.
+        return json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as e:
         raise Refused(
             f"{what} at {path} is not valid JSON ({e.msg} at line {e.lineno}, "
