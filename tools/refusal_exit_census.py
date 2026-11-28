@@ -427,17 +427,21 @@ EXPECTED = {
 # (_handlers_in_scope), the same machinery that reads the contract; a site
 # with no enclosing def keys as "<module>".  A NEW site outside the set still
 # turns --check red -- a future tool refusing with an undeclared status
-# changes the key set, a third refusal in this function changes the count.
+# changes the key set, a refusal added to a listed function changes the count.
 # Known residual, accepted: swapping one `return 1` for another inside the
 # same function is not caught; the exit-code contract does not care which
 # statement refuses, only which statuses exist outside the declared set.
-# Both pinned sites are in tools/cymbal_vca_drive.py's main() and both are
-# deliberate: the --require-source exit 1 is in that tool's argparse help and
-# in docs/scorecard/cymbal-369/vca-drive/README.md; #804 scoped them out
-# rather than quietly change a documented contract.
-EXPECTED["sites_outside_set"] = [
-    ["tools/cymbal_vca_drive.py", "main", 1, 2],
-]
+#
+# EMPTY since #1789.  Until then it held exactly one entry,
+# ["tools/cymbal_vca_drive.py", "main", 1, 2]: that tool's `--require-source`
+# on a scan that does not verify, and balance_targets() refusing.  #804
+# pinned them as deliberate rather than quietly change a contract that was
+# documented as "exit 1" (the tool's argparse help and its README); #1789
+# moved both to the declared REFUSED status and changed that documentation
+# with them, at which point the census table held no status outside
+# {2, 3, 126}.  Listing a site here is a documented decision with its reason
+# written above it, never a way to make a red --check pass.
+EXPECTED["sites_outside_set"] = []
 
 
 def check() -> tuple[bool, list[str]]:
