@@ -14,6 +14,17 @@ both carrying the commit they were produced at and a `sources_dirty` flag, both 
 
 ---
 
+**Neither commit these two records name is on origin (#1940).** `low-tail.json` says `commit: e3c565ce…` and
+`m-origin.json` says `commit: 2d4abdb1…`, both `sources_dirty: false`. On 2026-11-28 neither SHA was an ancestor of
+`origin/main` in a full-history clone, and the GitHub commits endpoint answered 422 (`No commit found for SHA`) for
+both. The flag says `model/` and `tools/` were unmodified relative to those HEADs; it does not make a HEAD
+recoverable, so **the figures in these two files cannot be reproduced from a known tree.** Each file's
+`source_provenance` key records the lookup and its date, and `tools/check_cymbal_source_provenance.py` reports both as
+historical unknowns, never as verified sources. Both landed in one commit, `1c8a941a`, through the two-parent merge of
+PR #418, whose branch commits are on main — the same kind of landing that put `1916d361`, the commit
+`tone-knob/tone-knob.json` names, on main. So a squash merge did not discard these two; they were never part of the
+branch as pushed. The files cite two different commits, and how either left the branch is not recorded.
+
 ## 1. Headline
 
 **The 808's 1–2.5 kHz band outlasts its own 3.45 kHz low band at every one of the 25 settings. Ours dies first at
