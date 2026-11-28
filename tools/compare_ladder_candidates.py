@@ -467,12 +467,15 @@ def _moved(d: dict, b: dict, key: str, ndigits: int, rows: str):
     checked rather than compared, since every comparison against `nan` is
     False (#134). And the points are counted too, because a summary can be
     finite over nothing: each stage derives it from the points it scored,
-    which is one edit away from no longer being so.
+    which is one edit away from no longer being so. A side with no operating
+    points at all is refused the same way -- it refused nothing because there
+    was nothing to refuse -- and is counted FIRST, before any summary is
+    read: over an empty grid even `0.0` is not a measurement.
 
     `d` and `b` are the defective and baseline rows the stage returned, `key`
     the summary compared, and `rows` the key of a row's operating points
     (`points`; `sweeps` for the movement stage)."""
-    if any(row[rows] and row["refused"] == len(row[rows]) for row in (d, b)):
+    if any(row["refused"] == len(row[rows]) for row in (d, b)):
         return UNMEASURED
     if not all(isinstance(v, (int, float)) and not isinstance(v, bool)
                and math.isfinite(v) for v in (d[key], b[key])):

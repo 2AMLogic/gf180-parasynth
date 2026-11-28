@@ -47,16 +47,19 @@ otherwise returns the `round(abs(a - b), n)` the sites always computed. Both
 signals are read because each can fail where the other is blind: the summary
 alone is defeated by a finite figure over all-refused points
 (`test_a_summary_that_contradicts_its_own_points...`), and a refusal count
-alone cannot see a stage that scores a `nan`. Every move now also carries
+alone cannot see a stage that scores a `nan`. A side with no operating points
+at all counts as one that refused every point
+(`test_a_side_with_no_operating_points_at_all...`): it scored nothing, and
+over an empty grid even `0.0` is not a measurement. Every move now also carries
 `moved_refused_points` and `baseline_refused_points`, so the two directions
 -- defect dead over a scoring baseline, and the reverse -- do not read alike.
 
-RED, THEN GREEN, this file whole against each tree. Unfixed: 15 failed, 4
-passed. Fixed: 19 passed. The four are green on both trees by construction,
+RED, THEN GREEN, this file whole against each tree. Unfixed: 17 failed, 4
+passed. Fixed: 21 passed. The four are green on both trees by construction,
 which is what lets them speak: the two number controls
 (`...keep_the_numbers_the_subtraction_gave`, `...partially...is_still_a_measurement`),
 the one that tells the two directions apart, and the block check's own control.
-The fifteen, on the unfixed tree:
+The seventeen, on the unfixed tree:
 
     both sides dead, end to end   moved_cents=nan, moved_residual_db=nan, and
                                   dropped-pole's two moves absent altogether
@@ -65,20 +68,27 @@ The fifteen, on the unfixed tree:
                                   dropped-pole -- the old guard's blind side
     dead defect, scoring baseline the same nan in the other two controls
     a summary over no points      moved_peak_db=6.2 printed as a measurement
+    a side with no points         nan printed as the move
     operand nan / inf / -inf      printed as the move
     operand None / a str          TypeError: a traceback where a refusal belongs
     operand a bool                37.7 printed as the move
     the real block, read anew     dropped-pole carries no move field at all
-    the two rule-5 controls       red because their baseline is red (#1125)
+    the three rule-5 controls     red because their baseline is red (#1125)
 
 AND THE HEALTHY RUNS DID NOT MOVE. The whole `controls` dict of a healthy run,
-before against after, field by field: quick grid 98 of 98 identical, full grid
-204 of 204, zero changed and zero lost, six fields added in each (dropped-pole's
-two moves, now `REFUSED`, and the two counts on each of the other controls).
-Under the seam the whole report differs in exactly two fields, the two above.
+before against after, field by field, measured by
+`tools/probes/ladder_controls_before_after.py` (one pass of the real stages;
+their rows replayed into the unfixed assembly): quick grid 98 of 98 identical,
+full grid 204 of 204, zero changed and zero lost, six fields added in each
+(dropped-pole's two moves, now `REFUSED`, and the two counts on each of the
+other controls). Under the seam, whole quick report against whole quick report,
+two EXISTING leaves change -- the two `nan` fields, now `REFUSED` -- the same
+six are added, and the other 179 are identical.
 
-WRONG-THEN-RIGHT, five in this file's own apparatus, every one caught by the
-run disagreeing with what reading had predicted and none by inspection:
+WRONG-THEN-RIGHT, six in this file's own apparatus. The first five were caught
+by a run disagreeing with what reading had predicted, none by inspection; the
+sixth by reading the helper against its own docstring, and then measured
+before it was touched:
 
   1. Two `assert`s carried their message on the next line without parentheses:
      a SyntaxError, caught by compiling before the first run. The class was
@@ -98,12 +108,19 @@ run disagreeing with what reading had predicted and none by inspection:
      is the one that failed. The summary-over-no-points test failed on another
      message, and the control said so -- "Regex pattern did not match" -- rather
      than count it. The test now fails on the shared one.
+  6. The fix as first written skipped the count for a side with no operating
+      points (`row[rows] and ...`), while its own docstring said a summary could
+      be finite over nothing. Reading had taken the line for tighter than it
+      was. Asked directly -- the real stage over an empty grid, a finite summary
+      put on the row -- it printed a move of `0.0`: "the defect moved nothing".
+      `test_a_side_with_no_operating_points_at_all...` is red on that tree, and
+      `NO_POINTS_EXEMPT` keeps it there.
 
 WHAT IS STUBBED, AND WHAT IS NOT
 
   in process   `stage_controls` and `_print`, the producer and the renderer of
                the block, over rows the REAL stages wrote. `_real()` runs the
-               real `stage_controls` once on a one-point grid and five single
+               real `stage_controls` once on a one-point grid and six single
                stages beside it; `_wire` then answers the stage calls with
                those rows, so each side of each move is made dead, partially
                dead, or lying, independently and in milliseconds. No row here
@@ -118,10 +135,13 @@ Nothing here asserts on the verdict or the exit status: under this seam the
 unfixed tree prints RETAIN at exit 0, which is #2036's defect and PR #2079's
 to fix. The two files must stay green whichever lands first.
 
-THE RULE-5 CONTROL LIVES IN THIS FILE. `test_control_...` re-instates the
+THE RULE-5 CONTROL LIVES IN THIS FILE. `test_control_...` re-instates a
 broken move in memory and calls the green tests by name: each must pass
 unmutated first (a red before the mutation is that test's own, #1125) and
-then fail on the assertion it was written for. It is not a `make controls`
+then fail on the assertion it was written for. Three ways the fix can be
+undone: the subtraction as it shipped, the fix with its points never counted,
+and the fix as it was first written, with an empty grid left out of the count.
+It is not a `make controls`
 harness because that edits the Makefile and
 `tools/test_control_harness_baselines.py` at the lines open PR #2079 edits.
 """
@@ -273,6 +293,9 @@ def _real() -> dict:
         # too few periods of a 10 Hz tone (#1881), and the committed full-grid
         # record refuses both of its 100 Hz rows
         R["linear_partial"] = cc.stage_linear([BASE], (100.0, 400.0), (0.5,))[BASE]
+        # the empty grid: the real stage called with no operating points at all,
+        # which is the smallest "a summary over nothing"
+        R["linear_empty"] = cc.stage_linear([BASE], (), ())[BASE]
         # the apparatus's own preconditions, before any test reads a row
         assert R["linear"]["refused"] == 0 and all(
             _number(R["linear"][k]) for k in LINEAR_SUMMARIES), R["linear"]
@@ -288,6 +311,9 @@ def _real() -> dict:
         part = R["linear_partial"]
         assert part["refused"] == 1 < len(part["points"]), part
         assert all(_number(part[k]) for k in LINEAR_SUMMARIES), part
+        empty = R["linear_empty"]
+        assert empty["points"] == {} and empty["refused"] == 0, empty
+        assert all(math.isnan(empty[k]) for k in LINEAR_SUMMARIES), empty
     return _REAL
 
 
@@ -442,6 +468,28 @@ def test_a_summary_that_contradicts_its_own_points_is_not_a_measurement(monkeypa
     assert inj[DROPPED]["baseline_refused_points"] == "1/1", inj[DROPPED]
 
 
+def test_a_side_with_no_operating_points_at_all_is_not_a_measurement(monkeypatch):
+    """Rule 8's question asked of the fix itself, and the empty grid is its
+    smallest answer. A row with no points refused nothing (`0/0`), and a real
+    stage leaves its summary `nan` over nothing. The fix as it was first
+    written skipped the count for such a row, so a summary that was finite
+    anyway came out as a move of 0.0 -- "the defect moved nothing", the one
+    number that reads as the dimension being blind. A side that scored nothing
+    is refused whatever its summary says, on the linear stage and on the
+    movement stage alike."""
+    R = _real()
+    lying = dict(R["linear_empty"], **{k: R["linear"][k] for k in LINEAR_SUMMARIES})
+    no_sweeps = dict(R["movement"], sweeps=[], refused=0)
+    for empty in (R["linear_empty"], lying):
+        inj = _controls(monkeypatch, linear=(OK, empty),
+                        movement=(OK, no_sweeps))["injected"]
+        quiet = {f"{c}.{k}": inj[c][k] for c in MOVES for k in MOVES[c]
+                 if inj[c][k] != REFUSED}
+        assert not quiet, f"{UNKNOWN}: a baseline with no operating points: {quiet}"
+        assert [inj[c]["baseline_refused_points"] for c in MOVES] == ["0/0"] * 3, inj
+        assert [inj[c]["moved_refused_points"] for c in MOVES] == ["0/1", "0/1", "0/2"], inj
+
+
 @pytest.mark.parametrize("value", [nan, float("inf"), float("-inf"), None, True, "38.68"],
                          ids=["nan", "inf", "neg-inf", "none", "bool", "text"])
 def test_a_move_operand_that_is_not_a_finite_number_is_refused(value, monkeypatch):
@@ -576,6 +624,15 @@ def _summary_only(d, b, key, ndigits, rows):
             else round(abs(d[key] - b[key]), ndigits))
 
 
+def _no_points_exempt(d, b, key, ndigits, rows):
+    """The fix as it was first written: a side with no operating points at all
+    was left out of the count, so a finite summary over an empty grid came out
+    as a move."""
+    if any(row[rows] and row["refused"] == len(row[rows]) for row in (d, b)):
+        return cc.UNMEASURED
+    return _summary_only(d, b, key, ndigits, rows)
+
+
 def _calls(t, mutation=None) -> None:
     """Call test `t` on a MonkeyPatch of its own, with `cc._moved` replaced by
     `mutation` when one is given."""
@@ -593,9 +650,13 @@ MUST_GO_RED = (
         test_every_point_refused_on_both_sides_reads_refused_not_nan,
         test_a_dead_baseline_under_a_scoring_defect_reads_refused,
         test_a_dead_defect_over_a_scoring_baseline_still_reads_red,
-        test_a_summary_that_contradicts_its_own_points_is_not_a_measurement)),
+        test_a_summary_that_contradicts_its_own_points_is_not_a_measurement,
+        test_a_side_with_no_operating_points_at_all_is_not_a_measurement)),
     ("POINTS_NEVER_COUNTED", _summary_only, (
-        test_a_summary_that_contradicts_its_own_points_is_not_a_measurement,)),
+        test_a_summary_that_contradicts_its_own_points_is_not_a_measurement,
+        test_a_side_with_no_operating_points_at_all_is_not_a_measurement)),
+    ("NO_POINTS_EXEMPT", _no_points_exempt, (
+        test_a_side_with_no_operating_points_at_all_is_not_a_measurement,)),
 )
 
 
