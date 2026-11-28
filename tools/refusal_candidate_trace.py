@@ -44,8 +44,11 @@ WHAT IT CANNOT TELL YOU, stated rather than carried:
   * a `return` inside a `finally` discards an exception without an `except`
     clause; it reads as "left the frame", which is what it is.
 
-It is a tracer, not a gate: it records `ESCAPED`, `HANDLED`, `NOT-RAISED` or
-`UNRESOLVED` per run and never decides whether an escape is a defect.
+It is a tracer, not a gate: per run and per site it records `ESCAPED` (the
+refusal left the entry point), `HANDLED` (a clause took it), `RETURNED` (the
+call ran and came back), `NOT-REACHED` (this run never got to the site) or
+`UNRESOLVED` (a prerequisite was missing), and never decides whether an
+escape is a defect.
 
     python tools/refusal_candidate_trace.py follow PLAN.json SCRIPT.py [args...]
     python tools/refusal_candidate_trace.py run --spec SPEC.py --out RECORD.json
@@ -88,7 +91,8 @@ TAG = "_refusal_candidate_trace_token"
 #: RuntimeError, and where it goes is still the question the trace asks
 REFUSED_SUFFIX = "Refused"
 
-ESCAPED, HANDLED, NOT_RAISED, UNRESOLVED = "ESCAPED", "HANDLED", "NOT-RAISED", "UNRESOLVED"
+ESCAPED, HANDLED, RETURNED, NOT_REACHED, UNRESOLVED = (
+    "ESCAPED", "HANDLED", "RETURNED", "NOT-REACHED", "UNRESOLVED")
 
 
 # ---------------------------------------------------------------------------
@@ -454,6 +458,8 @@ def follow(plan_path: str, script: str, args: list[str]) -> int:
     for d in reversed(plan.get("path", ())):
         if d not in sys.path:
             sys.path.insert(0, d)
+    # what `python SCRIPT.py` gives an entry point: its own directory first
+    sys.path.insert(0, str(pathlib.Path(script).parent))
     sys.argv = [script, *args]
     rc = 0
     try:
@@ -486,32 +492,43 @@ def follow(plan_path: str, script: str, args: list[str]) -> int:
 # ---------------------------------------------------------------------------
 # the parent half: run the child, read the log back
 # ---------------------------------------------------------------------------
-def run_child(run: dict, workdir: pathlib.Path, wrap: list[str], sites: list[str],
-              inject: list[str] = (), extra_plan: dict | None = None) -> dict:
+NOT_REACHED = "NOT-REACHED"
+
+
+def run_child(run: dict, workdir: pathlib.Path, wrap: list[str], sites: list[str] | None = None,
+              extra_plan: dict | None = None) -> dict:
     """One traced execution of `run["entry"]`. Never raises on the child's
-    behalf: a timeout is recorded as `UNRESOLVED`, not as a verdict."""
+    behalf: a timeout, or a child that wrote no log, is recorded as
+    `UNRESOLVED`, not as a verdict. `sites` None keeps every intercepted
+    call (a run several sites share is recorded once and viewed per site)."""
     entry = str(pathlib.Path(run["entry"]).resolve())
-    log = workdir / f"log-{time.time_ns()}.json"
     root = pathlib.Path(run.get("root", ROOT)).resolve()
+    workdir.mkdir(parents=True, exist_ok=True)
+    stamp = time.time_ns()
+    log, plan_path = workdir / f"log-{stamp}.json", workdir / f"plan-{stamp}.json"
     plan = {"log": str(log), "wrap": {w.split(".")[0]: [] for w in wrap},
             "path": [str(p) for p in run.get("path", ())],
-            "prelude": run.get("prelude"), "inject": list(inject), "root": str(root)}
+            "prelude": run.get("prelude"), "inject": list(run.get("inject", ())),
+            "root": str(root)}
     for w in wrap:
         mod, _, fn = w.partition(".")
         plan["wrap"][mod].append(fn)
     plan.update(extra_plan or {})
-    plan_path = workdir / f"plan-{time.time_ns()}.json"
     plan_path.write_text(json.dumps(plan))
     env = dict(os.environ)
     env.update({k: str(v) for k, v in run.get("env", {}).items()})
     env["PYTHONUNBUFFERED"] = "1"
-    env.pop("PYTHONDONTWRITEBYTECODE", None)
     cmd = [sys.executable, str(HERE), "follow", str(plan_path), entry, *[str(a) for a in run["argv"]]]
-    started = time.time()
-    rel = lambda p: str(pathlib.Path(p).relative_to(root)) if pathlib.Path(p).is_relative_to(root) else str(p)
+
+    def rel(q) -> str:
+        q = pathlib.Path(q)
+        return str(q.relative_to(root)) if q.is_relative_to(root) else str(q)
+
     rec = {"entry": rel(entry), "argv": [str(a) for a in run["argv"]], "role": run.get("role"),
-           "timeout_s": run.get("timeout", 900), "tree": str(root)}
-    proc = subprocess.Popen(cmd, cwd=str(run.get("cwd", ROOT)), env=env, text=True,
+           "timeout_s": run.get("timeout", 900), "tree": str(root),
+           "expect": run.get("expect"), "note": run.get("note")}
+    started = time.time()
+    proc = subprocess.Popen(cmd, cwd=str(run.get("cwd", root)), env=env, text=True,
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
     try:
         out, err = proc.communicate(timeout=rec["timeout_s"])
@@ -524,29 +541,29 @@ def run_child(run: dict, workdir: pathlib.Path, wrap: list[str], sites: list[str
     rec["traceback"] = "Traceback (most recent call last)" in err
     rec["stdout_tail"] = out.strip().splitlines()[-12:]
     rec["stderr_tail"] = err.strip().splitlines()[-12:]
+    rec["harness_frame_in_traceback"] = any(str(HERE) in line for line in rec["stderr_tail"])
     try:
-        logrec = json.loads(log.read_text()) if log.exists() else None
+        child = json.loads(log.read_text()) if log.exists() else None
     except ValueError:
-        logrec = None
-    if logrec is None:
+        child = None
+    if child is None:
         rec.setdefault("verdict", UNRESOLVED)
         rec.setdefault("unresolved", "the child wrote no log (it exited before the entry point ran)")
+        rec["calls"], rec["follows"], rec["site_executed"] = [], [], []
         return rec
-    rec["wrap_missing"] = logrec["wrap_missing"]
-    rec["system_exit"] = logrec["system_exit"]
-    rec["calls"] = [c for c in logrec["calls"] if _hit(c, sites)]
+    rec["wrap_missing"] = child["wrap_missing"]
+    rec["system_exit"] = child["system_exit"]
+    rec["uncaught"] = child["uncaught"]
+    rec["calls"] = child["calls"] if sites is None else [c for c in child["calls"] if _hit(c, sites)]
+    rec["follows"] = child["follows"] if sites is None else [f for f in child["follows"] if _hit_stack(f, sites)]
+    rec["all_raised"] = sorted({c["raised"]["class"] for c in child["calls"] if c.get("raised")})
     rec["site_executed"] = sorted({f"{c['caller']['file']}:{c['caller']['line']}" for c in rec["calls"]})
-    rec["follows"] = [f for f in logrec["follows"] if _hit_stack(f, sites)]
-    rec["all_raised"] = sorted({c["raised"]["class"] for c in logrec["calls"] if c.get("raised")})
-    uncaught = logrec["uncaught"]
-    rec["uncaught"] = uncaught
-    if "verdict" not in rec:
-        rec["verdict"] = classify(rec)
+    rec.setdefault("verdict", classify(rec))
     return rec
 
 
 def _hit(call: dict, sites: list[str]) -> bool:
-    """Does this call sit at one of `sites`? Its own line, or inside the
+    """Does this call sit at one of `sites`? On its own line, or inside the
     source span of its call expression when the call is written over several
     lines (the scanner names the first)."""
     c = call["caller"]
@@ -558,21 +575,26 @@ def _hit(call: dict, sites: list[str]) -> bool:
 
 
 def _hit_stack(followed: dict, sites: list[str]) -> bool:
+    """A refusal is a site's when the call that let it out was made there."""
     return bool(followed["stack"]) and _hit({"caller": followed["stack"][0]}, sites)
+
+
+def _mine(call: dict, site: str, callee: str) -> bool:
+    return call["callee"] == callee and _hit(call, [site])
 
 
 def classify(rec: dict) -> str:
     """ESCAPED, HANDLED, NOT-RAISED or UNRESOLVED for one run, from what the
-    child observed -- never from what was expected."""
+    child observed -- never from what was expected. A refusal raised at the
+    site that was not followed is UNRESOLVED: "not raised" would contradict
+    the record's own `calls`."""
     if rec.get("unresolved"):
         return UNRESOLVED
     follows = rec.get("follows", [])
     if not follows:
-        # a refusal raised at the site that was not followed is UNRESOLVED:
-        # "not raised" would contradict the record's own `calls`
         if any(c.get("raised") for c in rec.get("calls", ())):
             return UNRESOLVED
-        return NOT_RAISED
+        return RETURNED
     last = follows[-1]
     if rec.get("uncaught") and rec["uncaught"].get("followed"):
         return ESCAPED
@@ -583,27 +605,99 @@ def classify(rec: dict) -> str:
     return UNRESOLVED
 
 
-def trace_one(spec: dict, workdir: pathlib.Path, roles: tuple[str, ...] = ("working", "refusing")) -> dict:
-    sites = spec.get("sites") or [spec["site"]]
-    out = {"id": spec["id"], "site": spec["site"], "callee": spec["callee"],
-           "classification": spec.get("classification"), "runs": {}}
-    for role in roles:
-        make = spec.get(role)
-        if make is None:
-            out["runs"][role] = None
-            continue
-        run = make(workdir / role)
-        if run.get("unresolved"):
-            out["runs"][role] = {"role": role, "verdict": UNRESOLVED, "unresolved": run["unresolved"],
-                                 "expect": run.get("expect")}
-            continue
-        run["role"] = role
-        rec = run_child(run, workdir / role, spec["wrap"], sites,
-                        inject=run.get("inject", ()))
-        rec["expect"] = run.get("expect")
-        rec["note"] = run.get("note")
-        out["runs"][role] = rec
+def view(rec: dict, site: str, callee: str) -> dict:
+    """One site's view of a run: only that callee's calls made at `site` and
+    the refusals they let out (two calls share a line at
+    `fpga/verify_live_midi.py:107`), the process-level facts unchanged."""
+    out = {k: v for k, v in rec.items() if k not in ("calls", "follows", "site_executed", "verdict")}
+    if rec.get("unresolved"):
+        return {**out, "verdict": UNRESOLVED, "calls": [], "follows": [], "site_executed": []}
+    out["calls"] = [c for c in rec["calls"] if _mine(c, site, callee)]
+    out["follows"] = [f for f in rec["follows"]
+                      if f["stack"][0]["fn"] and _hit({"callee": callee, "caller": f["stack"][0]}, [site])]
+    out["site_executed"] = [site] if out["calls"] else []
+    if out["follows"]:
+        out["verdict"] = classify({**rec, "follows": out["follows"]})
+    elif out["calls"]:
+        out["verdict"] = RETURNED            # the call ran and came back
+    else:
+        out["verdict"] = NOT_REACHED         # this run never got to the site
     return out
+
+
+def trace_all(traces: list[dict], workroot: pathlib.Path, roles: tuple[str, ...],
+              cache: dict | None = None, wrap: list[str] | None = None) -> list[dict]:
+    """Run every trace. A shared run -- `share="name"` in the dict a callable
+    returns, or `spec["share"][role]` -- is executed once and viewed by every
+    site that names it: rows may share a fixture when the record shows each
+    site's own call executed. `cache` carries shared runs across calls."""
+    cache = cache if cache is not None else {}
+    # every callee ANY trace names: a shared run is made once, and the site
+    # that views it second must find its own callee's calls in the record
+    all_wrap = wrap or sorted({w for t in traces for w in t["wrap"]})
+    # a shared name -> the run it was first used for, for the whole session: a
+    # name that later stands for a different run is a spec error, and reusing
+    # the first run's record under it would be a silent wrong answer
+    owners: dict = cache.setdefault("_owners", {})
+    out = []
+    for spec in traces:
+        sites = spec.get("sites") or [spec["site"]]
+        t = {"id": spec["id"], "site": spec["site"], "callee": spec["callee"],
+             "classification": spec.get("classification"), "runs": {}}
+        for role in roles:
+            make = spec.get(role)
+            if make is None:
+                t["runs"][role] = None
+                continue
+            makers = make if isinstance(make, (list, tuple)) else [make]
+            base = workroot / _slug(spec.get("share", {}).get(role) or spec["id"])
+            recs = []
+            for i, mk in enumerate(makers):
+                ws = base if len(makers) == 1 else base / str(i)
+                ws.mkdir(parents=True, exist_ok=True)
+                made = mk(ws)
+                for j, run in enumerate(made if isinstance(made, list) else [made]):
+                    name = (run.get("share") or spec.get("share", {}).get(role)) if isinstance(run, dict) else None
+                    if name and not run.get("unresolved"):
+                        what = (run["entry"], tuple(run["argv"]), run.get("root"))
+                        if owners.setdefault(name, what) != what:
+                            run = {"unresolved": f"shared run {name!r} names two different runs: "
+                                                 f"{owners[name]} and {what}"}
+                    recs.append(_one(run, spec, sites, role, all_wrap, ws / f"child{j}", cache, owners))
+            t["runs"][role] = recs
+        for k in ("invariant", "shadowed_by"):
+            if spec.get(k):
+                t[k] = spec[k]
+        out.append(t)
+    return out
+
+
+def _one(run: dict, spec: dict, sites: list[str], role: str, wrap: list[str],
+         child_dir: pathlib.Path, cache: dict, owners: dict) -> dict:
+    if run.get("unresolved"):
+        return {"role": role, "verdict": UNRESOLVED, "unresolved": run["unresolved"],
+                "expect": run.get("expect"), "note": run.get("note")}
+    share = run.get("share") or spec.get("share", {}).get(role)
+    if share and share in cache:
+        what = (run["entry"], tuple(run["argv"]), run.get("root"))
+        if owners.setdefault(share, what) != what:
+            return {"role": role, "verdict": UNRESOLVED,
+                    "unresolved": f"shared run {share!r} names two different runs: "
+                                  f"{owners[share][0]} and {what[0]}"}
+        rec = cache[share]
+    else:
+        run["role"] = role
+        rec = run_child(run, child_dir, wrap, None if share else sites)
+        if share:
+            owners[share] = (run["entry"], tuple(run["argv"]), run.get("root"))
+            cache[share] = rec
+    rec = view(rec, spec["site"], spec["callee"])
+    rec["role"], rec["share"] = role, share
+    return rec
+
+
+def _slug(text: str) -> str:
+    return "".join(ch if ch.isalnum() or ch in "-." else "_" for ch in text)
 
 
 def load_spec(path: pathlib.Path):
@@ -612,7 +706,7 @@ def load_spec(path: pathlib.Path):
     mod = importlib.util.module_from_spec(spec)
     sys.modules[path.stem] = mod
     spec.loader.exec_module(mod)
-    return mod.TRACES
+    return mod
 
 
 def report(record: dict) -> str:
@@ -621,10 +715,17 @@ def report(record: dict) -> str:
              f" scanner {record['scanner']['rev']} roots={','.join(record['scanner']['roots'])}"]
     for t in record["traces"]:
         runs = t["runs"]
-        w, r = runs.get("working") or {}, runs.get("refusing") or {}
-        lines.append(f"{t['id']:52s} {t['callee']:36s} "
-                     f"working={w.get('verdict', '-'):<10s} refusing={r.get('verdict', '-'):<10s} "
-                     f"exit={r.get('exit_status', '-')} tb={int(bool(r.get('traceback')))}")
+        cells = []
+        for role, recs in runs.items():
+            for rec in recs or []:
+                if role == "working":
+                    cells.append(f"exit={rec.get('exit_status')} site={'hit' if rec.get('site_executed') else 'NOT-REACHED'}")
+                elif role == "refusing":
+                    cells.append(f"{rec.get('verdict')} exit={rec.get('exit_status')} "
+                                 f"tb={int(bool(rec.get('traceback')))}")
+                else:
+                    cells.append(rec.get("verdict", "?"))
+        lines.append(f"{t['id']:50s} {t['callee']:34s} " + " | ".join(cells))
     return "\n".join(lines)
 
 
@@ -645,32 +746,43 @@ def main(argv=None) -> int:
     r.add_argument("--only", action="append", default=[], help="trace id (repeatable)")
     r.add_argument("--roles", default="working,refusing,boundary")
     r.add_argument("--keep", type=pathlib.Path, default=None, help="scratch dir to reuse (kept)")
+    r.add_argument("--into", type=pathlib.Path, default=None,
+                   help="an existing record: replace only the traces named by --only")
     p = sub.add_parser("report")
     p.add_argument("record", type=pathlib.Path)
     a = ap.parse_args(argv)
     if a.cmd == "report":
         print(report(json.loads(a.record.read_text())))
         return 0
-    traces = load_spec(a.spec)
+    module = load_spec(a.spec)
+    traces = module.TRACES
     if a.only:
         traces = [t for t in traces if t["id"] in set(a.only)]
     sys.path.insert(0, str(ROOT / "tools"))
     import refusal_sibling_scan as rss
-    scan = json.loads(json.dumps(_scan_json(rss)))
     out = {"revision": _git("rev-parse", "HEAD"), "tree_dirty": bool(_git("status", "--porcelain").strip()),
            "dirty_paths": [ln[3:] for ln in _git("status", "--porcelain").splitlines()],
-           "scanner": scan, "traces": []}
+           "scanner": _scan_json(rss), "traces": []}
+    if a.into and a.into.exists():
+        prior = json.loads(a.into.read_text())
+        keep = [t for t in prior["traces"] if t["id"] not in {s["id"] for s in traces}]
+        out = {**prior, "traces": keep}
     roles = tuple(r_ for r_ in a.roles.split(",") if r_)
     workroot = a.keep or pathlib.Path(tempfile.mkdtemp(prefix="refusal-candidate-trace-"))
     workroot.mkdir(parents=True, exist_ok=True)
+    if hasattr(module, "set_scratch"):
+        module.set_scratch(workroot)
+    cache: dict = {}
+    all_wrap = sorted({w for t in module.TRACES for w in t["wrap"]})
     for spec in traces:
         print(f"== {spec['id']}", flush=True)
-        t = trace_one(spec, workroot / spec["id"].replace("/", "_").replace(":", "_"), roles)
-        out["traces"].append(t)
-        for role, rec in t["runs"].items():
-            if rec:
-                print(f"   {role:9s} {rec.get('verdict')} exit={rec.get('exit_status')} "
-                      f"{rec.get('unresolved', '')}", flush=True)
+        for t in trace_all([spec], workroot, roles, cache, all_wrap):
+            out["traces"].append(t)
+            for role, recs in t["runs"].items():
+                for rec in recs or []:
+                    print(f"   {role:9s} {rec.get('verdict')} exit={rec.get('exit_status')} "
+                          f"{rec.get('unresolved', '')}", flush=True)
+    out["traces"].sort(key=lambda t: t["id"])
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(out, indent=1, default=str) + "\n")
     print(f"wrote {a.out} (scratch kept in {workroot})")
@@ -682,13 +794,18 @@ def _git(*args: str) -> str:
 
 
 def _scan_json(rss) -> dict:
+    """The inventory the traces are read against, saved with them: revision,
+    roots, and every candidate row (the test plan's first item)."""
     files = rss.tracked_files()
     scope = [f for f in files if any(str(f.relative_to(rss.ROOT)).startswith(r_ + "/") for r_ in rss.SCAN_ROOTS)]
     sites = rss.scan(scope, rss.build_index(files))
     behind = subprocess.run(["git", "-C", str(ROOT), "rev-list", "--count", "HEAD..origin/main"],
                             capture_output=True, text=True).stdout.strip() or "?"
     return dict(rev=_git("rev-parse", "--short", "HEAD"), behind_origin_main=behind,
-                roots=list(rss.SCAN_ROOTS), files_scanned=len(scope), sites=sites)
+                roots=list(rss.SCAN_ROOTS), files_scanned=len(scope),
+                candidates=[s for s in sites if s["classification"] == "candidate-escape"],
+                classes={c: sum(1 for s in sites if s["classification"] == c)
+                         for c in sorted({s["classification"] for s in sites})})
 
 
 if __name__ == "__main__":
