@@ -501,6 +501,22 @@ def test_a_refusal_from_the_environment_tuple_exits_REFUSED_not_a_traceback(
     assert json.loads(out.read_text())["outcome"] == "REFUSED"
 
 
+def test_a_recorder_refusal_after_a_QUALIFIED_rig_does_not_print_the_122_note(
+        monkeypatch, capsys, bundle, tmp_path):
+    """The rig measured QUALIFIED; only the record builder refused. Printing
+    that Model D cannot be the reference and #122 REOPENS would be a conclusion
+    about the plugin drawn from a failure of the recorder."""
+    with_host(monkeypatch, bundle)
+
+    def refusing(**kw):
+        raise rp.Refused("<control> the environment tuple refused")
+    monkeypatch.setattr(rp, "environment_tuple", refusing)
+    assert qmp.main([]) == rp.REFUSED
+    text = capsys.readouterr().out
+    assert "QUALIFIED" in text, "precondition: the rig must have qualified"
+    assert "REOPENS" not in text and "stated NO-VERDICT" in text, text[-600:]
+
+
 def test_a_refusal_while_building_the_record_inside_a_handler_is_caught(
         monkeypatch, capsys, tmp_path):
     _absent_bundle(monkeypatch, tmp_path)

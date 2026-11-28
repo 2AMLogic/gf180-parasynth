@@ -177,6 +177,7 @@ def main(argv=None) -> int:
                     "note": "the full record could not be built, so this one is short"}
 
     dev, qual, rec = None, None, None
+    recorder_refused = False
     try:
         dev = build()
         qual = dev.qualification
@@ -197,8 +198,11 @@ def main(argv=None) -> int:
         try:
             rec = report(dev, qual)
         except rp.Refused as why:
+            # The RECORD BUILDER refused, after the rig measured. Nothing about
+            # the plugin follows from that, so the #122 note must not print.
             print(f"REFUSED  {why}")
             rec, code = recorded(refusal=str(why)), REFUSED
+            recorder_refused = True
         else:
             code = OK if qual.qualified else (
                 FAIL if qual.verdict == rq.FAIL else REFUSED)
@@ -228,7 +232,8 @@ def main(argv=None) -> int:
     # uncorrectable. A host with no pedalboard has measured nothing, and saying
     # otherwise would be the tool answering a question it could not ask.
     if code != OK:
-        print("\n" + (REOPEN_122 if qual is not None else NO_APPARATUS))
+        print("\n" + (REOPEN_122 if qual is not None and not recorder_refused
+                       else NO_APPARATUS))
 
     if a.json:
         p = pathlib.Path(a.json)
