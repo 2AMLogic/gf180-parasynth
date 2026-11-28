@@ -47,6 +47,11 @@ import numpy as np
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import audio_measure as am                                            # noqa: E402
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[1] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import exit_contract  # noqa: E402
+import refusal  # noqa: E402
 
 SR_EXPECTED = 44100
 MIN_SETTLED = 8          # clean periods needed in the settled window
@@ -135,13 +140,22 @@ PITCH_DROP_DOMAIN = am.register_domain(am.ValidatedDomain(
 
 # ------------------------------------------------------------------ io ------
 
+class Refused(refusal.Refused, ValueError):
+    """A WAV this probe cannot read: absent, not RIFF, a directory, or a
+    sample format it does not handle (#1861). Also a `ValueError`, which the
+    format refusal it carries was before."""
+
+
 def read_wav(path: str) -> tuple[int, np.ndarray]:
     """WAV to float in [-1, 1). 24-bit arrives from scipy as int32 (left
     aligned), 16-bit as int16; stereo is averaged. Nothing is resampled."""
     from scipy.io import wavfile
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        sr, raw = wavfile.read(path)
+        try:
+            sr, raw = wavfile.read(path)
+        except (OSError, ValueError) as exc:
+            raise Refused(f"{path}: unreadable WAV ({exc})") from exc
     if raw.dtype == np.int32:
         x = raw.astype(np.float64) / 2.0 ** 31
     elif raw.dtype == np.int16:
@@ -149,7 +163,7 @@ def read_wav(path: str) -> tuple[int, np.ndarray]:
     elif raw.dtype in (np.float32, np.float64):
         x = raw.astype(np.float64)
     else:
-        raise ValueError(f"{path}: unsupported sample format {raw.dtype}")
+        raise Refused(f"{path}: unsupported sample format {raw.dtype}")
     if x.ndim > 1:
         x = x.mean(axis=1)
     return int(sr), x
@@ -678,27 +692,31 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--no-band", action="store_true", help="skip the band-pass (validation only)")
     a = ap.parse_args(argv)
     rows = []
-    for p in a.wav:
-        sr, x = read_wav(p)
-        r = measure(x, sr, label=pathlib.Path(p).name, band=not a.no_band)
-        rows.append(r)
-        if a.json:
-            continue
-        print(f"{r['label']}  {r['verdict']}")
-        if r["verdict"] == "REFUSED":
-            print(f"    {r['why']}")
-            continue
-        print(f"    settled {r['f_settled_hz']:.2f} Hz  floor {r['floor_hz']:.3f} Hz "
-              f"({100*r['floor_frac']:.2f} %)  n={r['n_settled']}  file floor {r['floor_dbfs']:.1f} dBFS")
-        print(f"    first period {r['f_first_hz']:.2f} Hz at {1e3*r['t_first_s']:.1f} ms "
-              f"-> x{r['ratio_first_period']:.4f};  excess {r['peak_excess_hz']:+.2f} Hz "
-              f"= {r['excess_sigma']:.1f} sigma")
-        if r.get("ratio_at_onset"):
-            print(f"    fit: onset x{r['ratio_at_onset']:.4f}  tau {r['fit_tau_ms']:.1f} ms  "
-                  f"shape {r['fit_shape']} (rms exp {r['fit_rms_exp']:.5f} vs lin {r['fit_rms_lin']:.5f})")
-        if a.traj:
-            for tt, ff, dd, dr in r["traj"][:20]:
-                print(f"      {1e3*tt:7.2f} ms  {ff:8.2f} Hz  {dd:7.1f} dBFS  {dr}")
+    try:
+        for p in a.wav:
+            sr, x = read_wav(p)
+            r = measure(x, sr, label=pathlib.Path(p).name, band=not a.no_band)
+            rows.append(r)
+            if a.json:
+                continue
+            print(f"{r['label']}  {r['verdict']}")
+            if r["verdict"] == "REFUSED":
+                print(f"    {r['why']}")
+                continue
+            print(f"    settled {r['f_settled_hz']:.2f} Hz  floor {r['floor_hz']:.3f} Hz "
+                  f"({100*r['floor_frac']:.2f} %)  n={r['n_settled']}  file floor {r['floor_dbfs']:.1f} dBFS")
+            print(f"    first period {r['f_first_hz']:.2f} Hz at {1e3*r['t_first_s']:.1f} ms "
+                  f"-> x{r['ratio_first_period']:.4f};  excess {r['peak_excess_hz']:+.2f} Hz "
+                  f"= {r['excess_sigma']:.1f} sigma")
+            if r.get("ratio_at_onset"):
+                print(f"    fit: onset x{r['ratio_at_onset']:.4f}  tau {r['fit_tau_ms']:.1f} ms  "
+                      f"shape {r['fit_shape']} (rms exp {r['fit_rms_exp']:.5f} vs lin {r['fit_rms_lin']:.5f})")
+            if a.traj:
+                for tt, ff, dd, dr in r["traj"][:20]:
+                    print(f"      {1e3*tt:7.2f} ms  {ff:8.2f} Hz  {dd:7.1f} dBFS  {dr}")
+    except refusal.Refused as exc:
+        print(f"REFUSED: {exc}", file=sys.stderr)
+        return exit_contract.REFUSED
     if a.json:
         print(json.dumps(rows, indent=1))
     return 0

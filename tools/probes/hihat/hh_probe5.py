@@ -518,7 +518,10 @@ def scorecard_record(x: np.ndarray, ref_rel: str, setting: str, case: str,
     path = refdir / ref_rel
     if not path.exists():
         raise Refused(f"reference recording missing: {path}")
-    sr_ref, ref_x = wavfile.read(str(path))
+    try:
+        sr_ref, ref_x = wavfile.read(str(path))
+    except (OSError, ValueError) as exc:
+        raise Refused(f"reference recording {path}: unreadable WAV ({exc})") from exc
     rc.require_int16_pcm(ref_x, path, Refused)
     ref_x = np.asarray(ref_x, float)
     if ref_x.ndim > 1:

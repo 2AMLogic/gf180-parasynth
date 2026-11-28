@@ -44,6 +44,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import pathlib
 import sys
 import warnings
 
@@ -52,6 +53,12 @@ from scipy.io import wavfile
 from scipy.signal import find_peaks, get_window
 
 warnings.filterwarnings("ignore", message=".*EOF.*")
+
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[1] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import exit_contract  # noqa: E402
+import refusal  # noqa: E402
 
 # The sixteen sounds, in the order model/drums_fx_render.py numbers the solo
 # renders (drums_fx.SOUND_NAMES). STOPS is kept as the revision-8 subset so a
@@ -200,6 +207,12 @@ OSC_NOMINAL = [205.3, 369.6, 304.4, 522.7, 800.0, 540.0]
 
 
 # ---------------------------------------------------------------- io ----------
+class Refused(refusal.Refused, ValueError):
+    """A WAV this module cannot read: absent, not RIFF, a directory (#1861).
+    Also a `ValueError`, the shape every drum reader's refusal has, so a
+    caller written against either type catches it."""
+
+
 def read_wav(path: str) -> tuple[int, np.ndarray]:
     """Mono float64, DC removed, peak-normalised to 1.0. Levels are not
     comparable across the reference set anyway (LEVEL was pinned at max).
@@ -208,12 +221,16 @@ def read_wav(path: str) -> tuple[int, np.ndarray]:
     non-zero sample, not over the whole file: a whole-file mean moves with the
     digital silence a clip carries (#617), and the peak normalisation then
     rescales every sample with it."""
-    sr, x = wavfile.read(path)
+    try:
+        sr, x = wavfile.read(path)
+    except (OSError, ValueError) as exc:
+        raise Refused(f"{path}: unreadable WAV ({exc})") from exc
+    raw_dtype = x.dtype
     x = np.asarray(x)
     if x.ndim > 1:
         x = x.mean(axis=1)
     x = x.astype(np.float64)
-    if np.issubdtype(np.asarray(wavfile.read(path)[1]).dtype, np.integer):
+    if np.issubdtype(raw_dtype, np.integer):
         x = x / 32768.0
     nz = np.nonzero(x)[0]
     if len(nz):
@@ -674,90 +691,94 @@ def main() -> int:
     os.makedirs(a.out, exist_ok=True)
     results, refs_wav, ours_wav = {}, {}, {}
 
-    for i, v in enumerate(a.voices):
-        rel, knobs = REF_MAIN[v]
-        rp = os.path.join(a.refs, rel)
-        op = os.path.join(a.ours, f"00-solo-{SOUNDS.index(v):02d}-{v}.wav")
-        if not os.path.exists(rp):
-            print(f"!! missing reference {rp}", file=sys.stderr)
-            continue
-        if not os.path.exists(op):
-            print(f"!! missing render {op}", file=sys.stderr)
-            continue
-        sr_r, xr = read_wav(rp)
-        sr_o, xo = read_wav(op)
-        hits = segment_hits(xo, sr_o)
-        refs_wav[v] = (sr_r, xr)
-        ours_wav[v] = (sr_o, hits[0])
-        results[v] = dict(
-            ref_file=rel, ref_knobs=knobs, spec=SPEC[v],
-            ref=measure(xr, sr_r, v),
-            ours=[measure(h, sr_o, v) for h in hits],
-        )
-
-    # print a table
-    hdr = (f"{'voice':5s} {'src':5s} {'peak Hz':>9s} {'centroid':>9s} {'attack ms':>10s} "
-           f"{'tau ms':>8s} {'R^2':>6s} {'span dB':>8s} {'t-20dB ms':>10s}")
-    print(hdr)
-    print("-" * len(hdr))
-    for v in a.voices:
-        if v not in results:
-            continue
-        r = results[v]
-        for src, m in (("real", r["ref"]), ("ours", r["ours"][0])):
-            if m.get("silent"):
-                print(f"{v:5s} {src:5s}  SILENT")
+    try:
+        for i, v in enumerate(a.voices):
+            rel, knobs = REF_MAIN[v]
+            rp = os.path.join(a.refs, rel)
+            op = os.path.join(a.ours, f"00-solo-{SOUNDS.index(v):02d}-{v}.wav")
+            if not os.path.exists(rp):
+                print(f"!! missing reference {rp}", file=sys.stderr)
                 continue
-            print(f"{v:5s} {src:5s} {m['peak_hz']:9.1f} {m['centroid_hz']:9.0f} "
-                  f"{m['attack_ms']:10.2f} {m['tau_ms']:8.1f} {m['r2']:6.3f} "
-                  f"{m['span_db']:8.1f} {m['t20_ms']:10.1f}")
-        sp = r["spec"]
-        f0txt = "%.1f" % sp["f0"] if sp["f0"] else "—"
-        print(f"{'':5s} {'spec':5s} {f0txt:>9s} {'':>9s} {'':>10s} "
-              f"{sp['tau_ms']:8.1f} {'':>6s} {'':>8s} {sp['chart_ms']:10.1f}"
-              f"   ({sp['note']})")
+            if not os.path.exists(op):
+                print(f"!! missing render {op}", file=sys.stderr)
+                continue
+            sr_r, xr = read_wav(rp)
+            sr_o, xo = read_wav(op)
+            hits = segment_hits(xo, sr_o)
+            refs_wav[v] = (sr_r, xr)
+            ours_wav[v] = (sr_o, hits[0])
+            results[v] = dict(
+                ref_file=rel, ref_knobs=knobs, spec=SPEC[v],
+                ref=measure(xr, sr_r, v),
+                ours=[measure(h, sr_o, v) for h in hits],
+            )
+
+        # print a table
+        hdr = (f"{'voice':5s} {'src':5s} {'peak Hz':>9s} {'centroid':>9s} {'attack ms':>10s} "
+               f"{'tau ms':>8s} {'R^2':>6s} {'span dB':>8s} {'t-20dB ms':>10s}")
+        print(hdr)
+        print("-" * len(hdr))
+        for v in a.voices:
+            if v not in results:
+                continue
+            r = results[v]
+            for src, m in (("real", r["ref"]), ("ours", r["ours"][0])):
+                if m.get("silent"):
+                    print(f"{v:5s} {src:5s}  SILENT")
+                    continue
+                print(f"{v:5s} {src:5s} {m['peak_hz']:9.1f} {m['centroid_hz']:9.0f} "
+                      f"{m['attack_ms']:10.2f} {m['tau_ms']:8.1f} {m['r2']:6.3f} "
+                      f"{m['span_db']:8.1f} {m['t20_ms']:10.1f}")
+            sp = r["spec"]
+            f0txt = "%.1f" % sp["f0"] if sp["f0"] else "—"
+            print(f"{'':5s} {'spec':5s} {f0txt:>9s} {'':>9s} {'':>10s} "
+                  f"{sp['tau_ms']:8.1f} {'':>6s} {'':>8s} {sp['chart_ms']:10.1f}"
+                  f"   ({sp['note']})")
+            print()
+
+        print("energy split (power), and the power centroid the magnitude centroid hides:")
+        print(f"{'voice':5s} {'src':5s} {'split at':>9s} {'body %':>8s} {'air %':>8s} {'pow cent':>9s}")
+        for v in a.voices:
+            if v not in results:
+                continue
+            for src, m in (("real", results[v]["ref"]), ("ours", results[v]["ours"][0])):
+                if m.get("silent"):
+                    continue
+                print(f"{v:5s} {src:5s} {m['split_hz']:8d}  {m['body_pct']:8.2f} "
+                      f"{m['air_pct']:8.2f} {m['power_centroid_hz']:9.0f}")
         print()
 
-    print("energy split (power), and the power centroid the magnitude centroid hides:")
-    print(f"{'voice':5s} {'src':5s} {'split at':>9s} {'body %':>8s} {'air %':>8s} {'pow cent':>9s}")
-    for v in a.voices:
-        if v not in results:
-            continue
-        for src, m in (("real", results[v]["ref"]), ("ours", results[v]["ours"][0])):
-            if m.get("silent"):
-                continue
-            print(f"{v:5s} {src:5s} {m['split_hz']:8d}  {m['body_pct']:8.2f} "
-                  f"{m['air_pct']:8.2f} {m['power_centroid_hz']:9.0f}")
-    print()
-
-    for v in a.voices:
-        if v not in results or v not in LINE_BAND:
-            continue
-        for src, m in (("real", results[v]["ref"]), ("ours", results[v]["ours"][0])):
-            print(f"{v} {src}: flatness {m['flatness_db']:.1f} dB "
-                  f"(noise control {m['noise_flatness_db']:.1f} dB), "
-                  f"{m['n_lines']} lines")
-    if "CP" in results:
-        print(f"CP real bursts at {results['CP']['ref']['burst_ms']} ms")
-        print(f"CP ours bursts at {results['CP']['ours'][0]['burst_ms']} ms")
-
-    plots = []
-    if not a.no_plots:
         for v in a.voices:
-            if v in refs_wav:
-                rel, knobs = REF_MAIN[v]
-                plots.append(make_plots(v, refs_wav[v], ours_wav[v], a.out,
-                                        os.path.basename(rel), knobs))
-        if "OH" in refs_wav:
-            plots.append(plot_hat_lines(refs_wav, ours_wav, a.out))
-        if "CP" in refs_wav:
-            plots.append(plot_clap(refs_wav, ours_wav, a.out))
-        laws, p = plot_knob_laws(a.refs, a.out)
-        plots.append(p)
-        results["_knob_laws"] = laws
-        print("\nplots:")
-        for p in plots:
-            print("  " + p)
+            if v not in results or v not in LINE_BAND:
+                continue
+            for src, m in (("real", results[v]["ref"]), ("ours", results[v]["ours"][0])):
+                print(f"{v} {src}: flatness {m['flatness_db']:.1f} dB "
+                      f"(noise control {m['noise_flatness_db']:.1f} dB), "
+                      f"{m['n_lines']} lines")
+        if "CP" in results:
+            print(f"CP real bursts at {results['CP']['ref']['burst_ms']} ms")
+            print(f"CP ours bursts at {results['CP']['ours'][0]['burst_ms']} ms")
+
+        plots = []
+        if not a.no_plots:
+            for v in a.voices:
+                if v in refs_wav:
+                    rel, knobs = REF_MAIN[v]
+                    plots.append(make_plots(v, refs_wav[v], ours_wav[v], a.out,
+                                            os.path.basename(rel), knobs))
+            if "OH" in refs_wav:
+                plots.append(plot_hat_lines(refs_wav, ours_wav, a.out))
+            if "CP" in refs_wav:
+                plots.append(plot_clap(refs_wav, ours_wav, a.out))
+            laws, p = plot_knob_laws(a.refs, a.out)
+            plots.append(p)
+            results["_knob_laws"] = laws
+            print("\nplots:")
+            for p in plots:
+                print("  " + p)
+    except refusal.Refused as exc:
+        print(f"REFUSED: {exc}", file=sys.stderr)
+        return exit_contract.REFUSED
 
     if a.json:
         with open(a.json, "w") as fh:

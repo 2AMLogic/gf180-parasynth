@@ -100,6 +100,7 @@ import hashlib
 import hashlib
 import math
 import os
+import pathlib
 import sys
 import warnings
 from dataclasses import dataclass, field
@@ -109,7 +110,11 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "..", "audition"))
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[1] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
 
+import refusal  # noqa: E402
 from scipy.io import wavfile
 from scipy.signal import butter, sosfilt, sosfiltfilt
 from scipy.stats import beta as beta_dist
@@ -261,14 +266,24 @@ def ref_clips(refdir: str, voices=None, include_unmodelled: bool = False) -> lis
     return out
 
 
+class Refused(refusal.Refused, ValueError):
+    """A WAV this module cannot read: absent, not RIFF, or not 16-bit PCM
+    (#1861). Also a `ValueError`, which the width refusal it carries was
+    before (`tools/test_wav_reader_refusal.py` reads it as one)."""
+
+
 def read_wav(path: str) -> tuple:
     """16-bit PCM WAV to float full scale, `(x, sr)`; REFUSES any other
     sample width (#817): `/32768` is only the 16-bit divisor, and a 24-bit
     file (scipy returns left-justified int32) would read 96 dB hot with
-    nothing raised."""
-    sr, x = wavfile.read(path)
+    nothing raised. REFUSES too a path that is not a readable WAV file
+    (#1861): absent, a directory, a git-lfs pointer, 0 bytes."""
+    try:
+        sr, x = wavfile.read(path)
+    except (OSError, ValueError) as exc:
+        raise Refused(f"{path}: unreadable WAV ({exc})") from exc
     if x.dtype != np.int16:
-        raise ValueError(f"{path}: {x.dtype} samples, expected 16-bit PCM (int16)")
+        raise Refused(f"{path}: {x.dtype} samples, expected 16-bit PCM (int16)")
     x = x.astype(np.float64)
     if x.ndim > 1:
         x = x.mean(axis=1)

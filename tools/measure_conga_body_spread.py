@@ -13,7 +13,7 @@ working tree.  It is validated by EXACT REPRODUCTION of the two reference
 numbers those results published (`--check`), which is the only way to know the
 definition matches:
 
-    x        = wavfile.read(...) -> int16 or REFUSED (#817) -> mono mean -> / 32768.0
+    x        = wavfile.read(...) -> int16 or REFUSED (#817, #1861) -> mono mean -> / 32768.0
     prepare  = pk = max|x| ; i = first index with |x| > 0.02*pk ;
                lead = max(0, i - 1 ms) ; if lead >= 5 ms: subtract mean(x[:lead])
                y = x[lead:] ; y /= max|y|
@@ -58,8 +58,10 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 import audio_measure as am           # noqa: E402
 import drum_verify as dv             # noqa: E402
+import exit_contract                 # noqa: E402
 import measure_harness as mh         # noqa: E402
 import preparation_contract as pc    # noqa: E402
+import refusal                       # noqa: E402
 import run_case as rc                # noqa: E402
 
 BAND, SPLIT_HZ = dv.BAND, dv.SPLIT_HZ
@@ -96,6 +98,14 @@ class InventoryRefused(Exception):
         self.missing = list(missing)
         super().__init__("expected reference takes absent or not files: "
                          + ", ".join(self.missing))
+
+
+class Refused(refusal.Refused, ValueError):
+    """A WAV this study cannot read: absent, not RIFF, or not 16-bit PCM
+    (#1861). Also a `ValueError`, which the width refusal it carries was
+    before: `measure_harness._DATA_ERRORS` classes a reference it cannot
+    read as `unreadable` by that type, and `tools/test_wav_reader_refusal.py`
+    reads it as one."""
 
 
 def expected_takes(voices=("LC", "MC", "HC")) -> list[str]:
@@ -165,10 +175,14 @@ def read_wav(path: pathlib.Path):
     """16-bit PCM WAV to float full scale, `(x, sr)`; REFUSES any other
     sample width (#817): `/32768` is only the 16-bit divisor, and a 24-bit
     file (scipy returns left-justified int32) would read 96 dB hot with
-    nothing raised."""
-    sr, x = wavfile.read(str(path))
+    nothing raised. REFUSES too a path that is not a readable WAV file
+    (#1861): absent, a directory, a git-lfs pointer, 0 bytes."""
+    try:
+        sr, x = wavfile.read(str(path))
+    except (OSError, ValueError) as exc:
+        raise Refused(f"{path}: unreadable WAV ({exc})") from exc
     if x.dtype != np.int16:
-        raise ValueError(f"{path}: {x.dtype} samples, expected 16-bit PCM (int16)")
+        raise Refused(f"{path}: {x.dtype} samples, expected 16-bit PCM (int16)")
     x = np.asarray(x, dtype=np.float64)
     if x.ndim > 1:
         x = x.mean(axis=1)
@@ -633,38 +647,15 @@ def validation_status(report: dict) -> int:
     return 0
 
 
-def main(argv=None) -> int:
-    ap = argparse.ArgumentParser()
-    import run_case
-    ap.add_argument("--refs", default=run_case.configured_refs(), type=pathlib.Path)
-    ap.add_argument("--json", type=pathlib.Path)
-    ap.add_argument("--descent", type=pathlib.Path,
-                    help="directory of candidate '808 conga' files to test for "
-                         "descent from the Fischer set")
-    ap.add_argument("--check", action="store_true",
-                    help="validation only: known-answer signals and reproduction")
-    args = ap.parse_args(argv)
-
-    refdir = args.refs
-    report = dict(provenance=provenance(refdir))
-    report["definition"] = (
-        "10*log10(E[split..2000] / E[20..split]) over the first 150 ms after "
-        "prepare()'s onset trim, band_energy 4th-order Butterworth sosfiltfilt; "
-        "LC split 700 Hz, HC split 1300 Hz; tolerance 3.0 dB flat")
-
-    try:
-        require_takes(refdir, PUBLISHED_TAKES if args.check else expected_takes())
-        report["known_answer"] = validate_known_answer()
-        report["reproduction"] = validate_reproduction(refdir)
-    except InventoryRefused as exc:
-        report["refusal"] = dict(why="expected reference takes missing or not files",
-                                 missing=exc.missing)
-        report["outcome_code"] = 2
-        if args.json:
-            args.json.write_text(json.dumps(report, indent=2))
-        print(f"REFUSED: incomplete reference corpus at {refdir}. "
-              "Missing: " + ", ".join(exc.missing), file=sys.stderr)
-        return 2
+def _study(args, refdir: pathlib.Path, report: dict) -> int:
+    """The inventory, the controls and the measurement, in order. Every stage
+    reads reference WAVs and any of them may refuse: an absent take raises
+    `InventoryRefused`, an unreadable one `Refused`. Both are caught at
+    `main()`; the old `try` here covered the controls alone, so a pointer
+    file at a non-anchor take left `measure_corpus` as a traceback (#1861)."""
+    require_takes(refdir, PUBLISHED_TAKES if args.check else expected_takes())
+    report["known_answer"] = validate_known_answer()
+    report["reproduction"] = validate_reproduction(refdir)
     report["outcome_code"] = validation_status(report)
     if report["outcome_code"]:
         if args.json:
@@ -799,6 +790,45 @@ def main(argv=None) -> int:
                   "this run is not a result", file=sys.stderr)
         return code
     return 0
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser()
+    import run_case
+    ap.add_argument("--refs", default=run_case.configured_refs(), type=pathlib.Path)
+    ap.add_argument("--json", type=pathlib.Path)
+    ap.add_argument("--descent", type=pathlib.Path,
+                    help="directory of candidate '808 conga' files to test for "
+                         "descent from the Fischer set")
+    ap.add_argument("--check", action="store_true",
+                    help="validation only: known-answer signals and reproduction")
+    args = ap.parse_args(argv)
+
+    refdir = args.refs
+    report = dict(provenance=provenance(refdir))
+    report["definition"] = (
+        "10*log10(E[split..2000] / E[20..split]) over the first 150 ms after "
+        "prepare()'s onset trim, band_energy 4th-order Butterworth sosfiltfilt; "
+        "LC split 700 Hz, HC split 1300 Hz; tolerance 3.0 dB flat")
+
+    try:
+        return _study(args, refdir, report)
+    except InventoryRefused as exc:
+        report["refusal"] = dict(why="expected reference takes missing or not files",
+                                 missing=exc.missing)
+        report["outcome_code"] = exit_contract.REFUSED
+        if args.json:
+            args.json.write_text(json.dumps(report, indent=2))
+        print(f"REFUSED: incomplete reference corpus at {refdir}. "
+              "Missing: " + ", ".join(exc.missing), file=sys.stderr)
+        return exit_contract.REFUSED
+    except refusal.Refused as exc:
+        report["refusal"] = dict(why=str(exc))
+        report["outcome_code"] = exit_contract.REFUSED
+        if args.json:
+            args.json.write_text(json.dumps(report, indent=2))
+        print(f"REFUSED: {exc}", file=sys.stderr)
+        return exit_contract.REFUSED
 
 
 if __name__ == "__main__":

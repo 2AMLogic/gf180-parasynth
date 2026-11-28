@@ -151,7 +151,10 @@ def validate_transcript(text: str, wav_sha256: str, voice: str, frames: int) -> 
 
 
 def load_window(path: pathlib.Path, frames: int) -> np.ndarray:
-    sr, x = wavfile.read(path)
+    try:
+        sr, x = wavfile.read(path)
+    except (OSError, ValueError) as exc:
+        raise Refused(f"{path}: unreadable WAV ({exc})") from exc
     if sr != SR:
         raise Refused(f"the decoded window must be {SR} Hz (saw {sr})")
     x = np.asarray(x)
