@@ -179,7 +179,9 @@ Normalised by its own total but still read as the first sample AT OR BELOW the
 depth, the rising curve answers 0.00 ms at every depth on every record, and
 `measure()` then dies on 0/0 computing rho. Integrated forward and read
 back-to-front, it crosses late and the end-margin guard refuses every depth:
-red through None, which is the refusal again.
+red through None, which is the refusal again. All four readings are re-run by
+`tools/probes/cymbal_low_tail_forward_trace.py`, which fails if any of them
+stops behaving this way.
 
 Wrong-then-right rate of this module: 5 of the numbers below were wrong before
 they were right, and the controls caught all five rather than inspection.
