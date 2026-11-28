@@ -38,6 +38,10 @@ WHAT IT CANNOT TELL YOU, stated rather than carried:
   * a callee bound by `from x import f` BEFORE the finder runs, or reached
     through an instance attribute, is not intercepted (every site the scan
     reports is a dotted module call);
+  * which OBJECT a call hangs on: the anchor matches a callee by the name it
+    is called by, so a same-named call on another object that also matches
+    `in`, `target` and `arg` resolves, and only the run says so -- the site
+    reads NOT-REACHED;
   * a refusal raised one frame deeper than the wrapped callee is attributed to
     the wrapped call that let it out, which is the call site a repair would
     guard -- the scanner's own blind spot, seen from the other side;
@@ -47,18 +51,29 @@ WHAT IT CANNOT TELL YOU, stated rather than carried:
 It is a tracer, not a gate: per run and per site it records `ESCAPED` (the
 refusal left the entry point), `HANDLED` (a clause took it), `RETURNED` (the
 call ran and came back), `NOT-REACHED` (this run never got to the site) or
-`UNRESOLVED` (a prerequisite was missing), and never decides whether an
-escape is a defect.
+`UNRESOLVED` (a prerequisite was missing, or the site did not resolve), and
+never decides whether an escape is a defect.
 
     python tools/refusal_candidate_trace.py follow PLAN.json SCRIPT.py [args...]
     python tools/refusal_candidate_trace.py run --spec SPEC.py --out RECORD.json
     python tools/refusal_candidate_trace.py report RECORD.json
+    python tools/refusal_candidate_trace.py resolve --spec SPEC.py [--revision REV]
 
 `follow` is the child half and is not meant to be typed. A spec module defines
 `TRACES`, a list of dicts:
 
-    dict(id=..., site="path:line", callee="module.func", wrap=["module.func", ...],
-         working=<callable>, refusing=<callable> | None, boundary=[<callable>, ...])
+    dict(id=..., site="path:line", callee="module.func", **{"in": <function>, "target": <expr>},
+         wrap=["module.func", ...], working=<callable>, refusing=<callable> | None, boundary=[<callable>, ...])
+
+A SITE IS ITS CALL, NOT ITS LINE (#1772). `site` is where the call was when
+the ID was traced; the ID is a record key and keeps that string for good.
+Where the call is NOW is derived from the anchor -- `in`, the enclosing
+function; the callee; and `target` (what the statement assigns to) or `arg`
+(the call's first positional argument) as the discriminator between calls of
+one callee in one function -- and rewritten into `site` before anything runs.
+A site that does not resolve is REFUSED: UNRESOLVED in every role, with no
+child started, naming the spec, file, line and callee. A spec with a line and
+no anchor is refused as well. `resolve` prints that table and starts nothing.
 
 Each callable receives a scratch directory and returns a run dict -- `entry`,
 `argv`, `env`, `cwd`, `path` (dirs to prepend to the child's sys.path),
@@ -653,13 +668,212 @@ def cap_calls(rec: dict) -> None:
     rec["calls"] = calls[:KEPT_CALLS]
 
 
+# ---------------------------------------------------------------------------
+# the site anchor (#1772): a spec names a call, and its line is derived
+# ---------------------------------------------------------------------------
+def _tail(func: ast.expr) -> str | None:
+    """The name a call is made by, whatever it hangs on: `rc.prepare` -> prepare."""
+    if isinstance(func, ast.Name):
+        return func.id
+    if isinstance(func, ast.Attribute):
+        return func.attr
+    return None
+
+
+def _calls(source: str) -> list[dict]:
+    """One row per Call in `source`, in source order: the chain of scopes it
+    sits in (`MidiSession.__init__`), the name it is called by, the first and
+    last line of the call expression, the target of the assignment statement
+    it is in (None outside one) and its first positional argument (None when
+    it has none). A lambda and a comprehension are transparent: a call inside
+    either belongs to the function that contains it."""
+    tree = ast.parse(source)
+    parent = {}
+    for node in ast.walk(tree):
+        for child in ast.iter_child_nodes(node):
+            parent[child] = node
+    rows = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        scope, stmt, up = [], node, node
+        while stmt in parent and not isinstance(stmt, ast.stmt):
+            stmt = parent[stmt]
+        while up in parent:
+            up = parent[up]
+            if isinstance(up, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                scope.append(up.name)
+        if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
+            target = stmt.targets[0]
+        elif isinstance(stmt, (ast.AnnAssign, ast.AugAssign)):
+            target = stmt.target
+        else:
+            target = None
+        rows.append({"scope": ".".join(reversed(scope)), "name": _tail(node.func), "line": node.lineno,
+                     "last": node.end_lineno, "target": target, "arg": node.args[0] if node.args else None,
+                     "col": node.col_offset})
+    rows.sort(key=lambda r: (r["line"], r["col"]))
+    return rows
+
+
+def _in_scope(scope: str, where: str) -> bool:
+    """Is `scope` the one named, or inside it? `MidiSession.__init__` is
+    `__init__`, and is `MidiSession.__init__`; `<module>` is no scope at all."""
+    if where == "<module>":
+        return scope == ""
+    return scope == where or scope.endswith("." + where)
+
+
+def _shape(node: ast.expr) -> str:
+    """An expression as a tree, its context forgotten. An assignment target
+    parses in Store context and the same text written in a spec in Load, so
+    `a = f()` and `target="a"` are compared with every ctx read as Load."""
+    for inner in ast.walk(node):
+        if isinstance(inner, ast.expr):
+            inner.ctx = ast.Load()
+    return ast.dump(node)
+
+
+def _resolve(spec: dict, rows: list[dict], path: str, pinned: int) -> tuple[int | None, str | None]:
+    """(line, None) where the spec's call is, or (None, why the site is REFUSED)."""
+    callee = spec["callee"].rpartition(".")[2]
+    where = spec.get("in")
+    if where is None:
+        if not any(r["name"] == callee and r["line"] <= pinned <= r["last"] for r in rows):
+            return None, f"line-only pin: line {pinned} of {path} is not a call to {callee}"
+        return None, (f"line-only pin: line {pinned} of {path} holds a call to {callee}, but a line is not "
+                      f"an anchor -- it says where the call was, never which call it is (declare in=<function> "
+                      f"and target= or arg=)")
+    what = f"in {where}() of {path}"
+    hits = [r for r in rows if r["name"] == callee and _in_scope(r["scope"], where)]
+    if not hits:
+        return None, f"no call to {callee} {what}"
+    for key in ("target", "arg"):
+        if key not in spec:
+            continue
+        try:
+            want = _shape(ast.parse(spec[key], mode="eval").body)
+        except SyntaxError:
+            return None, f"the anchor's {key}={spec[key]!r} is not an expression"
+        hits = [r for r in hits if r[key] is not None and _shape(r[key]) == want]
+        what += f" whose {key} is {spec[key]}"
+        if not hits:
+            return None, f"no call to {callee} {what}"
+    n = spec.get("n")
+    if n is not None:
+        if isinstance(n, bool) or not isinstance(n, int) or not 1 <= n <= len(hits):
+            return None, f"n={n} but only {len(hits)} call(s) to {callee} match {what}"
+        return hits[n - 1]["line"], None
+    if len(hits) > 1:
+        return None, (f"{len(hits)} calls to {callee} {what} (lines "
+                      f"{', '.join(str(r['line']) for r in hits)}): the discriminator is not unique -- "
+                      f"narrow it, or declare n to take the n-th")
+    return hits[0]["line"], None
+
+
+def resolve_sites(traces: list[dict], root: pathlib.Path | None = None,
+                  sources: dict[str, str] | None = None) -> dict[str, str]:
+    """Resolve every spec's site from its anchor, in place, before anything
+    runs: `spec["site"]` (and `sites`, where it has one) become the
+    `path:line` of the call the anchor names, where the file is NOW. Returns
+    the specs that are REFUSED, {id: reason}; `trace_all` records those as
+    UNRESOLVED in every role and starts no child for them.
+
+    The anchor is read off the ast of the traced file -- `root/path`, or
+    `sources[path]` when the caller holds the text (a committed revision, a
+    copy altered in memory). A line alone is never an anchor: it is REFUSED
+    whether or not it still holds a call of the callee, because nothing about
+    a number says WHICH call it was meant to be.
+
+    THE ANCHOR. `in` is the enclosing function, matched by the tail of its
+    scope chain, so a method is `__init__` or `MidiSession.__init__`; the
+    callee is matched by the name the call is made by (`rc.prepare` ->
+    `prepare`); and `target` (what the statement assigns to) or `arg` (the
+    call's first positional argument) is a discriminator, compared as trees
+    with every context read as Load, so neither quote style nor a target's
+    Store context is part of it. One call must be left. A spec may add `n`,
+    the weakest anchor, to choose among calls a discriminator cannot separate
+    -- and `n` is checked against the calls that match even when only one is
+    left, so it does not slide onto the neighbour of a deleted call.
+
+    WHAT IT CANNOT SEE (rule 8; the control is
+    `test_control_the_anchor_cannot_see_which_object_a_tail_name_hangs_on`):
+    a same-named call on ANOTHER object that also matches `in`, `target` and
+    `arg` resolves, because the anchor never sees a module. The run says so
+    instead -- the wrapper intercepts one module's function, so the site reads
+    NOT-REACHED."""
+    root = ROOT if root is None else root
+    refused: dict[str, str] = {}
+    rows: dict[str, list[dict]] = {}
+    for spec in traces:
+        path, _, pinned = spec["site"].rpartition(":")
+        try:
+            if path not in rows:
+                rows[path] = _calls(sources[path] if sources is not None else (root / path).read_text())
+            line, why = _resolve(spec, rows[path], path, int(pinned))
+        except (OSError, SyntaxError, ValueError, KeyError) as exc:
+            line, why = None, f"cannot resolve a call in {path}: {type(exc).__name__}: {exc}"
+        if why:
+            refused[spec["id"]] = f"{spec['id']} (callee {spec['callee']}, pinned line {pinned}): {why}"
+            continue
+        spec["site"] = f"{path}:{line}"
+        if spec.get("sites"):
+            spec["sites"] = [spec["site"]]
+    return refused
+
+
+def _dirty_sites(traces: list[dict], dirty_paths: list[str]) -> dict[str, str]:
+    """Specs whose traced file is modified in the working tree. A tampered run
+    executes a clone of HEAD and the working run the working tree, and one
+    resolved line serves both, so the two must hold the same file. A modified
+    file no spec traces is not this tool's to refuse. It names the pinned
+    line, so it is asked before `resolve_sites` rewrites `site`."""
+    dirty = set(dirty_paths)
+    out: dict[str, str] = {}
+    for spec in traces:
+        path = spec["site"].rpartition(":")[0]
+        if path in dirty:
+            out[spec["id"]] = (f"{spec['id']} (callee {spec['callee']}, pinned line "
+                               f"{spec['site'].rpartition(':')[2]}): {path} is modified in the working tree, "
+                               f"and a tampered run executes the committed file: commit or restore it "
+                               f"before tracing")
+    return out
+
+
+def _refused(spec: dict, roles: tuple[str, ...], why: str) -> dict:
+    """A site that did not resolve: every role the spec names reads UNRESOLVED,
+    and the roles it has none of read as they always did."""
+    t = {"id": spec["id"], "site": spec["site"], "callee": spec["callee"],
+         "classification": spec.get("classification"), "runs": {}}
+    for role in roles:
+        t["runs"][role] = None if spec.get(role) is None else [
+            {"role": role, "verdict": UNRESOLVED, "unresolved": why}]
+    for k in ("invariant", "shadowed_by"):
+        if spec.get(k):
+            t[k] = spec[k]
+    return t
+
+
+def _print_runs(t: dict) -> None:
+    for role, recs in t["runs"].items():
+        for rec in recs or []:
+            print(f"   {role:9s} {rec.get('verdict')} exit={rec.get('exit_status')} "
+                  f"{rec.get('unresolved', '')}", flush=True)
+
+
 def trace_all(traces: list[dict], workroot: pathlib.Path, roles: tuple[str, ...],
-              cache: dict | None = None, wrap: list[str] | None = None) -> list[dict]:
+              cache: dict | None = None, wrap: list[str] | None = None,
+              root: pathlib.Path | None = None) -> list[dict]:
     """Run every trace. A shared run -- `share="name"` in the dict a callable
     returns, or `spec["share"][role]` -- is executed once and viewed by every
     site that names it: rows may share a fixture when the record shows each
-    site's own call executed. `cache` carries shared runs across calls."""
+    site's own call executed. `cache` carries shared runs across calls.
+
+    Every site is resolved from its anchor first (`resolve_sites`, against
+    `root`): one that does not resolve is REFUSED -- recorded UNRESOLVED in
+    every role, with nothing made, launched or run for it."""
     cache = cache if cache is not None else {}
+    refused = resolve_sites(traces, root)
     # every callee ANY trace names: a shared run is made once, and the site
     # that views it second must find its own callee's calls in the record
     all_wrap = wrap or sorted({w for t in traces for w in t["wrap"]})
@@ -669,6 +883,9 @@ def trace_all(traces: list[dict], workroot: pathlib.Path, roles: tuple[str, ...]
     owners: dict = cache.setdefault("_owners", {})
     out = []
     for spec in traces:
+        if spec["id"] in refused:
+            out.append(_refused(spec, roles, refused[spec["id"]]))
+            continue
         sites = spec.get("sites") or [spec["site"]]
         t = {"id": spec["id"], "site": spec["site"], "callee": spec["callee"],
              "classification": spec.get("classification"), "runs": {}}
@@ -778,19 +995,27 @@ def main(argv=None) -> int:
                    help="an existing record: replace only the traces named by --only")
     p = sub.add_parser("report")
     p.add_argument("record", type=pathlib.Path)
+    s = sub.add_parser("resolve", help="resolve every spec's site from its anchor; start nothing")
+    s.add_argument("--spec", type=pathlib.Path, required=True)
+    s.add_argument("--only", action="append", default=[], help="trace id (repeatable)")
+    s.add_argument("--revision", default=None,
+                   help="resolve against this committed revision instead of the working tree")
     a = ap.parse_args(argv)
     if a.cmd == "report":
         print(report(json.loads(a.record.read_text())))
         return 0
+    if a.cmd == "resolve":
+        return _resolve_report(a)
     module = load_spec(a.spec)
     traces = module.TRACES
     if a.only:
         traces = [t for t in traces if t["id"] in set(a.only)]
     sys.path.insert(0, str(ROOT / "tools"))
     import refusal_sibling_scan as rss
-    out = {"revision": _git("rev-parse", "HEAD"), "tree_dirty": bool(_git("status", "--porcelain").strip()),
-           "dirty_paths": [ln[3:] for ln in _git("status", "--porcelain").splitlines()],
-           "scanner": _scan_json(rss), "traces": []}
+    status = _git("status", "--porcelain").splitlines()
+    dirty = [ln[3:] for ln in status]
+    out = {"revision": _git("rev-parse", "HEAD"), "tree_dirty": any(ln.strip() for ln in status),
+           "dirty_paths": dirty, "scanner": _scan_json(rss), "traces": []}
     if a.into and a.into.exists():
         prior = json.loads(a.into.read_text())
         keep = [t for t in prior["traces"] if t["id"] not in {s["id"] for s in traces}]
@@ -802,19 +1027,49 @@ def main(argv=None) -> int:
         module.set_scratch(workroot)
     cache: dict = {}
     all_wrap = sorted({w for t in module.TRACES for w in t["wrap"]})
+    refused = _dirty_sites(traces, dirty)
+    refused.update(resolve_sites(traces))
     for spec in traces:
         print(f"== {spec['id']}", flush=True)
+        if spec["id"] in refused:
+            t = _refused(spec, roles, refused[spec["id"]])
+            out["traces"].append(t)
+            _print_runs(t)
+            continue
         for t in trace_all([spec], workroot, roles, cache, all_wrap):
             out["traces"].append(t)
-            for role, recs in t["runs"].items():
-                for rec in recs or []:
-                    print(f"   {role:9s} {rec.get('verdict')} exit={rec.get('exit_status')} "
-                          f"{rec.get('unresolved', '')}", flush=True)
+            _print_runs(t)
     out["traces"].sort(key=lambda t: t["id"])
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(out, indent=1, default=str) + "\n")
     print(f"wrote {a.out} (scratch kept in {workroot})")
     return 0
+
+
+def _resolve_report(a) -> int:
+    """`resolve`: every ID with the line it was traced under and the line its
+    anchor resolves to now, or why it does not. Nothing is started. The exit
+    status is 1 when any site is REFUSED, so the report is the gate it reads as."""
+    traces = load_spec(a.spec).TRACES
+    if a.only:
+        traces = [t for t in traces if t["id"] in set(a.only)]
+    sources = None
+    if a.revision:
+        sources = {}
+        for path in sorted({t["site"].rpartition(":")[0] for t in traces}):
+            shown = subprocess.run(["git", "-C", str(ROOT), "show", f"{a.revision}:{path}"],
+                                   capture_output=True, text=True)
+            if shown.returncode:
+                print(shown.stderr.strip() or f"git show {a.revision}:{path} failed", file=sys.stderr)
+                return 2
+            sources[path] = shown.stdout
+    pinned = {t["id"]: t["site"] for t in traces}
+    refused = resolve_sites(traces, sources=sources)
+    print(f"# resolve @ {a.revision or 'the working tree'}: {len(traces)} sites, {len(refused)} REFUSED")
+    for t in sorted(traces, key=lambda t: t["id"]):
+        where = f"REFUSED: {refused[t['id']]}" if t["id"] in refused else f"-> {t['site']}"
+        print(f"{t['id']:52s} {pinned[t['id']]:52s} {where}")
+    return 1 if refused else 0
 
 
 def _git(*args: str) -> str:

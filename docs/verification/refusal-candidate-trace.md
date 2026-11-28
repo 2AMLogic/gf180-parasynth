@@ -115,25 +115,50 @@ exits non-zero, which is what the stub stands for. #1616 says so.
 
 The record is the tree it names. Synced with `origin/main` before this PR
 opened (`d51d9d42`, 0 behind), a fresh scan reports 85 candidates against the
-record's 90, and three of the moves are rows this document discusses:
+record's 90:
 
-- PR #1574 added an `import` to `fpga/release/r2_release.py`, so its rows
-  moved by one line: `:110` is `:111` and `:302` is `:303`, both still
-  candidates; `:372` is `:373` and is now `covered(base)` -- the repair. The
-  committed calibration control is a differential and passes on the repaired
-  tree.
-- #1699 grew `tools/probes/audio_distance_floor.py` by 57 lines. Its nine
-  rows above `main` moved by 11: `:441` is `:452`, `:446` `:457`, `:467`
-  `:478`, `:489` `:500`, `:490` `:501`, `:540` `:551`, `:611` `:622`, `:612`
-  `:623`, `:640` `:651`. Its two inside `main` moved by 45: `:687` is `:732`
-  and `:705` is `:750`. Each is still the call or handler it was; `:687`
-  reads `return exit_contract.REFUSED` -- the same status, by name.
+- PR #1574 added an `import` to `fpga/release/r2_release.py`. Its `:372` row
+  read `covered(base)` there -- the repair. The committed calibration control
+  is a differential and passes on the repaired tree.
 - `tools/mono_m5a_score.py` changed under #1570 and #1586 (a shared harmonic
   summary; hashes bound to the bytes measured). The two `:264` inputs were
   re-run on the merged tree and escape exactly as recorded.
 - Four OLDER candidates left the census, none of them traced here:
   `measure_m5a_pulse_duty.py:39` and `:112`, `measure_m5a_signal_path.py:56`
   and `:104`.
+
+**An ID's line is where the call was, not where it is.** Every row in this
+document is named by the line it was traced under, and those lines are record
+keys: they do not follow the call when an edit moves it. The plan
+(`tools/refusal_candidate_traces.py`) therefore names each call by an anchor
+instead -- its enclosing function, its callee, and the statement's assignment
+target or the call's first positional argument -- and the tracer derives the
+line from it against the tree being traced, before anything runs. All 37
+sites carry an anchor, and each resolves on this tree to a call of its
+callee.
+
+<!-- claim: test=tools/test_refusal_candidate_trace.py::test_every_site_in_the_plan_is_anchored_and_resolves_on_this_tree -->
+
+A site that does not resolve is REFUSED: `UNRESOLVED` in every role, with no
+child started. A spec that carries a line and no anchor is refused as well,
+whether or not the line still holds a call, because nothing about a number
+says which call it was meant to be; deleting the baseline call leaves its ID
+unresolved rather than letting the ID slide onto the next call of the same
+callee. Where each call is now is not written down here. It is read
+(`resolve`, under "Running it").
+
+<!-- claim: test=tools/test_refusal_candidate_trace.py::test_control_a_deleted_baseline_call_is_unresolved_and_starts_no_child -->
+
+How much the hand-kept pins had drifted was not known until the resolver
+existed. Run on the plan at `origin/main` `02394528`, it found 12 of the 37
+naming a line that was not the call -- five of them in the list issue #1772
+had measured by hand, which that issue said not to extend by hand. The
+resolver also reproduces the record: in the sources of the record's revision
+every anchor resolves to the line its ID carries, which is the check that
+each anchor names the call its row was traced on and not merely a call of the
+callee.
+
+<!-- claim: commit=02394528 -->
 
 ## Covered, though the census lists them
 
@@ -282,6 +307,20 @@ record, because the rate is how a reader calibrates any single row:
    script's directory was missing from `sys.path`; both made entries fail on
    imports they normally resolve.
 9. **"no call observed" read `RETURNED`.** It is `NOT-REACHED`.
+10. **the sites were pinned by line, and nothing checked them.** Each was the
+    line the scanner reported, and an edit to a traced file moved the call off
+    it silently: at `origin/main` `02394528`, 12 of the 37 named a line that
+    was not the call (`f1_rtl_filter_path.py:449` a `print`,
+    `measure_pulse2x_headroom.py:191` a `def`), and a site whose call had
+    moved read `NOT-REACHED`, which is also what a site the run never reached
+    reads. Caught by writing the resolver #1772 asked for and running it on
+    the plan before committing it.
+11. **the resolver, twice, before it was right.** An assignment target parses
+    in Store context and the same text written in a spec in Load, so every
+    `target` match failed: the gate on the real plan read 30 of 37 REFUSED.
+    And an ordinal was checked only when two calls matched, so with one left
+    `n=2` resolved. Caught by that gate and by the ordinal control, in that
+    order.
 
 And the inputs I got wrong, each visible in the record because a script prints
 what happened instead of asserting it: "the render minus its lead" did not
@@ -326,7 +365,18 @@ python tools/refusal_candidate_trace.py run --spec tools/refusal_candidate_trace
 python tools/refusal_candidate_trace.py run --spec tools/refusal_candidate_traces.py \
     --only 'fpga/release/r2_release.py:372' --roles working,refusing
 python tools/refusal_candidate_trace.py report build/refusal-candidate-trace.json
+python tools/refusal_candidate_trace.py resolve --spec tools/refusal_candidate_traces.py
+python tools/refusal_candidate_trace.py resolve --spec tools/refusal_candidate_traces.py \
+    --revision c9584c65                                # the record's own revision
 ```
+
+`resolve` starts nothing. It prints every ID with the line it was traced
+under and the line its anchor resolves to now, or why it does not, and exits
+1 when any site is refused -- so it is the current-state report, and the
+check to run after editing a traced file. `run` resolves the same way first:
+a site that does not resolve, or whose traced file is modified in the working
+tree (a tampered run executes a clone of HEAD, and one line must serve
+both), is `UNRESOLVED` in every role before any child starts.
 
 A tampered input is always a fresh clone of the traced revision under the
 scratch directory, never the working tree. The whole plan is about an hour of
