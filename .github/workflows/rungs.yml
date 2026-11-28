@@ -536,15 +536,29 @@ jobs:
   # cancelled at [96%] with NO pytest summary -- the failing tests' identity
   # had to be re-derived from dot-progress by index. A cap a growing suite
   # reaches nondeterministically is a red unrelated to the diff, and a
-  # cancelled run reports nothing where a verdict belongs. 105 is ~1.75x the
+  # cancelled run reports nothing where a verdict belongs. 105 was ~1.75x the
   # 59m44s hosted maximum, the same headroom the `python` job's 70 gives
   # over its own 40.3 min hosted max. Re-measure once more hosted runs
   # accumulate.
+  #
+  # 150, not 105 (#1816) -- that re-measurement. Twenty green whole-jobs on
+  # main in one morning (Actions API, 2026-11-28) ran 42.1-84.4 min, median
+  # 71.8: 105 was down to 1.24x the maximum, where its own note claimed
+  # ~1.75x. Where the time goes was measured once, hosted, at ed00ea2c (run
+  # 46139990892, 6550 passed in 72m47s): 99.5% of pytest's wall time is
+  # attributable to tests, no file dominates (the top 5 of 190 hold 38%), and
+  # 93 tests at 10 s or more -- 3.4% of the tests -- hold 70%. They are real
+  # end-to-end renders, trials and probes, not overhead, so no cheap win
+  # shrinks this soon, and the directory grows by construction. The maximum
+  # moved from 80.9 to 84.4 min while it was being measured. 150 is ~1.78x
+  # the 84.4 min maximum; the 42-84 min spread for one suite is unexplained.
+  # Record and tool: docs/ci-tools-job-durations-2026-11-28.md,
+  # tools/pytest_durations_report.py. Re-measure when the maximum moves.
   tools:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.scope != 'none' && needs.changes.outputs.scope != 'docs' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 105
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
         with:
@@ -568,6 +582,8 @@ jobs:
       # test_score_f1_rtl, test_trial). sympy is deliberately NOT installed:
       # test_tone_stage_schematic's sympy witness is meant to be a VISIBLE skip
       # beside two numpy-only witnesses of the same fact that do run.
+      # Measured (#1816): these five are 13.7 s of a 72m47s run, 0.3% -- not
+      # a cost centre; the job's time is in its end-to-end renders and probes.
       - run: sudo apt-get update && sudo apt-get install -y iverilog
       # Not set here, on purpose: GF180_TR808_REFS. The corpus is ~30 MB and is
       # not in the repo, so the tests that need the WAVs skip visibly and the
@@ -673,7 +689,8 @@ jobs:
   # Measured on the 8-vCPU worker (2026-11-15, origin/main @ 6be93eef):
   # 197 passed in 0.81 s -- three orders of magnitude under the tools job --
   # so the 10-minute cap is ~700x the measured runtime, the same headroom
-  # logic the tools job's 105 gives over its ~59 min hosted maximum (#1236).
+  # logic the tools job's 150 gives over its ~84 min hosted maximum (#1236,
+  # re-measured in #1816).
   #
   # Default checkout depth: no pnr/ test reads origin/main or computes a
   # merge-base, unlike tools/test_run_case.py (measured 2026-11-15). No
