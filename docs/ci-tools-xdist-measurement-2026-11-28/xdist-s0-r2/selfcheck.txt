@@ -1,0 +1,2 @@
+3233 of the collection's 6678 ids are in this shard's list of 120 files; the check below is over those, with this shard's own log:
+PASS: 3233 expected, 3233 ran, 0 missing, 0 extra, 0 duplicate; PASSED 3211, SKIPPED 20, XFAILED 2

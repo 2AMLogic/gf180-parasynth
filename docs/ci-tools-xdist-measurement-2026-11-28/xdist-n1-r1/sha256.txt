@@ -1,0 +1,3 @@
+4d0c1374eddf8c2fdab08cc57b09b5e2dc557b4a59fd9f269000c9f6475c0592  junit.xml
+a495eaba2abec93195ce780550cab41dbb9cbf900beb413b431d74bac4ee36fd  collect.txt
+44efa81a60806d395a9dc7fd59a0efc87fc0b3e97d4d65948c75afe5fa1c344d  pytest.log

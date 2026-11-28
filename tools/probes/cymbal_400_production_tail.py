@@ -66,6 +66,7 @@ _REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
 if _REFUSAL_TOOLS not in sys.path:
     sys.path.append(_REFUSAL_TOOLS)
 import refusal  # noqa: E402
+import manifest as mf  # noqa: E402
 
 
 class Refused(refusal.Refused, RuntimeError):
@@ -331,6 +332,28 @@ def require_frozen_contract(frozen: dict) -> None:
             "re-rubric the measurement of a pinned source; re-freeze before measuring")
 
 
+def load_frozen(path: pathlib.Path) -> dict:
+    """The `--frozen` record, which the OPERATOR names. One that cannot be READ is a
+    refusal naming the path, never a traceback (#1774): the bare
+    `json.loads(path.read_text())` turned a truncated JSON or bytes that are not
+    UTF-8 into exit 1 by traceback, where this tool's declared refusal is exit 2 and
+    nothing was measured. The parse half is `manifest.load_json_refused` re-typed as
+    THIS module's `Refused`. `OSError` is the other half, minus the one case
+    `cmd_measure` already refuses in its own words: a MISSING record has a remedy to
+    name (`freeze` first), so `FileNotFoundError` passes through to it untouched
+    (#1774 AC 3). Only those are caught -- an implementation error is still a
+    traceback, never a refusal."""
+    try:
+        return mf.load_json_refused(path, "the frozen record")
+    except mf.Refused as e:
+        raise Refused(str(e)) from e
+    except FileNotFoundError:
+        raise
+    except OSError as e:
+        raise Refused(f"the frozen record at {path} cannot be read ({e.strerror or e}) -- nothing was "
+                      f"measured; run `freeze` again to write one that can be") from e
+
+
 def cmd_freeze(a) -> int:
     require_tree_identity()
     hashes = require_corpus(a.refs, None)
@@ -348,7 +371,7 @@ def cmd_freeze(a) -> int:
 
 def cmd_measure(a) -> int:
     try:
-        frozen = json.loads(pathlib.Path(a.frozen).read_text())
+        frozen = load_frozen(pathlib.Path(a.frozen))
     except FileNotFoundError:
         print(f"REFUSED: no frozen record at {a.frozen}; run `freeze` BEFORE measuring")
         return 2

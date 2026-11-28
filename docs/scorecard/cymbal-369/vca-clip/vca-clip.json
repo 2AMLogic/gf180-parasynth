@@ -1721,6 +1721,25 @@
    }
   }
  },
+ "source_provenance": {
+  "status": "unresolved",
+  "recorded": "2026-11-28",
+  "issue": 1940,
+  "recorded_commit": "ac9bf86526b1ebb64b632d8a2e024d0c265590ee",
+  "lookup": {
+   "date": "2026-11-28",
+   "method": "git merge-base --is-ancestor <commit> origin/main in a full-history clone, then GET api.github.com/repos/2AMLogic/gf180-parasynth/commits/<commit>",
+   "main_at": "e2d1bae75198e3aa8b31fe21d31c00daba53b5e9",
+   "is_ancestor": false,
+   "object_in_clone": false,
+   "github_http_status": 422,
+   "github_message": "No commit found for SHA: ac9bf86526b1ebb64b632d8a2e024d0c265590ee"
+  },
+  "landed_by": "cfc38fdd55120b5751de6d17bc270e8584069419",
+  "landed_in": "315465f3f79c26170fe68be8b25d64ed724a2e34 (merge of PR #423, feature/issue-369)",
+  "cause": "Not established. This file reached main through a two-parent merge commit whose branch commits are on main (see landed_in), so a squash merge did not discard the commit named above. That commit was never part of the pushed branch as pushed: amended, rebased away, or made in a worktree that was never pushed -- the repository does not say which.",
+  "meaning": "`sources_dirty: false` says model/ and tools/ were unmodified relative to that HEAD when the record was written. It does not make the HEAD recoverable: the lookup recorded here found no such commit, so the figures in this file cannot be reproduced from a known tree. This annotation records a failed lookup. It is not a verified source."
+ },
  "commit": "ac9bf86526b1ebb64b632d8a2e024d0c265590ee",
  "sources_dirty": false
 }
