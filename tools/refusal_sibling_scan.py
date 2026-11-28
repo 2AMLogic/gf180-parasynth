@@ -97,7 +97,22 @@ WHAT THIS SCAN RESOLVES that the #1160 one-off dotted-call grep could not:
     name rebound by a LATER import does not reach a class defined before
     it; an import that rebinds the subclass's own name afterwards does --
     the name is then no longer the class -- and a def's own import of that
-    name binds it there and only there, as for any name.
+    name binds it there and only there, as for any name;
+  * a GUARD naming a family SUBCLASS is a guard (#2032): `handler_origins`
+    resolved an except clause through a family NAME or a dotted `.Refused`
+    alone, so `except callee.Unbindable` -- and `except Unbindable` after
+    `from callee import Unbindable` -- read as shape `other`, and once the
+    raise side read `raise Unbindable(...)` as a refusal (above) a caller
+    guarded that way was listed as an escape the interpreter does not let
+    escape. Such a name is resolved now by the raise side's own rule, to
+    the same origin: the class of the module a dotted head imports, of a
+    from-import's lender (under the original name, as for a def), or of the
+    handler's own module (`class Unbindable(Refused)` above it, the shape of
+    the three same-module handlers on this tree), function scopes first as
+    everywhere. Shape `exact`, or `local` for the handler's own module's
+    family; never `base`, which is every origin and this is one class. A
+    stem two modules carry resolves to neither, and a name bound to a class
+    outside the family covers nothing, under whichever module's name it came;
 
 WHAT IT CANNOT TELL YOU, and why the per-site list is an inventory, not a
 verdict. A dotted call is not necessarily a raising call on the CLI's input
@@ -118,6 +133,15 @@ is decided by tracing the caller with a known-answer input, as #1160 and
     module's name (`from x import Unbindable`, `x.Unbindable(...)`), which
     is neither the callee's family name nor a class of the callee's
     (#2015). Each leaves the raise unread;
+  * a guard naming a family subclass is credited for the WHOLE origin, which
+    is wider than the class (#2032): the census is keyed per origin, a
+    module's family, and cannot say that `except callee.Unbindable` catches
+    one class of `callee`'s. A def that raises the named subclass AND
+    another class of the same family -- `Refused` itself, or a sibling
+    subclass -- reads `covered(exact)` while the other raise leaves the
+    caller. Pinned in `tools/test_refusal_sibling_scan.py` as the rule-8
+    input of that fix, and filed on its own (#2161): a fail-closed reading
+    needs the raise side to say WHICH classes of an origin a def raises;
   * bindings are per scope, not per statement: within a module or within a
     function the LAST import of a name in SOURCE order wins for that whole
     scope, so a call written above a later rebinding of its head is read
@@ -528,6 +552,48 @@ def enclosing_try_parents(tree: ast.AST, call: ast.AST) -> list[ast.Try]:
     return out
 
 
+def _one_stem(by_stem: dict[str, list[ModInfo]], stem: str) -> ModInfo | None:
+    """The one module an importable stem denotes, or None when none or
+    several carry it: which `play.Unbindable` is is not decidable, as
+    `origin_of` says of `play.Refused`."""
+    mods = by_stem.get(stem)
+    return mods[0] if mods and len(mods) == 1 else None
+
+
+def subclass_origins(mod: ModInfo, name: str,
+                     by_stem: dict[str, list[ModInfo]]) -> set[str]:
+    """The origins of a family subclass `name` DEFINED in `mod`, by the rule
+    `raise_origins` gives a raise of it (#1956): a class defined in the
+    module is the definer of what derives from it, whatever its family name
+    is bound to by now; a lender's is followed to the definer, through a
+    re-export. Guard and raise name one class by one origin, or a re-export
+    reads as two."""
+    return {s if s == mod.path.stem else (origin_of(by_stem, s) or s)
+            for s in mod.family_subclasses.get(name, ())}
+
+
+def subclass_origins_named(mod: ModInfo, by_stem: dict[str, list[ModInfo]],
+                           txt: str, at: ast.AST | None) -> set[str]:
+    """The origins of the family SUBCLASS an except clause names under its
+    own name (#2032); empty when it names none. Three ways, as Python binds
+    the name where the handler sits: dotted, `callee.Unbindable`, the class
+    of the module the head imports; by from-import, `from callee import
+    Unbindable [as U]`, under the ORIGINAL name as for a def; and the
+    handler's own module's class, `class Unbindable(Refused)` above it. A
+    name a def of the handler's own imports binds there and only there, as
+    everywhere (#1573); a stem two modules carry resolves to neither; and a
+    class outside the family is no subclass under whichever name it came."""
+    if "." in txt:
+        stem = mod.resolve_head(txt.split(".")[0], at) or txt.split(".")[0]
+        owner, name = _one_stem(by_stem, stem), txt.rsplit(".", 1)[-1]
+    elif mod.family_subclasses_at(txt, at):
+        owner, name = mod, txt
+    else:
+        ent = mod.from_import(txt, at)
+        owner, name = (_one_stem(by_stem, ent[0]), ent[1]) if ent else (None, "")
+    return subclass_origins(owner, name, by_stem) if owner is not None else set()
+
+
 def handler_origins(mod: ModInfo, by_stem: dict[str, list[ModInfo]],
                     handler: ast.ExceptHandler) -> tuple[set[str], str]:
     """(origins this handler catches, shape) -- shape in
@@ -553,9 +619,25 @@ def handler_origins(mod: ModInfo, by_stem: dict[str, list[ModInfo]],
                 # `import refusal as rf; except rf.Refused` is the base too
                 shapes.add("base" if o == BASE_STEM else "exact")
             else:
-                shapes.add("other")
+                sub = subclass_origins_named(mod, by_stem, txt, handler)
+                if sub:
+                    origins |= sub
+                    shapes.add("exact")
+                else:
+                    shapes.add("other")
         else:
             fam = mod.family_name_at(txt, handler)
+            sub = (subclass_origins_named(mod, by_stem, txt, handler)
+                   if fam is None else set())
+            if sub:
+                # a SUBCLASS of the family under its own name (#2032): the
+                # credit its family name has, to the origin the raise side
+                # gives the class. Never `base`: that is every origin, and
+                # this is one class of one family
+                origins |= sub
+                shapes.add("local" if (mod.has_local_family
+                                       and sub <= {mod.path.stem}) else "exact")
+                continue
             if fam is None:
                 shapes.add("other")
             else:

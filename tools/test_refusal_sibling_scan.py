@@ -34,6 +34,12 @@ refusal: each row is held to the interpreter's verdict on the planted files,
 the same-named class outside the family is the rule-8 control, and each of
 the fix's three parts is reverted in memory to show which control goes red
 without it. One blind spot the fix leaves is pinned as such: a dotted base.
+The #2032 section plants a GUARD naming the family subclass the callee
+raises, which `handler_origins` read as no guard at all: each row is held to
+the interpreter's verdict and to the origin the raise side gives the same
+class, the same-named class outside the family is the rule-8 control, each
+of the fix's three ways is reverted in memory, and the credit's own limit --
+one class, read as the whole origin -- is pinned as a stated blind spot.
 """
 from __future__ import annotations
 
@@ -2690,14 +2696,16 @@ def other(p):
 
 
 def _subclass_verdict(monkeypatch, tmp_path: pathlib.Path, caller: str,
-                      fn: str | None = "go") -> str:
+                      fn: str | None = "go", arg: str = "x") -> str:
     """What the INTERPRETER does with a planted caller of `subclass_callee`:
     'caught' when the callee RAISED and the caller came back, 'escaped' when
     the refusal left it, 'left-as-<class>' when something that is no refusal
     left it, 'not-run' when the callee never raised -- a defect in the
     planting, not a verdict. `fn=None` runs the module as `__main__`, the CLI
     boundary itself, and reads its exit status: the fixture exits 2 from its
-    handler and 0 from a returned value."""
+    handler and 0 from a returned value. `arg` is what `fn` is called with
+    (#2032: a callee that raises one class for one argument and another for
+    the rest)."""
     import refusal                            # noqa: E402  (tools/ is on sys.path above)
     for stem in ("mod_a", "mod_b", "relay", "foreign", "subclass_callee"):
         if (tmp_path / f"{stem}.py").exists():
@@ -2720,7 +2728,7 @@ def _subclass_verdict(monkeypatch, tmp_path: pathlib.Path, caller: str,
     else:
         mod = _import(monkeypatch, path)
         try:
-            getattr(mod, fn)("x")
+            getattr(mod, fn)(arg)
         except refusal.Refused:
             verdict = "escaped"
         except Exception as e:               # noqa: BLE001  reported, never swallowed
@@ -3033,3 +3041,447 @@ def test_with_every_local_class_counted_the_rule_8_control_goes_red(tmp_path):
     got = [s for s in mut.scan(files, idx) if "caller_sub_unguarded.py" in s["site"]]
     assert [(s["callee"], s["classification"]) for s in got] == [
         ("subclass_callee.load_capture", "candidate-escape")], got
+
+
+# ---------------------------------------------------------------------------
+# #2032 controls: a GUARD naming a family subclass
+# ---------------------------------------------------------------------------
+# `handler_origins` resolved an except clause only through a family NAME or a
+# dotted name ending in `.Refused`. A handler naming the SUBCLASS -- `except
+# callee.Unbindable`, or `except Unbindable` after `from callee import
+# Unbindable` -- read as shape `other` with no origin. #1956 taught the RAISE
+# side to read `raise Unbindable(...)` as a refusal of the callee's family,
+# so from then on a cross-module caller guarded this way was listed as an
+# escape the interpreter does not let escape: the pessimistic direction, but
+# one that reads as a defect in the caller rather than as a limit of the
+# census. The guard side resolves such a name now by the raise side's own
+# rule, to the same origin, and each control here RUNS the planted files and
+# holds the census row to what the interpreter does with the refusal.
+#
+# Rule 8's guard-defeating inputs are two. The first is the fix as its own
+# cheap imitation: a fix matching the class NAME alone would credit a handler
+# naming ANOTHER module's same-named class, family or not; that class must
+# leave the site uncovered. The second is the credit itself: the census is
+# keyed per ORIGIN, a module's whole family, and a handler naming one
+# subclass is narrower than that. A def raising the named subclass AND the
+# family class reads covered while the second raise leaves the caller; that
+# is pinned below as a stated blind spot, not endorsed.
+
+# the issue's probe: the callee's subclass, by its name, both ways
+SUBCLASS_CALLER_DOTTED = '''
+import subclass_callee
+
+def go(p):
+    try:
+        return subclass_callee.load_capture(p)
+    except subclass_callee.Unbindable as e:  # the callee's SUBCLASS, by its name
+        print("REFUSED", e)
+'''
+
+SUBCLASS_CALLER_IMPORTED = '''
+import subclass_callee
+from subclass_callee import Unbindable    # the same class object, bound here
+
+def go(p):
+    try:
+        return subclass_callee.load_capture(p)
+    except Unbindable as e:
+        print("REFUSED", e)
+'''
+
+SUBCLASS_CALLER_IMPORTED_ALIAS = '''
+import subclass_callee
+from subclass_callee import Unbindable as UB
+
+def go(p):
+    try:
+        return subclass_callee.load_capture(p)
+    except UB as e:                        # the ORIGINAL name is kept, as for a def
+        print("REFUSED", e)
+'''
+
+# a tuple: the subclass part contributes its origin beside a class of no family
+SUBCLASS_CALLER_TUPLE = '''
+import subclass_callee
+
+def go(p):
+    try:
+        return subclass_callee.load_capture(p)
+    except (subclass_callee.Unbindable, ValueError) as e:
+        print("REFUSED", e)
+'''
+
+SUBCLASS_CALLER_CLI_DOTTED = '''
+import sys
+import subclass_callee
+
+def go(p):
+    return subclass_callee.load_capture(p)   # unguarded HERE; the guard is the boundary
+
+if __name__ == "__main__":
+    try:
+        sys.exit(go("x"))
+    except subclass_callee.Unbindable as e:
+        print(f"REFUSED  {e}")
+        sys.exit(2)
+'''
+
+# rule 8, first input: the SAME name, of no family, in another module
+SUBCLASS_CALLER_IMPORTED_FOREIGN = '''
+import subclass_callee
+from foreign import Unbindable              # `Unbindable(Exception)`: of no family
+
+def go(p):
+    try:
+        return subclass_callee.load_capture(p)
+    except Unbindable as e:
+        print("REFUSED", e)
+'''
+
+SUBCLASS_CALLER_DOTTED_FOREIGN = '''
+import subclass_callee
+import foreign
+
+def go(p):
+    try:
+        return subclass_callee.load_capture(p)
+    except foreign.Unbindable as e:         # the same name in another module: no family
+        print("REFUSED", e)
+'''
+
+# ... and defined in the caller itself, outside the family
+SUBCLASS_CALLER_LOCAL_OTHER = '''
+import subclass_callee
+
+class Unbindable(Exception):                # defined here; a class of no family
+    pass
+
+def go(p):
+    try:
+        return subclass_callee.load_capture(p)
+    except Unbindable as e:
+        print("REFUSED", e)
+'''
+
+# the caller's OWN family subclass -- the shape of the three same-module
+# handlers on the real tree (`except SourceUnavailable` in
+# tools/cymbal_vca_drive.py and tools/tone_stage_schematic.py), planted
+# around a cross-module call. It is a SIBLING family's refusal and the
+# subclass catches none of it; the credit is the one `except Refused` has
+# here, shape `local` with the caller's own origin, where before it was no
+# guard at all.
+OWN_SUBCLASS_CALLER = '''
+import refusal
+import subclass_callee
+
+class Refused(refusal.Refused, Exception):  # the caller's own family
+    pass
+
+class SourceUnavailable(Refused):           # ... and a subclass of it
+    pass
+
+def go(p):
+    try:
+        return subclass_callee.plain(p)     # a SIBLING family's plain refusal
+    except SourceUnavailable as e:
+        print("REFUSED", e)
+'''
+
+# a subclass of the COMMON BASE, imported by name: no module's family, the
+# base's own. The handler names ONE class of that family -- never `base`,
+# which is every origin.
+BASE_SUBCLASS_CALLEE = '''
+from refusal import Refused                   # the base itself, by name: no family of this module's
+
+class Unbindable(Refused):
+    pass
+
+RAISED = []
+
+def load_capture(p):
+    RAISED.append(p)
+    raise Unbindable(f"cannot bind {p}")
+'''
+
+BASE_SUBCLASS_CALLER = '''
+import subclass_callee
+
+def go(p):
+    try:
+        return subclass_callee.load_capture(p)
+    except subclass_callee.Unbindable as e:  # one class of the base's family
+        print("REFUSED", e)
+'''
+
+BASE_SUBCLASS_SIBLING_CALLER = '''
+import subclass_callee
+import mod_a
+
+def go(p):
+    try:
+        subclass_callee.load_capture(p)      # raises the subclass: caught, so the callee ran
+    except subclass_callee.Unbindable as e:
+        print("REFUSED", e)
+    try:
+        return mod_a.load(p)                 # ... then a refusal that is no instance of that class
+    except subclass_callee.Unbindable as e:
+        print("REFUSED", e)
+'''
+
+# rule 8, second input: the def raises the subclass AND the family class
+MIXED_RAISE_CALLEE = '''
+import refusal
+
+class Refused(refusal.Refused, Exception):
+    pass
+
+class Unbindable(Refused):
+    pass
+
+RAISED = []
+
+def load_capture(p):
+    RAISED.append(p)
+    if p == "plain":
+        raise Refused("plain")               # the family class: no instance of the subclass
+    raise Unbindable(f"cannot bind {p}")
+'''
+
+SUBCLASS_CALLER_COLLISION = '''
+import play
+
+def go(p):
+    try:
+        return play.fetch(p)
+    except play.Unbindable as e:             # WHICH play's class? not decidable
+        print("REFUSED", e)
+'''
+
+
+def _first_handler(mod) -> ast.ExceptHandler:
+    return next(h for n in ast.walk(mod.tree) if isinstance(n, ast.Try) for h in n.handlers)
+
+
+@pytest.mark.parametrize("callee,extra,origins", [
+    pytest.param(SUBCLASS_CALLEE, {}, ["subclass_callee"], id="the-module-own-family"),
+    pytest.param(BORROWED_SUBCLASS_CALLEE, {"relay": RELAY}, ["mod_a"],
+                 id="a-reexported-family"),
+    pytest.param(ALIASED_BORROWED_SUBCLASS_CALLEE, {"relay": RELAY}, ["mod_a"],
+                 id="a-reexported-family-under-an-alias"),
+    pytest.param(BASE_SUBCLASS_CALLEE, {}, ["refusal"], id="the-common-base-itself"),
+])
+@pytest.mark.parametrize("form", ["dotted", "imported"])
+def test_a_guard_naming_the_subclass_the_callee_raises_covers_it(
+        tmp_path, monkeypatch, callee, extra, origins, form):
+    """Controls A and B, red first against the unfixed guard side: the census
+    said `candidate-escape` with no guard while the interpreter caught the
+    refusal. The row follows the interpreter now, and the guard's origin IS
+    `raise_origins`'s for the def it guards, read on the same tree -- so a
+    resolution to some other origin (the base module's for the module's own
+    family, say, or the re-exporter's for the lender's) cannot pass."""
+    caller = {"dotted": SUBCLASS_CALLER_DOTTED, "imported": SUBCLASS_CALLER_IMPORTED}[form]
+    files, idx = _local_tree(tmp_path, {**extra, "subclass_callee": callee,
+                                        "caller_sub": caller})
+    assert _subclass_verdict(monkeypatch, tmp_path, "caller_sub") == "caught", (form, callee)
+    got = _sites_for(files, idx, "caller_sub")
+    assert len(got) == 1, got
+    assert (got[0]["origins"], got[0]["classification"], got[0]["guard"],
+            got[0]["uncovered"]) == (origins, "covered(exact)", "exact", []), got[0]
+    by_stem = rss.stem_map(idx)
+    caller_mod = idx[str(tmp_path / "caller_sub.py")]
+    assert rss.handler_origins(caller_mod, by_stem, _first_handler(caller_mod)) == (
+        rss.raise_origins(idx[str(tmp_path / "subclass_callee.py")], "load_capture",
+                          by_stem), "exact")
+
+
+@pytest.mark.parametrize("caller,fn,python,row", [
+    pytest.param(SUBCLASS_CALLER_IMPORTED_ALIAS, "go", "caught",
+                 ("covered(exact)", "exact", []), id="imported-under-an-alias"),
+    pytest.param(SUBCLASS_CALLER_TUPLE, "go", "caught",
+                 ("covered(exact)", "exact", []), id="in-a-tuple-with-a-class-of-no-family"),
+    pytest.param(SUBCLASS_CALLER_CLI_DOTTED, None, "caught",
+                 ("covered(cli-exact)", "none", []), id="at-the-cli-boundary"),
+])
+def test_the_other_shapes_of_a_subclass_guard_follow_the_interpreter(
+        tmp_path, monkeypatch, caller, fn, python, row):
+    """An aliased borrow resolves under the original name, as a def's alias
+    does (#1188); in a tuple the subclass part contributes its origin beside
+    a class of no family; and at the CLI boundary the handler is an exact
+    one, `covered(cli-exact)`, where the site itself has no guard."""
+    files, idx = _local_tree(tmp_path, {"subclass_callee": SUBCLASS_CALLEE,
+                                        "caller_sub": caller})
+    assert _subclass_verdict(monkeypatch, tmp_path, "caller_sub", fn) == python, caller
+    got = _sites_for(files, idx, "caller_sub")
+    assert len(got) == 1, got
+    assert (got[0]["origins"], got[0]["classification"], got[0]["guard"],
+            got[0]["uncovered"]) == (["subclass_callee"], *row), got[0]
+
+
+@pytest.mark.parametrize("caller", [
+    pytest.param(SUBCLASS_CALLER_IMPORTED_FOREIGN, id="imported-from-another-module"),
+    pytest.param(SUBCLASS_CALLER_DOTTED_FOREIGN, id="dotted-into-another-module"),
+    pytest.param(SUBCLASS_CALLER_LOCAL_OTHER, id="defined-in-the-caller"),
+])
+def test_a_guard_naming_a_same_named_class_outside_the_family_stays_uncovered(
+        tmp_path, monkeypatch, caller):
+    """Rule 8: the input that defeats a fix matching the class NAME alone.
+    `Unbindable` here is a class of no family, wherever the handler's name
+    is bound -- and the callee HAS a family subclass of that very name, so
+    a fix looking the name up in the callee, or in any module at all, would
+    credit this site. The interpreter lets the refusal out; the census must
+    still list it, with no guard."""
+    files, idx = _local_tree(tmp_path, {"foreign": FOREIGN_CLASS,
+                                        "subclass_callee": SUBCLASS_CALLEE,
+                                        "caller_sub": caller})
+    assert idx[str(tmp_path / "foreign.py")].family_subclasses == {}
+    callee_mod = idx[str(tmp_path / "subclass_callee.py")]
+    assert "Unbindable" in callee_mod.family_subclasses          # the name IS down there
+    assert _subclass_verdict(monkeypatch, tmp_path, "caller_sub") == "escaped", caller
+    got = _sites_for(files, idx, "caller_sub")
+    assert len(got) == 1, got
+    assert (got[0]["origins"], got[0]["classification"], got[0]["guard"],
+            got[0]["uncovered"]) == (["subclass_callee"], "candidate-escape",
+                                     "none", ["subclass_callee"]), got[0]
+    caller_mod = idx[str(tmp_path / "caller_sub.py")]
+    assert rss.handler_origins(caller_mod, rss.stem_map(idx),
+                               _first_handler(caller_mod)) == (set(), "other")
+
+
+def test_the_callers_own_family_subclass_is_a_local_guard_of_its_own_family(
+        tmp_path, monkeypatch):
+    """The three real-tree handlers' shape, around a cross-module call: the
+    caller's own subclass is a sibling of the callee's family, so the site
+    stays an escape -- but the guard is READ now, as the `local` one `except
+    Refused` is, where before it was no guard at all. The interpreter lets
+    the callee's refusal out, as the row says."""
+    files, idx = _local_tree(tmp_path, {"subclass_callee": SUBCLASS_CALLEE,
+                                        "caller_sub_own": OWN_SUBCLASS_CALLER})
+    assert _subclass_verdict(monkeypatch, tmp_path, "caller_sub_own") == "escaped"
+    got = _sites_for(files, idx, "caller_sub_own")
+    assert len(got) == 1, got
+    assert (got[0]["origins"], got[0]["classification"], got[0]["guard"],
+            got[0]["uncovered"]) == (["subclass_callee"], "candidate-escape",
+                                     "local", ["subclass_callee"]), got[0]
+
+
+def test_a_guard_naming_one_class_of_the_base_family_is_exact_never_base(
+        tmp_path, monkeypatch):
+    """A subclass derived from the common base by name has the base's stem
+    for its lender. The handler naming it is `exact` for that origin -- a
+    `base` shape, "covers every origin", would be a false covered for every
+    sibling family: the class is one of the base's family, not the base. The
+    sibling row is the one that decides it, and the interpreter is asked."""
+    files, idx = _local_tree(tmp_path, {
+        "subclass_callee": BASE_SUBCLASS_CALLEE,
+        "caller_sub_base": BASE_SUBCLASS_CALLER,
+        "caller_sub_sibling": BASE_SUBCLASS_SIBLING_CALLER})
+    own = _sites_for(files, idx, "caller_sub_base")
+    assert len(own) == 1, own
+    assert (own[0]["origins"], own[0]["classification"], own[0]["guard"],
+            own[0]["uncovered"]) == (["refusal"], "covered(exact)", "exact", []), own[0]
+    sib = {s["callee"]: s for s in _sites_for(files, idx, "caller_sub_sibling")}
+    assert (sib["mod_a.load"]["origins"], sib["mod_a.load"]["classification"],
+            sib["mod_a.load"]["guard"], sib["mod_a.load"]["uncovered"]) == (
+        ["mod_a"], "candidate-escape", "exact", ["mod_a"]), sib
+    assert _subclass_verdict(monkeypatch, tmp_path, "caller_sub_base") == "caught"
+    assert _subclass_verdict(monkeypatch, tmp_path, "caller_sub_sibling") == "escaped"
+
+
+def test_a_subclass_named_through_a_colliding_stem_is_not_resolved(tmp_path):
+    """Two `play` modules each define `Unbindable`. Which one `play.Unbindable`
+    is is not decidable from the AST, as `origin_of` says of `play.Refused`,
+    so the name resolves to neither: no credit, the reading that cannot
+    report a false covered."""
+    files = _collision_tree(tmp_path, PLAY_SUBCLASS_RAISER, PLAY_SUBCLASS_RAISER,
+                            "caller_sub_collide", SUBCLASS_CALLER_COLLISION)
+    idx = rss.build_index(files)
+    by_stem = rss.stem_map(idx)
+    assert len(by_stem["play"]) == 2
+    assert all("Unbindable" in m.family_subclasses for m in by_stem["play"])
+    caller_mod = idx[str(tmp_path / "caller_sub_collide.py")]
+    assert rss.handler_origins(caller_mod, by_stem, _first_handler(caller_mod)) == (
+        set(), "other")
+
+
+def test_a_guard_naming_one_subclass_is_credited_for_the_whole_origin_pinned_blind_spot(
+        tmp_path, monkeypatch):
+    """DOCUMENTED BLIND SPOT (#2032), pinned, not endorsed. The census is
+    keyed per origin -- a module's whole family -- and a handler naming one
+    subclass is narrower than that. This def raises the named subclass for
+    one argument and the family class for another; the interpreter lets the
+    second out of the caller, and the census, which cannot tell the two
+    raises apart (both are `subclass_callee`'s), says `covered(exact)`. The
+    two verdicts are asserted so the gap is a measured row, not a guess."""
+    files, idx = _local_tree(tmp_path, {"subclass_callee": MIXED_RAISE_CALLEE,
+                                        "caller_sub": SUBCLASS_CALLER_DOTTED})
+    assert _subclass_verdict(monkeypatch, tmp_path, "caller_sub") == "caught"
+    assert _subclass_verdict(monkeypatch, tmp_path, "caller_sub", arg="plain") == "escaped"
+    got = _sites_for(files, idx, "caller_sub")
+    assert len(got) == 1, got
+    assert (got[0]["origins"], got[0]["classification"], got[0]["uncovered"]) == (
+        ["subclass_callee"], "covered(exact)", []), got[0]
+
+
+def test_with_the_dotted_form_reverted_the_dotted_control_goes_red(tmp_path):
+    """Mutant 1 of 3: the dotted way of the resolver switched off, compiled
+    in memory from the shipped source. `except callee.Unbindable` is no guard
+    again and the issue's own measurement is re-derived -- `candidate-escape`
+    with no guard where the interpreter catches -- while the imported way,
+    untouched by this mutant, still credits its row."""
+    mut = _scanner_with('    if "." in txt:\n        stem = mod.resolve_head(',
+                        '    if False:\n        stem = mod.resolve_head(')
+    files = _local_tree(tmp_path, {"subclass_callee": SUBCLASS_CALLEE,
+                                   "caller_sub_dotted": SUBCLASS_CALLER_DOTTED,
+                                   "caller_sub_imported": SUBCLASS_CALLER_IMPORTED})[0]
+    idx = mut.build_index(files)
+    got = {s["site"].split("/")[-1].split(".py")[0]: (s["classification"], s["guard"])
+           for s in mut.scan(files, idx) if "caller_sub_" in s["site"]}
+    assert got == {"caller_sub_dotted": ("candidate-escape", "none"),
+                   "caller_sub_imported": ("covered(exact)", "exact")}, got
+    shipped = rss.scan(files, rss.build_index(files))
+    assert sorted(s["classification"] for s in shipped if "caller_sub_" in s["site"]) == [
+        "covered(exact)", "covered(exact)"], shipped
+
+
+def test_with_the_imported_form_reverted_the_imported_control_goes_red(tmp_path):
+    """Mutant 2 of 3: the from-import way of the resolver switched off. The
+    Curator's sketch resolved the bare form through the handler's OWN module
+    alone; under that reading `from callee import Unbindable` binds nothing
+    the guard side knows and Control B is red -- the reason the resolver
+    follows the lender as well."""
+    mut = _scanner_with("        ent = mod.from_import(txt, at)\n",
+                        "        ent = None\n")
+    files = _local_tree(tmp_path, {"subclass_callee": SUBCLASS_CALLEE,
+                                   "caller_sub_dotted": SUBCLASS_CALLER_DOTTED,
+                                   "caller_sub_imported": SUBCLASS_CALLER_IMPORTED})[0]
+    idx = mut.build_index(files)
+    got = {s["site"].split("/")[-1].split(".py")[0]: (s["classification"], s["guard"])
+           for s in mut.scan(files, idx) if "caller_sub_" in s["site"]}
+    assert got == {"caller_sub_dotted": ("covered(exact)", "exact"),
+                   "caller_sub_imported": ("candidate-escape", "none")}, got
+
+
+def test_with_the_name_matched_alone_the_rule_8_control_goes_red(tmp_path):
+    """Mutant 3 of 3: the fix as its own cheap imitation -- the class NAME
+    looked up in whichever module defines a family subclass of that name,
+    the module the handler names ignored. The rule-8 controls are red under
+    it: a handler bound to ANOTHER module's `Unbindable(Exception)` is
+    credited with the callee's origin, a false covered for a refusal Python
+    lets out."""
+    mut = _scanner_with(
+        "    return subclass_origins(owner, name, by_stem) if owner is not None else set()",
+        "    owner = next((m for ms in by_stem.values() for m in ms\n"
+        "                 if name in m.family_subclasses), owner)\n"
+        "    return subclass_origins(owner, name, by_stem) if owner is not None else set()")
+    files = _local_tree(tmp_path, {"foreign": FOREIGN_CLASS,
+                                   "subclass_callee": SUBCLASS_CALLEE,
+                                   "caller_sub_if": SUBCLASS_CALLER_IMPORTED_FOREIGN,
+                                   "caller_sub_df": SUBCLASS_CALLER_DOTTED_FOREIGN})[0]
+    idx = mut.build_index(files)
+    got = sorted((s["site"].split("/")[-1].split(".py")[0], s["classification"])
+                 for s in mut.scan(files, idx) if "caller_sub_" in s["site"])
+    assert got == [("caller_sub_df", "covered(exact)"),
+                   ("caller_sub_if", "covered(exact)")], got
+    shipped = rss.scan(files, rss.build_index(files))
+    assert sorted(s["classification"] for s in shipped if "caller_sub_" in s["site"]) == [
+        "candidate-escape", "candidate-escape"], shipped
