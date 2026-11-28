@@ -1,0 +1,54 @@
+# One measurement for #1944, on a hosted ubuntu-24.04 runner. Lives on a
+# throwaway branch only: nothing here is meant for main.
+name: t-physical-profile-once
+on:
+  push:
+    branches: ['throwaway/**']
+jobs:
+  the-test:
+    name: the test under pytest, un-instrumented
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: python -m pip install --upgrade pip numpy scipy pytest pyyaml soundfile
+      - name: the stack
+        run: |
+          python -c "import sys, os, numpy, scipy, pytest, platform; print(sys.version.split()[0], numpy.__version__, scipy.__version__, pytest.__version__, platform.platform()); print(open('/proc/cpuinfo').read().split('model name')[1].splitlines()[0], 'x', os.cpu_count())"
+      - name: the test alone, as the tools job runs it
+        run: python -m pytest tools/test_r0_capture.py -q -k test_t_physical_on_a_synthetic_bundle --durations=5
+  the-files:
+    name: both files, as trial-physical runs them
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: python -m pip install --upgrade pip numpy scipy pytest pyyaml soundfile
+      - name: tools/test_r0_capture.py and tools/test_r1_capture.py, every test timed
+        run: python -m pytest tools/test_r0_capture.py tools/test_r1_capture.py -q --durations=12
+  the-breakdown:
+    name: the instrument
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: python -m pip install --upgrade pip numpy scipy pytest pyyaml soundfile
+      - name: phases, sessions, functions, the kernel's alternatives
+        run: python tools/r0_controls_profile.py --out build/r0-profile --bench | tee summary.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: t-physical-profile
+          path: |
+            build/r0-profile/report.json
+            build/r0-profile/children/
+            summary.txt
