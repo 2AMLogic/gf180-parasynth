@@ -44,6 +44,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import pathlib
 import sys
 import warnings
 
@@ -52,6 +53,35 @@ from scipy.io import wavfile
 from scipy.signal import find_peaks, get_window
 
 warnings.filterwarnings("ignore", message=".*EOF.*")
+
+_REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[1] / "tools")
+if _REFUSAL_TOOLS not in sys.path:
+    sys.path.append(_REFUSAL_TOOLS)
+import refusal  # noqa: E402
+
+
+class Refused(refusal.Refused, RuntimeError):
+    """A precondition is not met; nothing was attempted."""
+
+
+def check_json_destination(name: str) -> None:
+    """Make `--json`'s parent directory, or REFUSE the path.
+
+    Called before any voice is read, so a path that names a directory, or
+    whose parent cannot be made, is refused in seconds. It used to raise at the
+    write instead, after the whole table had been measured: exit 1 and a
+    traceback, which is what a caller reads as a failed comparison, with the
+    record lost (#2097). A parent that is there but not writable passes here
+    -- `mkdir(exist_ok=True)` cannot see permission -- and is REFUSED at the
+    write."""
+    p = pathlib.Path(name)
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as why:
+        raise Refused(f"--json {name}: its parent cannot be made ({why})") from why
+    if p.is_dir():
+        raise Refused(f"--json {name} is a directory, not a file to write")
+
 
 # The sixteen sounds, in the order model/drums_fx_render.py numbers the solo
 # renders (drums_fx.SOUND_NAMES). STOPS is kept as the revision-8 subset so a
@@ -671,6 +701,13 @@ def main() -> int:
         print(f"!! no reference recording mapped for {unknown}", file=sys.stderr)
         a.voices = [v for v in a.voices if v in REF_MAIN]
 
+    if a.json:
+        try:
+            check_json_destination(a.json)
+        except Refused as why:
+            print(f"REFUSED: {why}", file=sys.stderr)
+            return 2
+
     os.makedirs(a.out, exist_ok=True)
     results, refs_wav, ours_wav = {}, {}, {}
 
@@ -760,8 +797,13 @@ def main() -> int:
             print("  " + p)
 
     if a.json:
-        with open(a.json, "w") as fh:
-            json.dump(results, fh, indent=1, default=float)
+        try:
+            with open(a.json, "w") as fh:
+                json.dump(results, fh, indent=1, default=float)
+        except OSError as why:
+            print(f"REFUSED: the table above was measured, but --json {a.json} could not be "
+                  f"written ({why})", file=sys.stderr)
+            return 2
         print(f"\nmetrics: {a.json}")
     return 0
 

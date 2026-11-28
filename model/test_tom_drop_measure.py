@@ -352,3 +352,77 @@ def test_absent_congas_are_required_only_by_the_congas_flag(root, tmp_path, monk
     res = json.loads((tmp_path / "all.json").read_text(encoding="utf-8"))
     assert sorted(res["voices"]) == ["HC", "HT", "LC", "LT", "MC", "MT"]
     assert res["voices"]["HC"]["B"]["n_ok"] == 11 and "C" not in res["voices"]["HC"]
+
+
+# ------------------------------------------------------- the --json path (#2097)
+#
+# THE DEFECT, red-first on main @ 8eb04e5b (2026-11-28): the report was written
+# with `pathlib.Path(a.json).write_text(...)` after every take had been
+# measured, and nothing made the directory. Under a missing directory that is a
+# `FileNotFoundError` out of `main`: exit 1 and a traceback -- a reader takes it
+# for a failed measurement -- with the whole report lost.
+#
+# WHAT RUNS FOR REAL: the inventory over the cache built here, the report and
+# its JSON, with the estimator behind the stand-in this file already uses.
+#
+# The input that defeats a `mkdir` guard is carried on purpose: a symlink at the
+# destination whose target directory is gone. Its parent exists and it is not a
+# directory, so the pre-flight passes and only the write fails -- for every
+# user, root included, where a read-only directory would not.
+
+def _complete_cache(root, monkeypatch) -> None:
+    """Every tom take present, so only the `--json` path is left to refuse."""
+    _cache(root, tm.VOICES)
+    monkeypatch.setattr(tm, "CACHE", root)
+    monkeypatch.setattr(tm.P, "measure", _fast_measure)
+
+
+def _not_a_file(tmp_path: pathlib.Path, kind: str) -> pathlib.Path:
+    """A `--json` that can never be a file: a directory, or a path under one."""
+    if kind == "a-directory":
+        dest = tmp_path / "result.json"
+        dest.mkdir()
+    else:
+        (tmp_path / "as-parent").write_text("not a directory", encoding="utf-8")
+        dest = tmp_path / "as-parent" / "result.json"
+    return dest
+
+
+def test_the_cli_writes_the_json_under_a_directory_that_did_not_exist(
+        root, tmp_path, monkeypatch, capsys):
+    _complete_cache(root, monkeypatch)
+    out = tmp_path / "reports" / "tom-drop" / "result.json"
+    assert tm.main(["--json", str(out)]) == 0
+    assert "REFUSED" not in capsys.readouterr().out
+    res = json.loads(out.read_text(encoding="utf-8"))
+    assert sorted(res["voices"]) == ["HT", "LT", "MT"]
+    assert res["voices"]["LT"]["A"]["n_ok"] == 11
+
+
+@pytest.mark.parametrize("kind", ["a-directory", "a-file-as-parent"])
+def test_the_cli_refuses_a_json_that_cannot_be_a_file_before_anything_is_measured(
+        root, tmp_path, monkeypatch, capsys, kind):
+    _complete_cache(root, monkeypatch)
+
+    def past_the_destination(*a, **k):
+        raise AssertionError("a take was measured before --json was checked")
+    monkeypatch.setattr(tm.P, "measure", past_the_destination)
+    dest = _not_a_file(tmp_path, kind)
+    assert tm.main(["--json", str(dest)]) == 2
+    text = capsys.readouterr().out
+    assert "REFUSED" in text and str(dest) in text, text
+    assert "=== LT" not in text and "THE ANSWER" not in text
+    if kind == "a-file-as-parent":
+        assert (tmp_path / "as-parent").read_text(encoding="utf-8") == "not a directory"
+
+
+def test_a_json_that_cannot_be_written_after_the_measurement_is_refused_with_the_answer(
+        root, tmp_path, monkeypatch, capsys):
+    _complete_cache(root, monkeypatch)
+    dest = tmp_path / "result.json"
+    dest.symlink_to(tmp_path / "gone" / dest.name)
+    assert tm.main(["--json", str(dest)]) == 2
+    text = capsys.readouterr().out
+    assert "=== THE ANSWER:" in text                 # the report was printed first
+    assert "REFUSED" in text and str(dest) in text, text
+    assert not dest.exists()

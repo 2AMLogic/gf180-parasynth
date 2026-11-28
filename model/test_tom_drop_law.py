@@ -429,3 +429,162 @@ def test_the_conga_check_fires_when_the_conga_is_given_the_toms_tuning_slope():
 def test_the_conga_re_examination_refuses_a_voice_it_has_no_files_for():
     with pytest.raises(D.Refused):
         D.conga_cell_errors(voices=("XX",))
+
+
+# --------------------------------------------- the --json destination (#2097) ----
+#
+# THE DEFECT, red-first on main @ 8eb04e5b (2026-11-28): the fit, the prose
+# check and the comparator each wrote their `--json` after the work was done,
+# with `write_text`, and nothing made the directory. Under a missing directory
+# that is a `FileNotFoundError` out of `main`: exit 1 and a traceback -- a
+# reader takes it for a failed check -- with the record lost.
+#
+# WHAT RUNS FOR REAL: `tom_drop_fit.main` and `tom_drop_docs.main` over the
+# committed measurement and documents; both are cheap and need nothing fetched.
+# `tom_drop_compare` reads the licensed 808 From Mars cache, so its `run` is
+# replaced by a result of its own shape and `main` is what is tested.
+#
+# The input that defeats a `mkdir` guard is carried on purpose: a symlink at
+# the destination whose target directory is gone. Its parent exists and it is
+# not a directory, so the pre-flight passes and only the write fails -- for
+# every user, root included, where a read-only directory would not.
+
+BAD_JSON = ["a-directory", "a-file-as-parent"]
+
+
+def _not_a_file(tmp_path: pathlib.Path, kind: str) -> pathlib.Path:
+    """A `--json` that can never be a file: a directory, or a path under one."""
+    if kind == "a-directory":
+        dest = tmp_path / "result.json"
+        dest.mkdir()
+    else:
+        (tmp_path / "as-parent").write_text("not a directory", encoding="utf-8")
+        dest = tmp_path / "as-parent" / "result.json"
+    return dest
+
+
+def _a_dangling_link(dest: pathlib.Path) -> None:
+    """The `--json` path itself is a symlink to a directory that does not exist."""
+    dest.symlink_to(dest.parent / "gone" / dest.name)
+
+
+def _nothing_run(*_a, **_k):
+    raise AssertionError("the work ran before --json was checked")
+
+
+# ---------------------------------------------------------------- the fit ----
+def test_the_fit_writes_its_json_under_a_directory_that_did_not_exist(tmp_path):
+    out = tmp_path / "fits" / "tom-drop" / "law.json"
+    assert F.main(["--json", str(out)]) == 0
+    law = json.loads(out.read_text(encoding="utf-8"))
+    assert law["tom"]["K"] == pytest.approx(LAW["tom"]["K"], rel=1e-9)    # the record is the fit's
+    assert set(law["holdouts"]) == {"accent_B_unseen", "tuning_even_unseen",
+                                    "voice_MT_unseen", "pot_ends_unseen"}
+
+
+@pytest.mark.parametrize("kind", BAD_JSON)
+def test_the_fit_refuses_a_json_that_cannot_be_a_file_before_the_fit_runs(
+        tmp_path, monkeypatch, capsys, kind):
+    dest = _not_a_file(tmp_path, kind)
+    monkeypatch.setattr(F, "run", _nothing_run)
+    assert F.main(["--json", str(dest)]) == 2
+    err = capsys.readouterr().err                        # the fit's refusals go to stderr
+    assert "REFUSED" in err and str(dest) in err, err
+
+
+def test_a_fit_json_that_cannot_be_written_after_the_fit_is_refused(tmp_path, capsys):
+    dest = tmp_path / "law.json"
+    _a_dangling_link(dest)
+    assert F.main(["--json", str(dest)]) == 2
+    out, err = capsys.readouterr()
+    assert "HELD OUT" in out                             # the report was printed first
+    assert "REFUSED" in err and str(dest) in err, err
+    assert not dest.exists()
+
+
+# ---------------------------------------------------------- the prose check ----
+def test_the_prose_check_writes_its_json_under_a_directory_that_did_not_exist(tmp_path):
+    """With and without `--json` the exit is the check's own verdict."""
+    bare = D.main([])
+    out = tmp_path / "checks" / "prose.json"
+    assert D.main(["--json", str(out)]) == bare
+    r = json.loads(out.read_text(encoding="utf-8"))
+    assert r["congas"]["verdict"] in ("PASS", "FAIL") and "prose_disagreements" in r
+
+
+@pytest.mark.parametrize("kind", BAD_JSON)
+def test_the_prose_check_refuses_a_json_that_cannot_be_a_file_before_the_check_runs(
+        tmp_path, monkeypatch, capsys, kind):
+    dest = _not_a_file(tmp_path, kind)
+    monkeypatch.setattr(D, "run", _nothing_run)
+    assert D.main(["--json", str(dest)]) == 2
+    out = capsys.readouterr().out                       # this one's refusals go to stdout
+    assert "REFUSED" in out and str(dest) in out, out
+
+
+def test_a_prose_json_that_cannot_be_written_after_the_check_is_refused(tmp_path, capsys):
+    dest = tmp_path / "prose.json"
+    _a_dangling_link(dest)
+    assert D.main(["--json", str(dest)]) == 2
+    out = capsys.readouterr().out
+    assert "-> PASS" in out or "-> FAIL" in out           # the verdict was printed first
+    assert "REFUSED" in out and str(dest) in out, out
+
+
+def test_a_read_only_parent_is_refused_at_the_write_with_the_verdict_printed(tmp_path, capsys):
+    """`parent.mkdir(exist_ok=True)` on a directory that is already there says
+    nothing about permission, so a read-only parent passes the pre-flight and
+    fails at the write: REFUSED (2) after the check, its verdict still printed.
+    Needs a user subject to file permissions; root writes regardless."""
+    locked = tmp_path / "locked"
+    locked.mkdir()
+    locked.chmod(0o500)
+    try:
+        if os.access(locked, os.W_OK, effective_ids=True):
+            pytest.skip("requires a user subject to file write permissions")
+        dest = locked / "prose.json"
+        assert D.main(["--json", str(dest)]) == 2
+        out = capsys.readouterr().out
+        assert "-> PASS" in out or "-> FAIL" in out
+        assert "REFUSED" in out and str(dest) in out, out
+        assert not dest.exists()
+    finally:
+        locked.chmod(0o700)
+
+
+# ------------------------------------------------------------ the comparator ----
+def _a_run_of_its_own_shape(stage: str) -> dict:
+    """What `run` hands `main`, with no rows: the shape `main` prints and
+    writes, without the licensed cache."""
+    return {"stage": stage, "provenance": {"drums_fx_sha256": "0" * 16},
+            "shipped_constants": {"TOM_DROP_RATIO": dx.TOM_DROP_RATIO},
+            "resample_control": {"cases": []}, "rows": []}
+
+
+def test_the_comparator_writes_its_json_under_a_directory_that_did_not_exist(tmp_path, monkeypatch):
+    monkeypatch.setattr(C, "run", _a_run_of_its_own_shape)
+    out = tmp_path / "comparisons" / "before" / "rows.json"
+    assert C.main(["--stage", "before", "--json", str(out)]) == 0
+    assert json.loads(out.read_text(encoding="utf-8"))["stage"] == "before"
+
+
+@pytest.mark.parametrize("kind", BAD_JSON)
+def test_the_comparator_refuses_a_json_that_cannot_be_a_file_before_the_comparison(
+        tmp_path, monkeypatch, capsys, kind):
+    dest = _not_a_file(tmp_path, kind)
+    monkeypatch.setattr(C, "run", _nothing_run)
+    assert C.main(["--json", str(dest)]) == 2
+    err = capsys.readouterr().err                    # the comparator's refusals go to stderr
+    assert "REFUSED" in err and str(dest) in err, err
+
+
+def test_a_comparator_json_that_cannot_be_written_after_the_comparison_is_refused(
+        tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(C, "run", _a_run_of_its_own_shape)
+    dest = tmp_path / "rows.json"
+    _a_dangling_link(dest)
+    assert C.main(["--stage", "before", "--json", str(dest)]) == 2
+    out, err = capsys.readouterr()
+    assert "stage: before" in out                    # the report was printed first
+    assert "REFUSED" in err and str(dest) in err, err
+    assert not dest.exists()

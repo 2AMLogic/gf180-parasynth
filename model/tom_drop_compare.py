@@ -80,6 +80,24 @@ def indexed_sizes() -> dict:
     return sizes
 
 
+def check_json_destination(name: str) -> None:
+    """Make `--json`'s parent directory, or REFUSE the path.
+
+    Called before anything is compared, so a path that names a directory, or
+    whose parent cannot be made, is refused in seconds. It used to raise at the
+    write instead, after the whole comparison: exit 1 and a traceback, with
+    every row lost (#2097). A parent that is there but not writable passes
+    here -- `mkdir(exist_ok=True)` cannot see permission -- and is REFUSED at
+    the write."""
+    p = pathlib.Path(name)
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as why:
+        raise Refused(f"--json {name}: its parent cannot be made ({why})") from why
+    if p.is_dir():
+        raise Refused(f"--json {name} is a directory, not a file to write")
+
+
 def member(voice: str, accent: str, tuning: int) -> str:
     return f"{STEM}/{FOLDER[voice]}/Clean/Digital/{accent}/{FILE_STEM[voice]} {accent} 808 {tuning:02d}.wav"
 
@@ -286,6 +304,8 @@ def main(argv=None) -> int:
     ap.add_argument("--json", default=None)
     a = ap.parse_args(argv)
     try:
+        if a.json:
+            check_json_destination(a.json)                 # before anything is compared
         r = run(a.stage)
     except Refused as e:
         print(f"REFUSED: {e}", file=sys.stderr)
@@ -313,7 +333,12 @@ def main(argv=None) -> int:
         print(f"\nagainst the machine, over {s['n']} rows: bias {s['bias']:+.4f}, "
               f"rms {s['rms']:.4f}, worst {s['max_abs']:.4f} ({s['worst_row'].split('/')[-1]})")
     if a.json:
-        pathlib.Path(a.json).write_text(json.dumps(r, indent=1), encoding="utf-8")
+        try:
+            pathlib.Path(a.json).write_text(json.dumps(r, indent=1), encoding="utf-8")
+        except OSError as why:
+            print(f"REFUSED: the report above was compared, but --json {a.json} could not be "
+                  f"written ({why})", file=sys.stderr)
+            return 2
         print(f"wrote {a.json}")
     return 0
 
