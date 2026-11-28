@@ -234,9 +234,9 @@ def cmd_measure():
             e = f"{vo-vr:9.2f}" if (vr is not None and vo is not None) else f"{'-':>9s}"
             print(f"  {t*1e3:8.1f} {f(vr)} {f(vo)} {e}   ref {rh:5.1f}/{rl:5.1f}  ours {oh:5.1f}/{ol:5.1f}")
     if not answered:
-        print(f"\nREFUSED: measured nothing: 0 of {cells} cell(s) answered; every partial of RS and "
-              f"CB, reference and ours, is within {FLOOR_MARGIN_DB:.0f} dB of its record's floor at "
-              f"every time point")
+        print(f"\nREFUSED: measured nothing: 0 of {cells} cell(s) answered; no cell of RS and "
+              f"CB, reference and ours, had both partials more than {FLOOR_MARGIN_DB:.0f} dB above "
+              f"its record's floor")
         return REFUSED
     return PASS
 

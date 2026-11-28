@@ -365,3 +365,12 @@ def test_one_floor_bound_side_does_not_refuse_a_run_whose_other_side_answers(
     assert all(row[1] == "REFUSED" and row[2] != "REFUSED" and row[3] == "-" for row in rs), table
     assert rc == exit_contract.PASS, (rc, out)
     assert not any(ln.startswith("REFUSED") for ln in out.splitlines()), out
+
+
+def test_the_refusal_reason_names_the_cell_not_every_partial(tmp_path, monkeypatch, capsys):
+    """A cell needs only ONE weak partial to be refused, so the reason must not
+    claim every partial was within the margin (#1934 review)."""
+    _, out = _measure(tmp_path, monkeypatch, capsys, ALL_FLOOR_BOUND)
+    verdict = [ln for ln in out.splitlines() if ln.startswith("REFUSED")][0]
+    assert "every partial" not in verdict, verdict
+    assert "both partials" in verdict, verdict

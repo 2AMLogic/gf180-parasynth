@@ -211,8 +211,10 @@ def _measure_response(dev, name, cut_setting, cut_hz, res, amp=0.25):
     try:
         gain = response_curve(dev, name, cut_setting, res, amp)
     except am.InsufficientEvidence as exc:
+        # `unacquired`: the rig returned no curve at all -- distinct from an
+        # estimator refusing a curve that was rendered (#1857, `_answered`).
         return dict(device=name, cut_setting=cut_setting, cut_hz=cut_hz, res=res,
-                    ok=False, why=str(exc))
+                    ok=False, why=str(exc), unacquired=True)
     return response_row(FREQS, np.asarray(gain), cut_hz, name, res, cut_setting)
 
 
@@ -379,6 +381,10 @@ KIND = {"ours": "ours", "ours-tanh256": "probe", "ours-huovtune": "probe",
         "ours-skew30": "INJECTED DEFECT"}
 
 
+# Every key `main` writes as `<key>-<device>.json`.
+STAGE_KEYS = ("selfosc", "response", "peak", "tracking", "drive", "peakdrive", "bigdrive")
+
+
 def _load(out, stage, dev):
     p = os.path.join(out, f"{stage}-{dev}.json")
     if not os.path.exists(p):
@@ -388,10 +394,12 @@ def _load(out, stage, dev):
 
 
 def _answered(rows) -> bool:
-    """Whether a stage's rows hold anything `guard` did not write as
-    `not_answerable`. The same predicate serves a run (its stages) and
-    `--report` (one stage file at a time)."""
-    return any("not_answerable" not in r for r in rows)
+    """Whether a stage's rows hold anything that was acquired: not written by
+    `guard` as `not_answerable`, and not a response whose rig returned no
+    curve (`unacquired`). A rig that rendered and whose estimator then refused
+    has answered. The same predicate serves a run (its stages) and `--report`
+    (one stage file at a time)."""
+    return any("not_answerable" not in r and not r.get("unacquired") for r in rows)
 
 
 def _stage_files(out) -> list:
@@ -400,9 +408,12 @@ def _stage_files(out) -> list:
     status keys on what the directory HOLDS, not on what it shows."""
     if not os.path.isdir(out):
         return []
-    split = (fname[:-5].rpartition("-") for fname in sorted(os.listdir(out))
+    # Device names contain hyphens (`ours-tanh256`), stage names never do:
+    # split at the FIRST hyphen and require both halves to be registered.
+    split = (fname[:-5].partition("-") for fname in sorted(os.listdir(out))
              if fname.endswith(".json"))
-    return [(stage, device) for stage, _, device in split if device in KIND]
+    return [(stage, device) for stage, _, device in split
+            if stage in STAGE_KEYS and device in KIND]
 
 
 def _f(v, n=1, w=8):

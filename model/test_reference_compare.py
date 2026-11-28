@@ -468,3 +468,49 @@ def test_the_control_a_report_passes_on_a_measurement_it_does_not_display(tmp_pa
     rc, out = _report(tmp_path, capsys)
     assert rc == PASS, (rc, out)
     assert _verdicts(out) == [], out
+
+
+# -- review of #1934: the filenames the writer produces, and a refused acquisition
+
+class _NoCurve(_Deaf):
+    """The rig is here and cannot acquire a curve: the response call raises
+    InsufficientEvidence (what a silent Diva capture does)."""
+
+    def tone_gain_db(self, *a, **k):
+        raise rcmp.am.InsufficientEvidence("reference is silent in a requested bin")
+
+    noise_curve = tone_gain_db
+
+
+@pytest.mark.parametrize("device", sorted(rcmp.KIND))
+def test_report_recognises_every_registered_device_filename(tmp_path, capsys, device):
+    """Splitting at the last hyphen dropped seven registered devices."""
+    (tmp_path / f"selfosc-{device}.json").write_text(json.dumps(
+        [dict(device=device, ok=True, res=0.5, rms=0.1)]))
+    assert rcmp._stage_files(str(tmp_path)) == [("selfosc", device)]
+
+
+def test_report_ignores_a_json_file_that_is_not_a_stage_file(tmp_path, capsys):
+    """CONTROL (defeats a filter that accepts any prefix): metadata only is REFUSED."""
+    (tmp_path / "notes-ours.json").write_text(json.dumps([dict(note="metadata only")]))
+    rc, out = _report(tmp_path, capsys)
+    assert rc == REFUSED, (rc, out)
+
+
+@pytest.mark.parametrize("stage", ("peakdrive", "response"))
+def test_a_stage_whose_every_acquisition_was_refused_exits_refused(
+        monkeypatch, tmp_path, capsys, stage):
+    argv = ["--stage", stage, "--devices", "ours"]
+    rc, out = _main(monkeypatch, tmp_path, capsys, argv, {"ours": _NoCurve})
+    rows = _rows(tmp_path, stage, "ours")
+    assert rows and all(r["ok"] is False for r in rows), rows
+    assert rc == REFUSED, (rc, out)
+    rc, out = _report(tmp_path, capsys)
+    assert rc == REFUSED, (rc, out)
+
+
+def test_a_mixed_run_with_one_acquired_curve_still_passes(monkeypatch, tmp_path, capsys):
+    rows = [dict(device="ours", ok=False, why="silent", unacquired=True),
+            dict(device="ours", res=0.5, freqs=[1.0], gain_db=[0.0], corner_hz=None)]
+    assert rcmp._answered(rows)
+    assert not rcmp._answered(rows[:1])
