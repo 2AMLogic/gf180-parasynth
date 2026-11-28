@@ -55,11 +55,44 @@ def corrupt_audio_hash(sandbox, case):
     ("measure_m5a_filter_headroom", "M5A", ()),
     ("measure_m5a_filter_oversample", "M5A", ()),
     ("measure_mono_pulse_2x", "M5A", ("--case", "M5A")),
+    # #1570: both carried a private copy of the loader that raised RuntimeError.
+    ("measure_m5a_pulse_duty", "M5A", ("--shapes", "pulse29")),
+    ("measure_m5a_signal_path", "M5A", ("--cutoff", "14073", "--drive", "0.75")),
 ])
 def test_frozen_audio_mismatch_exits_refused(sandbox, module, case, args):
     corrupt_audio_hash(sandbox, case)
     proc = run_cli(sandbox, module, *args, "--out", "result")
     assert_refused(proc, f"frozen {case} Mini V3 audio hash mismatch")
+
+
+MINI_V4_IDENTITY = {"name": "Mini V4", "version": "4.0.4.6366"}
+
+
+@pytest.mark.parametrize(("damage", "reason"), [
+    ("suite", "reference-suite mix"),
+    ("case", "frozen manifest identifies as 'M5B', expected M5A"),
+])
+@pytest.mark.parametrize(("module", "args", "prefix"), [
+    ("measure_m5a_pulse_duty", ("--shapes", "pulse29"), "REFUSED: "),
+    ("measure_m5a_signal_path", ("--cutoff", "14073", "--drive", "0.75"), "REFUSED: "),
+    ("measure_m5a_attack_bias", (), "measure_m5a_attack_bias: REFUSED -- "),
+])
+def test_foreign_manifest_exits_refused_and_writes_no_report(
+        sandbox, module, args, prefix, damage, reason):
+    # #1570: none of the three checked the suite (#1050) or the case id, so a
+    # Mini V4 record or an M5B manifest in the M5A slot produced a valid report.
+    path = sandbox / SCORECARD / "mono-m5a-miniv3/manifest.json"
+    manifest = json.loads(path.read_text())
+    if damage == "suite":
+        manifest["identity"] = {**manifest["identity"], **MINI_V4_IDENTITY}
+    else:
+        manifest["case_id"] = "M5B"
+    path.write_text(json.dumps(manifest))
+    proc = run_cli(sandbox, module, *args, "--out", "result")
+    assert proc.returncode == 2, (proc.stdout, proc.stderr)
+    assert any(line.startswith(f"{prefix}{reason}") for line in proc.stdout.splitlines()), proc.stdout
+    assert "Traceback" not in proc.stdout + proc.stderr
+    assert not (sandbox / "result").exists()
 
 
 @pytest.mark.parametrize("module", ["measure_m5_operating_level", "measure_m5_saw_drive"])
