@@ -459,3 +459,43 @@ def test_check_reports_label_sites_without_pinning_them(monkeypatch):
     ok, lines = census_mod.check()
     assert ok, "\n".join(lines)
     assert any("2 label/status sites" in ln for ln in lines)
+
+
+def test_shared_trees_parse_each_file_once_and_change_no_result(tmp_path, monkeypatch):
+    """The three passes share one read+parse per file (the census's runtime is
+    nearly all parsing, #1827 review).  Control: counting `ast.parse` calls
+    fails if a pass re-parses; comparing against the standalone call fails if
+    sharing changes a result."""
+    src = textwrap.dedent('''
+        import sys
+        REFUSED = 2
+        def main():
+            try:
+                pass
+            except Refused:
+                return 2
+            print("REFUSED: no evidence")
+            return 1
+    ''')
+    (tmp_path / "a.py").write_text(src)
+    (tmp_path / "test_skip.py").write_text(src)
+    (tmp_path / "bad.py").write_text("def (:\n")
+    monkeypatch.setattr(census_mod, "ROOT", tmp_path)
+    files = ["a.py", "test_skip.py", "bad.py"]
+    contract = {"REFUSED": 2}
+
+    real_parse, calls = ast.parse, []
+    monkeypatch.setattr(census_mod.ast, "parse",
+                        lambda text, *a, **k: calls.append(text) or real_parse(text, *a, **k))
+    trees = census_mod.parse_sources(files)
+    shared = (census_mod.handler_census(files, contract, trees),
+              census_mod.constant_census(files, trees),
+              census_mod.label_census(files, contract, frozenset({2}), trees))
+    assert len(calls) == 2, "a.py and bad.py are parsed once each; test_ files never"
+    assert set(trees) == {"a.py"}
+
+    alone = (census_mod.handler_census(files, contract),
+             census_mod.constant_census(files),
+             census_mod.label_census(files, contract, frozenset({2})))
+    assert shared == alone
+    assert shared[0] and shared[1], "the fixture must exercise handler and constant passes"

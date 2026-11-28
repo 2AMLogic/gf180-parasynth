@@ -331,17 +331,38 @@ def _return_status(value, local: dict[str, int], imported: dict[str, str],
     return None
 
 
-def handler_census(files: list[str], contract: dict[str, int]) -> dict[int, list[tuple[str, str, int]]]:
-    """Per exit status, the `except <refusal>: ... return <status>` sites,
-    each as (file, enclosing function, line)."""
-    by: dict[int, list[tuple[str, str, int]]] = collections.defaultdict(list)
+def parse_sources(files: list[str]) -> dict[str, ast.Module]:
+    """Parse each scanned file ONCE.  Parsing is essentially the whole runtime
+    of the census (~3 s per pass over the tracked tree), so `census()` parses
+    here and hands the trees to all three passes.  Unreadable or unparseable
+    files are skipped, exactly as each pass skipped them before."""
+    out: dict[str, ast.Module] = {}
     for f in files:
         if pathlib.Path(f).name.startswith("test_") or f == str(CONTRACT):
             continue
         try:
-            tree = ast.parse((ROOT / f).read_text())
+            out[f] = ast.parse((ROOT / f).read_text())
         except (OSError, SyntaxError):
             continue
+    return out
+
+
+def _scanned_trees(files: list[str], trees: dict[str, ast.Module] | None):
+    """(file, tree) per scanned file: from `trees` when the caller already
+    parsed them, else parsed here.  Same exclusions either way."""
+    if trees is None:
+        trees = parse_sources(files)
+    for f in files:
+        if f in trees:
+            yield f, trees[f]
+
+
+def handler_census(files: list[str], contract: dict[str, int],
+                   trees: dict[str, ast.Module] | None = None) -> dict[int, list[tuple[str, str, int]]]:
+    """Per exit status, the `except <refusal>: ... return <status>` sites,
+    each as (file, enclosing function, line)."""
+    by: dict[int, list[tuple[str, str, int]]] = collections.defaultdict(list)
+    for f, tree in _scanned_trees(files, trees):
         local = _module_int_assigns(tree)
         imported = _exit_contract_imports(tree)
         for func, node in _handlers_in_scope(tree):
@@ -356,18 +377,13 @@ def handler_census(files: list[str], contract: dict[str, int]) -> dict[int, list
     return dict(by)
 
 
-def constant_census(files: list[str]) -> dict[int, list[tuple[str, str, int]]]:
+def constant_census(files: list[str],
+                    trees: dict[str, ast.Module] | None = None) -> dict[int, list[tuple[str, str, int]]]:
     """Per exit status, the module-level `REFUSED = <int>` declarations.  These
     are invisible to `handler_census` when no handler returns the constant.
     Module-level by construction, so every site keys as MODULE_LEVEL."""
     by: dict[int, list[tuple[str, str, int]]] = collections.defaultdict(list)
-    for f in files:
-        if pathlib.Path(f).name.startswith("test_") or f == str(CONTRACT):
-            continue
-        try:
-            tree = ast.parse((ROOT / f).read_text())
-        except (OSError, SyntaxError):
-            continue
+    for f, tree in _scanned_trees(files, trees):
         for st in tree.body:
             if not isinstance(st, ast.Assign):
                 continue
@@ -446,8 +462,8 @@ def label_sites(tree: ast.Module, local: dict[str, int], imported: dict[str, str
             if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 visit(child, child, False)
             elif isinstance(child, ast.ExceptHandler):
-                refusal = bool(set(_handled_classes(child)) & REFUSAL_CLASSES)
-                visit(child, func, in_refusal_handler or refusal)
+                is_refusal = bool(set(_handled_classes(child)) & REFUSAL_CLASSES)
+                visit(child, func, in_refusal_handler or is_refusal)
             else:
                 if func is not None:
                     if isinstance(child, ast.Call) and isinstance(child.func, ast.Name) \
@@ -478,18 +494,13 @@ def label_sites(tree: ast.Module, local: dict[str, int], imported: dict[str, str
 
 
 def label_census(files: list[str], contract: dict[str, int],
-                 no_evidence: frozenset[int]) -> dict[int, list[tuple[str, str, int]]]:
+                 no_evidence: frozenset[int],
+                 trees: dict[str, ast.Module] | None = None) -> dict[int, list[tuple[str, str, int]]]:
     """Per exit status, the label/status sites, each as (file, enclosing
     function, line).  REPORTED, never pinned (issue #1790); same file
     exclusions as the other two passes."""
     by: dict[int, list[tuple[str, str, int]]] = collections.defaultdict(list)
-    for f in files:
-        if pathlib.Path(f).name.startswith("test_") or f == str(CONTRACT):
-            continue
-        try:
-            tree = ast.parse((ROOT / f).read_text())
-        except (OSError, SyntaxError):
-            continue
+    for f, tree in _scanned_trees(files, trees):
         local = _module_int_assigns(tree)
         imported = _exit_contract_imports(tree)
         for status, func, ln in label_sites(tree, local, imported, contract, no_evidence):
@@ -507,8 +518,10 @@ def census() -> dict:
     no_evidence = _contract_no_evidence(contract_tree)
     _runner_honours_contract(runner_tree)
     contract_ints = _contract_ints(contract_tree)
-    handlers, constants = handler_census(files, contract_ints), constant_census(files)
-    labels = label_census(files, contract_ints, no_evidence)
+    trees = parse_sources(files)  # one read+parse per file, shared by all three passes
+    handlers = handler_census(files, contract_ints, trees)
+    constants = constant_census(files, trees)
+    labels = label_census(files, contract_ints, no_evidence, trees)
     codes = sorted(set(handlers) | set(constants) | set(labels))
     return {
         "n_python_files": len(files),
