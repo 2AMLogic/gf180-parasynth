@@ -3339,6 +3339,20 @@ def go(p):
         print("REFUSED", e)
 '''
 
+# the HANDLER's def defines a class of the borrowed name: another class entirely
+BORROWED_CALLER_DEF_LOCAL_GUARD = '''
+from lender_a import Unbindable           # the subclass, by from-import
+import borrower
+
+def go(p):
+    class Unbindable(Exception):         # THIS def's class shadows the borrow
+        pass
+    try:
+        return borrower.by_name(p)
+    except Unbindable as e:              # catches the def's class, not the lender's subclass
+        print("REFUSED", e)
+'''
+
 BORROWED_CALLER_CLI = '''
 import sys
 import lender_a
@@ -3588,6 +3602,26 @@ def test_a_borrowed_name_rebound_by_a_later_local_class_is_no_longer_the_subclas
         assert "Unbindable" not in idx[str(tmp_path / "borrower.py")].from_imports
 
 
+def test_a_handler_name_rebound_by_a_def_local_class_covers_nothing(tmp_path, monkeypatch):
+    """The binding rule on the HANDLER side, where what is at stake is a
+    false covered. `except Unbindable` in a def that defines its own
+    `Unbindable(Exception)` names that class, and the lender's subclass the
+    borrower raises goes past it -- the interpreter says so -- so the
+    handler covers nothing and the site is an escape. The def-local class is
+    in no import table: only the scope's own names stop the lookup from
+    falling through to the module's from-import, which reads
+    `covered(exact)` here."""
+    files, idx = _local_tree(tmp_path, {
+        "lender_a": SUBCLASS_LENDER, "borrower": BORROWER,
+        "caller_borrowed": BORROWED_CALLER_DEF_LOCAL_GUARD})
+    assert _subclass_verdict(monkeypatch, tmp_path, "caller_borrowed", "go",
+                             BORROWED_STEMS, "borrower") == "escaped"
+    got = _sites_for(files, idx, "caller_borrowed")
+    assert len(got) == 1, got
+    assert (got[0]["origins"], got[0]["classification"], got[0]["guard"],
+            got[0]["uncovered"]) == (["lender_a"], "candidate-escape", "none", ["lender_a"]), got[0]
+
+
 def test_a_borrowers_other_dotted_raises_invent_no_origin(tmp_path):
     """The pre-filter's widening is no licence for the old dotted credit.
     Before #2015 a callee without a family was dropped before ANY of its
@@ -3682,7 +3716,7 @@ def _mutant_rows(mut, files, caller: str) -> list[tuple]:
 
 
 def test_with_the_lender_lookup_reverted_the_borrowed_raise_is_absent_again(tmp_path):
-    """Mutant 1 of 8: `raise_origins` back to reading a family name and the
+    """Mutant 1 of 9: `raise_origins` back to reading a family name and the
     callee's own class alone, compiled in memory from the shipped source.
     The issue's own measurement, re-derived -- the borrower's def raises
     nothing the census knows -- so the red-first control is red under it and
@@ -3701,7 +3735,7 @@ def test_with_the_lender_lookup_reverted_the_borrowed_raise_is_absent_again(tmp_
 
 
 def test_with_the_prefilter_unwidened_the_borrower_is_dropped_again(tmp_path):
-    """Mutant 2 of 8: the single-callee pre-filter back to a family NAME
+    """Mutant 2 of 9: the single-callee pre-filter back to a family NAME
     alone. The lookup is intact and resolves the raise, and the row is gone
     anyway -- the borrower binds no family name, which is the second half of
     the issue and the half a lookup alone leaves unfixed."""
@@ -3714,7 +3748,7 @@ def test_with_the_prefilter_unwidened_the_borrower_is_dropped_again(tmp_path):
 
 
 def test_with_the_collision_prefilter_unwidened_the_borrowing_candidate_is_dropped(tmp_path):
-    """Mutant 3 of 8: the collision branch's pre-filter, the mirror of the
+    """Mutant 3 of 9: the collision branch's pre-filter, the mirror of the
     last one. A borrower candidate reads as unable to refuse, and the site
     is lost as a quiet collision."""
     mut = _scanner_with(
@@ -3731,7 +3765,7 @@ def test_with_the_collision_prefilter_unwidened_the_borrowing_candidate_is_dropp
 
 
 def test_with_the_handler_reading_reverted_a_guarded_borrower_is_an_escape(tmp_path):
-    """Mutant 4 of 8: `handler_origins` back to `other` for a name that is
+    """Mutant 4 of 9: `handler_origins` back to `other` for a name that is
     neither a family nor `.Refused`. The raise still resolves and the
     caller is reported a candidate escape under the one handler that
     catches it -- the shape the issue named, and the interpreter says so."""
@@ -3745,7 +3779,7 @@ def test_with_the_handler_reading_reverted_a_guarded_borrower_is_an_escape(tmp_p
 
 
 def test_with_every_borrowed_name_counted_the_rule_8_control_goes_red(tmp_path):
-    """Mutant 5 of 8: the fix as its own cheap imitation -- any name borrowed
+    """Mutant 5 of 9: the fix as its own cheap imitation -- any name borrowed
     from a module with a family subclass counts as one, the lender's map
     aside. `Unbindable(Exception)` beside an intact family is red under it:
     two sites invented for raises Python does not catch as refusals."""
@@ -3763,7 +3797,7 @@ def test_with_every_borrowed_name_counted_the_rule_8_control_goes_red(tmp_path):
 
 
 def test_with_the_class_binding_reverted_a_shadowed_borrow_is_counted_again(tmp_path):
-    """Mutant 6 of 8: a module-level class statement no longer unbinds an
+    """Mutant 6 of 9: a module-level class statement no longer unbinds an
     earlier import of its name. `raise Unbindable(...)` after
     `from lender_a import Unbindable; class Unbindable(Exception)` reads as
     the subclass again -- a site invented for a raise Python does not catch
@@ -3781,7 +3815,7 @@ def test_with_the_class_binding_reverted_a_shadowed_borrow_is_counted_again(tmp_
 
 
 def test_with_the_def_local_class_unread_a_module_borrow_shines_through(tmp_path):
-    """Mutant 7 of 8: a def's own class no longer shadows in that def, so
+    """Mutant 7 of 9: a def's own class no longer shadows in that def, so
     the module-level borrow is read under it -- `over_the_module_borrow`
     raises the def's `Unbindable(Exception)` and reads as the lender's
     subclass. Without the def's own names the lookup falls through the
@@ -3796,7 +3830,7 @@ def test_with_the_def_local_class_unread_a_module_borrow_shines_through(tmp_path
 
 
 def test_with_the_dotted_credit_unguarded_a_borrowers_other_raises_invent_origins(tmp_path):
-    """Mutant 8 of 8: the old dotted credit let back onto a callee without a
+    """Mutant 8 of 9: the old dotted credit let back onto a callee without a
     family -- which is what the widened pre-filter does on its own.
     `raise self.Error(...)` is an origin `self` and `lender_a.NotAClass`
     an origin `lender_a`: two sites for raises that are no refusal, and the
@@ -3809,3 +3843,18 @@ def test_with_the_dotted_credit_unguarded_a_borrowers_other_raises_invent_origin
     assert _mutant_rows(mut, files, "caller_borrowed") == [
         ("borrower.of_self", "candidate-escape", ("self",)),
         ("borrower.of_the_lender", "candidate-escape", ("lender_a",))]
+
+
+def test_with_the_scopes_own_names_unread_a_shadowing_handler_covers_the_subclass(tmp_path):
+    """Mutant 9 of 9: the scope's own names no longer shadow, so the
+    handler's lookup falls through to the module's from-import and
+    `except Unbindable` -- the def's own class -- is credited for the
+    lender's subclass: `covered(exact)` where the interpreter lets the
+    refusal out. The false covered a merge of this raise side with a
+    handler reading that consults the import tables alone would ship."""
+    mut = _scanner_with("            if txt in b.imports or txt in b.own:",
+                        "            if txt in b.imports:")
+    files = _local_tree(tmp_path, {"lender_a": SUBCLASS_LENDER, "borrower": BORROWER,
+                                   "caller_borrowed": BORROWED_CALLER_DEF_LOCAL_GUARD})[0]
+    assert _mutant_rows(mut, files, "caller_borrowed") == [
+        ("borrower.by_name", "covered(exact)", ("lender_a",))]
