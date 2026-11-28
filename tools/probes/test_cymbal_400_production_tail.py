@@ -655,9 +655,9 @@ def test_frozen_record_declares_the_pre_measurement_commitments():
 # -- truncated JSON, bytes that are not UTF-8 -- was `json.loads(path.read_text())`: exit
 # 1 by traceback, where this tool's declared refusal is exit 2 and nothing was measured.
 # The refusal tests run the real CLI as a subprocess, nothing stubbed, and need neither
-# the corpus nor a clean tree: each refusal comes before either is consulted. The two
-# controls at the end drive `main()` in process, because a monkeypatch cannot reach a
-# subprocess.
+# the corpus nor a clean tree: each refusal comes before either is consulted. The
+# injected-bug control drives `main()` in process, because a monkeypatch cannot reach a
+# subprocess, and the last control calls the loader itself.
 RAW_READ_RAISES = {"truncated": json.JSONDecodeError,
                    "not-utf8": UnicodeDecodeError,
                    "empty": json.JSONDecodeError,
@@ -739,11 +739,13 @@ def test_without_the_loader_measure_is_the_shipped_defect(tmp_path, monkeypatch,
     assert not (tmp_path / "result.json").exists()
 
 
-def test_the_loader_refuses_only_what_it_names(tmp_path, monkeypatch, capsys):
+def test_the_loader_refuses_only_what_it_names(tmp_path, monkeypatch):
     """#1774 AC 7: the catch is `manifest.Refused` and `OSError`, never `Exception`. An
     exception that is neither -- an implementation error inside the reader -- is an
-    execution error: it escapes `main()` as itself rather than being relabelled a
-    refusal, which is the inverse defect (test_main_lets_a_non_refusal_escape_as_a_traceback)."""
+    execution error: it leaves `load_frozen` as itself rather than being relabelled a
+    refusal, which is the inverse defect (test_main_lets_a_non_refusal_escape_as_a_traceback
+    holds `main()` to the same rule). Called on the loader directly, so it fails only for
+    that reason; whether `measure` reads THROUGH the loader is the refusal tests' to assert."""
     frozen = tmp_path / "frozen.json"
     frozen.write_text("{}")
 
@@ -751,5 +753,4 @@ def test_the_loader_refuses_only_what_it_names(tmp_path, monkeypatch, capsys):
         raise TypeError("an implementation error inside the reader, not a refusal")
     monkeypatch.setattr(pt.manifest, "load_json_refused", boom)
     with pytest.raises(TypeError, match="not a refusal"):
-        pt.main(_cli(tmp_path, frozen))
-    assert "REFUSED" not in capsys.readouterr().out
+        pt.load_frozen(frozen)

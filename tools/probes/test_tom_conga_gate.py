@@ -370,8 +370,8 @@ def test_injection_turns_its_known_answer_red(name):
 # traceback: FAIL, "the comparison ran and disagreed" (tools/exit_contract.py), where this
 # tool's declared refusal is exit 2 and nothing was judged. The refusal tests run the real
 # CLI as a subprocess, nothing stubbed: what is asserted is what an operator sees. The
-# two controls at the end drive `main()` in process, because a monkeypatch cannot reach a
-# subprocess. None of these needs the corpus.
+# injected-bug control drives `main()` in process, because a monkeypatch cannot reach a
+# subprocess, and the last control calls the loader itself. None of these needs the corpus.
 REPO = pathlib.Path(__file__).resolve().parents[2]
 ARCHIVED = REPO / "docs" / "scorecard" / "tom-conga-558"
 #: Each way a user-supplied file can fail to be read, with the exception the shipped
@@ -459,11 +459,13 @@ def test_without_the_loader_judge_is_the_shipped_defect(tmp_path, monkeypatch, k
     assert not out.exists()
 
 
-def test_the_loader_refuses_only_what_it_names(tmp_path, monkeypatch, capsys):
+def test_the_loader_refuses_only_what_it_names(tmp_path, monkeypatch):
     """#1774 AC 7: the catch is `manifest.Refused` and `OSError`, never `Exception`. An
     exception that is neither -- an implementation error inside the reader -- is an
-    execution error: it escapes `main()` as itself rather than being relabelled a
-    refusal, which is the inverse defect."""
+    execution error: it leaves `load_record` as itself rather than being relabelled a
+    refusal, which is the inverse defect. Called on the loader directly, so it fails only
+    for that reason; whether the CLI reads THROUGH the loader is the refusal tests' to
+    assert."""
     rec = tmp_path / "record.json"
     rec.write_text("{}")
 
@@ -471,5 +473,4 @@ def test_the_loader_refuses_only_what_it_names(tmp_path, monkeypatch, capsys):
         raise TypeError("an implementation error inside the reader, not a refusal")
     monkeypatch.setattr(tc.manifest, "load_json_refused", boom)
     with pytest.raises(TypeError, match="not a refusal"):
-        tc.main(["judge", str(rec), "--out", str(tmp_path / "judge.json")])
-    assert "REFUSED" not in capsys.readouterr().out
+        tc.load_record(rec, "the run record")
