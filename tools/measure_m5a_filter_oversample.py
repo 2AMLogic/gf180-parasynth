@@ -23,6 +23,7 @@ import scipy
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "tools"))
+import audio_measure as am
 import mono_m5a_score as m5a
 import refusal
 from exit_contract import REFUSED
@@ -337,7 +338,13 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     try:
         report = run(ROOT / "build/scorecard/m5a-filter-rate-audio")
-    except refusal.Refused as exc:
+    # `am.InsufficientEvidence` is the estimator's own refusal, listed BY CLASS
+    # beside the base (#1751, #1763, #1902): it subclasses AssertionError, so
+    # `except refusal.Refused` could not see it, and a stage window with no
+    # harmonic evidence left `run` as an exit-1 traceback at the `measure`
+    # call -- a refusal rendered as FAIL. Not AssertionError, not Exception:
+    # an unrelated fault stays an execution error.
+    except (refusal.Refused, am.InsufficientEvidence) as exc:
         print(f"REFUSED: {exc}")
         return REFUSED
     out = ROOT / args.out
