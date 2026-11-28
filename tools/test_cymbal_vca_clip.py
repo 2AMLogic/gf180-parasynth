@@ -15,7 +15,14 @@ The module makes two claims and they need different kinds of test:
 Plus the usual: every named property must be moved by some injected defect, the
 two blind defects must be blind, and the numbers quoted in the docstring must
 come from the artifacts rather than from the prose.
+
+And one answer from outside float64 (#2147): the clipper against its own
+definition in 80-digit decimal arithmetic. `clip()` is DEFINED as a difference
+of two tanh over `1 - tanh(b)^2`, and at the documented bias that form is exact
+-- so every property in the module passed while the same expression, at
+`--asym 19`, returned roundoff.
 """
+import decimal
 import math
 import pathlib
 import sys
@@ -143,6 +150,193 @@ def test_thd_rises_with_drive_and_the_refusal_threshold_is_reachable():
     t = [v.thd_db(d) for d in v.DRIVE_DB]
     assert all(b > a for a, b in zip(t, t[1:]))
     assert max(t) > v.MAX_THD_DB or min(t) < v.MAX_THD_DB
+
+
+# ---------------------------------------------------------------------------
+# the clipper against its own definition, in decimal (#2147)
+# ---------------------------------------------------------------------------
+GRID_ASYM = (0.5, 5.0, 12.0, 19.0)
+GRID_DRIVE_DB = (-12.0, 0.0, 12.0)
+UNIT_SINE_RMS = math.sqrt(0.5)
+
+
+def _errors(asym, *, crests=(1.0, v.KA_CREST), n=v.KA_N_CLIP, defect=None) -> dict:
+    """{(crest, drive): the clipper's largest sample-by-sample relative error
+    against its definition} on one period of a sine at that crest."""
+    return {(c, d): v.clip_rel_error(v.clip_input(c, n), d, asym, defect=defect, rms=UNIT_SINE_RMS)
+            for c in crests for d in GRID_DRIVE_DB}
+
+
+@pytest.mark.parametrize("asym", GRID_ASYM)
+def test_the_clipper_is_its_own_definition_in_decimal_arithmetic_at_every_point(asym):
+    """The grid of #2147 -- asym 0.5, 5, 12 and 19 against drive -12, 0 and
+    +12 dB -- at the unit sine's crest and at `KA_CREST`, the one the module's
+    own renders reach. Every sample must be within `CLIP_REL_ERR_MAX` of
+    `(tanh(u+b) - tanh(b)) / (g (1 - tanh(b)^2))` in 80-digit decimal.
+
+    Relative sample by sample on purpose: at crest 60 and asym 19 the true
+    output runs from 0.09 to -3e15, and an error taken against the peak would
+    not see the half of the waveform that is small.
+    """
+    err = _errors(asym)
+    assert max(err.values()) < v.CLIP_REL_ERR_MAX, err
+
+
+@pytest.mark.parametrize("asym", [-a for a in GRID_ASYM])
+def test_a_negative_bias_is_as_exact_as_its_mirror(asym):
+    """The bias is swept positive only, but `--asym -19` is inside the domain
+    too, and it is the half where the output explodes (the positive bias
+    clips one side; the negative bias amplifies the other)."""
+    err = _errors(asym)
+    assert max(err.values()) < v.CLIP_REL_ERR_MAX, err
+
+
+def test_the_definition_check_knows_its_own_answers():
+    """The reference is a definition, and a definition can be mistranscribed.
+    By hand, at b = ln3/2: tanh(b) = 1/2 and tanh(2b) = 4/5, so the function is
+    (tanh(u+b) - 1/2) / (3/4), which is 2/5 at u = b, -2/3 at u = -b and
+    2/3 and -2 at u = +-inf. Asserted on `clip()` directly at g = 1, so three
+    routes -- decimal, libm's tanh and this arithmetic -- have to agree.
+
+    A zero input has a zero output by the definition, and must come out as
+    exactly that. Before #2147 `clip()` returned 0.1256 for it at asym 19 and
+    drive +12 dB (numpy 2.5.5, glibc 2.39, x86-64 AVX2): the array's
+    `np.tanh(19)` is 1.0 there while the scalar `math.tanh(19)` the normaliser
+    read is one ulp below it, and at that bias an ulp is most of the output."""
+    b = math.log(3.0) / 2.0
+    u = np.array([b, -b, 800.0, -800.0])
+    assert v.clip(u, 0.0, b, rms=1.0) == pytest.approx([0.4, -2.0 / 3.0, 2.0 / 3.0, -2.0],
+                                                       rel=1e-12, abs=0.0)
+    assert v.clip(np.zeros(4), 12.0, 19.0, rms=1.0).tolist() == [0.0] * 4
+    with decimal.localcontext() as ctx:
+        ctx.prec = 80
+        for n in (2, 3, 5, 13):
+            # tanh(ln(n)/2) = (n - 1)/(n + 1)
+            want = decimal.Decimal(n - 1) / decimal.Decimal(n + 1)
+            got = v._decimal_tanh(decimal.Decimal(n).ln() / 2)
+            assert abs(got - want) < decimal.Decimal("1e-70"), (n, got)
+        for z in np.linspace(-10.0, 10.0, 41):
+            assert abs(float(v._decimal_tanh(decimal.Decimal(float(z)))) - math.tanh(float(z))) \
+                <= 4 * math.ulp(1.0), z
+
+
+def test_the_second_order_coefficient_has_no_subtraction_and_is_exact_at_every_bias():
+    """`clip_a2` is -tanh(b) g: one product, no difference of two numbers that
+    both approach 1, so the cancellation cannot reach it. #2147 asked for that
+    to be checked and stated rather than assumed. Read the way `_im_amp` reads
+    it, divided by the RMS, since its own gain stops at 10^(drive/20)."""
+    with decimal.localcontext() as ctx:
+        ctx.prec = 80
+        for asym in GRID_ASYM:
+            for d in GRID_DRIVE_DB:
+                want = -v._decimal_tanh(decimal.Decimal(asym)) * decimal.Decimal(v._gain(d, UNIT_SINE_RMS))
+                got = decimal.Decimal(float(v.clip_a2(d, asym))) / decimal.Decimal(UNIT_SINE_RMS)
+                assert abs(got - want) / abs(want) < v.CLIP_REL_ERR_MAX, (asym, d)
+
+
+def test_zero_bias_is_the_symmetric_clipper_and_tanh_itself():
+    """`defect="SYMMETRIC_NL"` is b = 0, where the definition collapses to
+    tanh(u) / g: a second route to the same numbers through libm's and numpy's
+    tanh, neither of which the new evaluation calls."""
+    x = v.clip_input(1.0, 256)
+    assert max(_errors(0.0, n=256).values()) < v.CLIP_REL_ERR_MAX
+    for d in v.DRIVE_DB:
+        g = v._gain(d, UNIT_SINE_RMS)
+        assert v.clip(x, d, v.ASYM, defect="SYMMETRIC_NL", rms=UNIT_SINE_RMS) == \
+            pytest.approx(np.tanh(g * x) / g, rel=1e-14, abs=0.0), d
+
+
+def test_the_clipper_is_exactly_odd_under_flipping_the_bias_and_the_signal():
+    """f(-u, -b) = -f(u, b) by the definition. Held exactly, not to a
+    tolerance: the evaluation never mixes the two signs, so a negative bias
+    is the positive one read the other way round."""
+    x = v.clip_input(60.0)
+    for asym in GRID_ASYM:
+        for d in GRID_DRIVE_DB:
+            assert np.array_equal(v.clip(-x, d, -asym, rms=UNIT_SINE_RMS),
+                                  -v.clip(x, d, asym, rms=UNIT_SINE_RMS)), (asym, d)
+
+
+def test_the_clipper_stays_exact_at_arguments_where_cosh_overflows():
+    """The renders reach |u| = 237 at +12 dB (KA_CREST); 3000 is far past
+    float64's cosh, which overflows near 710. Known in closed form: y*g tends
+    to 1 / (1 + tanh b) as u -> +inf and to -1 / (1 - tanh b) as u -> -inf,
+    which with q = e^(-2|b|) is (1 + q)/2 at the side that clips and
+    (1 + q)/(2q) at the side that grows. Checked against those and against the
+    decimal reference, at the sweep's extreme drives as well."""
+    for asym in (0.5, 19.0, -19.0):
+        q = math.exp(-2.0 * abs(asym))
+        clips, grows = (1.0 + q) / 2.0, (1.0 + q) / (2.0 * q)
+        hi, lo = (clips, -grows) if asym > 0 else (grows, -clips)
+        got = v.clip(np.array([3000.0, -3000.0]), 0.0, asym, rms=1.0)
+        assert np.isfinite(got).all() and got == pytest.approx([hi, lo], rel=1e-12, abs=0.0), asym
+        assert v.clip_rel_error([3000.0, -3000.0], 0.0, asym, rms=1.0) < v.CLIP_REL_ERR_MAX, asym
+    for crest in (1.0, v.KA_CREST):
+        for d in (v.DRIVE_DB[0], v.DRIVE_DB[-1]):
+            assert v.clip_rel_error(v.clip_input(crest, 256), d, 19.0, rms=UNIT_SINE_RMS) \
+                < v.CLIP_REL_ERR_MAX, (crest, d)
+
+
+# ---------------------------------------------------------------------------
+# the injected bug: the clipper as it was written before #2147
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("asym", (12.0, 19.0))
+def test_the_tanh_difference_fails_the_definition_check_at_12_and_19(asym):
+    """`defect="TANH_DIFFERENCE"` is the expression `clip()` used to evaluate,
+    kept as the permanent control for `clip-exact` (#2147). On the grid it
+    must be red at every point; the issue's minimum was 12 and 19."""
+    err = _errors(asym, defect="TANH_DIFFERENCE")
+    assert min(err.values()) > v.CLIP_REL_ERR_MAX, err
+
+
+def test_the_tanh_difference_passes_at_the_documented_bias_which_is_why_nothing_saw_it():
+    """The other half of the control, and the reason the defect lived: at
+    ASYM and every ASYM_SWEEP value the cancelling form is within the same
+    bound, so no property that runs at the documented bias could see it. It
+    is first red at 5 (1.0e-11 at -12 dB), which is in no sweep."""
+    for asym in (v.ASYM, *v.ASYM_SWEEP):
+        err = _errors(asym, defect="TANH_DIFFERENCE")
+        assert max(err.values()) < v.CLIP_REL_ERR_MAX, (asym, err)
+    assert max(_errors(5.0, defect="TANH_DIFFERENCE").values()) > v.CLIP_REL_ERR_MAX
+
+
+def test_the_tanh_difference_moves_clip_exact_and_nothing_else():
+    """Rule 4's matrix for this one defect, as a number: ten properties blind,
+    because all ten run the clipper at ASYM, and one that sees it."""
+    got = v.properties(defect="TANH_DIFFERENCE")
+    assert [p for p in v.PROPERTIES if not got[p]["pass"]] == ["clip-exact"]
+    assert v.properties()["clip-exact"]["pass"]
+
+
+def test_nothing_shipped_moves_at_the_documented_asymmetries():
+    """#2147's own acceptance: every render at ASYM 0.5 and ASYM_SWEEP
+    0.15-0.8, all three clipped positions and three drives, is the same record
+    the cancelling form rendered, to 1e-12 of the peak. Both sources at ASYM,
+    the staircase alone across the sweep; the difference is the clipper's and
+    does not depend on the source."""
+    worst = 0.0
+    for asym in v.ASYM_SWEEP:
+        for kind in (("staircase", "white") if asym == v.ASYM else ("staircase",)):
+            for pos in ("pre_vca", "post_vca", "sum"):
+                for d in (-12.0, 0.0, 12.0):
+                    new = v.render(position=pos, drive=d, asym=asym, kind=kind)[0]
+                    old = v.render(position=pos, drive=d, asym=asym, kind=kind,
+                                   defect="TANH_DIFFERENCE")[0]
+                    worst = max(worst, float(np.max(np.abs(new - old)) / np.max(np.abs(new))))
+    assert worst < 1e-12, worst
+
+
+def test_the_reported_rows_are_the_ones_the_cancelling_form_reported(monkeypatch):
+    """What a reader can quote: `sweep()`'s rows at the documented bias -- THD,
+    M re Ln, Mn re Ln and both rho, rounded as reported -- are identical
+    through either evaluation. `sweep()` takes no defect, so the old clipper
+    is put under it in place of the new one."""
+    drives = (-20.0, 0.0, 12.0)
+    new = v.sweep(asym=v.ASYM, drives=drives)
+    real = v.clip
+    monkeypatch.setattr(v, "clip", lambda x, d, a=v.ASYM, defect=None, **k: real(
+        x, d, a, defect="TANH_DIFFERENCE" if defect is None else defect, **k))
+    assert v.sweep(asym=v.ASYM, drives=drives) == new
 
 
 # ---------------------------------------------------------------------------
