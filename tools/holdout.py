@@ -117,6 +117,16 @@ class Refused(refusal.Refused, Exception):
     outcome here, distinct from pass and from fail."""
 
 
+class Unverifiable(Refused):
+    """A `Refused` at which NOTHING was established: the seal could not be read
+    or parsed, is not the schema this tool reads, lacks a field its identity is
+    made of, or git has no history to date it by. Distinct from its parent on
+    purpose (#1821): a `Refused` that is not `Unverifiable` is a comparison
+    that RAN and DISAGREED -- the seal names another case, is untracked, is
+    modified -- which is a FAIL. Both share one message channel, so a handler
+    that told them apart by wording would misclassify the next edit."""
+
+
 def _git(*args: str) -> str:
     return provenance.git(*args, root=ROOT)
 
@@ -160,7 +170,7 @@ def load_seal(case_id: str) -> dict:
     path = seal_path(case_id)
     rel = _rel(path)
     if not path.is_file():
-        raise Refused(
+        raise Unverifiable(
             f"{case_id} is a Holdout-split case with no sealed settings at {rel}. "
             f"A holdout is REFUSED rather than scored until its settings are "
             f"committed before the render that reads them -- see "
@@ -169,15 +179,15 @@ def load_seal(case_id: str) -> dict:
     try:
         seal = json.loads(path.read_text())
     except (OSError, ValueError) as e:
-        raise Refused(f"the seal {rel} could not be read: {e}") from None
+        raise Unverifiable(f"the seal {rel} could not be read: {e}") from None
     if not isinstance(seal, dict):
-        raise Refused(f"the seal {rel} is not a JSON object")
+        raise Unverifiable(f"the seal {rel} is not a JSON object")
     if seal.get("schema") != SCHEMA:
-        raise Refused(f"the seal {rel} declares schema {seal.get('schema')!r}, "
-                      f"and this tool only reads {SCHEMA!r}")
+        raise Unverifiable(f"the seal {rel} declares schema {seal.get('schema')!r}, "
+                           f"and this tool only reads {SCHEMA!r}")
     missing = [f for f in REQUIRED_FIELDS if f not in seal]
     if missing:
-        raise Refused(f"the seal {rel} is missing {', '.join(missing)}")
+        raise Unverifiable(f"the seal {rel} is missing {', '.join(missing)}")
     if seal["case_id"] != case_id:
         raise Refused(f"the seal {rel} names case {seal['case_id']!r}, not {case_id!r}")
     if seal["state"] not in (SEALED, OPENED):
@@ -211,7 +221,7 @@ def seal_git_state(case_id: str) -> dict:
     path, rel = seal_path(case_id), _rel(seal_path(case_id))
     head = _git("rev-parse", "HEAD").strip()
     if not head:
-        raise Refused(
+        raise Unverifiable(
             f"no git history is readable at {_rel(ROOT)}, so nothing can establish "
             f"that {rel} was committed before this render. Refusing rather than "
             f"assuming it: an unverifiable seal is not a seal.")
@@ -229,8 +239,8 @@ def seal_git_state(case_id: str) -> dict:
             f"of the same pass, which is the one thing a seal exists to prevent.")
     log = _git("log", "-1", "--format=%H%x09%cI", "--", rel).strip()
     if not log:
-        raise Refused(f"the seal {rel} is tracked but has no commit touching it, "
-                      f"so the ordering cannot be established")
+        raise Unverifiable(f"the seal {rel} is tracked but has no commit touching it, "
+                           f"so the ordering cannot be established")
     commit, _, committed = log.partition("\t")
     return {"seal": rel, "seal_commit": commit, "seal_commit_short": commit[:12],
             "seal_committed_utc": committed, "head_at_render": head[:12]}
@@ -446,10 +456,29 @@ def _ancestry(a: str, b: str) -> bool | None:
     return base == full_a
 
 
+#: The order `check()` folds outcomes in. The exit codes are NOT this order:
+#: `OK, FAIL, REFUSED = 0, 1, 2`, so a `max` over them lets one seal that could
+#: not be checked (2) outrank another that was checked and does not hold up (1).
+_SEVERITY = {OK: 0, REFUSED: 1, FAIL: 2}
+
+
+def _worst(a: int, b: int) -> int:
+    """The outcome a reader has to act on when two hold at once: a FAIL always
+    wins, then a REFUSED, then OK. An outcome outside the three has no
+    severity and raises rather than being folded into a verdict."""
+    return max(a, b, key=_SEVERITY.__getitem__)
+
+
 def check() -> tuple[int, list[str]]:
     """Exit 0 when every seal and every recorded read hold up, 1 when one does
     not, 2 when something cannot be established at all. Same convention as
-    `tools/refprofile.py --verify` and the repository's verifiers."""
+    `tools/refprofile.py --verify` and the repository's verifiers.
+
+    Which of the two a refused seal gets is decided by the class raised, never
+    by its message (`Unverifiable`): a seal that could not be READ was compared
+    with nothing and is 2; a seal that was read and disagrees is 1. When both
+    happen in one tree the exit is 1 -- something that could not be checked
+    must not hide something that was checked and failed."""
     lines: list[str] = []
     worst = OK
     try:
@@ -458,6 +487,7 @@ def check() -> tuple[int, list[str]]:
         return REFUSED, [f"REFUSED  {why}"]
 
     seals: dict[str, dict] = {}
+    refused_seals: set[str] = set()
     for path in sorted(SEAL_DIR.glob("*.json")):
         if path.name == LEDGER.name:
             continue
@@ -465,8 +495,13 @@ def check() -> tuple[int, list[str]]:
         try:
             seal = load_seal(cid)
             git_state = seal_git_state(cid)
+        except Unverifiable as why:
+            refused_seals.add(cid)
+            worst = _worst(worst, REFUSED)
+            lines.append(f"REFUSED  {cid}\n         {why}")
+            continue
         except Refused as why:
-            worst = max(worst, FAIL)
+            worst = _worst(worst, FAIL)
             lines.append(f"FAIL     {cid}\n         {why}")
             continue
         seals[cid] = seal
@@ -475,7 +510,7 @@ def check() -> tuple[int, list[str]]:
                      f"committed {git_state['seal_commit_short']}")
         order = _ancestry(seal["sealed_at_head"], git_state["seal_commit"])
         if order is False:
-            worst = max(worst, FAIL)
+            worst = _worst(worst, FAIL)
             lines.append(f"FAIL     {cid}: sealed_at_head {seal['sealed_at_head']} is "
                          f"not an ancestor of the commit that added the seal "
                          f"({git_state['seal_commit_short']})")
@@ -486,7 +521,7 @@ def check() -> tuple[int, list[str]]:
         if seal["state"] == OPENED:
             op = seal.get("opened") or {}
             if not op.get("why") or not op.get("guided_change"):
-                worst = max(worst, FAIL)
+                worst = _worst(worst, FAIL)
                 lines.append(f"FAIL     {cid}: opened without a why and a "
                              f"guided-change reference")
 
@@ -495,14 +530,20 @@ def check() -> tuple[int, list[str]]:
         if e.get("kind") != "read":
             continue
         seal = seals.get(cid)
+        if cid in refused_seals:
+            worst = _worst(worst, REFUSED)
+            lines.append(f"REFUSED  ledger entry {e.get('n')}: a read of {cid}, whose "
+                         f"seal could not be checked above, so what was read cannot "
+                         f"be compared with what is committed")
+            continue
         if seal is None:
-            worst = max(worst, FAIL)
+            worst = _worst(worst, FAIL)
             lines.append(f"FAIL     ledger entry {e.get('n')}: a read of {cid} with "
                          f"no readable seal for it")
             continue
         if e.get("generation") == seal["generation"] and \
                 e.get("seal_core_sha256") != core_sha256(seal):
-            worst = max(worst, FAIL)
+            worst = _worst(worst, FAIL)
             lines.append(
                 f"STALE    ledger entry {e.get('n')}: {cid} was read against seal core "
                 f"{e.get('seal_core_sha256')} and the committed seal now hashes to "
@@ -512,7 +553,7 @@ def check() -> tuple[int, list[str]]:
                 f"(`tools/holdout.py seal {cid} ... --reseal`).")
         order = _ancestry(e.get("seal_commit"), e.get("render_commit"))
         if order is False:
-            worst = max(worst, FAIL)
+            worst = _worst(worst, FAIL)
             lines.append(
                 f"FAIL     ledger entry {e.get('n')}: {cid}'s seal commit "
                 f"{str(e.get('seal_commit'))[:12]} is NOT an ancestor of the render "
@@ -529,7 +570,7 @@ def check() -> tuple[int, list[str]]:
             continue
         states = {e.get("model_state_sha256") for e in reads_of(cid, seal["generation"])}
         if len(states) > 1:
-            worst = max(worst, FAIL)
+            worst = _worst(worst, FAIL)
             lines.append(
                 f"FAIL     {cid} is still marked {SEALED!r} and has been read at "
                 f"{len(states)} different model states. Reading a holdout again after "

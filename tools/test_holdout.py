@@ -26,6 +26,7 @@ refuses or records it rather than producing a number:
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import shutil
 import subprocess
@@ -272,6 +273,256 @@ def test_check_reports_two_reads_at_different_model_states_under_one_seal(repo):
     code, lines = ho.check()
     assert code == ho.FAIL
     assert any("different model states" in ln for ln in lines), lines
+
+
+# ===========================================================================
+# check: REFUSED is not FAIL (#1821). A seal that cannot be read has not been
+# compared with anything; reporting it as one that was read and lost is the
+# verdict for a different state, and the only thing separating them is the
+# class raised -- never the wording of the message.
+# ===========================================================================
+def _rewrite(path, drop=(), **changes):
+    seal = json.loads(path.read_text())
+    for field in drop:
+        del seal[field]
+    seal.update(changes)
+    path.write_text(json.dumps(seal))
+
+
+def _record_a_read(cid="F1D"):
+    block = ho.assert_readable(cid, model_state="a" * 16)
+    ho.record_read(cid, block, engine="fixed-model", state="fail", worst=3.0,
+                   result_path="build/x", command="t")
+    return block
+
+
+def _commit_changes(repo_root, message):
+    """Commit only what the last step changed: an injected break leaves the
+    tree byte-identical, and `git commit` with nothing to commit exits 1."""
+    changed = subprocess.run(["git", "-C", str(repo_root), "diff", "--quiet", "HEAD"],
+                             capture_output=True).returncode
+    if changed:
+        _commit(repo_root, message)
+
+
+def _corrupt_json(monkeypatch):
+    ho.seal_path("F1D").write_text("{not-json")
+
+
+def _unreadable(monkeypatch):
+    """The OSError at the read, injected where no filesystem state but
+    chmod 000 produces it -- and root reads a chmod-000 file anyway."""
+    real = pathlib.Path.read_text
+    target = ho.seal_path("F1D")
+
+    def read_text(self, *args, **kwargs):
+        if self == target:
+            raise PermissionError(13, "Permission denied", str(self))
+        return real(self, *args, **kwargs)
+    monkeypatch.setattr(pathlib.Path, "read_text", read_text)
+
+
+def _non_object(monkeypatch):
+    ho.seal_path("F1D").write_text("[]")
+
+
+def _another_schema(monkeypatch):
+    _rewrite(ho.seal_path("F1D"), schema="holdout-seal/99")
+
+
+def _missing_a_required_field(monkeypatch):
+    _rewrite(ho.seal_path("F1D"), drop=("why",))
+
+
+def _no_git_history(monkeypatch):
+    """git cannot resolve HEAD at all: a root that is not a repository, so
+    every git answer is the empty string `provenance.git` returns."""
+    monkeypatch.setattr(ho, "ROOT", ho.ROOT.parent / "no-repository-here")
+
+
+def _no_commit_touching_the_seal(monkeypatch):
+    """No reachable git state produces this short of a damaged repository, so
+    git's `log` answer is injected: tracked, clean, and never committed."""
+    real = ho._git
+    monkeypatch.setattr(ho, "_git", lambda *args: "" if args[0] == "log" else real(*args))
+
+
+CANNOT_BE_ESTABLISHED = [
+    pytest.param(_corrupt_json, id="corrupt-json"),
+    pytest.param(_unreadable, id="unreadable-oserror"),
+    pytest.param(_non_object, id="non-object-json"),
+    pytest.param(_another_schema, id="another-schema"),
+    pytest.param(_missing_a_required_field, id="missing-required-field"),
+    pytest.param(_no_git_history, id="no-git-history"),
+    pytest.param(_no_commit_touching_the_seal, id="no-commit-touching-the-seal"),
+]
+
+
+@pytest.mark.parametrize("break_it", CANNOT_BE_ESTABLISHED)
+def test_a_seal_that_cannot_be_established_is_refused_not_failed(repo, monkeypatch,
+                                                                 break_it):
+    """Started red (#1821): each of these printed `FAIL` and exited 1, the
+    verdict for a seal that was read and does not hold up, although nothing
+    was compared. The seal is committed valid first and the break is committed
+    too, so the one thing wrong with the tree is the one the test id names."""
+    _seal(repo)
+    break_it(monkeypatch)
+    _commit_changes(repo, "break the seal")
+    code, lines = ho.check()
+    assert code == ho.REFUSED, "\n".join(lines)
+    assert any(ln.startswith("REFUSED  F1D") for ln in lines), lines
+    assert not any(ln.startswith(("FAIL", "STALE")) for ln in lines), lines
+
+
+def test_a_seal_nobody_can_read_is_refused(repo):
+    """The OSError from the filesystem rather than injected: chmod 000 is the
+    one state that is a file and still cannot be read."""
+    if os.geteuid() == 0:
+        pytest.skip("root reads a chmod-000 file; the injected OSError case covers this site")
+    _seal(repo)
+    path = ho.seal_path("F1D")
+    path.chmod(0)
+    try:
+        code, lines = ho.check()
+    finally:
+        path.chmod(0o644)
+    assert code == ho.REFUSED, "\n".join(lines)
+    assert any(ln.startswith("REFUSED  F1D") and "could not be read" in ln
+               for ln in lines), lines
+
+
+def _names_another_case(monkeypatch):
+    _rewrite(ho.seal_path("F1D"), case_id="F2D")
+
+
+def _in_an_unknown_state(monkeypatch):
+    _rewrite(ho.seal_path("F1D"), state="ajar")
+
+
+def _with_no_settings(monkeypatch):
+    _rewrite(ho.seal_path("F1D"), settings={})
+
+
+def _with_no_generation(monkeypatch):
+    _rewrite(ho.seal_path("F1D"), generation=0)
+
+
+def _opened_without_saying_why(monkeypatch):
+    _rewrite(ho.seal_path("F1D"), state=ho.OPENED)
+
+
+WAS_READ_AND_DISAGREED = [
+    pytest.param(_names_another_case, id="another-case"),
+    pytest.param(_in_an_unknown_state, id="unknown-state"),
+    pytest.param(_with_no_settings, id="no-settings"),
+    pytest.param(_with_no_generation, id="no-generation"),
+    pytest.param(_opened_without_saying_why, id="opened-without-a-block"),
+]
+
+
+@pytest.mark.parametrize("break_it", WAS_READ_AND_DISAGREED)
+def test_a_seal_that_was_read_and_disagrees_still_fails(repo, break_it):
+    """The other half of the raise site: these were read in full and did not
+    hold up, which is a FAIL whatever an unreadable seal is worth."""
+    _seal(repo)
+    break_it(None)
+    _commit(repo, "break the seal")
+    code, lines = ho.check()
+    assert code == ho.FAIL, "\n".join(lines)
+    assert any(ln.startswith("FAIL     F1D") for ln in lines), lines
+    assert not any(ln.startswith("REFUSED") for ln in lines), lines
+
+
+def test_an_untracked_or_uncommitted_seal_still_fails(repo):
+    """git answered, and the answer is no -- never committed, or committed
+    and then edited. Both were compared, with the index and with HEAD."""
+    _seal(repo, commit=False)
+    code, lines = ho.check()
+    assert code == ho.FAIL
+    assert any(ln.startswith("FAIL     F1D") and "not committed" in ln for ln in lines), lines
+    _commit(repo, "seal F1D")
+    _rewrite(ho.seal_path("F1D"), settings={**SPEC["settings"], "cut_hz": 1234.0})
+    code, lines = ho.check()
+    assert code == ho.FAIL
+    assert any(ln.startswith("FAIL     F1D") and "uncommitted modifications" in ln
+               for ln in lines), lines
+
+
+def test_a_read_of_a_seal_that_cannot_be_checked_is_refused_not_failed(repo):
+    """The second trap in #1821. The seal loop refused, so the case never
+    reached `seals`, and the ledger loop read that absence as "no readable
+    seal" -- FAIL -- undoing the refusal for every seal that had been read.
+    A seal that was DELETED is still a FAIL (`test_check_reports_a_read_of_a_
+    case_with_no_seal` above): nothing was refused, the file is gone."""
+    _seal(repo)
+    _record_a_read()
+    _commit(repo, "the read")
+    _corrupt_json(None)
+    _commit(repo, "corrupt the seal")
+    code, lines = ho.check()
+    assert code == ho.REFUSED, "\n".join(lines)
+    assert any(ln.startswith("REFUSED  F1D") for ln in lines), lines
+    assert any(ln.startswith("REFUSED  ledger entry 1") and "a read of F1D" in ln
+               for ln in lines), lines
+    assert not any(ln.startswith(("FAIL", "STALE")) for ln in lines), lines
+
+
+@pytest.mark.parametrize("refused,failed", [("A", "Z"), ("Z", "A")])
+def test_a_seal_that_fails_outranks_a_seal_that_cannot_be_checked(repo, refused,
+                                                                   failed):
+    """Rule 8: the input that defeats a severity taken from the exit codes.
+    `OK, FAIL, REFUSED = 0, 1, 2`, so a `max` would let the refused seal hide
+    the failed one -- in either scan order, which is by case id."""
+    _seal(repo, refused, commit=False)
+    _seal(repo, failed, commit=False)
+    ho.seal_path(refused).write_text("{not-json")
+    _rewrite(ho.seal_path(failed), case_id="Q")
+    _commit(repo, "one refused, one failed")
+    code, lines = ho.check()
+    assert code == ho.FAIL, "\n".join(lines)
+    assert any(ln.startswith(f"REFUSED  {refused}") for ln in lines), lines
+    assert any(ln.startswith(f"FAIL     {failed}") for ln in lines), lines
+
+
+def test_a_failed_ledger_entry_outranks_a_refused_one(repo):
+    """The same precedence through the ledger, where the refused line and the
+    failed line are both about a read."""
+    _seal(repo, "A")
+    _seal(repo, "Z")
+    for cid in ("A", "Z"):
+        _record_a_read(cid)
+    _commit(repo, "the reads")
+    ho.seal_path("A").write_text("{not-json")
+    _commit(repo, "corrupt A")
+    ho.seal_path("Z").unlink()
+    _commit(repo, "delete Z")
+    code, lines = ho.check()
+    assert code == ho.FAIL, "\n".join(lines)
+    assert any(ln.startswith("REFUSED  ledger entry") and "a read of A" in ln
+               for ln in lines), lines
+    assert any(ln.startswith("FAIL     ledger entry") and "a read of Z" in ln
+               for ln in lines), lines
+
+
+def test_worst_is_an_order_not_a_max():
+    assert [ho._worst(a, b) for a in (ho.OK, ho.FAIL, ho.REFUSED)
+            for b in (ho.OK, ho.FAIL, ho.REFUSED)] == [
+        ho.OK, ho.FAIL, ho.REFUSED,
+        ho.FAIL, ho.FAIL, ho.FAIL,
+        ho.REFUSED, ho.FAIL, ho.REFUSED]
+    with pytest.raises(KeyError):
+        ho._worst(ho.OK, 3)
+
+
+def test_the_check_command_exits_two_on_a_seal_it_cannot_read(repo, capsys):
+    """The exit status is the channel `make verify` and `tools/run_all.py`
+    classify on, so it is asserted through the command and not only through
+    `check()`."""
+    _seal(repo)
+    _corrupt_json(None)
+    _commit(repo, "corrupt the seal")
+    assert ho.main(["check"]) == ho.REFUSED
+    assert "REFUSED  F1D" in capsys.readouterr().out
 
 
 # ===========================================================================
