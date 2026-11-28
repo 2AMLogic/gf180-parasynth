@@ -252,3 +252,11 @@ def test_a_non_object_json_document_is_refused_not_a_crash(side):
         baseline, candidate = _record(), []
     with pytest.raises(Refused, match=f"{side} is not a record"):
         compare.compare_records(baseline, candidate)
+
+
+def test_refuses_a_changed_scoring_direction_on_bus_balance():
+    """Bus balance -1 dB: a match is 2 tolerances out; a ceiling clamps to 0."""
+    baseline, candidate = _record(balance=-1.0), _record(balance=-1.0)
+    candidate["metrics"]["bus balance"]["purpose"] = "defect ceiling"
+    with pytest.raises(Refused, match="bus balance is scored as 'defect ceiling'"):
+        compare.compare_records(baseline, candidate)

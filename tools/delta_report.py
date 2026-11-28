@@ -43,6 +43,7 @@ import math
 import pathlib
 import subprocess
 
+import run_case
 import scorecard
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -96,6 +97,9 @@ def evaluate_record(record, label: str, *, engines: tuple, family: str | None = 
       * no `case_id`, a case `docs/scorecard/cases.csv` does not list, or one
         outside `family` when the caller reads one family;
       * a `provenance` that is not an object or carries no `inputs`;
+      * a metric whose `purpose` (absent = `match`) is not the fixed contract's
+        `run_case.metric_purpose(name)` -- a change of scoring direction;
+      * a supplied `case` row whose `case_id` is not the record's;
       * `metrics` that are not all objects, or a property whose `valid` is
         not exactly `true` (the board reads a missing or truthy `valid` as
         valid; an invalid measurement has no distance to compare);
@@ -127,6 +131,10 @@ def evaluate_record(record, label: str, *, engines: tuple, family: str | None = 
         case = next((c for c in scorecard.load_cases() if c["case_id"] == case_id), None)
         if case is None:
             raise refused(f"{case_id} is not a case in docs/scorecard/cases.csv")
+    elif case.get("case_id") != case_id:
+        # a caller-supplied row is a claim about which case this is (#1601)
+        raise refused(f"{label} is case {case_id!r} but was handed the board row for "
+                      f"{case.get('case_id')!r}")
     if family is not None and case.get("family") != family:
         raise refused(f"{case_id} belongs to the {case.get('family')} family, but this "
                       f"comparison reads {family} cases")
@@ -146,6 +154,13 @@ def evaluate_record(record, label: str, *, engines: tuple, family: str | None = 
             raise refused(f"{label} property {name} is malformed")
         if metric.get("valid") is not True:
             raise refused(f"{label} property {name} is invalid, so it has no distance")
+        # The scoring DIRECTION is part of the measurement contract: a ceiling
+        # clamps a negative error to zero where a match takes its magnitude.
+        # Absent means `match`; the fixed contract is run_case.metric_purpose.
+        purpose, fixed = metric.get("purpose", scorecard.MATCH), run_case.metric_purpose(name)
+        if purpose != fixed:
+            raise refused(f"{label} property {name} is scored as {purpose!r}, but the fixed "
+                          f"measurement contract scores it as {fixed!r}")
     try:
         verdict = scorecard.evaluate(case, record)
     except OverflowError as exc:

@@ -245,3 +245,21 @@ def test_a_case_outside_the_drum_family_is_refused_before_any_verdict():
                                              "comparison reads Drums cases"):
         compare.compare_records(baseline, candidate,
                                 dict(CASE, family="Ensemble"))
+
+
+# --- review of #1638 ---------------------------------------------------------
+
+def test_refuses_a_supplied_board_row_for_a_different_case():
+    """Handing the D02A row to two M5B-headed records graded them against D02A."""
+    baseline, candidate = _pair()
+    baseline["case_id"] = candidate["case_id"] = "M5B"
+    with pytest.raises(compare.Refused, match="case 'M5B' but was handed the board row for 'D02A'"):
+        compare.compare_records(baseline, candidate, CASE)
+
+
+def test_refuses_a_changed_scoring_direction_with_identical_values():
+    baseline, candidate = _pair()
+    name = next(iter(candidate["metrics"]))
+    candidate["metrics"][name]["purpose"] = "defect ceiling"
+    with pytest.raises(compare.Refused, match=f"property {name} is scored as 'defect ceiling'"):
+        compare.compare_records(baseline, candidate, CASE)

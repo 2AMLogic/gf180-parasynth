@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import hashlib
 import pathlib
 import subprocess
 import sys
@@ -81,6 +82,13 @@ def _row(record: dict, label: str) -> dict:
         raise m5a.Refused(f"{label} event identities are missing or duplicated")
     if not diagnostics.get("reference_sha256") or not diagnostics.get("reference_manifest_sha256"):
         raise m5a.Refused(f"{label} lacks frozen reference identity")
+    # The header names the case; the evidence must agree. A record relabelled
+    # M5A -> M5B changes only the header, and the manifest it was scored
+    # against is still the other case's.
+    expected_manifest = hashlib.sha256(m5a.MANIFESTS[case_id].read_bytes()).hexdigest()
+    if diagnostics["reference_manifest_sha256"] != expected_manifest:
+        raise m5a.Refused(f"{label} says it is {case_id} but was scored against a different "
+                          f"frozen manifest than the {case_id} manifest")
     analysis_version = record.get("analysis_version")
     if not isinstance(analysis_version, str) or not analysis_version:
         raise m5a.Refused(f"{label} omits its analysis-version identifier")
@@ -174,17 +182,21 @@ def compare_records(baseline: dict, candidate: dict) -> dict:
     candidate_filter = candidate_config.get("filter_config")
     if not base_filter or base_filter != candidate_filter:
         raise m5a.Refused("baseline and candidate filter configurations differ or are missing")
-    comparison = filter_gate._compare_incremental(base_row, candidate_row)
     base_events, candidate_events = base_row["event_diagnostics"], candidate_row["event_diagnostics"]
     if len(base_events) != len(candidate_events):
         raise m5a.Refused("baseline and candidate event evidence differs")
+    # Validate every per-note number BEFORE the incremental comparison, which
+    # reads the harmonic partials with a raw float() (null -> TypeError,
+    # 10**400 -> OverflowError, both exit 1).
+    base_checked = [_event_errors(event, "baseline") for event in base_events]
+    candidate_checked = [_event_errors(event, "candidate") for event in candidate_events]
+    comparison = filter_gate._compare_incremental(base_row, candidate_row)
     preserved_passes, lost_passes, degraded_within_limit = [], [], []
-    for before, after in zip(base_events, candidate_events):
+    for before, after, before_errors, after_errors in zip(
+            base_events, candidate_events, base_checked, candidate_checked):
         identity = (before.get("wave"), before.get("midi"))
         if identity != (after.get("wave"), after.get("midi")):
             raise m5a.Refused("baseline and candidate event order differs")
-        before_errors = _event_errors(before, "baseline")
-        after_errors = _event_errors(after, "candidate")
         if set(before_errors) != set(after_errors):
             raise m5a.Refused("baseline and candidate per-note properties differ")
         for prop, base_value in before_errors.items():

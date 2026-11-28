@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import json
 
 import pytest
@@ -23,7 +24,8 @@ def _record(*, ref="a", engine="integrated-rtl", events=None, harmonic=-2.0, cas
             "reference_profile": "frozen Mini V3",
             "tolerance_policy": copy.deepcopy(m5a.TOLERANCES),
             "metrics": metrics, "diagnostics": {
-                "reference_sha256": ref, "reference_manifest_sha256": "manifest",
+                "reference_sha256": ref, "reference_manifest_sha256": hashlib.sha256(
+                    m5a.MANIFESTS[case_id].read_bytes()).hexdigest(),
                 "decoded_i2s_sha256": "audio", "events": events},
             "provenance": {"engine": engine, "worktree": {"commit": "deadbeef"},
                            "command": "tools/score_m5a_i2s.py --case M5A",
@@ -331,3 +333,49 @@ def test_rejects_candidate_that_loses_a_per_note_alias_pass_hidden_by_pulse():
     assert result["comparison"]["lost_per_note_passes"] == [{
         "wave": "saw", "midi": 84, "property": "Foldback energy",
         "baseline_error": 0.0, "candidate_error": 3.01, "limit": 3.0}]
+
+
+# --- review of #1638: four controls, each starting red ----------------------
+
+def _relabel(record, case_id):
+    record["case_id"] = case_id
+    return record
+
+
+def test_refuses_the_committed_m5a_pair_relabelled_as_m5b():
+    """Only the headers change; the events (MIDI 84/96) and the manifest digest
+    are still M5A's. The genuine pair above is the positive control."""
+    baseline = _relabel(_committed("mono-pulse-2x/rtl/M5A.json"), "M5B")
+    candidate = _relabel(_committed("m5-artifacts-333/pulse2x-rtl/M5A.json"), "M5B")
+    with pytest.raises(m5a.Refused, match="says it is M5B.*manifest"):
+        compare.compare_records(baseline, candidate)
+
+
+@pytest.mark.parametrize("side", ["baseline", "candidate"])
+def test_refuses_a_changed_scoring_direction_on_one_property(side):
+    """Pitch error -2 cents against a `defect ceiling` clamps to zero: the same
+    values flip from fail to pass with no change in the device."""
+    baseline, candidate = _record(), _record()
+    for record in (baseline, candidate):
+        record["metrics"]["Pitch"]["error"] = -2.0
+    (baseline if side == "baseline" else candidate)["metrics"]["Pitch"]["purpose"] = "defect ceiling"
+    with pytest.raises(m5a.Refused, match=rf"{side} property Pitch is scored as 'defect ceiling'"):
+        compare.compare_records(baseline, candidate)
+
+
+def test_an_explicit_match_purpose_is_the_same_as_an_absent_one():
+    baseline, candidate = _record(), _record()
+    candidate["metrics"]["Pitch"]["purpose"] = "match"
+    compare.compare_records(baseline, candidate)
+
+
+@pytest.mark.parametrize("side", ["baseline", "candidate"])
+@pytest.mark.parametrize("value", [None, 10**400], ids=["null", "overflow"])
+def test_refuses_a_harmonic_partial_that_is_not_a_finite_json_number(side, value):
+    """Was exit 1 with TypeError / OverflowError from a raw float() in
+    measure_m5a_filter_oversample, reached before the per-note validation."""
+    baseline, candidate = _record(), _record()
+    record = baseline if side == "baseline" else candidate
+    record["diagnostics"]["events"][0]["harmonic_error_db_model_minus_reference"]["h2"] = value
+    with pytest.raises(m5a.Refused, match=rf"{side}:saw/84 harmonic_error_db_model_minus_reference\['h2'\]"):
+        compare.compare_records(baseline, candidate)
