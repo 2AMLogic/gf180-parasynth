@@ -9,11 +9,21 @@ success says nothing about that. This measures it.
     .venv/bin/python tools/probes/audio_distance_floor.py
     .venv/bin/python tools/probes/audio_distance_floor.py --json out.json
 
-Exit status follows the repository's verifier convention:
+Exit status follows the repository's verifier convention
+(`tools/exit_contract.py`):
 
-    0   every experiment ran
-    2   REFUSED -- a precondition of the apparatus is unmet (no reference
-        audio on this host), so nothing was attempted
+    0   every experiment measured
+    2   REFUSED -- a precondition was unmet, so at least one row is no
+        evidence and `run_all.py` reports the run NO-VERDICT, never PASS.
+        Returned when nothing could be attempted (the distances failed their
+        own closed-form check; no reference audio on this host) AND when the
+        other experiments measured: an experiment that cannot measure writes
+        `refused: <reason>` in its row (E5, E7) or a `{"refused": <reason>}`
+        record in place of its result (E9), and the run still exits 2, because
+        a process that succeeds while a row holds no number reads as a pass to
+        anything that looks only at the exit status (#1699; before it such a
+        run exited 0). The report and `--json` are written first and carry
+        every row that did measure: a partial result is evidence, not garbage.
 
 WHAT IS MEASURED, AND WHY EACH ONE
 
@@ -93,6 +103,7 @@ import run_case as _rc_refs  # noqa: E402
 _REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
 if _REFUSAL_TOOLS not in sys.path:
     sys.path.append(_REFUSAL_TOOLS)
+import exit_contract  # noqa: E402
 import refusal  # noqa: E402
 
 REFDIR = _rc_refs.configured_refs()
@@ -657,6 +668,40 @@ def e9_noise_floor() -> dict:
     return out
 
 
+#: How an experiment that could not measure says so in the result. Two shapes,
+#: and they are the only two this file writes: a `refused: <reason>` string in
+#: place of a measurement (e5, e7) and a `{"refused": <reason>}` record in
+#: place of a whole experiment's result (e9).
+REFUSED_PREFIX = "refused: "
+
+
+def _refusals(node: object, path: str = "") -> list[str]:
+    """Every refusal recorded anywhere below `node`, as `<path>: <reason>`.
+
+    Walks the whole result rather than a list of experiment names, because a
+    refusal is not always at the top: e5 writes one two keys down, under
+    `per_property_pitch_drop_hz`. Recognises the two shapes above at any depth
+    and nothing else. A string that says `refused` WITHOUT the prefix is
+    deliberately not matched: the prefix is this file's own convention and a
+    word-match would flag prose. That leaves a writer which invents a third
+    shape unread, and the writer-count control in
+    tools/test_audio_distance_floor_refusal.py is what closes it."""
+    out: list[str] = []
+    if isinstance(node, dict):
+        for k, v in node.items():
+            here = f"{path}/{k}" if path else str(k)
+            if k == "refused":
+                out.append(f"{here}: {v}")
+            else:
+                out.extend(_refusals(v, here))
+    elif isinstance(node, (list, tuple)):
+        for i, v in enumerate(node):
+            out.extend(_refusals(v, f"{path}[{i}]"))
+    elif isinstance(node, str) and node.startswith(REFUSED_PREFIX):
+        out.append(f"{path}: {node[len(REFUSED_PREFIX):]}")
+    return out
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -676,7 +721,7 @@ def main(argv=None) -> int:
     if not res["E0_ground_truth"]["ok"]:
         print("REFUSED: the distances do not reproduce their own closed-form answers")
         print(json.dumps(res["E0_ground_truth"], indent=2))
-        return 2
+        return exit_contract.REFUSED
 
     try:
         import run_case as rc
@@ -684,7 +729,7 @@ def main(argv=None) -> int:
         x = norm(rc.prepare(raw, sr, side=a.ref))
     except refusal.Refused as exc:
         print(f"REFUSED: {exc}")
-        return 2
+        return exit_contract.REFUSED
 
     # PRECONDITION, asserted at the point of use. The decay sweep perturbs the
     # signal's OWN measured T20 by a stated percentage, so a reference whose
@@ -706,7 +751,7 @@ def main(argv=None) -> int:
             e = am.schroeder_t20(zz, zs)
             if e.ok:
                 print(f"    bd8/{q.name}  T20 {e.value * 1000:.1f} ms")
-        return 2
+        return exit_contract.REFUSED
     res["reference_t20_ms"] = t20.value * 1000.0
 
     res["E1_determinism"] = e1_determinism()
@@ -723,6 +768,18 @@ def main(argv=None) -> int:
         a.json.write_text(json.dumps(res, indent=1, sort_keys=True))
         print(f"wrote {a.json}")
     report(res)
+    # (#1699) An experiment that refused left `refused: ...` in its row while
+    # the others measured. That run is no verdict, not a pass: a batch runner
+    # reads this exit status and nothing else, so exit 0 here rendered a row
+    # with no number as PASS. The report and --json above are written first;
+    # the rows that measured are evidence and are not thrown away.
+    refusals = _refusals(res)
+    if refusals:
+        print(f"\nREFUSED: no measurement in {len(refusals)} of the rows above, "
+              "so this run is NO-VERDICT, not a pass:")
+        for r in refusals:
+            print(f"  {r}")
+        return exit_contract.REFUSED
     return 0
 
 
