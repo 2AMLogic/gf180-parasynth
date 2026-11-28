@@ -25,6 +25,7 @@ import math
 import os
 import pathlib
 import subprocess
+import sys
 
 import numpy as np
 import pytest
@@ -989,6 +990,42 @@ def test_load_json_refused_refuses_invalid_utf8_that_is_not_a_truncation(tmp_pat
                        match=r"record\.json.*not valid UTF-8.*invalid start byte"
                              r".*git checkout"):
         mf.load_json_refused(p, "analysis record")
+
+
+_LOCALE_ENVS = {
+    # The decoder `read_text()` would pick is the host locale's. C with coercion
+    # and UTF-8 mode off is ASCII; the Latin-1 locale is the judge's (#1849).
+    "c-ascii": {"LC_ALL": "C", "PYTHONUTF8": "0", "PYTHONCOERCECLOCALE": "0"},
+}
+
+
+def _load_in_fresh_interpreter(path, env_extra):
+    code = ("import sys, pathlib; sys.path.insert(0, %r); import manifest as mf; "
+            "print(sorted(mf.load_json_refused(pathlib.Path(sys.argv[1]), 'record')))"
+            % str(pathlib.Path(__file__).parent))
+    return subprocess.run([sys.executable, "-c", code, str(path)],
+                          env={**os.environ, **env_extra}, capture_output=True, text=True)
+
+
+def test_load_json_refused_reads_valid_utf8_whatever_the_host_locale(tmp_path):
+    """POSITIVE control that runs on CI's UTF-8 hosts: a valid UTF-8 record
+    holding a non-ASCII character must load under the C locale. A bare
+    `read_text()` decodes with the locale (ASCII here) and refuses it; this
+    fails on the unpinned helper and passes with `encoding="utf-8"` (#1849)."""
+    p = tmp_path / "record.json"
+    p.write_bytes(json.dumps({"note": "caf\u00e9"}, ensure_ascii=False).encode("utf-8"))
+    r = _load_in_fresh_interpreter(p, _LOCALE_ENVS["c-ascii"])
+    assert r.returncode == 0, r.stderr
+    assert "note" in r.stdout
+
+
+def test_load_json_refused_refuses_latin1_bytes_whatever_the_host_locale(tmp_path):
+    """A Latin-1 record (0xe9 inside a JSON string, otherwise valid JSON) is
+    refused as non-UTF-8 and names the path, not accepted by a Latin-1 locale."""
+    p = tmp_path / "record.json"
+    p.write_bytes(json.dumps({"note": "caf\u00e9"}, ensure_ascii=False).encode("latin-1"))
+    with pytest.raises(mf.Refused, match=r"record\.json.*not valid UTF-8"):
+        mf.load_json_refused(p, "record")
 
 
 # =============================================================================

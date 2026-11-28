@@ -86,6 +86,7 @@ import cymbal_tone_realisation as ct        # noqa: E402
 import tone_stage_schematic as ts           # noqa: E402
 import werner_fig4 as wf                    # noqa: E402
 import werner_fig9 as w9                    # noqa: E402
+from finite_number import is_finite_number  # noqa: E402
 
 Refused = ct.Refused
 BANDS = ct.BANDS
@@ -286,6 +287,9 @@ def _bound_cached(band, hz, db, f):
     return _BOUND_CACHE[key]
 
 
+FIGURE_TERM_FIELDS = ("hz", "db", "lo_db", "hi_db", "width_db")
+
+
 def figure_tone_term(band, fig9, *, at_hz=None, defect=None):
     """The tone stage's contribution to this band's level FROM FIGURE 9, with
     its bound -- the route #396 excludes, kept because the exclusion has to be
@@ -296,6 +300,11 @@ def figure_tone_term(band, fig9, *, at_hz=None, defect=None):
     fit -- evaluated AT THE BAND'S OWN CENTRE. The 9 dB / 18 dB figures quoted
     in #396 and reference §18 are the same bound at 7.1 kHz for all three
     bands, which is not where two of the three bands are levelled.
+
+    REFUSES, naming the band and the field, when any number it returns is not
+    a finite number (#1928). These come from `extrapolation_bound`, not from a
+    record a loader guards, and a NaN returned here is False in every
+    comparison downstream -- it would be reported as a level and as a bound.
     """
     f = float(at_hz if at_hz is not None else CENTRE_HZ[band])
     if defect == "TONE_AT_7100_FOR_ALL":
@@ -304,18 +313,25 @@ def figure_tone_term(band, fig9, *, at_hz=None, defect=None):
     b = _bound_cached(band, hz, db, f)
     nominal = float(tone_db(band, np.array([f]), fig9)[0])
     if defect == "NO_TONE_TERM":
-        return {"hz": f, "db": 0.0, "lo_db": 0.0, "hi_db": 0.0, "width_db": 0.0,
+        term = {"hz": f, "db": 0.0, "lo_db": 0.0, "hi_db": 0.0, "width_db": 0.0,
                 "measured": True, "n_alternatives": 0, "route": ROUTE_FIGURE}
-    return {
-        "hz": f,
-        "db": nominal,
-        "lo_db": float(b["lo_db"]),
-        "hi_db": float(b["hi_db"]),
-        "width_db": float(b["hi_db"] - b["lo_db"]),
-        "measured": bool(hz.min() <= f <= hz.max()),
-        "n_alternatives": int(b["n_alternatives"]),
-        "route": ROUTE_FIGURE,
-    }
+    else:
+        term = {
+            "hz": f,
+            "db": nominal,
+            "lo_db": float(b["lo_db"]),
+            "hi_db": float(b["hi_db"]),
+            "width_db": float(b["hi_db"] - b["lo_db"]),
+            "measured": bool(hz.min() <= f <= hz.max()),
+            "n_alternatives": int(b["n_alternatives"]),
+            "route": ROUTE_FIGURE,
+        }
+    if bad := [f"{k} = {term[k]!r}" for k in FIGURE_TERM_FIELDS
+               if not is_finite_number(term[k])]:
+        raise Refused(f"the figure route's {band} band at {f:.1f} Hz carries a "
+                      "non-finite value: " + ", ".join(bad)
+                      + "; a tone term that is not a number is not a level")
+    return term
 
 
 # ---------------------------------------------------------------------------
@@ -877,6 +893,15 @@ def properties(fig9, corner_hz, *, defect=None) -> dict:
         lv = shipped_rule_levels(defect=defect)
         g = gap_db(fig9, corner_hz, defect=defect)
         figg = gap_db(fig9, corner_hz, defect=defect, route=ROUTE_FIGURE)
+        if bad := [f"{route} {b} {field} = {v[field]!r}"
+                   for route, gaps, field in ((ROUTE_SCHEMATIC, g, "gap_db"),
+                                              (ROUTE_FIGURE, figg, "bound_db"))
+                   for b, v in gaps.items() if not is_finite_number(v[field])]:
+            raise Refused(
+                "the worst gap cannot be compared with the widest tone bound: "
+                "max() drops a NaN that is not its first argument and returns "
+                "an infinity as the widest, so a value that is not a finite "
+                "number must not reach it -- " + ", ".join(bad))
         worst_bind, at = 0.0, ""
         for b in BANDS:
             # Combine the positive finite factors in dB. Their linear products
