@@ -75,6 +75,7 @@ import voice_fx as vf                # noqa: E402
 import f1_filter_path as fp          # noqa: E402
 import f1_selected_path as sp        # noqa: E402
 import refusal
+import exit_contract
 
 #: Every record this module contributes to names this engine.
 ENGINE = "integrated-rtl"
@@ -423,9 +424,9 @@ def main(argv=None) -> int:
         path = RtlFilterChainPath(inject=a.inject, frames=a.frames or None)
         freqs = np.asarray(_profile_freqs(), dtype=np.float64)
         db, info = path.curve(freqs, a.cut_hz, a.res, rp.PROBE_AMP)
-    except Refused as exc:
+    except refusal.Refused as exc:
         print(f"f1_rtl_filter_path: REFUSED -- {exc}")
-        return 2
+        return exit_contract.REFUSED
     agree = info["rtl_vs_model"]
     print(f"f1_rtl_filter_path: {agree['frames']} frames, {info['n_tones']} tones, "
           f"cut {a.cut_hz:.0f} Hz, words g={info['g_q16']} k={info['k_eff_q14']} "
