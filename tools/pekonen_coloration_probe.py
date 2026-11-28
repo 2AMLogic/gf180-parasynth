@@ -37,6 +37,7 @@ import numpy as np
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(ROOT, "model"))
 sys.path.insert(0, os.path.join(ROOT, "audition"))
+import audio_measure as am
 import refusal
 
 RESULTS = os.path.join(ROOT, "docs", "reference-voice-results.json")
@@ -278,7 +279,14 @@ def main(argv=None):
         mini, ours = load_reference()
         rows, excluded = build_residuals(mini, ours)
         v = verdict(rows)
-    except Refused as e:
+    # The estimator's own refusal is listed BY CLASS beside `Refused` (#1751,
+    # #1763): `InsufficientEvidence` subclasses AssertionError, so the
+    # base-class clause cannot see it, and a silent oscillator render left
+    # `ours_rerender` as an exit-1 traceback -- a refusal rendered as FAIL.
+    # Not AssertionError, not Exception: an unrelated fault stays an
+    # execution error. The control's own `except Refused` above stays narrow,
+    # so a dead oscillator cannot pass `stale_ours_refused` for it.
+    except (Refused, am.InsufficientEvidence) as e:
         print(f"REFUSED: {e}")
         return 2
     print(report(rows, excluded, v))
