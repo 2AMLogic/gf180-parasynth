@@ -2,6 +2,8 @@
 import copy
 import json
 
+import pytest
+
 import check_m1a_selection as sel
 
 
@@ -43,3 +45,32 @@ def test_event_deviation_refuses_structure_changes():
     assert sel.event_deviation({"a": 1.}, {"b": 1.}) is None
     assert sel.event_deviation({"a": None}, {"a": 0.}) is None
     assert sel.event_deviation({"a": "x"}, {"a": "y"}) is None
+
+
+# ---- a record missing a key the check reads with [] is REFUSED, not a
+# traceback (#1604). One control per key: each deletes ONE key from the
+# committed record and runs the tool's own main().
+def _main_over(monkeypatch, tmp_path, capsys, which, key):
+    record, candidate, baseline, _ = _inputs()
+    records = {"record": record, "candidate": candidate, "baseline": baseline}
+    del records[which][key]
+    paths = {}
+    for name, obj in records.items():
+        paths[name] = tmp_path / f"{name}.json"
+        paths[name].write_text(json.dumps(obj))
+    monkeypatch.setattr(sel, "CANDIDATE", paths["candidate"])
+    monkeypatch.setattr(sel, "BASELINE", paths["baseline"])
+    code = sel.main(["--record", str(paths["record"])])
+    return code, capsys.readouterr().out
+
+
+@pytest.mark.parametrize("which, key", [
+    ("record", "diagnostics"), ("record", "audio"), ("record", "metrics"),
+    ("candidate", "patch"), ("candidate", "sha256"),
+    ("candidate", "measurements"), ("candidate", "metrics"),
+    ("baseline", "measurements"),
+])
+def test_a_record_missing_a_key_the_check_reads_is_refused(monkeypatch, tmp_path, capsys,
+                                                            which, key):
+    code, out = _main_over(monkeypatch, tmp_path, capsys, which, key)
+    assert code == 2 and "REFUSED" in out and f"'{key}'" in out
