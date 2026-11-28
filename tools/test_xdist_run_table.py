@@ -145,7 +145,22 @@ def test_the_rendered_table_has_a_row_per_run_and_a_header(tmp_path):
     lines = text.splitlines()
     assert lines[0].startswith("| candidate | repeat |")
     assert len(lines) == 4                       # header, rule, two rows
-    assert "6550" in text and "3091" in text and "PASS" in text and "4366.77" in text
+    assert "6550" in text and "3091" in text and "4366.77" in text
+    assert text.count("6678 ran once; outcomes identical to baseline") == 2
+    assert "UNION BROKEN" not in text
+
+
+def test_the_union_cell_separates_what_ran_from_how_it_came_out(tmp_path):
+    """Every hosted run of #1947 passed the union; what differed was outcomes.
+    A cell that said only FAIL would hide that, and one that said only PASS
+    would hide the rest."""
+    d = write_run(tmp_path, "n8", 1, union=dict(UNION, verdict="FAIL", outcome_diffs=[
+        {"nodeid": "a::b", "baseline": "PASSED", "candidate": "FAILED"}]))
+    text = xt.build_table([d]).render()
+    assert "6678 ran once; 1 outcome differences vs baseline" in text
+    d = write_run(tmp_path, "n8", 2, union=dict(UNION, verdict="FAIL", missing=["a::b"]))
+    text = xt.build_table([d]).render()
+    assert "UNION BROKEN: 1 not run exactly once" in text
 
 
 def test_a_broken_record_refuses_the_whole_table_rather_than_a_row(tmp_path):

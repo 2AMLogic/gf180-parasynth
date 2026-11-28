@@ -136,7 +136,8 @@ class Run:
     counts: dict = field(default_factory=dict)          # the union check's tally
     summary_counts: dict = field(default_factory=dict)   # pytest's own line
     summary_line: str = ""
-    verdict: str = ""
+    verdict: str = ""                                   # the check's overall verdict
+    expected: int = 0                                   # what the collection lists
     outcome_diffs: int = 0
     union_holes: int = 0
     exits: dict = field(default_factory=dict)
@@ -185,6 +186,7 @@ def read_run_dir(path) -> Run:
     if union.exists():
         u = json.loads(union.read_text())
         run.verdict = u["verdict"]
+        run.expected = int(u.get("expected", 0))
         run.counts = u.get("counts", {})
         run.outcome_diffs = len(u.get("outcome_diffs", []))
         run.union_holes = sum(len(u.get(k, [])) for k in ("missing", "extra", "duplicate"))
@@ -253,11 +255,12 @@ def render(runs: list[Run]) -> str:
     lines = [HEAD, "|" + "---|" * 12]
     for r in runs:
         step = _f(r.step_wall_api_min, ".1f", "(no step record)")
-        union = r.verdict
-        if r.outcome_diffs:
-            union += f", {r.outcome_diffs} outcome differences"
         if r.union_holes:
-            union += f", {r.union_holes} not run exactly once"
+            union = f"UNION BROKEN: {r.union_holes} not run exactly once"
+        else:
+            union = f"{r.expected} ran once; " + (
+                f"{r.outcome_diffs} outcome differences vs baseline"
+                if r.outcome_diffs else "outcomes identical to baseline")
         lines.append(
             f"| {r.label} | {r.repeat} | {r.runner} | {_f(r.job_wall_min, '.1f', '(no jobs record)')} | "
             f"{step} | {r.pytest_s:.2f} | {r.cpu_s:.0f} | {r.cpu_over_wall:.2f} | "
