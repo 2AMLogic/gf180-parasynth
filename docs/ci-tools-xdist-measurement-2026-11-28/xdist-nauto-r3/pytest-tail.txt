@@ -1,0 +1,5 @@
+6642 passed, 34 skipped, 2 xfailed in 1934.22s (0:32:14)
+[rss] peak RSS 1118 MB  user 6860.6s  sys 148.8s  wall 1935.0s  minflt 23476247  majflt 89  MemAvailable now 14952 MB
+[rss] exit 0
+[mem] peak tree RSS 2820 MB at 1596.5s  samples 3760  max processes 18  wall 1935.0s
+[mem] exit 0
