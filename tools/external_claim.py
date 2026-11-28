@@ -25,6 +25,9 @@ import math
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from finite_number import non_finite  # noqa: E402
+
 # loader and machine are required so a second route cannot count as
 # "different" merely by omitting them.
 ENV_KEYS = ("host", "host_version", "loader", "machine", "binary_sha256",
@@ -72,7 +75,14 @@ def check_claim(claim: dict) -> list[str]:
 def assert_readback(*, expected_hz: float, measured_hz: float, pitch_tol_cents: float = 30.0,
                     level_dbfs: float | None = None, min_level_dbfs: float = -60.0,
                     pins_set: dict | None = None, pins_read: dict | None = None) -> list[str]:
-    """Pitch, level and pin readback. Returns failures; empty means all held."""
+    """Pitch, level and pin readback. Returns failures; empty means all held.
+
+    Every level and pin operand is a finite number before it is compared
+    (#1994): IEEE makes each ordering comparison against NaN False, so a NaN
+    level used to pass "silence is not data" and a NaN used to read back as
+    the pin that was set. `None` is unchanged: an absent level or pin is still
+    a failure. A comparison whose operand is not a finite number is withheld:
+    each such operand is named instead, and nothing is reported beside it."""
     fails = []
     if not (measured_hz > 0 and expected_hz > 0):
         fails.append("pitch: no measurable fundamental")
@@ -81,10 +91,23 @@ def assert_readback(*, expected_hz: float, measured_hz: float, pitch_tol_cents: 
         if abs(cents) > pitch_tol_cents:
             fails.append(f"pitch: {measured_hz:.2f} Hz vs expected {expected_hz:.2f} Hz "
                          f"({cents:+.0f} cents)")
-    if level_dbfs is None or level_dbfs < min_level_dbfs:
+    level_bad = non_finite({"level_dbfs": level_dbfs})
+    floor_bad = non_finite({"min_level_dbfs": min_level_dbfs})
+    if level_bad:
+        fails.append(f"level: {level_dbfs} dBFS is not a finite number (silence is not data)")
+    if floor_bad:
+        fails.append(f"min_level_dbfs: {min_level_dbfs} is not a finite number")
+    if not (level_bad or floor_bad) and (level_dbfs is None or level_dbfs < min_level_dbfs):
         fails.append(f"level: {level_dbfs} dBFS below {min_level_dbfs} (silence is not data)")
     for pin, want in (pins_set or {}).items():
         got = (pins_read or {}).get(pin)
+        read_bad, set_bad = non_finite({"read back": got}), non_finite({"set": want})
+        if read_bad:
+            fails.append(f"pin {pin}: read back {got}, which is not a finite number")
+        if set_bad:
+            fails.append(f"pin {pin}: set {want}, which is not a finite number")
+        if read_bad or set_bad:
+            continue
         if got is None or abs(got - want) > 1e-6:
             fails.append(f"pin {pin}: set {want}, read back {got}")
     return fails

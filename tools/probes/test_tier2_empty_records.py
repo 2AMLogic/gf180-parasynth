@@ -53,7 +53,9 @@ def test_sensitivity_requires_records(sensitivity_root):
     registry = json.loads(path.read_text())
     tool_dir = sensitivity_root / "tools"
     tool_dir.mkdir(exist_ok=True)
-    for name in ("sensitivity.py", "refusal.py"):
+    # finite_number.py (imported by sensitivity.py since #1994) needs numpy; the
+    # subprocess runs under sys.executable, the same interpreter as this test.
+    for name in ("sensitivity.py", "refusal.py", "finite_number.py"):
         shutil.copyfile(ROOT / "tools" / name, tool_dir / name)
     cmd = [sys.executable, str(tool_dir / "sensitivity.py"), "check"]
     assert subprocess.run(cmd).returncode == 0

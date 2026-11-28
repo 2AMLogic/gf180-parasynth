@@ -129,3 +129,67 @@ def test_main_types_malformed_second_route_without_traceback(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "FAIL" in out and "second_route is not an object" in out
     assert "Traceback" not in out
+
+
+NAN = float("nan")
+
+
+def test_readback_passes_when_every_operand_is_a_finite_number():
+    """The control for the refusals below (#1994). They exist because IEEE
+    comparisons with NaN are always False (#134): `level_dbfs < min_level_dbfs`
+    let a NaN level through "silence is not data", and `abs(got - want) > 1e-6`
+    let a NaN read back as the pin that was set. The rule-6 readback is the one
+    place a plugin's state is asserted rather than assumed, so each operand is
+    asserted to be a finite number first."""
+    assert ec.assert_readback(expected_hz=261.63, measured_hz=261.0, level_dbfs=-12,
+                              pins_set={"range": 3.0, "oct": 1.0},
+                              pins_read={"range": 3.0, "oct": 1.0}) == []
+
+
+@pytest.mark.parametrize("level", [NAN, float("inf"), -float("inf")])
+def test_readback_fails_a_level_that_is_not_a_finite_number(level):
+    fails = ec.assert_readback(expected_hz=261.63, measured_hz=261.0, level_dbfs=level)
+    assert len(fails) == 1, fails
+    assert fails[0].startswith("level:") and "not a finite number" in fails[0], fails
+    assert "silence is not data" in fails[0]
+
+
+def test_readback_fails_a_level_floor_that_is_not_a_finite_number():
+    for bad in (NAN, float("inf"), -float("inf")):
+        fails = ec.assert_readback(expected_hz=261.63, measured_hz=261.0, level_dbfs=-12,
+                                   min_level_dbfs=bad)
+        assert fails == [f"min_level_dbfs: {bad} is not a finite number"], bad
+
+
+@pytest.mark.parametrize("bad", [NAN, float("inf"), -float("inf")])
+def test_readback_fails_a_pin_read_back_as_a_non_finite_number(bad):
+    fails = ec.assert_readback(expected_hz=1, measured_hz=1, level_dbfs=-6,
+                               pins_set={"range": 3.0, "oct": 1.0}, pins_read={"range": bad, "oct": 1.0})
+    assert fails == [f"pin range: read back {bad}, which is not a finite number"]
+
+
+@pytest.mark.parametrize("bad", [NAN, float("inf"), -float("inf")])
+def test_readback_fails_a_pin_set_to_a_non_finite_number(bad):
+    fails = ec.assert_readback(expected_hz=1, measured_hz=1, level_dbfs=-6,
+                               pins_set={"range": bad}, pins_read={"range": 3.0})
+    assert fails == [f"pin range: set {bad}, which is not a finite number"]
+
+
+def test_readback_names_each_non_finite_operand_and_withholds_the_comparison():
+    """Both operands bad at once: each is named, and no 'below' or 'read back'
+    line is derived from an operand the rule has just declared unusable."""
+    fails = ec.assert_readback(expected_hz=1, measured_hz=1, level_dbfs=NAN, min_level_dbfs=float("inf"),
+                               pins_set={"range": NAN}, pins_read={"range": float("inf")})
+    assert fails == [
+        "level: nan dBFS is not a finite number (silence is not data)",
+        "min_level_dbfs: inf is not a finite number",
+        "pin range: read back inf, which is not a finite number",
+        "pin range: set nan, which is not a finite number"]
+
+
+def test_readback_still_reports_an_absent_level_and_an_absent_pin_as_failures():
+    """`None` is "no reading", not a NaN: both stay the failures they were."""
+    fails = ec.assert_readback(expected_hz=1, measured_hz=1, level_dbfs=None,
+                               pins_set={"range": 3.0}, pins_read={})
+    assert fails == ["level: None dBFS below -60.0 (silence is not data)",
+                     "pin range: set 3.0, read back None"]

@@ -52,6 +52,7 @@ from scipy.io import wavfile
 
 import mono_m1a_score as bass
 import refusal
+from finite_number import non_finite
 
 ROOT, SR = bass.ROOT, bass.SR
 lead, am = bass.lead, bass.lead.am
@@ -309,6 +310,22 @@ def _energy_change(ref_phase_rows):
                                      - a["osc2_dbfs_at_mix_partial"][f"h{k}"]))
         out[f"h{k}"] = change
     return out
+
+
+def scored_reproduce_record(model_rows, reference, record_scored):
+    """Refuse unless the scored errors are exactly the record's. A recorded
+    error that is not a finite number is refused before it is compared
+    (#1994): every ordering comparison against NaN is False, so one read as
+    reproduced."""
+    for i in range(3):
+        for k, v in record_scored[i].items():
+            bad = non_finite({f"diagnostics.events[{i}].harmonic_error_db_model_minus_reference.{k}": v})
+            if bad:
+                raise Refused(f"the M1A record holds a value that is not a finite number: "
+                              + ", ".join(bad))
+            mine = model_rows[i]["ratio_db"][k] - reference[i]["ratio_db"][k]
+            if abs(mine - v) > 1e-6:
+                raise Refused(f"scored error does not reproduce the record at event {i} {k}")
 
 
 def separate(reference_mix, ref_osc1, ref_osc2, model_mix, model_at_reference_phase):
@@ -593,11 +610,7 @@ def _run() -> int:
     reference = [partials(ref, e) for e in EVENTS]
     model_rows = [partials(model, e) for e in EVENTS]
     # the scored ratios must be exactly the record's
-    for i in range(3):
-        for k, v in record_scored[i].items():
-            mine = model_rows[i]["ratio_db"][k] - reference[i]["ratio_db"][k]
-            if abs(mine - v) > 1e-6:
-                raise Refused(f"scored error does not reproduce the record at event {i} {k}")
+    scored_reproduce_record(model_rows, reference, record_scored)
 
     table = []
     for i, e in enumerate(EVENTS):

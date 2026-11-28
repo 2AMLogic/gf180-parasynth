@@ -725,5 +725,40 @@ def test_a_move_from_a_zero_objective_prints_the_verdict_without_a_price(repo):
     assert "+0.00%" not in text and "-0.00%" not in text
 
 
+def test_a_recorded_objective_that_is_nan_refuses_the_gate_rather_than_reading_transcribed(root):
+    """#1994. Every ordering comparison against NaN is False (#134), so
+    `abs(recorded - measured) > 0.05` did not trip on a NaN objective and the
+    point read as faithfully transcribed. End to end, through the file:
+    `json.dumps` writes a bare `NaN` and `load_records` reads it back, which is
+    the path a real record takes."""
+    path, rec = record(root)
+    rec["points"][0]["objective"] = float("nan")
+    write(path, rec)
+    assert "NaN" in path.read_text()
+    code, text = run(root)
+    assert code == 2, text
+    assert "REFUSED" in text and "points" in text and "objective" in text, text
+    assert f"value={rec['points'][0]['value']:g}" in text, text
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), -float("inf")])
+@pytest.mark.parametrize("index", [0, -1], ids=["first-point", "last-point"])
+def test_evaluate_refuses_a_non_finite_recorded_objective_naming_the_point(root, bad, index):
+    _, rec = record(root)
+    point = rec["points"][index]
+    point["objective"] = bad
+    with pytest.raises(sens.Refused, match=rf"points\[value={point['value']:g}\]\.objective"):
+        sens.evaluate(rec, root)
+
+
+def test_a_finite_recorded_objective_is_still_compared_and_a_moved_one_is_red(root):
+    """The control for the two above: the same point, finite and moved, is the
+    red gate it always was -- the refusal did not replace the comparison."""
+    _, rec = record(root)
+    rec["points"][0]["objective"] = float(rec["points"][0]["objective"]) * 1.5
+    row = sens.evaluate(rec, root)
+    assert any("records" in p and "measures" in p for p in row["problems"]), row["problems"]
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q", *sys.argv[1:]]))
