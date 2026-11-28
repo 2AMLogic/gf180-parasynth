@@ -107,6 +107,22 @@ def tcl_assertions(xdc_text: str, report_path: str) -> str:
     return "\n".join(lines)
 
 
+def check_footer(text: str, report: str, marker: str) -> list:
+    """Tcl writes one tab-separated failed-check count for each section."""
+    counts = [line.partition("\t")[2] for line in text.splitlines()
+              if line.partition("\t")[0] == marker]
+    if not counts:
+        return [f"{report} is incomplete (no {marker} line)"]
+    if len(counts) != 1:
+        return [f"{report} has multiple {marker} lines"]
+    count = counts[0]
+    if not re.fullmatch(r"[0-9]+", count):
+        return [f"{report}: malformed {marker} count {count!r}"]
+    if count.lstrip("0"):
+        return [f"{report}: {marker} records {count} refused check(s)"]
+    return []
+
+
 def check_report(report_text: str, xdc_text: str) -> list:
     """Problems with a build's constraint_matches.rpt against the XDC it
     compiled (empty = every constraint bound exactly its objects)."""
@@ -115,18 +131,12 @@ def check_report(report_text: str, xdc_text: str) -> list:
                 for n, kind, rx, exp, ar in object_queries(xdc_text)}
     except Refused as exc:
         return [str(exc)]
-    got, end = {}, None
+    got = {}
     for line in report_text.splitlines():
         f = line.split("\t")
         if f[0] == "MATCH" and len(f) == 7:
             got[(int(f[1]), f[2], f[6])] = (int(f[3]), int(f[4]), f[5])
-        elif f[0] == "END" and len(f) == 2:
-            end = int(f[1])
-    problems = []
-    if end is None:
-        problems.append(f"{REPORT} is incomplete (no END line)")
-    elif end:
-        problems.append(f"{REPORT} records {end} refused constraint(s)")
+    problems = check_footer(report_text, REPORT, "END")
     for key, (exp, async_reg, rx) in want.items():
         if key not in got:
             problems.append(f"XDC line {key[0]}: {key[1]} {{{rx}}} not in {REPORT}")
@@ -208,19 +218,21 @@ def tcl_route_checks(report_path: str, exceptions_path: str) -> str:
 
 
 _FALSE = re.compile(r"^\s*set_false_path\s+(.*?)\s*$")
+_ENDPOINT = r"\[get_\w+\s+(?:-\w+\s+)*\{[^}]*\}\]|\[[^\]]*\]"
 
 
 def expected_exceptions(xdc_text: str) -> list:
     """[(from, to)] of the XDC's set_false_path lines, as report_exceptions
-    prints them ('*' where an end is not given)."""
+    prints them ('*' where an end is not given). Both ends parse with one
+    pattern: a braced name such as `{btn[0]}` holds a `]` of its own."""
     out = []
     for line in xdc_text.splitlines():
         m = _FALSE.match(line.split("#", 1)[0])
         if not m:
             continue
         args = m.group(1)
-        frm = re.search(r"-from\s+(\[[^\]]*\])", args)
-        to = re.search(r"-to\s+(\[get_\w+\s+(?:-\w+\s+)*\{[^}]*\}\]|\[[^\]]*\])", args)
+        frm = re.search(r"-from\s+(" + _ENDPOINT + ")", args)
+        to = re.search(r"-to\s+(" + _ENDPOINT + ")", args)
         out.append((frm.group(1) if frm else "*", to.group(1) if to else "*"))
     if re.search(r"set_(multicycle_path|max_delay|min_delay|clock_groups|disable_timing)",
                  xdc_text):
@@ -244,17 +256,12 @@ def reported_exceptions(report_text: str) -> list:
 
 def check_route(report_text: str, exceptions_text: str, xdc_text: str) -> list:
     """The publisher's check of the after-route section and the exception list."""
-    probs = []
+    probs = check_footer(report_text, REPORT, "ROUTE_END")
     checks = {}
-    end = None
     for line in report_text.splitlines():
         f = line.split("\t")
         if f[0] == "CHECK" and len(f) >= 3:
             checks[f[1]] = (f[2], f[3] if len(f) > 3 else "")
-        elif f[0] == "ROUTE_END" and len(f) == 2:
-            end = int(f[1])
-    if end is None:
-        probs.append(f"{REPORT} has no after-route section (ROUTE_END)")
     for name in ROUTE_CHECKS:
         if name not in checks:
             probs.append(f"after-route check {name} is missing")

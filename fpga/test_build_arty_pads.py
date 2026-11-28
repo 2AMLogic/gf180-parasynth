@@ -1,8 +1,11 @@
 """fpga/build_arty_pads.py's gates, without Vivado (#449).
 
 What these can and cannot show: that the build REFUSES on a tampered kit ROM, a
-missing/stale/injected bench record, a non-routed or failing timing report and
-an undispositioned input -- and that the Tcl it emits is well-formed. They
+missing/stale/injected bench record, a non-routed or failing timing report, a
+DRC error or critical warning, a wrong core clock, a constraint that did not
+bind or take effect, an unintended timing exception and an undispositioned
+input -- and that the Tcl it emits is well-formed. The post-Vivado cases replay
+the committed pads-demo-2025.1 reports with one defect injected each. They
 cannot show that Vivado accepts the Tcl or that the image closes timing; that
 is the build box's run."""
 import hashlib
@@ -80,7 +83,7 @@ def _records(tmp_path, paths):
         comp.update(periods=100, periods_required=100, writes_seen=10, presses=2)
         rec = {"state": "PASS", "exit_code": 0, "inject": None, "scenario": sc,
                "configuration": bp.CONFIG, "comparison": comp,
-               "source_sha256": {str(p): _sha(p) for p in paths},
+               "source_sha256": {bp._key(p): _sha(p) for p in paths},
                "transcript_sha256": _sha(d / "transcript.txt")}
         (d / "verification.json").write_text(json.dumps(rec))
 
@@ -115,21 +118,127 @@ def test_verification_gate(tmp_path):
         bp.validate_verification(tmp_path, [src])
 
 
-def test_timing_summary_reads_a_real_routed_report():
-    """The release image's committed UART-bridge build: the parser must read
-    its numbers and refuse it as the pads design."""
-    text = (ROOT / "fpga/reports/arty/uart-bridge-2025.1/timing.rpt").read_text()
-    with pytest.raises(ValueError, match="not for arty_a7_pads_top"):
-        bp.timing_summary(text)
-    m = bp.timing_summary(text, design="arty_a7_top")
-    assert m["wns_ns"] == 46.102 and m["setup_failing"] == 0 and m["setup_endpoints"] == 40510
-    assert bp.timing_verdict(m) == (True, [])
-    bad = {**m, "wns_ns": -0.01, "hold_failing": 2.0}
-    ok, why = bp.timing_verdict(bad)
-    assert not ok and any("WNS" in w for w in why) and any("hold" in w for w in why)
-    assert not bp.timing_verdict({**m, "setup_endpoints": 0.0})[0]
-    with pytest.raises(ValueError, match="routed"):
-        bp.timing_summary(text.replace("Routed", "Placed"), design="arty_a7_top")
+PADS_REPORTS = ROOT / "fpga/reports/arty/pads-demo-2025.1"
+PADS_TIMING = {"wns_ns": 15.82, "tns_ns": 0.0, "setup_failing": 0.0, "setup_endpoints": 44078.0,
+               "whs_ns": 0.03, "ths_ns": 0.0, "hold_failing": 0.0, "hold_endpoints": 44078.0,
+               "wpws_ns": 3.0, "tpws_ns": 0.0, "pulse_failing": 0.0, "pulse_endpoints": 14098.0}
+
+
+def _rewrite(name, old, new):
+    """A stand-in Vivado's last step: the build wrote `new` where the committed
+    report holds `old`."""
+    return (f"p = out / {name!r}; t = p.read_text()\n"
+            f"assert {old!r} in t, 'mutation target absent'\n"
+            f"p.write_text(t.replace({old!r}, {new!r}))\n")
+
+
+_EXTRA_EXCEPTION = (
+    "p = out / 'exceptions.rpt'\n"
+    "ls = p.read_text().splitlines(keepends=True)\n"
+    "last = max(i for i, ln in enumerate(ls) if ln[:1].isdigit())\n"
+    "ls.insert(last + 1, '12        [get_ports spi_miso]  *  *  false  false\\n')\n"
+    "p.write_text(''.join(ls))\n")
+
+
+def _replay(tmp_path, after=""):
+    """main() over the committed pads-demo-2025.1 reports: a stand-in Vivado
+    copies them into the build directory, runs the `after` snippet on them (a
+    defect a real build could produce) and writes the two binary outputs.
+    Returns (build directory, exit status, report.json)."""
+    verification = tmp_path / "verification"
+    if not verification.exists():
+        verification.mkdir()
+        _records(verification, bp.sources() + bp.roms())
+    hook = tmp_path / "after_reports.py"
+    hook.write_text(after)
+    vivado = tmp_path / "vivado"
+    vivado.write_text(f"""#!{sys.executable}
+import shutil, sys
+from pathlib import Path
+if '-version' in sys.argv:
+    print('report replay')
+    sys.exit(0)
+out = Path(sys.argv[sys.argv.index('-log') + 1]).parent
+for p in Path({str(PADS_REPORTS)!r}).glob('*.rpt'):
+    shutil.copyfile(p, out / p.name)
+exec(compile(Path({str(hook)!r}).read_text(), 'after_reports', 'exec'))
+for name in ('arty_pads.bit', 'routed.dcp'):
+    (out / name).write_bytes(b'fixture')
+""")
+    vivado.chmod(0o755)
+    build = tmp_path / "build"
+    rc = bp.main(["--vivado", str(vivado), "--out", str(build), "--verification", str(verification)])
+    return build, rc, json.loads((build / "report.json").read_text())
+
+
+@pytest.mark.parametrize("after,changed,problem", [
+    ("", (), None),
+    (_rewrite("timing.rpt", "        3.000        0.000", "       -0.500        0.000"),
+     ("timing.rpt",), "internal timing does not pass"),
+    (_rewrite("timing.rpt", "     15.820        0.000", "          NaN        0.000"),
+     ("timing.rpt",), "unexpected timing summary shape"),
+    (_rewrite("drc.rpt", "| Design State : Fully Routed", "| Design State : Placed"),
+     ("drc.rpt",), "report is not the routed Arty design"),
+    (_rewrite("timing.rpt", "checking unconstrained_internal_endpoints (0)",
+              "checking unconstrained_internal_endpoints (5)"),
+     ("timing.rpt",), "internal timing is incomplete: unconstrained_internal_endpoints"),
+    (_rewrite("drc.rpt", "| DPREG-4 | Warning  |", "| DPREG-4 | Critical Warning  |"),
+     ("drc.rpt",), "DRC error or critical warning"),
+    (_rewrite("clocks.rpt", "hardware_clock.clock_raw     81.380",
+              "hardware_clock.clock_raw     50.000"), ("clocks.rpt",), "wrong core clock period"),
+    (_rewrite(xb.REPORT, "CHECK\tuart_s1s2\t1\t", "CHECK\tuart_s1s2\t0\t"),
+     (xb.REPORT,), "after-route check uart_s1s2 failed"),
+    (_EXTRA_EXCEPTION, (xb.EXCEPTIONS,), "not exactly the XDC's set_false_path lines"),
+], ids=["clean", "wpws", "nan-slack", "drc-not-routed", "check_timing", "drc", "clock", "route-check",
+        "exception"])
+def test_post_vivado_verdict_reads_every_report(tmp_path, after, changed, problem):
+    build, rc, report = _replay(tmp_path, after)
+    mutated = {p.name for p in build.glob("*.rpt")
+               if p.read_bytes() != (PADS_REPORTS / p.name).read_bytes()}
+    assert mutated == set(changed), mutated
+    if problem is None:
+        assert rc == 0 and report["state"] == "PASS" and report["problems"] == []
+        assert report["timing"] == PADS_TIMING
+    else:
+        assert rc == 1 and report["state"] == "FAIL", report
+        assert any(problem in p for p in report["problems"]), report["problems"]
+
+
+@pytest.mark.parametrize("name,old,new,problem", [
+    (xb.REPORT, "ROUTE_END\t0", "ROUTE_END\t1", "ROUTE_END records 1 refused"),
+    (xb.REPORT, "ROUTE_END\t0", "ROUTE_END\t", "malformed ROUTE_END"),
+    (xb.REPORT, "ROUTE_END\t0", "ROUTE_END\t1\nROUTE_END\t0", "multiple ROUTE_END"),
+    (xb.REPORT, "\nEND\t0", "\nEND\t?", "malformed END"),
+    (bp.PADS_REPORT, "\nEND\t0", "\nEND\t?", "malformed END"),
+    (xb.REPORT, "MATCH\t107\t", "MATCH\tbad-line\t", "bad-line"),
+], ids=["route-refused", "route-empty", "route-duplicate", "binding-end", "pads-end", "match-line"])
+def test_bad_constraint_report_replaces_previous_pass(tmp_path, name, old, new, problem):
+    build, rc, passing = _replay(tmp_path)
+    assert rc == 0 and passing["state"] == "PASS"
+    _, rc, current = _replay(tmp_path, _rewrite(name, old, new))
+    assert (build / name).read_text() == (PADS_REPORTS / name).read_text().replace(old, new)
+    assert rc == 1 and current["state"] == "FAIL", current
+    assert any(problem in message for message in current["problems"]), current
+    assert current["artifact_sha256"][name] == _sha(build / name) != passing["artifact_sha256"][name]
+
+
+def test_the_verdict_reads_the_compiled_xdc_snapshot_not_the_live_tree(tmp_path, monkeypatch):
+    """A line pushed into the live XDC while Vivado runs shifts every query's
+    line number: the verdict must still be about the XDC the build compiled."""
+    key = bp.XDC.relative_to(bp.ROOT)
+    live = tmp_path / key
+    live.parent.mkdir(parents=True)
+    shutil.copyfile(bp.XDC, live)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(bp, "XDC", key)
+    assert bp.XDC.resolve() == live
+    original = live.read_text()
+    edit = "# edited in the live tree while Vivado ran\n"
+    after = f"p = Path({str(live)!r})\np.write_text({edit!r} + p.read_text())\n"
+    build, rc, report = _replay(tmp_path, after)
+    assert live.read_text() == edit + original
+    assert rc == 0 and report["state"] == "PASS" and report["problems"] == [], report
+    assert (build / "inputs" / key).read_text() == original
 
 
 def test_pads_inputs_report():

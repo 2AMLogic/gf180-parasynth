@@ -134,6 +134,39 @@ def test_the_xdc_false_paths_are_the_expected_exceptions():
         ("[get_ports btn_reset]", "*")]
 
 
+PADS_XDC = HERE / "boards/arty-a7-100-pads.xdc"
+PADS_REPORTS = HERE / "reports/arty/pads-demo-2025.1"
+
+
+def test_the_pads_xdc_braced_from_ports_parse_whole():
+    """`-from [get_ports {btn[0]}]`: the braced name holds a `]`, so the -from
+    end must parse exactly as the -to end does."""
+    assert xb.expected_exceptions(PADS_XDC.read_text()) == [
+        ("[get_ports {btn[0]}]", "*"), ("[get_ports {btn[1]}]", "*"),
+        ("[get_ports {btn[2]}]", "*"), ("[get_ports {btn[3]}]", "*"),
+        ("[get_ports sw_pads]", "*"), ("[get_ports sw_reset]", "*"),
+        ("[get_ports spi_sck]", r"[get_pins -hier -regexp {.*u_spi/sck_q_reg\[0\]/D}]"),
+        ("[get_ports spi_mosi]", r"[get_pins -hier -regexp {.*u_spi/mosi_q_reg\[0\]/D}]"),
+        ("[get_ports spi_cs_n]", r"[get_pins -hier -regexp {.*u_spi/csn_q_reg\[0\]/D}]"),
+        ("[get_ports uart_rxd]", r"[get_pins -hier -regexp {.*g_uart\.u_uart/rx_q_reg\[0\]/D}]")]
+
+
+def test_the_pads_routed_build_shows_exactly_its_xdc_exceptions():
+    assert xb.check_route((PADS_REPORTS / xb.REPORT).read_text(),
+                          (PADS_REPORTS / xb.EXCEPTIONS).read_text(),
+                          PADS_XDC.read_text()) == []
+
+
+def test_control_pads_routed_design_with_an_extra_exception_is_refused():
+    lines = (PADS_REPORTS / xb.EXCEPTIONS).read_text().splitlines(keepends=True)
+    last = max(i for i, ln in enumerate(lines) if ln[:1].isdigit())
+    lines.insert(last + 1, "12        [get_ports spi_miso]  *  *  false  false\n")
+    report = "".join(lines)
+    assert len(xb.reported_exceptions(report)) == 11
+    probs = xb.check_route((PADS_REPORTS / xb.REPORT).read_text(), report, PADS_XDC.read_text())
+    assert any("not exactly the XDC" in p and "[get_ports spi_miso]" in p for p in probs), probs
+
+
 def test_the_route_tcl_checks_identity_exception_and_analysed_paths():
     tcl = xb.tcl_route_checks("/x/r.rpt", "/x/e.rpt")
     for name in xb.ROUTE_CHECKS:
