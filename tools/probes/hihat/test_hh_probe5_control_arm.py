@@ -3,9 +3,13 @@
 `hh_probe5.main()` compares the cascade's transparent stage against the 2-pole
 render band by band as `20*log10(max(c, 1e-30) / max(r, 1e-30))` and passes the
 arm when the worst compared band is within 0.5 dB. Two exact zeros read 0.0 dB
-in every band, so a `decay_band_only` render that is silent on BOTH arms -- a
-kit that mutes the band, which is the opposite of a transparent cascade --
-passed the arm: "the cascade is transparent", on no signal. Neither `render()`
+in every band, so the PER-BAND EXPRESSION read "transparent" on a
+`decay_band_only` render that is silent on BOTH arms. (The enclosing gate did
+not pass: its total, `math.log10(0)`, raised `ValueError: math domain error`
+on the merge base. The defect was a crash that named nothing, not a pass.)
+The repaired arm refuses with a `Refused` that says "silent". The ratios are
+of ENERGIES (sums of squared samples), so the dB conversion is 10*log10, not
+20*log10 (the factor of two predates #1743 and refused a legal 0.30 dB gain). Neither `render()`
 nor `band_energy_abs()` refuses a silent record, and the CY_FIT precondition at
 the top of `main()` covers the full kit only, not these two renders.
 
@@ -74,7 +78,8 @@ def test_control_arm_ratio_still_reads_0_db_for_two_equal_live_renders():
     db = hh_probe5._control_arm_db(LIVE, LIVE)
     assert db == [0.0] * 6
     half = hh_probe5._control_arm_db(LIVE, LIVE / 2.0)
-    assert half == pytest.approx([20 * np.log10(0.5)] * 6)
+    assert half == pytest.approx([10 * np.log10(0.5)] * 6)        # -3.0103 dB, an ENERGY ratio
+    assert half[0] == pytest.approx(-3.0103, abs=1e-4)
 
 
 def test_control_arm_ratio_of_a_band_the_control_kills_is_minus_inf_not_a_floor():
@@ -86,3 +91,30 @@ def test_control_arm_ratio_of_a_band_the_control_kills_is_minus_inf_not_a_floor(
     db = hh_probe5._control_arm_db(LIVE, ec)
     assert db[2] == float("-inf")
     assert np.isfinite(np.delete(db, 2)).all()
+
+
+def test_control_arm_reads_a_known_sample_gain_through_the_real_filter_bank():
+    """CONTROL: a 0.30 dB AMPLITUDE gain change is 0.30 dB in every band and in
+    the total, inside the 0.5 dB allowance. The old 20*log10 of an energy ratio
+    read -0.60 dB per band and refused it."""
+    x = np.random.default_rng(1743).normal(size=4096)
+    y = x * 10 ** (-0.30 / 20)
+    db = hh_probe5._control_arm_db(hh_probe5.band_energy_abs(x), hh_probe5.band_energy_abs(y))
+    assert db == pytest.approx([-0.30] * len(hh_probe5.CY_BANDS), abs=0.01)
+    assert hh_probe5._control_total_db(x, y) == pytest.approx(-0.30, abs=1e-6)
+    assert abs(hh_probe5._control_total_db(x, x * np.sqrt(0.5)) + 3.0103) < 1e-3
+
+
+def test_control_total_of_a_muted_control_is_minus_inf_not_a_math_domain_error():
+    """CONTROL: live reference, all-zero control. Used to raise `ValueError`
+    from `math.log10(0)` before the 0.5 dB gate could refuse it."""
+    x = np.random.default_rng(1743).normal(size=4096)
+    assert hh_probe5._control_total_db(x, np.zeros_like(x)) == float("-inf")
+
+
+def test_control_total_refuses_a_silent_reference_and_non_finite_input():
+    x = np.random.default_rng(1743).normal(size=64)
+    with pytest.raises(hh_probe5.Refused, match="silent"):
+        hh_probe5._control_total_db(np.zeros(64), np.zeros(64))
+    with pytest.raises(hh_probe5.Refused, match="non-finite"):
+        hh_probe5._control_total_db(x, np.where(np.arange(64) == 3, np.nan, x))

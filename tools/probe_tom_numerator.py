@@ -192,7 +192,12 @@ def deadband(f0=90.0, q=25.0, levels=(100, 1_000, 10_000, 100_000), n=96_000) ->
         y = np.asarray(b.process(exc, [(a1, a2, 65535)], num=[mf.RAW]), dtype=np.float64)
         yf = lfilter([1.0], [1.0, -a1 / 2 ** 24, -a2 / 2 ** 24], exc.astype(np.float64)) * 65535 / 65536
         blk = int(0.01 * dx.SR)
-        pk = lambda x: np.array([np.max(np.abs(x[i:i + blk])) for i in range(0, n - blk, blk)])
+        if n < blk:
+            raise rc.Refused(f"deadband: n={n} is shorter than one {blk}-sample block, "
+                             f"so there is nothing to compare")
+        # `n - blk + 1`, not `n - blk`: a record of exactly k blocks holds k
+        # complete ones, and `range(0, n - blk, blk)` dropped the last.
+        pk = lambda x: np.array([np.max(np.abs(x[i:i + blk])) for i in range(0, n - blk + 1, blk)])
         e, ef = pk(y), pk(yf)
         bad = np.nonzero(np.abs(_departures_db(e, ef)) > 3.0)[0]
         i = int(bad[0]) if len(bad) else None

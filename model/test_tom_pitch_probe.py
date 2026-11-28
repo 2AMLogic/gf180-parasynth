@@ -303,3 +303,10 @@ def test_out_of_band_ratio_still_answers_on_a_real_tom():
     m = P.measure(_synth("MT", 135.0, 24.0), SR, label="MT")
     assert m["verdict"] == "OK"
     assert m["out_of_band_db"] == pytest.approx(-13.2066, abs=1e-3)
+
+
+def test_out_of_band_ratio_is_none_for_a_segment_too_short_to_measure():
+    """CONTROL (#1743 review): a < 64-sample segment returned NaN ahead of the
+    None guard -- NaN is not the documented missing-measurement outcome."""
+    assert P._out_of_band_db(np.zeros(16), SR, 150.0, 0.0) is None
+    assert P._out_of_band_db(np.ones(16), SR, 150.0, 0.0) is None

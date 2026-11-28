@@ -161,6 +161,9 @@ def click_report(x, sr, f0):
     d = np.diff(np.asarray(x, dtype=np.float64), n=2)
     nb = max(8, int(CLICK_PERIODS * sr / f0))
     m = len(d) // nb
+    if m == 0:
+        raise Refused(f"click_report: record too short -- no complete {nb}-sample block "
+                      f"({len(d)} second-difference samples)")
     lev = np.sqrt((d[:m * nb].reshape(m, nb) ** 2).mean(axis=1))
     if not np.isfinite(lev).all():
         raise Refused("click_report: non-finite block levels")
@@ -171,8 +174,17 @@ def click_report(x, sr, f0):
                       f"residual is undefined")
     res = np.where(lev > 0.0, 20.0 * np.log10(np.where(lev > 0.0, lev, 1.0) / trend), -np.inf)
     med = float(np.median(res))
-    mad = float(np.median(np.abs(res - med)))
+    with np.errstate(invalid="ignore"):       # -inf - -inf is NaN: refused just below
+        mad = float(np.median(np.abs(res - med)))
     thr = med + max(CLICK_K * mad, CLICK_FLOOR_DB)
+    # The minority argument above is about a window of the TREND; the residuals
+    # can still be mostly -inf (levels [p, 0, 0, p] have a positive nearest-edge
+    # trend everywhere), which makes med -inf and mad NaN. `res > nan` is False
+    # everywhere, so "0 events" would be reported with a NaN threshold.
+    if not (math.isfinite(med) and math.isfinite(mad) and math.isfinite(thr)):
+        raise Refused(f"click_report: the detection threshold is unusable (median {med}, "
+                      f"MAD {mad}) -- {int(np.isneginf(res).sum())} of {len(res)} blocks sit at "
+                      f"exact zero, so no click count can be trusted")
     hot = np.flatnonzero(res > thr)
     events = [] if not len(hot) else np.split(hot, np.flatnonzero(np.diff(hot) > 2) + 1)
     return {"n_events": len(events), "threshold_db": thr, "max_residual_db": float(res.max()),

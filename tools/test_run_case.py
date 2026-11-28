@@ -2855,3 +2855,12 @@ def test_a_bench_that_exited_nonzero_is_refused_whatever_it_printed(tmp_path, mo
     res = _m5a_run(monkeypatch, tmp_path, _smoke_report, returncode=1)
     assert _board(res) == sb.NO_VERDICT
     assert "did not pass" in res["note"], res["note"]
+
+
+def test_band_pair_decay_bias_is_none_on_short_silence_at_every_length():
+    """CONTROL (#1743 review): the short-record `return 0.0` defaults ran before
+    the silence check, so 16 zeros read 0.0 dB while 28 returned None. Silence
+    is None at every length; a SHORT LIVE record keeps the no-correction 0.0."""
+    for n in (0, 1, 7, 8, 16, 27, 28, 29, 64):
+        assert rc.band_pair_decay_bias_db(np.zeros(n), SR, (1500, 2100), (380, 560)) is None, n
+    assert rc.band_pair_decay_bias_db(np.ones(4), SR, (1500, 2100), (380, 560)) == 0.0

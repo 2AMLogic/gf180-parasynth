@@ -132,3 +132,19 @@ def test_main_reports_a_deadband_refusal_as_refused_not_as_a_traceback(tmp_path,
     assert code == 2
     assert "REFUSED:" in captured.out and "Traceback" not in captured.err
     assert not out.exists()
+
+
+def test_deadband_counts_the_last_complete_block_at_the_exact_boundary():
+    """CONTROL (#1743 review): `range(0, n - blk, blk)` dropped the only complete
+    block of an n == blk record, so `levels=(0,)` returned departs_at_ms=None --
+    the absence of a comparison read as agreement. At 481 samples it refused."""
+    blk = int(0.01 * ptn.dx.SR)
+    for n in (blk, blk + 1, 2 * blk):
+        with pytest.raises(ptn.rc.Refused):
+            ptn.deadband(levels=(0,), n=n)
+
+
+def test_deadband_refuses_a_record_shorter_than_one_block():
+    blk = int(0.01 * ptn.dx.SR)
+    with pytest.raises(ptn.rc.Refused, match="shorter than one"):
+        ptn.deadband(levels=(100,), n=blk - 1)

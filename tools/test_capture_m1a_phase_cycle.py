@@ -217,3 +217,19 @@ def test_a_click_report_refusal_reaches_the_take_labelled_with_its_condition(mon
     monkeypatch.setattr(c, "click_report", refuse)
     with pytest.raises(c.Refused, match=r"^osc1_open: the click detector's trend is zero"):
         c.check_take(saw(F36), SR, ON, "osc1_open")
+
+
+def test_click_report_refuses_an_unusable_threshold_rather_than_counting_zero_events():
+    """CONTROL (#1743 review): block levels [p, 0, 0, p] have a positive
+    nearest-edge trend everywhere, so half the residuals are -inf, the median is
+    -inf and the MAD NaN. The head reported n_events=0 with threshold_db=nan; it
+    must refuse."""
+    x = np.zeros(5870)
+    x[[733, 5134]] = 1
+    with pytest.raises(c.Refused, match="threshold"):
+        c.click_report(x, 48000, c.F36)
+
+
+def test_click_report_refuses_a_record_with_no_complete_block():
+    with pytest.raises(c.Refused, match="too short"):
+        c.click_report(np.ones(10) * np.arange(10), 48000, c.F36)

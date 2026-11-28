@@ -698,6 +698,10 @@ def band_pair_decay_bias_db(x, sr: int, band_a, band_b) -> float | None:
     Validated against known tau pairs in `tools/probes/estimator_domains.py` 2."""
     from scipy.signal import sosfiltfilt
     x = np.asarray(x, dtype=np.float64)
+    # Silence is judged BEFORE the short-record no-correction defaults below: a
+    # 16-sample record of zeros is silent, not "too short to estimate on".
+    if not (np.isfinite(x).all() and bool(np.any(x != 0.0))):
+        return None
     if len(x) < 8:
         return 0.0
     i0 = _onset_index(x)

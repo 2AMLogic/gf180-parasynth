@@ -532,7 +532,7 @@ def _out_of_band_db(x: np.ndarray, sr: int, f0: float, onset: float,
     i0 = int(onset * sr)
     seg = x[i0:i0 + int(span_s * sr)]
     if len(seg) < 64:
-        return float("nan")
+        return None             # too short to measure: the documented missing value, not NaN
     nfft = 1 << 17
     S = np.abs(np.fft.rfft(seg * np.hanning(len(seg)), nfft)) ** 2
     fr = np.fft.rfftfreq(nfft, 1.0 / sr)

@@ -494,7 +494,25 @@ def _control_arm_db(er, ec) -> list:
         raise Refused(f"the control arm cannot be scored: the 2-pole render holds no energy in "
                       f"{int((er <= 0.0).sum())} of {len(er)} bands (silent render)")
     return [float(d) for d in
-            np.where(ec > 0.0, 20 * np.log10(np.where(ec > 0.0, ec, 1.0) / er), -np.inf)]
+            np.where(ec > 0.0, 10 * np.log10(np.where(ec > 0.0, ec, 1.0) / er), -np.inf)]
+
+
+def _control_total_db(xr, xc) -> float:
+    """Total energy of the control render `xc` re the 2-pole render `xr`, in dB.
+
+    `er`/`ec` and these sums are ENERGIES (sums of squared samples), so the dB
+    ratio is 10*log10, not 20*log10: half the energy is -3.0103 dB. REFUSES a
+    2-pole render with no (or non-finite) total energy, where the ratio is 0/0;
+    a control that is exactly silent against a live reference is -inf dB, which
+    the 0.5 dB gate then refuses as non-transparent (it used to raise
+    `ValueError: math domain error` from `math.log10(0)` before the gate)."""
+    tr = float((np.asarray(xr, dtype=np.float64) ** 2).sum())
+    tc = float((np.asarray(xc, dtype=np.float64) ** 2).sum())
+    if not (math.isfinite(tr) and math.isfinite(tc)):
+        raise Refused("the control arm's total energies are non-finite")
+    if not tr > 0.0:
+        raise Refused("the control arm cannot be scored: the 2-pole render holds no energy (silent render)")
+    return 10 * math.log10(tc / tr) if tc > 0.0 else float("-inf")
 
 
 def decay_band_only(kit: list) -> list:
@@ -714,8 +732,7 @@ def main(argv=None) -> int:
     xc_, infoc_ = render(decay_band_only(kit_c), 2.0, "control")
     er, ec = band_energy_abs(xr_), band_energy_abs(xc_)
     db = _control_arm_db(er, ec)
-    tot_db = 20 * math.log10(float((xc_ ** 2).sum()) ** .5
-                             / max(float((xr_ ** 2).sum()) ** .5, 1e-30))
+    tot_db = _control_total_db(xr_, xc_)
     say("  decay band alone, per-band energy of control re 2-pole, dB:")
     say("    " + "  ".join(f"{lo/1000:g}-{hi/1000:g}k {d:+6.2f}"
                            for (lo, hi), d in zip(CY_BANDS, db)))
