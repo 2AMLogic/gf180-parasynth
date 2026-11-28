@@ -44,7 +44,8 @@ Octave: the stimulus enters through the Audio In oscillator, so no oscillator
 pitch/range setting is in the path; the held MIDI note only opens the gate.
 
 Exit: 0 verified, 1 a clip is present and is not what the manifest says,
-2 refused.
+2 refused (a clip the archive does not hold: nothing was compared). A run with
+both is 1 -- a measured disagreement outranks a refusal.
 """
 from __future__ import annotations
 
@@ -90,6 +91,12 @@ OPEN_GUARD_DB = 6.0
 
 class Refused(refusal.Refused, Exception):
     pass
+
+
+class Unbindable(Refused):
+    """A precondition of ONE capture: the manifest does not name it, or the
+    archive does not hold the member it names. No comparison ran, so `verify`
+    counts it REFUSED; a capture that is present and disagrees is FAIL."""
 
 
 def amp_tag(amp: float) -> str:
@@ -335,7 +342,7 @@ def load_capture(cond: str, amp: float, take: int, manifest: dict | None = None,
     m = manifest or load_manifest()
     key = clip_key(cond, amp, take)
     if key not in m["clips"]:
-        raise Refused(f"{key} is not a capture in the manifest")
+        raise Unbindable(f"{key} is not a capture in the manifest")
     meta = m["clips"][key]
     want = meta["sha256"]
     if inject == "TAMPERED":
@@ -344,7 +351,7 @@ def load_capture(cond: str, amp: float, take: int, manifest: dict | None = None,
         try:
             b = z.read(meta["archive_member"])
         except KeyError:
-            raise Refused(f"{key}: {meta['archive_member']} is absent from the archive")
+            raise Unbindable(f"{key}: {meta['archive_member']} is absent from the archive")
     if _sha(b) != want:
         raise Refused(f"{key} hashes {_sha(b)[:16]}, the manifest says {want[:16]}")
     from scipy.io import wavfile
@@ -369,17 +376,21 @@ def verify() -> int:
     except Refused as e:
         print(f"REFUSED  {e}")
         return REFUSED
-    bad = 0
+    bad = refused = 0
     for key, meta in sorted(m["clips"].items()):
         cond, tag, take = key.split("/")
         try:
             load_capture(cond, float(tag[1:]), int(take[4:]), m)
             print(f"ok       {key}  {meta['sha256'][:12]}")
+        except Unbindable as e:
+            refused += 1
+            print(f"REFUSED  {e}")
         except Refused as e:
             bad += 1
             print(f"FAIL     {e}")
-    print(f"{len(m['clips']) - bad} verified, {bad} failed")
-    return FAIL if bad else OK
+    print(f"{len(m['clips']) - bad - refused} verified, {bad} failed"
+          + (f", {refused} refused" if refused else ""))
+    return FAIL if bad else REFUSED if refused else OK
 
 
 def main(argv=None) -> int:

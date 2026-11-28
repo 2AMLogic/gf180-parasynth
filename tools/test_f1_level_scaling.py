@@ -9,9 +9,14 @@ equal the baseline's.
 """
 from __future__ import annotations
 
+import contextlib
+import io
+import json
 import math
 import pathlib
 import sys
+import types
+import zipfile
 
 import numpy as np
 import pytest
@@ -171,6 +176,215 @@ def test_captures_are_separate_from_the_frozen_profile():
 
 def test_post_render_pin_alias_is_limited_to_the_four_audio_in_indices():
     assert set(cap.AUDIO_IN_NAMES) == {259, 260, 264, 265}
+
+
+def test_verify_on_the_committed_captures_is_unchanged(capsys):
+    try:
+        cap.load_manifest()
+    except refusal.Refused as e:
+        pytest.skip(f"REFUSED: {e}")
+    code = cap.verify()
+    out = capsys.readouterr().out
+    assert code == exit_contract.PASS, (code, out[-400:])
+    assert out.splitlines()[-1] == "24 verified, 0 failed", out[-400:]
+    assert sum(ln.startswith("ok ") for ln in out.splitlines()) == 24, out[-400:]
+    assert not any(ln.startswith(("REFUSED", "FAIL")) for ln in out.splitlines()), out[-400:]
+
+
+# --- verify(): an absent capture is REFUSED, a corrupted one FAIL (issue #1822) --
+CAPTURE_KEYS = ("cut250/a0.2500/take1", "cut250/a0.1250/take1", "open20k/a0.0625/take2")
+KEPT, ABSENT, TAMPERED = CAPTURE_KEYS
+
+
+class _Archive:
+    """A known-answer stand-in for the committed captures: three short clips
+    written by the real `rp.write_clip`, zipped and hashed as `capture()` does,
+    with `MANIFEST` / `ARCHIVE` of the module under test pointed at it. It
+    never reads the committed 19 MB blob, so every control below states its own
+    population."""
+
+    def __init__(self, root, monkeypatch, mod):
+        root.mkdir(parents=True, exist_ok=True)
+        self.clips, blobs = {}, {}
+        for i, key in enumerate(CAPTURE_KEYS):
+            cond, _tag, take = key.split("/")
+            y = 0.25 * np.sin(2 * np.pi * (300.0 + 100.0 * i) * np.arange(480) / rp.SR)
+            wav = root / f"clip{i}.wav"
+            rp.write_clip(wav, y)
+            blobs[key] = wav.read_bytes()
+            self.clips[key] = {"condition": cond, "take": int(take[4:]), "frames": int(len(y)),
+                               "sha256": cap._sha(blobs[key]),
+                               "archive_member": cap._sha(blobs[key])[:16] + ".wav"}
+        self.manifest, self.archive = root / "manifest.json", root / "audio.zip"
+        self.manifest.write_text(json.dumps({"schema": "f1-level-captures/1", "clips": self.clips}))
+        self.blobs = blobs
+        self.write_archive()
+        monkeypatch.setattr(mod, "MANIFEST", self.manifest)
+        monkeypatch.setattr(mod, "ARCHIVE", self.archive)
+
+    def write_archive(self):
+        with zipfile.ZipFile(self.archive, "w", compression=zipfile.ZIP_DEFLATED) as z:
+            for key, b in self.blobs.items():
+                z.writestr(self.clips[key]["archive_member"], b)
+
+    def drop(self, key):
+        del self.blobs[key]
+        self.write_archive()
+
+    def corrupt(self, key):
+        """The member stays present and readable; its bytes are no longer what
+        the manifest hashed."""
+        self.blobs[key] = self.blobs[key][:-1] + bytes([self.blobs[key][-1] ^ 0x01])
+        self.write_archive()
+
+
+def _verify(mod, root, monkeypatch, *mutations):
+    """`mod.verify()` over a fresh archive after `mutations`, as (code, lines)."""
+    arc = _Archive(root, monkeypatch, mod)
+    for mutate in mutations:
+        mutate(arc)
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        code = mod.verify()
+    return code, out.getvalue().splitlines()
+
+
+def _absent_is_refused(mod, root, monkeypatch):
+    code, lines = _verify(mod, root, monkeypatch, lambda a: a.drop(ABSENT))
+    assert code == exit_contract.REFUSED, (code, lines)
+    refused = [ln for ln in lines if ln.startswith("REFUSED")]
+    assert len(refused) == 1 and ABSENT in refused[0] and "absent from the archive" in refused[0], lines
+    assert not any(ln.startswith("FAIL") for ln in lines), lines
+    assert [ln.split()[1] for ln in lines if ln.startswith("ok ")] == [KEPT, TAMPERED], lines
+    assert lines[-1] == "2 verified, 0 failed, 1 refused", lines
+
+
+def _tampered_still_fails(mod, root, monkeypatch):
+    code, lines = _verify(mod, root, monkeypatch, lambda a: a.corrupt(TAMPERED))
+    assert code == exit_contract.FAIL, (code, lines)
+    failed = [ln for ln in lines if ln.startswith("FAIL")]
+    assert len(failed) == 1 and TAMPERED in failed[0] and "hashes" in failed[0], lines
+    assert not any(ln.startswith("REFUSED") for ln in lines), lines
+    assert lines[-1] == "2 verified, 1 failed", lines
+
+
+def _measured_disagreement_outranks_a_refusal(mod, root, monkeypatch):
+    code, lines = _verify(mod, root, monkeypatch, lambda a: a.drop(ABSENT),
+                          lambda a: a.corrupt(TAMPERED))
+    assert code == exit_contract.FAIL, (code, lines)
+    assert sum(ln.startswith("REFUSED") for ln in lines) == 1, lines
+    assert sum(ln.startswith("FAIL") for ln in lines) == 1, lines
+    assert lines[-1] == "1 verified, 1 failed, 1 refused", lines
+
+
+def _clean_is_unchanged(mod, root, monkeypatch):
+    code, lines = _verify(mod, root, monkeypatch)
+    assert code == exit_contract.PASS, (code, lines)
+    assert lines[-1] == "3 verified, 0 failed", lines
+    assert not any(ln.startswith(("REFUSED", "FAIL")) for ln in lines), lines
+
+
+def _raise_site_types_the_precondition(mod, root, monkeypatch):
+    """The repair lives at the raise site: a precondition raises `Unbindable`,
+    which is still a `Refused` for every other caller (`except refusal.Refused`
+    in tools/probes/f1_level_scaling.py), and a comparison that ran and
+    disagreed still raises the plain class."""
+    arc = _Archive(root, monkeypatch, mod)
+    m = mod.load_manifest()
+    assert hasattr(mod, "Unbindable"), "the precondition class does not exist"
+    assert issubclass(mod.Unbindable, mod.Refused) and issubclass(mod.Unbindable, refusal.Refused)
+    # each block catches the BASE and asserts the exact type: `pytest.raises(Unbindable)`
+    # lets a plain `Refused` escape, and an escaped exception is not a failed check
+    with pytest.raises(mod.Refused) as got:
+        mod.load_capture("cut4000", 0.25, 1, m)
+    assert type(got.value) is mod.Unbindable, (type(got.value), got.value)
+    arc.drop(ABSENT)
+    with pytest.raises(mod.Refused) as got:
+        mod.load_capture("cut250", 0.125, 1, m)
+    assert type(got.value) is mod.Unbindable, (type(got.value), got.value)
+    assert "absent from the archive" in str(got.value), str(got.value)
+    with pytest.raises(mod.Refused) as got:
+        mod.load_capture("cut250", 0.25, 1, m, inject="TAMPERED")
+    assert type(got.value) is mod.Refused, (type(got.value), got.value)
+    assert "hashes" in str(got.value), str(got.value)
+
+
+CONTROLS = {"absent": _absent_is_refused, "tampered": _tampered_still_fails,
+            "mixed": _measured_disagreement_outranks_a_refusal, "clean": _clean_is_unchanged,
+            "raise_site": _raise_site_types_the_precondition}
+
+
+def test_verify_reports_an_absent_archive_member_as_refused(tmp_path, monkeypatch):
+    _absent_is_refused(cap, tmp_path, monkeypatch)
+
+
+def test_verify_still_fails_a_capture_whose_bytes_hash_to_something_else(tmp_path, monkeypatch):
+    _tampered_still_fails(cap, tmp_path, monkeypatch)
+
+
+def test_verify_a_measured_disagreement_outranks_a_refusal(tmp_path, monkeypatch):
+    _measured_disagreement_outranks_a_refusal(cap, tmp_path, monkeypatch)
+
+
+def test_verify_clean_run_is_unchanged(tmp_path, monkeypatch):
+    _clean_is_unchanged(cap, tmp_path, monkeypatch)
+
+
+def test_load_capture_types_what_could_not_be_compared_apart_from_what_disagreed(
+        tmp_path, monkeypatch):
+    _raise_site_types_the_precondition(cap, tmp_path, monkeypatch)
+
+
+_ON_UNBINDABLE = ('        except Unbindable as e:\n'
+                  '            refused += 1\n'
+                  '            print(f"REFUSED  {e}")\n')
+_ON_REFUSED = ('        except Refused as e:\n'
+               '            bad += 1\n'
+               '            print(f"FAIL     {e}")\n')
+
+
+def _mutant(sites):
+    """`f1_level_capture` with one wrong repair applied, as a module. Each site
+    must still exist exactly once: a mutant that no longer builds must not pass
+    for a control that caught it (verification-rules 5, condition 2)."""
+    source = pathlib.Path(cap.__file__).read_text()
+    for old, new in sites:
+        assert source.count(old) == 1, f"mutation site gone or ambiguous: {old!r}"
+        source = source.replace(old, new)
+    mod = types.ModuleType("f1_level_capture_mutant")
+    mod.__file__ = cap.__file__
+    exec(compile(source, cap.__file__, "exec"), mod.__dict__)
+    return mod
+
+
+@pytest.mark.parametrize("sites, red", [
+    pytest.param([('raise Unbindable(f"{key} is not', 'raise Refused(f"{key} is not'),
+                  ('raise Unbindable(f"{key}: {meta', 'raise Refused(f"{key}: {meta'),
+                  (_ON_UNBINDABLE + _ON_REFUSED, _ON_REFUSED)],
+                 ("absent", "mixed", "raise_site"), id="the-tree-before-the-repair"),
+    pytest.param([(_ON_UNBINDABLE + _ON_REFUSED, _ON_REFUSED + _ON_UNBINDABLE)],
+                 ("absent", "mixed"), id="plain-refused-caught-first"),
+    pytest.param([('raise Refused(f"{key} hashes', 'raise Unbindable(f"{key} hashes')],
+                 ("tampered", "mixed", "raise_site"), id="every-raise-is-the-precondition"),
+    pytest.param([("return FAIL if bad else REFUSED if refused else OK",
+                   "return REFUSED if refused else FAIL if bad else OK")],
+                 ("mixed",), id="a-refusal-outranks-a-measured-disagreement"),
+    pytest.param([("len(m['clips']) - bad - refused} verified", "len(m['clips']) - bad} verified")],
+                 ("absent", "mixed"), id="refused-counted-as-verified"),
+    pytest.param([("class Unbindable(Refused):", "class Unbindable(Exception):")],
+                 ("raise_site",), id="precondition-class-leaves-the-refusal-family"),
+    pytest.param([('+ (f", {refused} refused" if refused else ""))', '+ f", {refused} refused")')],
+                 ("tampered", "clean"), id="refused-always-on-the-summary-line"),
+])
+def test_control_each_wrong_repair_reddens_the_control_that_owns_it(sites, red, tmp_path,
+                                                                    monkeypatch):
+    mod = _mutant(sites)
+    for name, control in CONTROLS.items():
+        if name in red:
+            with pytest.raises(AssertionError):
+                control(mod, tmp_path / name, monkeypatch)
+        else:
+            control(mod, tmp_path / name, monkeypatch)
 
 
 # --- the rule itself, on synthetic tables ------------------------------------
