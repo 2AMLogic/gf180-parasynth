@@ -50,6 +50,10 @@ UNTOUCHED = (36, 48, 60, 72, 108, 120)
 DEV = (84, 96)
 
 
+class Refused(refusal.Refused, RuntimeError):
+    """A requested saw drive is outside the frozen candidate budget."""
+
+
 @contextlib.contextmanager
 def saw_only(drive: float, vol_factor: float):
     orig = score._patch_for_wave
@@ -179,7 +183,7 @@ def _run(argv) -> int:
     else:
         drives = a.drives or (BASE_DRIVE,) + CANDIDATES
         if any(d != BASE_DRIVE and d not in CANDIDATES for d in drives):
-            raise SystemExit("REFUSED: outside the frozen three-candidate budget")
+            raise Refused("outside the frozen three-candidate budget")
         rows = {}
         for d in drives:
             f = 1.0 if d == BASE_DRIVE else ol.calibrate(a.engine, d)
