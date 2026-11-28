@@ -75,6 +75,8 @@ S = "test_records_silent_reference_exits_refused_2_no_verdict"
 U = "test_unreadable_reference_is_an_execution_error_not_a_refusal"
 
 _EXIT2 = hic.Site("assert p.returncode == exit_contract.REFUSED", "AssertionError")
+_MESSAGE_PIN = hic.Site('assert (f"{FIRST_REL} holds 1 non-finite samples of {FRAMES} "',
+                        "AssertionError")
 _ESCAPED_NONE = hic.Site("assert escaped is None", "AssertionError")
 _IS_ASSERTION = hic.Site("assert isinstance(escaped, AssertionError)", "AssertionError")
 _EXIT1 = hic.Site("assert p.returncode == 1", "AssertionError")
@@ -94,8 +96,11 @@ MUTANTS = {
 # name: {test: the assertion that must fail}
 EXPECTED = {
     "load_reference-conversion-removed": {f"{T}[{i}]": _EXIT2 for i in ("nan", "pos-inf", "neg-inf")},
+    # With the assert gone the WIDTH guard refuses the same float32 file, so
+    # the three NaN/Inf controls still see exit 2 and go red on their message
+    # pin instead -- which is why that pin exists.
     "load_reference-finiteness-assert-removed": {
-        **{f"{T}[{i}]": _EXIT2 for i in ("nan", "pos-inf", "neg-inf")},
+        **{f"{T}[{i}]": _MESSAGE_PIN for i in ("nan", "pos-inf", "neg-inf")},
         f"{A}[load_reference]": _IS_ASSERTION,
     },
     "load_reference-conversion-widened": {f"{A}[load_reference]": _IS_ASSERTION},
