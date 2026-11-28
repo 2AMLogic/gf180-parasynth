@@ -485,6 +485,37 @@ def test_per_stop_control_reuse_reruns_when_a_bound_file_changes(tmp_path, monke
                                      simulator="verilator", timeout_s=1, reuse=True)
 
 
+# ---- a record that parses but is not an object (#1863) ------------------------
+# `.get()` on a JSON list is an AttributeError -- a traceback and exit 1 --
+# where a schedule or a twin that cannot be read is REFUSED and exit 2.
+NOT_AN_OBJECT = ["[1, 2, 3]", "5", "null"]
+
+
+@pytest.mark.parametrize("text", NOT_AN_OBJECT)
+def test_an_injected_schedule_that_is_not_an_object_refuses(tmp_path, monkeypatch, text):
+    """Reached past the reuse check on purpose: that path binds the schedule
+    by hash, so the file is whatever the injected run just wrote."""
+    wav, schedule = tmp_path / "x.wav", tmp_path / "sched.json"
+    _write_wav(wav, np.ones(CASE_FRAMES, dtype=np.int64))
+    schedule.write_text(text)
+    monkeypatch.setattr(score, "run_part",
+                        lambda *a, **k: {"paths": {"wav": wav, "schedule": schedule}, "status": 1})
+    with pytest.raises(score.Refused, match="schedule.*not a JSON object"):
+        score._injected_event_timing("E1A", "BD", tmp_path, simulator="verilator", timeout_s=1)
+
+
+@pytest.mark.parametrize("text", NOT_AN_OBJECT)
+def test_a_fixed_model_twin_that_is_not_an_object_refuses(tmp_path, text):
+    """The twin is searched for in order and an UNPARSEABLE one is skipped; one
+    that parses but is not a record must not be read with `.get()` -- and must
+    not be skipped either, which would drop the cross-engine comparison this
+    function exists to keep, invisibly."""
+    twin = tmp_path / "twin.json"
+    twin.write_text(text)
+    with pytest.raises(score.Refused, match="twin.json.*not a JSON object"):
+        score.fixed_model_comparison("E1A", {"metrics": {}}, twin)
+
+
 @pytest.mark.parametrize("name", ["E1A-control-DRUM_BUS_STALE.txt",
                                   "E1A-control-DRUM_BUS_STALE-stop-BD.txt"])
 def test_a_caught_control_report_from_the_board_binds_both_sidecars(name):

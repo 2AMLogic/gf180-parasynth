@@ -536,6 +536,33 @@ def test_show_refuses_an_unregistered_parameter():
     assert sens.main(["show", "drum-kit-modes"]) == 0
 
 
+# ---- a record that parses but is not an object (#1863) ------------------------
+# `.get()` on a JSON list is an AttributeError -- exit 1, "the check ran and
+# disagreed" -- where an unreadable registry is exit 2 and nothing was measured.
+NOT_AN_OBJECT = [("[1, 2, 3]", "not a JSON object"),
+                 ("5", "not a JSON object"),
+                 ("null", "not a JSON object")]
+
+
+@pytest.mark.parametrize("text, why", NOT_AN_OBJECT + [("{}", "schema")])
+def test_a_registry_that_is_not_an_object_is_refused(root, text, why):
+    # `{}` is the satisfiability pin: an empty object still reaches the
+    # schema refusal that was always there.
+    (root / "docs/sensitivity/registry.json").write_text(text)
+    code, out = run(root)
+    assert code == 2 and why in out, out
+
+
+@pytest.mark.parametrize("text, why", NOT_AN_OBJECT)
+def test_a_record_that_is_not_an_object_is_refused(root, text, why):
+    """The same shape one level down. `k not in rec` on a scalar is a
+    TypeError, and on a list it reads as every key missing -- a statement
+    about keys a record that has none cannot have."""
+    (root / "docs/sensitivity/drum-kit-modes.json").write_text(text)
+    code, out = run(root)
+    assert code == 2 and why in out, out
+
+
 # --------------------------------------------------------------------------
 # the retrofit: the finding of failure-modes mechanism 5, recomputed
 #

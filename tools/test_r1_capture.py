@@ -21,6 +21,7 @@ ITS image, and refuse everything else against the real R1 manifest.
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import pathlib
 import shutil
@@ -190,6 +191,79 @@ def test_a_missing_r1_reference_set_is_a_named_problem_not_a_pass(tmp_path):
     m1 = rr.load_manifest(rr.IMAGES["r1"]["manifest"])
     why = rr.reference_problems(tmp_path / "none", "held-default", m1)
     assert why and "no reference" in why[0]
+
+
+# ---- a reference that parses but is not an object (#1863) --------------------
+# `.get()` on a JSON list is an AttributeError, which reaches `check` as a
+# traceback and exit 1 -- where a reference set that cannot be read is a
+# problem it names, and exit 2.
+NOT_AN_OBJECT = ["[1, 2, 3]", "5", "null"]
+
+
+@pytest.mark.parametrize("text", NOT_AN_OBJECT)
+def test_a_reference_record_that_is_not_an_object_is_a_named_problem(tmp_path, text):
+    m0 = rr.load_manifest(rr.IMAGES["r0"]["manifest"])
+    d = relabel(R0_REFS, tmp_path / "unreadable", m0)
+    (d / "held-default.json").write_text(text)
+    why = rr.reference_problems(d, "held-default", m0)
+    assert why and "not a JSON object" in why[0], why
+
+
+def test_check_exits_2_on_a_reference_that_is_not_an_object(tmp_path, capsys):
+    """Through the CLI: one unreadable record names itself and refuses the
+    set; the same set untouched is verified."""
+    d = relabel(R0_REFS, tmp_path / "unreadable", rr.load_manifest(rr.IMAGES["r0"]["manifest"]))
+    assert rr.main(["check", str(d)]) == 0
+    (d / "held-default.json").write_text("[1, 2, 3]")
+    assert rr.main(["check", str(d)]) == 2
+    out = capsys.readouterr().out
+    assert "held-default: BAD -- held-default: reference record is a JSON list, not a JSON object" in out
+
+
+@pytest.mark.parametrize("text", NOT_AN_OBJECT)
+def test_a_silence_record_that_is_not_an_object_is_a_named_problem(tmp_path, text):
+    m0 = rr.load_manifest(rr.IMAGES["r0"]["manifest"])
+    d = relabel(R0_REFS, tmp_path / "unreadable", m0)
+    (d / "silence.json").write_text(text)
+    why = rr.reference_problems(d, "silence", m0)
+    assert why and why[0].startswith("silence:") and "not a JSON object" in why[0], why
+
+
+def _r1_bound_tree(tmp_path, monkeypatch, *, candidate, identity):
+    """An R1 tree holding whatever the test says in the two records
+    `rolling_bound` reads for a rolling fixture -- r1-candidate.json and the
+    demo replay's run identity -- at the paths it reads them from."""
+    root = tmp_path / "root"
+    (root / "fpga/release").mkdir(parents=True)
+    (root / "fpga/release/r1-candidate.json").write_text(candidate)
+    ids = root / "fpga/reports/r1-candidate/rtl-run-identities"
+    ids.mkdir(parents=True)
+    (ids / rr.R1_RUN_IDENTITY["demo"]).write_text(identity)
+    monkeypatch.setattr(rr, "ROOT", root)
+    monkeypatch.setattr(rr, "R1_RUN_IDENTITIES", ids)
+    return root, ids
+
+
+@pytest.mark.parametrize("text", NOT_AN_OBJECT)
+def test_an_r1_candidate_record_that_is_not_an_object_refuses(tmp_path, monkeypatch, text):
+    m1 = rr.load_manifest(rr.IMAGES["r1"]["manifest"])
+    _r1_bound_tree(tmp_path, monkeypatch, candidate=text, identity="{}")
+    with pytest.raises(rr.Refused, match="r1-candidate.json.*not a JSON object"):
+        rr.rolling_bound(m1, "demo")
+
+
+@pytest.mark.parametrize("text", NOT_AN_OBJECT)
+def test_an_r1_run_identity_that_is_not_an_object_refuses(tmp_path, monkeypatch, text):
+    """The identity file is pinned by hash in a well-formed candidate, so this
+    is the record that parses, IS the one pinned, and still cannot be read."""
+    m1 = rr.load_manifest(rr.IMAGES["r1"]["manifest"])
+    root, ids = _r1_bound_tree(tmp_path, monkeypatch, candidate="{}", identity=text)
+    name = ids / rr.R1_RUN_IDENTITY["demo"]
+    cand = {"evidence": {"files": {str(name.relative_to(root)):
+                                   hashlib.sha256(name.read_bytes()).hexdigest()}}}
+    (root / "fpga/release/r1-candidate.json").write_text(json.dumps(cand))
+    with pytest.raises(rr.Refused, match="run identity.*not a JSON object"):
+        rr.rolling_bound(m1, "demo")
 
 
 # ---- the transcript and the session ------------------------------------------

@@ -57,6 +57,21 @@ class Refused(refusal.Refused, Exception):
     """The gate could not answer. Never reported as a pass."""
 
 
+def _require_object(record, what: str) -> None:
+    """REFUSE a record that parses but is not a JSON object (#1863).
+
+    `.get()` on a list is an AttributeError, and `k not in rec` on a scalar
+    a TypeError: a traceback and exit 1 where an unreadable record is exit 2.
+    `manifest.require_keys` does this check, but importing manifest pulls
+    NumPy into a gate that otherwise needs only the standard library
+    (#1623) -- so the one check is restated here rather than imported.
+    """
+    if not isinstance(record, dict):
+        kind = "null" if record is None else f"a JSON {type(record).__name__}"
+        raise Refused(f"{what} is {kind}, not a JSON object -- it carries no keys at "
+                      f"all, so nothing in it can be read: the wrong file, or a partial write")
+
+
 # --------------------------------------------------------------------------
 # loading
 
@@ -65,6 +80,7 @@ def load_registry(path: Path = REGISTRY) -> dict:
     if not path.exists():
         raise Refused(f"no registry at {path}")
     reg = json.loads(path.read_text())
+    _require_object(reg, f"{path.name}: the registry")
     if reg.get("schema") != REGISTRY_SCHEMA:
         raise Refused(f"{path.name}: schema is {reg.get('schema')!r}, not {REGISTRY_SCHEMA!r}")
     if not isinstance(reg.get("records"), list) or not reg["records"]:
@@ -83,6 +99,7 @@ def load_records(reg: dict, root: Path = ROOT) -> list[dict]:
         if not path.exists():
             raise Refused(f"registry lists {name}, which does not exist")
         rec = json.loads(path.read_text())
+        _require_object(rec, f"{name}: the record")
         missing = [k for k in REQUIRED if k not in rec]
         if missing:
             raise Refused(f"{name}: record is missing {', '.join(missing)}")

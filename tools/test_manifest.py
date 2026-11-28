@@ -370,6 +370,23 @@ def test_render_refuses_to_overwrite_a_retained_wav_with_different_audio(tmp_pat
     assert again["wav_sha256"] == first["wav_sha256"]
 
 
+@pytest.mark.parametrize("text, why", [("[1, 2, 3]", "not a JSON object"),
+                                       ("5", "not a JSON object"),
+                                       ("null", "not a JSON object"),
+                                       ('{"render_id": "x"}', "'wav_sha256'")])
+def test_render_refuses_a_prior_manifest_that_cannot_be_read(tmp_path, text, why):
+    """A prior manifest.json that is not a JSON object is REFUSED, not read
+    with `.get()` (#1863): the comparison this function exists to make -- the
+    retained WAV against the one about to replace it -- cannot be made against
+    a record that carries no keys. One that is an object but names no WAV
+    hash is refused for that, rather than told it records a DIFFERENT one."""
+    runs = tmp_path / "runs"
+    first = mf.render("T1", {"hz": 440.0}, lambda: _tone(hz=440.0), runs_dir=runs)
+    (runs / first["render_id"] / "manifest.json").write_text(text)
+    with pytest.raises(mf.Refused, match=why):
+        mf.render("T1", {"hz": 440.0}, lambda: _tone(hz=440.0), runs_dir=runs)
+
+
 # =============================================================================
 # render preconditions: an instrument in a wrong state is not a result
 # =============================================================================

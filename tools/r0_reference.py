@@ -63,6 +63,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 for _p in ("fpga", "model", "rtl-sketch", "audition", "tools", "fpga/release"):
     sys.path.insert(0, str(ROOT / _p))
 import capture_commands
+import manifest as mf
 import refusal
 
 MANIFEST = capture_commands.MANIFESTS["r0"]
@@ -246,13 +247,17 @@ def rolling_bound(manifest: dict, fixture: str) -> tuple:
     if name is None:
         raise Refused(f"{fixture}: R1 binds no replay stimulus for it")
     path = R1_RUN_IDENTITIES / name
-    cand = json.loads((ROOT / "fpga/release/r1-candidate.json").read_text())
+    cand_path = ROOT / "fpga/release/r1-candidate.json"
+    cand = json.loads(cand_path.read_text())
+    mf.require_keys(cand, (), f"the R1 candidate record at {cand_path}", refused=Refused)
     pinned = (cand.get("evidence") or {}).get("files", {}).get(
         str(path.relative_to(ROOT)))
     if not path.is_file() or pinned is None or sha256_file(path) != pinned:
         raise Refused(f"{fixture}: R1's run identity {name} is missing or is not the one "
                       "r1-candidate.json pins")
-    stim = (json.loads(path.read_text()).get("identity") or {}).get("stimulus")
+    rid = json.loads(path.read_text())
+    mf.require_keys(rid, (), f"R1's run identity {name} at {path}", refused=Refused)
+    stim = (rid.get("identity") or {}).get("stimulus")
     if not stim:
         raise Refused(f"{fixture}: R1's run identity {name} records no stimulus digest")
     return stim, f"{path.relative_to(ROOT)} (stimulus {stim[:12]})"
@@ -541,6 +546,9 @@ def silence_problems(d: pathlib.Path, manifest: dict) -> list:
         rec = json.loads(p.read_text())
     except ValueError as exc:
         return [f"silence: reference record unreadable ({exc})"]
+    if not isinstance(rec, dict):
+        kind = "null" if rec is None else f"a JSON {type(rec).__name__}"
+        return [f"silence: reference record is {kind}, not a JSON object"]
     why = identity_label_problems(rec, manifest, "silence")
     if rec.get("verdict") != "PASS":
         why.append(f"declared silence is {rec.get('verdict')!r}, not PASS")
@@ -566,6 +574,9 @@ def reference_problems(d: pathlib.Path, key: str, manifest: dict) -> list:
         rec = json.loads(p.read_text())
     except ValueError as exc:
         return [f"{key}: reference record unreadable ({exc})"]
+    if not isinstance(rec, dict):
+        kind = "null" if rec is None else f"a JSON {type(rec).__name__}"
+        return [f"{key}: reference record is {kind}, not a JSON object"]
     why = identity_label_problems(rec, manifest, key)
     if rec.get("command_id") != key:
         why.append(f"record is for command {rec.get('command_id')!r}")

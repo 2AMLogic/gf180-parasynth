@@ -20,6 +20,7 @@ And what the acceptance targets are BLIND to, pinned rather than hidden
 pre-registered target, because the targets are set relative to a 105-cent
 baseline. The lock catches all six.
 """
+import functools
 import json
 import math
 import os
@@ -253,6 +254,38 @@ def test_the_plan_refuses_when_it_is_not_committed(tmp_path):
         rt.load_plan(str(p))
     with pytest.raises(rt.Refused):
         rt.load_plan(str(tmp_path / "absent.json"), require_committed=False)
+
+
+# ---- a plan that parses but is not an object (#1863) --------------------------
+# `.get()` on a JSON list is an AttributeError -- a traceback and exit 1 --
+# where a plan that cannot be read is REFUSED and exit 2.
+NOT_AN_OBJECT = [("[1, 2, 3]", "not a JSON object"),
+                 ("5", "not a JSON object"),
+                 ("null", "not a JSON object")]
+
+
+@pytest.mark.parametrize("text, why", NOT_AN_OBJECT + [("{}", "res-tuning-plan-v1")])
+def test_a_plan_that_is_not_an_object_is_refused(tmp_path, text, why):
+    # `{}` is the satisfiability pin: an empty object still reaches the
+    # schema refusal that was always there.
+    p = tmp_path / "plan.json"
+    p.write_text(text)
+    with pytest.raises(rt.Refused, match=why):
+        rt.load_plan(str(p), require_committed=False)
+
+
+@pytest.mark.parametrize("text, _", NOT_AN_OBJECT)
+def test_a_plan_that_is_not_an_object_exits_2_through_main(tmp_path, monkeypatch, capsys,
+                                                           text, _):
+    """The refusal reaches the process as exit 2, not a traceback. `load_plan`'s
+    default path is bound at definition, so the plan is bound to it here."""
+    p = tmp_path / "plan.json"
+    p.write_text(text)
+    monkeypatch.setattr(rt, "load_plan",
+                        functools.partial(rt.load_plan, str(p), require_committed=False))
+    assert rt.main(["controls"]) == 2
+    err = capsys.readouterr().err
+    assert "REFUSED" in err and "not a JSON object" in err
 
 
 def test_issue_237s_control_moves_against_the_pinned_historical_baseline():
