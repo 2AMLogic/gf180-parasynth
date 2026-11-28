@@ -14,6 +14,13 @@ reference gives up the one thing the hardware corpus could never give --
 is a controlled experiment, which sound-matching against unlabelled recordings
 could never be.
 
+Exit status follows `tools/exit_contract.py`: 0 when the devices ran, 2
+(REFUSED, one `REFUSED:` line on stderr) when a precondition was not met for a
+device -- no plugin host, a rig that refuses, a render that is not audio. The
+line names the devices already written, because that output is partial. A
+stage that cannot answer is NOT a refusal: it stays a `not_answerable` report
+row on the exit-0 path.
+
 What this does NOT claim, and the label goes on every result: agreeing with
 these three means "consistent with high-quality emulations", not "sounds like
 a Minimoog". None of the three is a Minimoog. Two of them are commercial
@@ -73,6 +80,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "audition"))
 
 import audio_measure as am                                          # noqa: E402
 import reference_rigs as rr                                         # noqa: E402
+import rig_qualification as rq                                      # noqa: E402
 import ring_estimator                                               # noqa: E402
 import voice_fx as vf                                               # noqa: E402
 
@@ -614,73 +622,103 @@ def main(argv=None) -> int:
         with open(cache_path) as f:
             cache = json.load(f)
 
-    for name in devices:
-        print(f"\n===== {name} =====", flush=True)
-        dev = build(name)
-        out = {}
-        def guard(key, fn):
-            try:
-                out[key] = fn()
-            except NotImplementedError as e:
-                out[key] = [dict(device=name, ok=False, not_answerable=str(e))]
-                print(f"  {name}: {key} NOT ANSWERABLE -- {e}", flush=True)
+    # The devices whose stages this run has put in `--out`. A refusal has to
+    # name them because that output is partial; the directory cannot be listed
+    # to find them, since `--out` is reused between runs.
+    written = []
+    sys.path.insert(0, os.path.join(HERE, "..", "tools"))
+    from exit_contract import REFUSED as EXIT_REFUSED
+    try:
+        for name in devices:
+            print(f"\n===== {name} =====", flush=True)
+            dev = build(name)
+            out = {}
+            def guard(key, fn):
+                try:
+                    out[key] = fn()
+                except NotImplementedError as e:
+                    out[key] = [dict(device=name, ok=False, not_answerable=str(e))]
+                    print(f"  {name}: {key} NOT ANSWERABLE -- {e}", flush=True)
 
-        try:
-            cs258, hz258 = cut_setting_for(dev, name, 261.6, cache)
-            if "selfosc" in stages:
-                print(" -- self-oscillation fingerprint", flush=True)
-                guard("selfosc", lambda: stage_selfosc(dev, name, cs258, hz258 or 261.6))
-            if "response" in stages:
-                print(" -- measured response: corner and slope", flush=True)
-                pts = []
-                for hz in CUTOFFS_HZ:
-                    cs, chz = cut_setting_for(dev, name, hz, cache)
-                    pts.append((cs, chz if chz is not None else hz, res_lo(name)))
-                guard("response", lambda: stage_response(dev, name, pts))
-                print(" -- measured response: resonant peak versus resonance", flush=True)
-                cs, chz = cut_setting_for(dev, name, 800.0, cache)
-                pk = [(cs, chz if chz is not None else 800.0, r)
-                      for r in ([0.2, 0.4, 0.6, 0.8, 0.9] if not name.startswith("ours")
-                                else [0.3, 0.5, 0.7, 0.85, 0.95])]
-                guard("peak", lambda: stage_response(dev, name, pk))
-            if "tracking" in stages:
-                print(" -- self-oscillation pitch versus cutoff", flush=True)
-                rows = []
-                res = res_grid(name)[-1]
-                for hz in CUTOFFS_HZ:
-                    cs, chz = cut_setting_for(dev, name, hz, cache)
-                    y = dev.ring(cs, res, seconds=0.8)
-                    f = _tracking_f_osc(y)
-                    rows.append(dict(device=name, commanded_hz=chz, want_hz=hz,
-                                     cut_setting=cs, res=res, f_osc=f,
-                                     rms=float(am.rms(y))))
-                    print(f"  {name:12s} cut {hz:7.0f} (cmd {chz}) -> f_osc "
-                          f"{f if f is None else round(f, 1)}", flush=True)
-                out["tracking"] = rows
-            if "peakdrive" in stages:
-                print(" -- resonant peak versus drive, at 0.9 of each filter's own onset",
-                      flush=True)
-                cs, chz = cut_setting_for(dev, name, 800.0, cache)
-                guard("peakdrive", lambda: stage_peakdrive(dev, name, cs, chz or 800.0))
-            if "bigdrive" in stages:
-                print(" -- where the saturation engages", flush=True)
-                cs, chz = cut_setting_for(dev, name, 800.0, cache)
-                guard("bigdrive", lambda: stage_bigdrive(dev, name, cs, chz or 800.0))
-            if "drive" in stages:
-                print(" -- drive", flush=True)
-                cs, chz = cut_setting_for(dev, name, 800.0, cache)
-                res = 0.6 if not name.startswith("ours") else 0.7
-                guard("drive", lambda: stage_drive(dev, name, cs, chz or 800.0, res, 200.0,
-                                                   [-48, -36, -24, -18, -12, -6, -3, 0]))
-        finally:
-            del dev
-        for k, v in out.items():
-            with open(os.path.join(a.out, f"{k}-{name}.json"), "w") as f:
-                json.dump(v, f, indent=1, default=str)
-        with open(cache_path, "w") as f:
-            json.dump(cache, f, indent=1)
-    print(f"\nwritten to {a.out}", flush=True)
-    return 0
+            try:
+                cs258, hz258 = cut_setting_for(dev, name, 261.6, cache)
+                if "selfosc" in stages:
+                    print(" -- self-oscillation fingerprint", flush=True)
+                    guard("selfosc", lambda: stage_selfosc(dev, name, cs258, hz258 or 261.6))
+                if "response" in stages:
+                    print(" -- measured response: corner and slope", flush=True)
+                    pts = []
+                    for hz in CUTOFFS_HZ:
+                        cs, chz = cut_setting_for(dev, name, hz, cache)
+                        pts.append((cs, chz if chz is not None else hz, res_lo(name)))
+                    guard("response", lambda: stage_response(dev, name, pts))
+                    print(" -- measured response: resonant peak versus resonance", flush=True)
+                    cs, chz = cut_setting_for(dev, name, 800.0, cache)
+                    pk = [(cs, chz if chz is not None else 800.0, r)
+                          for r in ([0.2, 0.4, 0.6, 0.8, 0.9] if not name.startswith("ours")
+                                    else [0.3, 0.5, 0.7, 0.85, 0.95])]
+                    guard("peak", lambda: stage_response(dev, name, pk))
+                if "tracking" in stages:
+                    print(" -- self-oscillation pitch versus cutoff", flush=True)
+                    rows = []
+                    res = res_grid(name)[-1]
+                    for hz in CUTOFFS_HZ:
+                        cs, chz = cut_setting_for(dev, name, hz, cache)
+                        y = dev.ring(cs, res, seconds=0.8)
+                        f = _tracking_f_osc(y)
+                        rows.append(dict(device=name, commanded_hz=chz, want_hz=hz,
+                                         cut_setting=cs, res=res, f_osc=f,
+                                         rms=float(am.rms(y))))
+                        print(f"  {name:12s} cut {hz:7.0f} (cmd {chz}) -> f_osc "
+                              f"{f if f is None else round(f, 1)}", flush=True)
+                    out["tracking"] = rows
+                if "peakdrive" in stages:
+                    print(" -- resonant peak versus drive, at 0.9 of each filter's own onset",
+                          flush=True)
+                    cs, chz = cut_setting_for(dev, name, 800.0, cache)
+                    guard("peakdrive", lambda: stage_peakdrive(dev, name, cs, chz or 800.0))
+                if "bigdrive" in stages:
+                    print(" -- where the saturation engages", flush=True)
+                    cs, chz = cut_setting_for(dev, name, 800.0, cache)
+                    guard("bigdrive", lambda: stage_bigdrive(dev, name, cs, chz or 800.0))
+                if "drive" in stages:
+                    print(" -- drive", flush=True)
+                    cs, chz = cut_setting_for(dev, name, 800.0, cache)
+                    res = 0.6 if not name.startswith("ours") else 0.7
+                    guard("drive", lambda: stage_drive(dev, name, cs, chz or 800.0, res, 200.0,
+                                                       [-48, -36, -24, -18, -12, -6, -3, 0]))
+            finally:
+                del dev
+            for k, v in out.items():
+                with open(os.path.join(a.out, f"{k}-{name}.json"), "w") as f:
+                    json.dump(v, f, indent=1, default=str)
+            if out:
+                written.append(name)
+            with open(cache_path, "w") as f:
+                json.dump(cache, f, indent=1)
+    except ImportError as exc:
+        # The plugin host and nothing else: any other module that fails to
+        # import is a bug here, and a bug must crash rather than be reported
+        # as a precondition that happened to be unmet.
+        # Exact name, not the package prefix: `dawdreamer.<anything>` failing
+        # means the host imported and then broke inside itself, a bug.
+        if exc.name != "dawdreamer":
+            raise
+        reason = f"the plugin host is not importable ({exc})"
+    except rq.RigRefusal as exc:
+        reason = str(exc)
+    except am.InsufficientEvidence as exc:
+        reason = str(exc)
+    else:
+        print(f"\nwritten to {a.out}", flush=True)
+        return 0
+    # One line on stderr is the contract: a multi-line reason is joined, not cut.
+    reason = " ".join(part.strip() for part in str(reason).splitlines() if part.strip())
+    state = (f"already written to {a.out} in this run: {', '.join(written)} "
+             f"-- that output is partial, not a result" if written
+             else f"nothing was written to {a.out} in this run")
+    print(f"REFUSED: {reason} at device {name}; {state}", file=sys.stderr)
+    return EXIT_REFUSED
 
 
 if __name__ == "__main__":

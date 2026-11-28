@@ -23,6 +23,7 @@ per render. `model/reference_compare.py --stage validate` is their check, and
 it cross-checks the two excitation methods against each other on Surge, where
 both are possible.
 """
+import json
 import math
 import os
 import sys
@@ -35,7 +36,9 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "..", "audition"))
 
 import audio_measure as am                                          # noqa: E402
+import reference_compare as rc                                      # noqa: E402
 import reference_rigs as rr                                         # noqa: E402
+import rig_qualification as rq                                      # noqa: E402
 import voice_fx as vf                                               # noqa: E402
 
 SR = rr.SR
@@ -243,3 +246,212 @@ def test_a_silent_stub_is_refused_rather_than_measured():
     return a plausible number (verification rule 1)."""
     with pytest.raises(am.InsufficientEvidence):
         am.harmonic_signature(np.zeros(SR), SR)
+
+
+# =============================================================================
+# 3. THE ENTRY POINT REFUSES (exit 2) INSTEAD OF CRASHING (exit 1)
+#
+# Issue #2028. `build()` is called outside `guard`, and `guard` catches
+# `NotImplementedError` only, so on a host without the plugin host every
+# `--stage` died in `reference_rigs._Plugin.__init__` at the first reference
+# device with a raw ModuleNotFoundError and exit 1 -- after the rig-free
+# `ours*` devices had already been written. `tools/run_all.py` renders 1 as
+# FAIL -- a RESULT -- where the truth is that nothing was measured for that
+# device; `tools/exit_contract.py` names that outcome REFUSED, 2.
+#
+# `guard`'s `NotImplementedError` handling is a DIFFERENT outcome and stays
+# what it was: a `not_answerable` report row on the exit-0 path. A missing
+# host must not become one of those rows, and a `not_answerable` row must not
+# become a refusal.
+#
+# Every refusal goes through the real `main`, the real `build()` and, where
+# this host can reach it, the real raise site -- never a stage stub raising
+# what the test expects. The controls are the exceptions that must keep
+# crashing.
+# =============================================================================
+STAGES = ("selfosc", "response", "tracking", "drive", "peakdrive", "bigdrive", "all")
+REFUSED = 2          # tools/exit_contract.py, retyped so the oracle is not read off its subject
+
+
+def _run(argv, tmp_path, capsys):
+    """(status, the non-empty stderr lines) of one `rc.main` into tmp_path."""
+    status = rc.main([*argv, "--out", str(tmp_path)])
+    return status, [ln for ln in capsys.readouterr().err.splitlines() if ln.strip()]
+
+
+def _device_files(tmp_path):
+    """What a run wrote for its devices. `knobs.json` is the cutoff-knob cache,
+    rewritten after every device and belonging to none of them."""
+    return sorted(p.name for p in tmp_path.iterdir() if p.name != "knobs.json")
+
+
+class _RigThatRaises:
+    """Stands in for `rr.SurgeRig`, the rig `build` makes for `surge-rk`."""
+
+    def __init__(self, exc):
+        self.exc = exc
+
+    def __call__(self, *a, **k):
+        raise self.exc
+
+
+@pytest.mark.parametrize("stage", STAGES)
+def test_a_missing_plugin_host_is_refused_not_a_crash(tmp_path, capsys, monkeypatch, stage):
+    """The issue's own reproduction, made host-independent: `None` in
+    sys.modules makes `import dawdreamer` raise ModuleNotFoundError with
+    name="dawdreamer" whether or not the package is installed, so this means
+    the same on a host that has the plugins as on one that does not.
+    One stderr line IS the no-traceback check: a traceback is many."""
+    monkeypatch.setitem(sys.modules, "dawdreamer", None)
+    status, err = _run(["--stage", stage, "--devices", "surge-rk"], tmp_path, capsys)
+    assert status == REFUSED, (status, err)
+    assert len(err) == 1 and err[0].startswith("REFUSED: "), err
+    assert "dawdreamer" in err[0] and "surge-rk" in err[0], err
+    assert err[0].endswith(f"nothing was written to {tmp_path} in this run"), err
+    assert _device_files(tmp_path) == [], _device_files(tmp_path)
+
+
+@pytest.mark.parametrize("missing, refused", [
+    ("dawdreamer", True),            # the plugin host
+    ("dawdreamer._ext", False),      # the host imported, then broke inside itself: a bug
+    ("numpy_typo", False),           # an unrelated broken import: a bug, not a precondition
+], ids=["host", "host-submodule", "unrelated"])
+def test_only_the_plugin_hosts_own_import_failure_is_a_refusal(tmp_path, capsys, monkeypatch,
+                                                               missing, refused):
+    """The boundary of that predicate, and two of the injected-bug controls.
+    `host-submodule` defeats a handler that matched on the MESSAGE: its text
+    names the host, and only `exc.name` tells a missing host from a broken
+    one. `unrelated` defeats a handler that caught every ImportError."""
+    exc = ModuleNotFoundError(f"No module named '{missing}'", name=missing)
+    monkeypatch.setattr(rr, "SurgeRig", _RigThatRaises(exc))
+    if refused:
+        status, err = _run(["--stage", "selfosc", "--devices", "surge-rk"], tmp_path, capsys)
+        assert status == REFUSED and len(err) == 1, (status, err)
+        assert err[0].startswith("REFUSED: ") and missing in err[0], err
+    else:
+        with pytest.raises(ModuleNotFoundError) as got:
+            rc.main(["--stage", "selfosc", "--devices", "surge-rk", "--out", str(tmp_path)])
+        assert got.value is exc
+        assert capsys.readouterr().err == ""
+    assert _device_files(tmp_path) == [], _device_files(tmp_path)
+
+
+@pytest.mark.parametrize("stage", STAGES)
+def test_a_rig_refusal_comes_out_as_refused_with_its_message(tmp_path, capsys, monkeypatch, stage):
+    """`_Plugin.__init__` ends in `qualify()`, and `Qualification.require()`
+    raises RigRefusal for a rig whose commands cause nothing (#137) -- so it
+    escapes from `build()` exactly as the missing host does."""
+    why = "surge under dawdreamer: REFUSED -- cutoff: FAIL -- moving the cutoff changed nothing"
+    monkeypatch.setattr(rr, "SurgeRig", _RigThatRaises(rq.RigRefusal(why)))
+    status, err = _run(["--stage", stage, "--devices", "surge-rk"], tmp_path, capsys)
+    assert status == REFUSED, (status, err)
+    assert err == [f"REFUSED: {why} at device surge-rk; "
+                   f"nothing was written to {tmp_path} in this run"], err
+    assert _device_files(tmp_path) == [], _device_files(tmp_path)
+
+
+class _NaNRig:
+    """A rig whose every ring is not audio. The ring goes through the REAL
+    `am.require_finite` -- the call `reference_rigs.render_midi_note` makes on
+    every plugin render -- so the NonFiniteAudio comes from its own raise
+    site, not from a stand-in `raise`. The `tracking` stage rings the device
+    OUTSIDE `guard`, which is where it escapes."""
+
+    def __init__(self, *a, **k):
+        pass
+
+    def set_point(self, hz, *a):
+        return hz
+
+    def ring(self, *a, **k):
+        return am.require_finite(np.full(int(0.1 * SR), np.nan), "nan-rig's 0.100 s ring")
+
+
+def test_a_render_that_is_not_audio_is_refused(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(rr, "SurgeRig", _NaNRig)
+    status, err = _run(["--stage", "tracking", "--devices", "surge-rk"], tmp_path, capsys)
+    assert status == REFUSED, (status, err)
+    assert len(err) == 1 and err[0].startswith("REFUSED: ") and "this is not audio" in err[0], err
+    assert _device_files(tmp_path) == [], _device_files(tmp_path)
+
+
+def test_a_refusal_mid_run_names_the_devices_already_written(tmp_path, capsys, monkeypatch):
+    """`ALL` puts the rig-free `ours*` devices first, so the default run
+    writes their JSONs and then dies at the first reference rig. That output
+    is partial and the refusal must say so and name the devices: a reader who
+    finds `selfosc-ours.json` beside a refusal has to be able to tell which
+    devices it is a result for."""
+    monkeypatch.setitem(sys.modules, "dawdreamer", None)
+    status, err = _run(["--stage", "selfosc", "--devices", "ours,surge-rk"], tmp_path, capsys)
+    assert status == REFUSED, (status, err)
+    assert len(err) == 1 and err[0].startswith("REFUSED: "), err
+    assert err[0].endswith(f"already written to {tmp_path} in this run: ours "
+                           f"-- that output is partial, not a result"), err
+    assert _device_files(tmp_path) == ["selfosc-ours.json"], _device_files(tmp_path)
+
+
+def test_a_refusal_names_only_what_this_run_wrote(tmp_path, capsys, monkeypatch):
+    """The input that defeats a refusal which lists the directory (verification
+    rule 8): `--out` is reused between runs, so a `selfosc-surge-rk.json` left
+    by an EARLIER run sits beside the partial output and is not this run's.
+    It must not be named -- and must not be deleted either."""
+    stale = tmp_path / "selfosc-surge-rk.json"
+    stale.write_text("[]")
+    monkeypatch.setitem(sys.modules, "dawdreamer", None)
+    status, err = _run(["--stage", "selfosc", "--devices", "ours,surge-rk"], tmp_path, capsys)
+    assert status == REFUSED, (status, err)
+    assert err[0].endswith(f"already written to {tmp_path} in this run: ours "
+                           f"-- that output is partial, not a result"), err
+    assert stale.read_text() == "[]"
+    assert _device_files(tmp_path) == ["selfosc-ours.json", "selfosc-surge-rk.json"]
+
+
+def test_a_bug_is_not_a_refusal_it_still_crashes(tmp_path, capsys, monkeypatch):
+    """The control for a bare `except Exception`. `_qualify_pins` raises
+    exactly this type, with this shape of text, when a rig's pinned settings
+    do not hold -- a bug in the rig or the harness, which must crash rather
+    than be reported as a precondition that happened to be unmet. The text
+    names the plugin host on purpose, so a handler that matched on the
+    message rather than on the exception would swallow it too."""
+    exc = RuntimeError("dawdreamer: pinned settings did not hold: [259]")
+    monkeypatch.setattr(rr, "SurgeRig", _RigThatRaises(exc))
+    with pytest.raises(RuntimeError) as got:
+        rc.main(["--stage", "selfosc", "--devices", "surge-rk", "--out", str(tmp_path)])
+    assert got.value is exc
+    assert capsys.readouterr().err == ""
+    assert _device_files(tmp_path) == [], _device_files(tmp_path)
+
+
+class _LadderWithoutAnInput(rr.OurLadder):
+    """Our ladder whose stepped tone is `DivaRig.tone_gain_db` -- the REAL
+    raise site for a stage a device cannot answer (Diva has no audio input)
+    -- so the NotImplementedError reaches `guard` from the repository's own
+    code on a host with no plugin host."""
+    tone_gain_db = rr.DivaRig.tone_gain_db
+
+
+def test_a_stage_that_cannot_answer_is_still_a_report_row_on_the_exit_0_path(tmp_path, capsys,
+                                                                              monkeypatch):
+    """`guard`'s contract, UNCHANGED by the refusal handlers: a stage that
+    raises NotImplementedError leaves a `not_answerable` row and the run goes
+    on to exit 0. It must not have become a refusal -- widening `guard` to
+    the refusal types would do that, and is #1936 B2's scope, not this fix.
+    Green before the fix as well as after, on purpose: it is the pin."""
+    monkeypatch.setattr(rr, "OurLadder", _LadderWithoutAnInput)
+    status, err = _run(["--stage", "response", "--devices", "ours"], tmp_path, capsys)
+    assert status == 0 and err == [], (status, err)
+    assert _device_files(tmp_path) == ["peak-ours.json", "response-ours.json"], \
+        _device_files(tmp_path)
+    why = "Diva has no audio input; use noise_render"
+    for name in _device_files(tmp_path):
+        rows = json.loads((tmp_path / name).read_text())
+        assert rows == [dict(device="ours", ok=False, not_answerable=why)], (name, rows)
+
+
+def test_a_run_that_completes_returns_0_and_keeps_its_output(tmp_path, capsys):
+    """The other side of the dispatch: the handlers must not turn a run that
+    ran into a refusal, nor skip its output, nor put anything on stderr."""
+    status, err = _run(["--stage", "selfosc", "--devices", "ours"], tmp_path, capsys)
+    assert status == 0 and err == [], (status, err)
+    rows = json.loads((tmp_path / "selfosc-ours.json").read_text())
+    assert len(rows) == len(rc.RES_GRID["ours"]), len(rows)
