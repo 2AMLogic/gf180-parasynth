@@ -28,7 +28,13 @@ census read as no guard -- and the inputs that must not be credited as one. The
 #1718 section plants an `async def` callee, which `funcs` did not register: each
 control RUNS the planted coroutine code first and holds the census row to the
 interpreter's verdict, and each fix is reverted in memory to show that its
-control goes red without it.
+control goes red without it. The #1946 section pins a blind spot the
+scanner's list was missing, documented there rather than closed: a handler
+is credited by its clause and never by its body, so a re-raising handler
+reads as a catch -- the issue's `main()` as `covered(cli-base)`, the
+translating guard the tree already holds as `covered(exact)` -- while the
+interpreter lets the refusal out; the control after it injects the
+body-aware reading and shows that pin red.
 """
 from __future__ import annotations
 
@@ -45,6 +51,7 @@ import pytest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
+import refusal  # noqa: E402
 import refusal_sibling_scan as rss                     # noqa: E402
 
 
@@ -2335,3 +2342,138 @@ def helper():
 ''')
     assert s["classification"] == "candidate-escape", s
     assert s["uncovered"] == ["mod_a"], s
+
+
+# --- #1946 control: a handler is credited by its clause, not its body --------
+# The issue's own fixture and the translating form live in the tree, each held
+# to the interpreter's verdict. A PIN on documented behaviour, not an
+# endorsement: the census row and Python disagree here on purpose, and the
+# companion mutant is the change that must retire it.
+
+CALLER_RERAISING_HEAD = '''
+import sys
+import refusal
+import mod_a
+
+def helper(p="p"):
+    return mod_a.load(p)          # the site: unguarded where it is written
+'''
+
+# the two BOUNDARY forms: the handler in main() lets the refusal out of the CLI
+CALLER_RERAISE_BARE = CALLER_RERAISING_HEAD + '''
+def main(argv=None):
+    try:
+        return helper("x")
+    except refusal.Refused:
+        raise                     # credited as a catch; the refusal continues
+
+if __name__ == "__main__":
+    sys.exit(main())
+'''
+
+CALLER_RERAISE_AS_OTHER_FAMILY = CALLER_RERAISING_HEAD + '''
+class Refused(refusal.Refused, Exception):
+    pass
+
+def main(argv=None):
+    try:
+        return helper("x")
+    except refusal.Refused as exc:
+        raise Refused(str(exc)) from exc     # a NEW refusal continues out of main
+
+if __name__ == "__main__":
+    sys.exit(main())
+'''
+
+# the LIBRARY-FRAME form, the one live in the tree: the call's own guard
+# translates the callee's refusal into the caller's and re-raises it
+CALLER_TRANSLATE_IN_LIBRARY_FRAME = '''
+import sys
+import refusal
+import mod_a
+
+class Refused(refusal.Refused, Exception):
+    pass
+
+def helper(p="p"):
+    try:
+        return mod_a.load(p)      # the site: credited by the clause below
+    except mod_a.Refused as exc:
+        raise Refused(str(exc)) from exc     # the caller's OWN refusal continues
+
+def main(argv=None):
+    return helper("x")
+
+if __name__ == "__main__":
+    sys.exit(main())
+'''
+
+
+def _reraising_tree(tmp_path: pathlib.Path, src: str) -> list[pathlib.Path]:
+    files = _tree(tmp_path)
+    p = tmp_path / "caller_reraise.py"
+    p.write_text(src)
+    files.append(p)
+    return files
+
+
+def _boundary_verdict(monkeypatch, tmp_path: pathlib.Path) -> str:
+    """What the INTERPRETER does with the planted `main()`: 'escaped' when
+    the refusal leaves it -- at `sys.exit(main())` the traceback and exit 1
+    -- 'caught' when it returns. The family BASE is what is caught here, so
+    a refusal re-raised as another member still reads 'escaped'."""
+    _import(monkeypatch, tmp_path / "mod_a.py")
+    mod = _import(monkeypatch, tmp_path / "caller_reraise.py")
+    try:
+        mod.main("x")
+    except refusal.Refused:
+        return "escaped"
+    return "caught"
+
+
+@pytest.mark.parametrize("src,row", [
+    pytest.param(CALLER_RERAISE_BARE, ("covered(cli-base)", "none", []),
+                 id="bare-raise-at-the-boundary"),
+    pytest.param(CALLER_RERAISE_AS_OTHER_FAMILY, ("covered(cli-base)", "none", []),
+                 id="raise-another-family-at-the-boundary"),
+    pytest.param(CALLER_TRANSLATE_IN_LIBRARY_FRAME, ("covered(exact)", "exact", []),
+                 id="translate-in-a-library-frame"),
+])
+def test_a_reraising_handler_is_credited_by_its_clause(tmp_path, monkeypatch, src, row):
+    """DOCUMENTED BLIND SPOT (#1946), pinned, not endorsed. The handler is
+    read by its except-expression alone, never by its body, so in every
+    form here the census says a refusal-catching clause stands at the site
+    while Python lets a refusal out of `main()`: the issue's fixture reads
+    `covered(cli-base)` and exits 1, and the translating guard the tree
+    already holds reads `covered(exact)` for a refusal it re-raises as the
+    caller's own. A body-aware reading is the change that must turn this
+    red and move the blind-spot bullet with it."""
+    files = _reraising_tree(tmp_path, src)
+    assert _boundary_verdict(monkeypatch, tmp_path) == "escaped"
+    idx = rss.build_index(files)
+    got = _sites_for(files, idx, "caller_reraise")
+    assert len(got) == 1, got
+    assert (got[0]["classification"], got[0]["guard"], got[0]["uncovered"]) == row, got
+
+
+def test_with_a_body_aware_reading_the_reraising_boundary_credits_nothing(tmp_path):
+    """Rule 8: the input that defeats the pin above, compiled from the
+    shipped source -- `handler_origins` answering `other` for a raise-only
+    body, the smallest body-aware scanner. The same fixture turns
+    `candidate-escape`, the label Python's exit 1 agrees with, so the pin is
+    red under exactly the change it exists to flag."""
+    mut = _scanner_with("    t = handler.type\n",
+                        "    if all(isinstance(s, ast.Raise) for s in handler.body):\n"
+                        "        return set(), 'other'\n"
+                        "    t = handler.type\n")
+    files = _reraising_tree(tmp_path, CALLER_RERAISE_BARE)
+    p = tmp_path / "caller_reraise.py"
+    # the shipped scanner reads the clause; the mutant is ACTIVE -- the same
+    # boundary handler now reads `other`, the shape `scan` does not credit
+    ship = rss.build_index(files)
+    assert rss.cli_boundary_guards(ship[str(p)], rss.stem_map(ship)) == [(set(), "base")]
+    idx = mut.build_index(files)
+    assert mut.cli_boundary_guards(idx[str(p)], mut.stem_map(idx)) == [(set(), "other")]
+    got = [s for s in mut.scan(files, idx) if "caller_reraise.py" in s["site"]]
+    assert [(s["classification"], s["guard"], s["uncovered"]) for s in got] == [
+        ("candidate-escape", "none", ["mod_a"])], got
