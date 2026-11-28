@@ -34,6 +34,8 @@ import numpy as np
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "model"), str(ROOT / "tools")]
 import voice_fx as vf  # noqa: E402
+import exit_contract  # noqa: E402
+import refusal  # noqa: E402
 
 BASE_Q15 = vf._OS2_SUBSTEP_GAIN_Q15
 SHAPES = ("pulse479", "square", "pulse29", "pulse25", "pulse15", "saw")
@@ -286,23 +288,31 @@ def main(argv=None) -> int:
                     help="phrases: pulse segments' drive x this for the candidate gains (not the baseline)")
     ap.add_argument("--out", type=pathlib.Path, required=True)
     a = ap.parse_args(argv)
-    if a.mode == "decimator":
-        res = decimator_sweep(a.gains)
-    elif a.mode == "probe":
-        res = probe_points(a.gains[0])
-    elif a.mode == "fine":
-        res = fine_sweep(a.gains)
-    elif a.mode == "mix":
-        res = mix_check([g for g in a.gains if q15(g) != BASE_Q15], a.scope)
-    else:
-        res = phrases([g for g in a.gains if q15(g) != BASE_Q15], a.scope, a.pulse_drive_comp)
-    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
-    dirty = subprocess.run(["git", "diff", "--quiet", "HEAD", "--", "tools/measure_pulse2x_headroom.py",
-                            "model/voice_fx.py"], cwd=ROOT).returncode != 0
-    a.out.parent.mkdir(parents=True, exist_ok=True)
-    a.out.write_text(json.dumps({"mode": a.mode, "scope": a.scope, "base_gain_q15": BASE_Q15,
-                                 "commit": head, "sources_dirty": dirty, "results": res},
-                                indent=1) + "\n")
+    try:
+        if a.mode == "decimator":
+            res = decimator_sweep(a.gains)
+        elif a.mode == "probe":
+            res = probe_points(a.gains[0])
+        elif a.mode == "fine":
+            res = fine_sweep(a.gains)
+        elif a.mode == "mix":
+            res = mix_check([g for g in a.gains if q15(g) != BASE_Q15], a.scope)
+        else:
+            res = phrases([g for g in a.gains if q15(g) != BASE_Q15], a.scope, a.pulse_drive_comp)
+        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
+        dirty = subprocess.run(["git", "diff", "--quiet", "HEAD", "--", "tools/measure_pulse2x_headroom.py",
+                                "model/voice_fx.py"], cwd=ROOT).returncode != 0
+        a.out.parent.mkdir(parents=True, exist_ok=True)
+        a.out.write_text(json.dumps({"mode": a.mode, "scope": a.scope, "base_gain_q15": BASE_Q15,
+                                     "commit": head, "sources_dirty": dirty, "results": res},
+                                    indent=1) + "\n")
+    except refusal.Refused as why:
+        # The CLI boundary (#1613): every mode's scorer raises its own module's
+        # `Refused` (mono_m5a_score.measure, mono_artifact_probe), all subclasses
+        # of the base. Catches refusals only -- an unexpected exception is an
+        # execution error and still exits 1.
+        print(f"REFUSED  {why}")
+        return exit_contract.REFUSED
     print(f"wrote {a.out}")
     return 0
 
