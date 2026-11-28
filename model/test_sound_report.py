@@ -27,10 +27,13 @@ while the report still printed clean numbers.
 """
 from __future__ import annotations
 
+import ast
 import os
+import subprocess
 import sys
 
 import numpy as np
+import pytest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -289,12 +292,24 @@ def test_a_changelog_entry_for_a_property_that_is_not_a_lock_is_flagged(monkeypa
     assert any("gone" in p for p in sr.check_lock_changelog())
 
 
-def test_the_changelog_records_the_commits_that_actually_moved_the_locks():
+@pytest.fixture(params=[False, True], ids=["committed", "additional-CP-move"])
+def lock_changelog(monkeypatch, request):
+    if request.param:
+        key = ("CP", "attack")
+        old = sr.LOCKS[key]
+        event = _ev(key, old, old + 1, recorded_by="74c90449",
+                    reason="Fixture moving the clap attack one millisecond later.")
+        monkeypatch.setattr(sr, "LOCK_CHANGELOG", [*sr.LOCK_CHANGELOG, event])
+        monkeypatch.setitem(sr.LOCKS, key, old + 1)
+    return sr.LOCK_CHANGELOG
+
+
+def test_the_changelog_records_the_commits_that_actually_moved_the_locks(lock_changelog):
     """Recovered with `git log -L` on the LOCKS block, not from memory: 28dfd55
     introduced the table (#51), bf13fdd added the power-centroid lock (#251),
     and 50d7aaf / 80b3756 are the two re-locks #242 traced with drift_probe.py."""
-    by = {ev["recorded_by"]: ev for ev in sr.LOCK_CHANGELOG}
-    assert set(by) == {"28dfd55", "bf13fdd", "50d7aaf", "80b3756", "b572b7fc"}
+    by = {ev["recorded_by"]: ev for ev in lock_changelog}
+    assert {"28dfd55", "bf13fdd", "50d7aaf", "80b3756", "b572b7fc"} <= by.keys()
     assert list(by["bf13fdd"]["locks"]) == [("SD", "brightness (power centroid)")]
     assert list(by["50d7aaf"]["locks"]) == [("LADDER", "corner ratio drift")]
     assert list(by["b572b7fc"]["locks"]) == [("LADDER", "corner ratio drift")]
@@ -326,86 +341,226 @@ def test_check_locks_exits_nonzero_when_the_record_disagrees(monkeypatch):
 # `LOCK` named `ce400a6`, an object that does not exist in this repository. Both are mechanism failures, so both get
 # a mechanism here rather than a note.
 # ===========================================================================
-def _git(*args):
-    import subprocess
-    return subprocess.run(["git", "-C", os.path.dirname(HERE), *args],
-                          capture_output=True, text=True)
-
-
-def _in_a_git_checkout() -> bool:
-    return _git("rev-parse", "--git-dir").returncode == 0
-
-
-def _history_is_truncated() -> bool:
-    """A shallow clone has not fetched the ancestors these tests resolve, so
-    `git cat-file -t <real ancestor sha>` fails there with exactly the error a
-    dangling sha gives. That is the apparatus in a wrong state, not a finding:
-    the first CI run of these tests went red on `28dfd55`/`50d7aaf`, both of
-    which resolve fine in a full clone, because `moog-acceptance.yml` checked
-    out at the default depth of 1.
-
-    Report it as its own outcome -- named, and still red. Skipping instead
-    would hand back a green run for the one check #242 exists to install, which
-    is the blind spot rather than a fix for it."""
-    return _git("rev-parse", "--is-shallow-repository").stdout.strip() == "true"
-
-
-def _assert_history_reaches_the_shas():
-    assert not _history_is_truncated(), (
-        "REFUSED: this is a shallow clone, so the lock table's ancestor commits "
-        "were never fetched and `git cat-file` cannot answer whether they exist. "
-        "Not a provenance failure -- a checkout-depth one. Clone with full "
-        "history, or set `fetch-depth: 0` on the workflow's checkout step.")
-
-
-def test_the_commit_the_locks_were_measured_at_exists_in_this_repository():
-    """`LOCK = "ce400a6"` for months and `git cat-file -t ce400a6` fails: it
-    was a pre-squash commit on #51's branch. Every "locked at ..." line in the
-    report therefore cited nothing, and the bisect the report's own advice
-    recommends could not be started at all -- the concrete cost, in #242, was
-    re-measuring 17 historical trees to recover two answers the table should
-    have carried."""
-    if not _in_a_git_checkout():
-        import pytest
-        pytest.skip("not a git checkout")
-    _assert_history_reaches_the_shas()
-    r = _git("cat-file", "-t", sr.LOCK)
-    assert r.returncode == 0 and r.stdout.strip() == "commit", (
-        f'sound_report.LOCK = "{sr.LOCK}" is not a commit in this repository '
-        f'({r.stdout.strip() or r.stderr.strip()}). A lock table whose own '
-        "provenance is a dangling sha cannot be bisected against.")
-
-
-def test_every_relock_names_a_real_property_and_a_real_commit():
-    """A re-lock records WHICH commit changed the sound. If that key does not
-    match a property, or that sha does not resolve, the record is decoration."""
+def test_every_changelog_entry_names_a_real_property_and_real_commits(lock_changelog):
+    """A lock move records WHICH commit changed the sound. If the key matches no
+    property, or an `at` / `recorded_by` sha does not resolve, it is decoration.
+    One table now (#1303): `LOCK_CHANGELOG` feeds the report and --check-locks."""
     props = {(p.voice, p.name) for p in sr.build_properties()}
-    for key, (commit, was, why) in sr.RELOCKS.items():
-        assert key in props, f"RELOCKS names {key}, which build_properties() does not create"
-        assert key in sr.LOCKS, f"RELOCKS names {key}, which has no entry in LOCKS"
-        assert abs(sr.LOCKS[key] - was) > 0, (
-            f"RELOCKS says {key} moved away from {was}, but LOCKS still holds {was}")
-        assert len(why) > 40, f"{key}'s re-lock gives no reason"
-        if _in_a_git_checkout():
-            _assert_history_reaches_the_shas()
-            r = _git("cat-file", "-t", commit)
-            assert r.returncode == 0 and r.stdout.strip() == "commit", (
-                f"{key} is re-locked against '{commit}', which is not a commit here")
+    for ev in lock_changelog:
+        for key in ev["locks"]:
+            assert key in props, f"LOCK_CHANGELOG names {key}, which build_properties() does not create"
+            assert key in sr.LOCKS, f"LOCK_CHANGELOG names {key}, which has no entry in LOCKS"
+        assert len(ev["reason"]) > 40, f"{ev['recorded_by']} gives no reason"
+    assert sr.check_lock_changelog() == []
 
 
-def test_a_relocked_propertys_provenance_reaches_the_line_the_report_prints():
+def test_a_relocked_propertys_provenance_reaches_the_line_the_report_prints(lock_changelog):
     """The provenance has to be where the number is read. `Result.sentence()`
-    is the only text a reader sees when a lock goes OUT, so the re-lock record
-    is appended to `source`, which that sentence quotes."""
+    is the only text a reader sees when a lock goes OUT, so the latest move,
+    derived from LOCK_CHANGELOG, is appended to `source`."""
     props = {(p.voice, p.name): p for p in sr.build_properties()}
-    for key, (commit, _, _) in sr.RELOCKS.items():
+    # Take the expected move from the raw events so a dropped property in
+    # lock_history() cannot disappear from both the report and its test.
+    latest = {}
+    for event in lock_changelog:
+        for key, (was, _) in event["locks"].items():
+            if was is not None:
+                latest[key] = (event, was)
+    assert {("LADDER", "corner ratio drift"), ("LT", "attack")} <= latest.keys()
+    for key, (last, was) in latest.items():
         p = props[key]
-        assert f"RE-LOCKED at {commit}" in p.source, (
-            f"{key}'s re-lock provenance is not in its source line")
-        # build_properties() leaves a lock's value None; run() fills it from LOCKS
         p.value = sr.LOCKS[key]
         s = sr.Result(p, p.value + 10 * p.tol, False, "", 10 * p.tol).sentence()
-        assert commit in s, f"{key} going OUT would not print which commit re-locked it"
+        assert f"RE-LOCKED at {last['recorded_by']} (was {was:g})" in s, key
+        assert last["reason"] in s, key
+
+
+def _with_changelog(extra, locks=None):
+    """Run check_lock_changelog against a modified copy, then restore."""
+    import copy
+    orig_cl, orig_locks = copy.deepcopy(sr.LOCK_CHANGELOG), dict(sr.LOCKS)
+    try:
+        sr.LOCK_CHANGELOG = orig_cl + extra
+        if locks:
+            sr.LOCKS.update(locks)
+        return sr.check_lock_changelog()
+    finally:
+        sr.LOCK_CHANGELOG[:] = orig_cl
+        sr.LOCKS.clear()
+        sr.LOCKS.update(orig_locks)
+
+
+def _ev(key, was, now, **kw):
+    e = {"at": "28dfd55", "recorded_by": "50d7aaf", "issue": 1,
+         "reason": "a real and sufficiently long reason", "locks": {key: (was, now)}}
+    e.update(kw)
+    return e
+
+
+@pytest.mark.parametrize("field", ["at", "recorded_by", "LOCK"])
+def test_check_locks_rejects_a_moving_commit_reference(monkeypatch, capsys, field):
+    key = ("CP", "attack")
+    old = sr.LOCKS[key]
+    move = _ev(key, old, old + 1, reason="Fixture moving the clap attack one millisecond later.")
+    if field == "LOCK":
+        monkeypatch.setattr(sr, "LOCK", "HEAD")
+    else:
+        move[field] = "HEAD"
+    monkeypatch.setattr(sr, "LOCK_CHANGELOG", [*sr.LOCK_CHANGELOG, move])
+    monkeypatch.setitem(sr.LOCKS, key, old + 1)
+
+    assert sr.main(["--check-locks"]) == 1
+    assert any(field in line and "HEAD" in line and "commit" in line
+               for line in capsys.readouterr().out.splitlines())
+
+
+@pytest.fixture
+def measurement_repo(tmp_path):
+    def git(*args):
+        return subprocess.check_output(
+            ["git", "-C", str(tmp_path), "-c", "user.name=Test", "-c", "user.email=test@example.org",
+             *args], text=True).strip()
+
+    git("init", "-q")
+    git("commit", "-q", "--allow-empty", "-m", "measurement")
+    return git
+
+
+def test_lock_commit_must_resolve_to_its_own_object(tmp_path, monkeypatch, measurement_repo):
+    git = measurement_repo
+    full = git("rev-parse", "HEAD")
+    short = git("rev-parse", "--short", "HEAD")
+    tree = git("rev-parse", "HEAD^{tree}")
+    monkeypatch.setattr(sr, "HERE", str(tmp_path))
+    assert sr._lock_commit_problems([("at", full), ("recorded_by", short)]) == []
+    assert sr._lock_commit_problems([("at", tree)]) == [
+        f"at={tree!r} does not identify a unique commit in this repository"]
+
+    # A hex branch can shadow a genuine object prefix. Git accepts the text
+    # as a commit even though the branch now points at a different commit.
+    git("commit", "-q", "--allow-empty", "-m", "later measurement")
+    git("branch", short, "HEAD")
+    assert git("rev-parse", "--verify", short) != full
+    assert sr._lock_commit_problems([("at", short)]) == [
+        f"at={short!r} does not identify a unique commit in this repository"]
+
+
+def test_check_locks_refuses_a_shallow_checkout(tmp_path, monkeypatch, capsys, measurement_repo):
+    measurement_repo("commit", "-q", "--allow-empty", "-m", "later measurement")
+    shallow = tmp_path / "shallow"
+    measurement_repo("clone", "-q", "--depth=1", tmp_path.as_uri(), str(shallow))
+    monkeypatch.setattr(sr, "HERE", str(shallow))
+    assert sr.main(["--check-locks"]) == 2
+    assert "REFUSED: checking lock commits requires a full Git checkout" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("field", ["LOCKS", "from", "to"])
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), -float("inf")])
+def test_check_locks_names_nonfinite_values(monkeypatch, capsys, field, bad):
+    key = ("LT", "attack")
+    if field == "LOCKS":
+        monkeypatch.setitem(sr.LOCKS, key, bad)
+    else:
+        moves = next(ev["locks"] for ev in sr.LOCK_CHANGELOG if ev["recorded_by"] == "80b3756")
+        was, now = moves[key]
+        monkeypatch.setitem(moves, key, (bad, now) if field == "from" else (was, bad))
+    assert sr.main(["--check-locks"]) == 1
+    assert any("LT 'attack'" in line and field in line and "finite" in line
+               for line in capsys.readouterr().out.splitlines())
+
+
+@pytest.fixture
+def relock_results(monkeypatch):
+    # Freeze the starting locks for the reviewer's round-trip example. Future
+    # changes to the real instrument can move either attack independently.
+    lt, cp = ("LT", "attack"), ("CP", "attack")
+    starting = {lt: 6.27083, cp: 3.0}
+    event = _ev(lt, None, starting[lt])
+    event["locks"][cp] = (None, starting[cp])
+    monkeypatch.setattr(sr, "LOCK_CHANGELOG", [event])
+    monkeypatch.setattr(sr, "LOCKS", starting)
+    props = {(p.voice, p.name): p for p in sr.build_properties()}
+    results = [sr.Result(props[lt], 301 * 1000 / 48000, True),
+               sr.Result(props[cp], 4.0, True)]
+    monkeypatch.setattr(sr, "run", lambda: (results, []))
+    return results
+
+
+@pytest.fixture
+def pasted_relock(relock_results, capsys, monkeypatch):
+    assert sr.main(["--relock"]) == 0
+    table, draft = capsys.readouterr().out.split("\n\n", 1)
+    locks = ast.literal_eval(ast.parse(table).body[0].value)
+    event, = ast.literal_eval("[" + draft + "]")
+    event.update(at="28dfd55", recorded_by="74c90449")
+    monkeypatch.setattr(sr, "LOCKS", locks)
+    monkeypatch.setattr(sr, "LOCK_CHANGELOG", [*sr.LOCK_CHANGELOG, event])
+    return event
+
+
+def test_relock_draft_round_trips_through_check_locks(pasted_relock):
+    assert sr.LOCKS == {("LT", "attack"): 6.27083, ("CP", "attack"): 4}
+    assert pasted_relock["locks"] == {("CP", "attack"): (3.0, 4)}
+    pasted_relock["reason"] = "Fixture moving the clap attack one millisecond later."
+    assert sr.main(["--check-locks"]) == 0
+
+
+def test_the_pasted_relock_requires_its_reason_to_be_edited(pasted_relock, capsys):
+    assert sr.main(["--check-locks"]) == 1
+    output = capsys.readouterr().out
+    assert "`reason`" in output and "placeholder" in output and "1 problem(s)" in output
+
+
+@pytest.mark.parametrize("field", ["measured", "LOCKS"])
+def test_relock_refuses_a_nonfinite_draft_before_printing_it(relock_results, field, capsys,
+                                                             monkeypatch):
+    if field == "measured":
+        relock_results[1].measured = float("nan")
+    else:
+        monkeypatch.setitem(sr.LOCKS, ("CP", "attack"), float("inf"))
+    assert sr.main(["--relock"]) == 1
+    output = capsys.readouterr().out
+    assert "CP" in output and "attack" in output and "finite" in output
+    assert "LOCKS = {" not in output
+
+
+def test_the_clean_changelog_has_no_problems():
+    assert sr.check_lock_changelog() == []
+
+
+def test_a_broken_from_to_chain_is_flagged():
+    # LT attack is held at 6.27083; this entry claims it moved from 999 -> 8.
+    probs = _with_changelog([_ev(("LT", "attack"), 999.0, 8.0)],
+                            {("LT", "attack"): 8.0})
+    assert any("does not continue" in p for p in probs), probs
+
+
+def test_a_no_op_move_is_flagged():
+    v = sr.LOCKS[("BD", "T20")]
+    probs = _with_changelog([_ev(("BD", "T20"), v, v)])
+    assert any("from == to" in p for p in probs), probs
+
+
+def test_an_unedited_relock_placeholder_is_flagged():
+    v = sr.LOCKS[("BD", "T20")]
+    probs = _with_changelog([_ev(("BD", "T20"), v, 250.0,
+                                 at="<the commit these were measured at>",
+                                 recorded_by="<the commit that re-locks>",
+                                 reason="")],
+                            {("BD", "T20"): 250.0})
+    assert sum("placeholder" in p for p in probs) == 3, probs
+
+
+def test_a_new_changelog_move_reaches_the_printed_line_without_a_second_table():
+    import copy
+    orig = copy.deepcopy(sr.LOCK_CHANGELOG)
+    try:
+        v = sr.LOCKS[("BD", "T20")]
+        sr.LOCK_CHANGELOG.append(_ev(("BD", "T20"), v, 250.0, recorded_by="abc1234"))
+        props = {(p.voice, p.name): p for p in sr.build_properties()}
+        assert "RE-LOCKED at abc1234" in props[("BD", "T20")].source
+    finally:
+        sr.LOCK_CHANGELOG[:] = orig
 
 
 def test_the_plain_report_never_prints_the_words_the_nightly_gate_used_to_grep_for():

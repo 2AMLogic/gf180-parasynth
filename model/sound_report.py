@@ -50,9 +50,11 @@ from __future__ import annotations
 import argparse
 import math
 import os
+import re
 import subprocess
 import sys
 from dataclasses import dataclass, field
+from numbers import Real
 from typing import Callable
 
 import numpy as np
@@ -437,48 +439,27 @@ INJECTIONS = {
 LOCK = "28dfd55"
 
 
-# Re-lock provenance: which commit moved a lock, and why the new value is the
-# right one. A lock that drifts is the report doing its job; a lock that drifts
-# and is then silently re-locked destroys the only record of what changed the
-# sound. #242 had to re-measure 17 historical trees, across a 44-commit range,
-# to recover two such records, because the `LOCK` above named a commit that did
-# not exist -- so a re-lock now writes the answer down here, next to the
-# number, and the report prints it on the row.
-#
-#   (voice, property) -> (commit that moved it, the value before it, why)
-RELOCKS = {
-    ("LADDER", "corner ratio drift"): (
-        "b572b7fc", 4.21473,
-        "#546: the corner is now read against the DC-plateau reference, not the "
-        "median of a band that moves with the cutoff. On an ideal 4-pole (truth "
-        "0.4343 of the pole at every cutoff) the median read +82 / +25 / +6 % high "
-        "at 100 / 200 / 400 Hz, which is estimator drift reading as cutoff-control "
-        "drift (tools/probes/corner_reference_convention.py). The plateau refuses "
-        "at 100 and 200 Hz, so the spread is now over the five cutoffs 400-6400 Hz "
-        "and 4.21 % -> 2.75 %; on those same five cutoffs the old reference gave "
-        "2.34 %, so this is a coverage change, not a better ladder. Earlier move: "
-        "50d7aaf, DR 0011 baked CUT_TRIM * Huovilainen's fcr() into "
-        "voice_fx.make_g_rom() (9.40 % -> 4.21 %), the fix for contract 17.12"),
-    ("LT", "attack"): (
-        "80b3756", 16.625,
-        "the toms' pitch drop was corrected from the inferred x1.7 to the x1.06 "
-        "measured over 99 clean-digital TR-808 files (docs/tom-pitch-drop-"
-        "correction.md). The x1.7 sweep detuned the resonator while the exciter "
-        "pulse was still in it -- 'costing the toms 38-44 % of their ring' -- which "
-        "delayed the envelope peak that drum_verify.attack_ms measures from onset. "
-        "16.625 ms was 1.50 periods of LT's own 90 Hz, an outlier against every "
-        "other voice; 6.27083 ms is 0.57, in family with BD 0.72 and HT 0.89"),
-}
-
-
+# Re-lock provenance lives in exactly one place: `LOCK_CHANGELOG` below (issue
+# #1303). Until then a second hand-edited table, `RELOCKS`, carried the same
+# facts for the printed OUT line, and nothing checked the two against each
+# other. A re-lock now writes its commit, prior value and full reason once, and
+# `_apply_relocks` derives the text the report prints from `lock_history`.
 def _apply_relocks(props):
     """Put each re-locked property's provenance in its own `source` line, which
-    is what `Result.sentence()` prints when that property next goes OUT."""
+    is what `Result.sentence()` prints when that property next goes OUT. Derived
+    from `lock_history`: a property with at least one move (`from is not None`)
+    quotes the latest move and lists the earlier ones."""
     for p in props:
-        rl = RELOCKS.get((p.voice, p.name))
-        if rl:
-            commit, was, why = rl
-            p.source += f"; RE-LOCKED at {commit} (was {was:g}) -- {why}"
+        moves = [h for h in lock_history(p.voice, p.name) if h["from"] is not None]
+        if not moves:
+            continue
+        last = moves[-1]
+        p.source += (f"; RE-LOCKED at {last['recorded_by']} "
+                     f"(was {last['from']:g}) -- {last['reason']}")
+        if len(moves) > 1:
+            p.source += "; earlier moves: " + ", ".join(
+                f"{m['recorded_by']} ({m['from']:g} -> {m['to']:g})"
+                for m in moves[:-1])
     return props
 
 
@@ -552,12 +533,11 @@ def build_properties():
 # Do NOT paste `--relock`'s whole block. It reprints every lock at today's
 # measurement, including ones that have drifted a little and are still INSIDE
 # their tolerance -- pasting those baked-in silently re-baselines drift the
-# table is supposed to keep accumulating until it is worth an argument. Two
-# entries below were re-locked in #242 and they are the only two that moved;
-# the rest are untouched at their 28dfd55 values on purpose.
+# table is supposed to keep accumulating until it is worth an argument.
+# Paste the intended changes and record each move in LOCK_CHANGELOG.
 LOCKS = {
     ("LADDER", "corner at 800 Hz / commanded"): 0.786039,
-    # re-locked from 9.40462 in #242 and from 4.21473 in #546; see RELOCKS above
+    # re-locked from 9.40462 in #242 and from 4.21473 in #546; see LOCK_CHANGELOG below
     ("LADDER", "corner ratio drift"): 2.74577,
     ("LADDER", "h3 at self-oscillation (res 1.3)"): -45.3762,
     ("LADDER", "h5-h3 at self-oscillation (res 1.3)"): -13.7836,
@@ -566,7 +546,7 @@ LOCKS = {
     ("SD", "T20"): 56.3958,
     ("SD", "attack"): 4.27083,
     ("LT", "T20"): 198.229,
-    # re-locked from 16.625 in #242; see RELOCKS above (80b3756, the tom drop)
+    # re-locked from 16.625 in #242; see LOCK_CHANGELOG below (80b3756, the tom drop)
     ("LT", "attack"): 6.27083,
     ("HT", "T20"): 89.3125,
     ("HT", "attack"): 4.20833,
@@ -602,7 +582,7 @@ LOCKS = {
 # `from: None` means the lock did not exist before that commit.
 LOCK_CHANGELOG = [
     {
-        "at": "ce400a6",
+        "at": "28dfd55",
         "recorded_by": "28dfd55",
         "issue": 51,
         "reason": "the lock table introduced with this report. Nothing was pinned "
@@ -632,7 +612,7 @@ LOCK_CHANGELOG = [
         },
     },
     {
-        "at": "ce400a6",
+        "at": "28dfd55",
         "recorded_by": "bf13fdd",
         "issue": 251,
         "reason": "the power-weighted centroid became a locked property so that "
@@ -653,8 +633,7 @@ LOCK_CHANGELOG = [
                   "one and the cutoff scaling became more uniform, 9.40 % -> "
                   "4.21 %. This property is the defect contract 17.12 records "
                   "and DR 0011 is its identified fix, so the lock falling is the "
-                  "fix landing, not a regression -- see RELOCKS above for the "
-                  "full rationale.",
+                  "fix landing, not a regression.",
         "locks": {
             ("LADDER", "corner ratio drift"): (9.40462, 4.21473),
         },
@@ -666,8 +645,12 @@ LOCK_CHANGELOG = [
         "reason": "the toms' pitch drop was corrected from the inferred x1.7 to "
                   "the x1.06 measured over 99 clean-digital TR-808 files, which "
                   "removed a delayed envelope peak that drum_verify.attack_ms "
-                  "had been reading as a longer attack -- see RELOCKS above for "
-                  "the full rationale.",
+                  "had been reading as a longer attack. 16.625 ms was 1.50 periods "
+                  "of LT's own 90 Hz, an outlier against every other voice; "
+                  "6.27083 ms is 0.57, in family with BD 0.72 and HT 0.89. The x1.7 "
+                  "sweep detuned the resonator while the exciter pulse was still in "
+                  "it -- 'costing the toms 38-44 % of their ring' -- which delayed "
+                  "the envelope peak (docs/tom-pitch-drop-correction.md).",
         "locks": {
             ("LT", "attack"): (16.625, 6.27083),
         },
@@ -679,8 +662,12 @@ LOCK_CHANGELOG = [
         "reason": "_corner reads the -3 dB point against the DC-plateau reference "
                   "instead of the moving-band median (+82 / +25 / +6 % high at 100 / "
                   "200 / 400 Hz on an ideal 4-pole) and refuses where the plateau "
-                  "does (100, 200 Hz), so the spread covers 400-6400 Hz only -- see "
-                  "RELOCKS above for the full rationale.",
+                  "does (100, 200 Hz). On an ideal 4-pole (truth 0.4343 of the pole at "
+                  "every cutoff) the median is estimator drift reading as cutoff-"
+                  "control drift (tools/probes/corner_reference_convention.py). The "
+                  "spread is now over the five cutoffs 400-6400 Hz and 4.21 % -> "
+                  "2.75 %; on those same five cutoffs the old reference gave 2.34 %, "
+                  "so this is a coverage change, not a better ladder.",
         "locks": {
             ("LADDER", "corner ratio drift"): (4.21473, 2.74577),
         },
@@ -704,12 +691,48 @@ def lock_history(voice: str, name: str) -> list:
     return out
 
 
+def _finite_lock_value(value):
+    return isinstance(value, Real) and math.isfinite(value)
+
+
+class LockHistoryUnavailable(Exception):
+    """The checkout cannot verify the recorded lock commits."""
+
+
+def _lock_commit_problems(citations):
+    """Check each citation against the object database in this checkout."""
+    def git(*args):
+        return subprocess.run(["git", "-C", HERE, *args], capture_output=True, text=True)
+
+    try:
+        depth = git("rev-parse", "--is-shallow-repository")
+    except FileNotFoundError as exc:
+        raise LockHistoryUnavailable("Git is unavailable to check the lock commits") from exc
+    if depth.returncode or depth.stdout.strip() != "false":
+        raise LockHistoryUnavailable("checking lock commits requires a full Git checkout "
+                                     "(use fetch-depth: 0 in CI)")
+
+    problems = []
+    for field, value in citations:
+        if not isinstance(value, str) or not re.fullmatch(r"[0-9a-fA-F]{4,40}", value):
+            problems.append(f"{field}={value!r} must be a full or abbreviated Git commit ID")
+            continue
+        # Object-prefix lookup ignores ref names. Ordinary revision lookup must
+        # resolve to that same, unique object, even if a ref is also named in hex.
+        objects = git("rev-parse", f"--disambiguate={value.lower()}")
+        resolved = git("rev-parse", "--verify", value)
+        if (objects.returncode or resolved.returncode
+                or objects.stdout.splitlines() != [resolved.stdout.strip()]
+                or git("cat-file", "-t", value).stdout.strip() != "commit"):
+            problems.append(f"{field}={value!r} does not identify a unique commit in this repository")
+    return problems
+
+
 def check_lock_changelog() -> list:
     """Problems with the changelog, as sentences. Empty list means every lock
     has a recorded value and a reason, and the record agrees with the table.
 
-    Three ways it can be wrong, and the first is the one that matters: a value
-    in `LOCKS` that the changelog does not end on means somebody re-locked
+    A value in `LOCKS` that the changelog does not end on means somebody re-locked
     without saying why, and every verdict that bound has issued since is
     unexplained."""
     problems = []
@@ -721,18 +744,48 @@ def check_lock_changelog() -> list:
                             f"number somebody chose")
             continue
         last = hist[-1]["to"]
-        if last is None or abs(float(last) - float(value)) > 1e-9:
+        if not _finite_lock_value(value):
+            problems.append(f"{key[0]} {key[1]!r}: LOCKS value {value!r} must be finite")
+        elif _finite_lock_value(last) and abs(last - value) > 1e-9:
             problems.append(f"{key[0]} {key[1]!r}: LOCKS says {value!r}, the "
                             f"changelog's last entry ({hist[-1]['recorded_by']}) says "
                             f"{last!r}. The lock moved with no reason recorded")
-    for ev in LOCK_CHANGELOG:
+        prev = None
+        for i, h in enumerate(hist):
+            where = f"{key[0]} {key[1]!r} entry {i} ({h['recorded_by']})"
+            was, now = h["from"], h["to"]
+            if i == 0 and was is not None:
+                problems.append(f"{where}: the first entry has from={was!r}, "
+                                f"not None. A first lock has no prior value")
+            elif i > 0 and not _finite_lock_value(was):
+                problems.append(f"{where}: from={was!r} must be finite")
+            elif i > 0 and _finite_lock_value(prev) and abs(was - prev) > 1e-9:
+                problems.append(f"{where}: from={was!r} does not continue "
+                                f"the previous entry's to={prev!r}. The chain is "
+                                f"broken, so a move went unrecorded")
+            if not _finite_lock_value(now):
+                problems.append(f"{where}: to={now!r} must be finite")
+            elif _finite_lock_value(was) and abs(now - was) <= 1e-9:
+                problems.append(f"{where}: from == to ({now!r}). A no-op is "
+                                f"not a move")
+            prev = now
+    citations = [("LOCK", LOCK)]
+    for i, ev in enumerate(LOCK_CHANGELOG):
+        for field in ("at", "recorded_by", "reason"):
+            v = ev.get(field)
+            if not isinstance(v, str) or not v.strip() or re.search(r"<[^<>\n]*>", v):
+                problems.append(f"{ev.get('recorded_by')!r}: `{field}` is "
+                                f"{v!r} -- empty or an unedited --relock "
+                                f"placeholder. Fill it in before committing")
+            elif field != "reason":
+                citations.append((f"event {i} `{field}`", v))
         for key in ev["locks"]:
             if key not in LOCKS:
                 problems.append(f"{ev['recorded_by']} records a change to "
                                 f"{key[0]} {key[1]!r}, which is not a lock. Either "
                                 f"the property was removed and the entry is stale, "
                                 f"or the name in one of the two is wrong")
-    return problems
+    return problems + _lock_commit_problems(citations)
 
 
 # ===========================================================================
@@ -873,7 +926,11 @@ def main(argv=None) -> int:
             print(f"  {k:18s} {','.join(v):8s} {d}")
         return 0
     if a.check_locks:
-        problems = check_lock_changelog()
+        try:
+            problems = check_lock_changelog()
+        except LockHistoryUnavailable as exc:
+            print(f"REFUSED: {exc}")
+            return 2
         for p in problems:
             print(f"  {p}")
         print(f"\n{len(LOCKS)} lock(s), {len(LOCK_CHANGELOG)} changelog event(s), "
@@ -892,31 +949,39 @@ def main(argv=None) -> int:
         return cmd_inject(a.inject)
     res, _ = run()
     if a.relock:
-        print("LOCKS = {")
+        draft = {}
         for r in res:
-            if r.prop.kind == "lock" and r.measured is not None:
-                print(f'    ("{r.prop.voice}", "{r.prop.name}"): {r.measured:.6g},')
+            if r.prop.kind != "lock" or r.measured is None:
+                continue
+            key = (r.prop.voice, r.prop.name)
+            if not _finite_lock_value(r.measured):
+                print(f"REFUSED: {key} measured value {r.measured!r} must be finite")
+                return 1
+            if key in LOCKS and not _finite_lock_value(LOCKS[key]):
+                print(f"REFUSED: {key} LOCKS value {LOCKS[key]!r} must be finite")
+                return 1
+            # Decide which moves to record using the literal the reader will paste.
+            draft[key] = f"{r.measured:.6g}"
+        print("LOCKS = {")
+        for (voice, name), value in draft.items():
+            print(f'    ("{voice}", "{name}"): {value},')
         print("}")
         # A new table with no record of what moved is the gap issue #68 names, so
         # the skeleton comes out with it. `from` is the value being replaced; fill
         # in the reason before committing, because --check-locks will not accept
         # an entry that does not end on the new value and the report will not
         # explain a bound that moved for no stated reason.
-        print("\n# paste into LOCK_CHANGELOG, and replace the reason:")
+        print("\n# paste into LOCK_CHANGELOG, and fill in the commits and reason:")
         print("    {")
         print('        "at": "<the commit these were measured at, and LOCK above>",')
         print('        "recorded_by": "<the commit that re-locks>",')
         print('        "issue": 0,')
-        print('        "reason": "WHY these values moved. A bound that moved with no '
-              'reason is how a test goes green without the model improving.",')
+        print('        "reason": "<why these values moved>",')
         print('        "locks": {')
-        for r in res:
-            if r.prop.kind == "lock" and r.measured is not None:
-                was = LOCKS.get((r.prop.voice, r.prop.name))
-                if was is not None and abs(float(was) - float(r.measured)) <= 1e-9:
-                    continue
-                print(f'            ("{r.prop.voice}", "{r.prop.name}"): '
-                      f'({was!r}, {r.measured:.6g}),')
+        for (voice, name), value in draft.items():
+            was = LOCKS.get((voice, name))
+            if was is None or abs(was - float(value)) > 1e-9:
+                print(f'            ("{voice}", "{name}"): ({was!r}, {value}),')
         print("        },")
         print("    },")
         return 0
