@@ -154,6 +154,25 @@ def test_noise_estimator_reads_a_known_noise_floor_and_ignores_harmonics():
     assert r["thd_db_median"] == pytest.approx(-20.0, abs=0.1)
 
 
+def test_noise_estimator_refuses_silence_rather_than_reading_0_db_thd():
+    """CONTROL (#1743's class re-search -- this site is not in the issue's
+    table, which lists only :187 here). Red on the pre-fix tree (origin/main @
+    3309dd59, 2026-11-28): `noise_thd(zeros)` returned thd_db_median 0.0 and
+    thd_db_worst 0.0 -- "no harmonic distortion", on no signal -- because THD
+    floored both the harmonics and the fundamental at 1e-12. The fitted
+    fundamental is the REFERENCE: with none there is nothing for the harmonics
+    2..n to be relative to. `run_job` is guarded by `project()` one call
+    earlier; `surge_side` calls this directly on captured audio and was not.
+    The paired positive is the known-answer test above (-20.0 dB)."""
+    parts = [(0, 9600, 200.0), (9600, 9600, 1000.0)]
+    with pytest.raises(fls.Refused, match="no fundamental"):
+        fls.noise_thd(np.zeros(19200), parts, 1000.0)
+    bad = np.zeros(19200)
+    bad[5] = np.nan
+    with pytest.raises(fls.Refused, match="non-finite"):
+        fls.noise_thd(bad, parts, 1000.0)
+
+
 # --- the captures ------------------------------------------------------------
 def test_captures_verify_and_a_tampered_hash_refuses():
     m = cap.load_manifest()
