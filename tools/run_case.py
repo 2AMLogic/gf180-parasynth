@@ -204,6 +204,14 @@ REFS_ALIAS_ENV = "TR808_REFS"
 REFS_REQUIRED_ENV = "GF180_REQUIRE_TR808_REFS"
 
 
+def refs_child_env(path) -> dict:
+    """Environment overlay that points a CHILD process's configured_refs() at
+    `path`. The variable names stay owned here (#522); the alias is blanked
+    (falsy to configured_refs) so an inherited one cannot make the child
+    REFUSE on disagreement."""
+    return {REFS_ENV: str(path), REFS_ALIAS_ENV: ""}
+
+
 def configured_refs() -> pathlib.Path:
     """The one place the corpus location is decided: ${GF180_TR808_REFS} (alias
     ${TR808_REFS}), else /tmp/tr808-ref. The CLI default, the tests and EVERY
