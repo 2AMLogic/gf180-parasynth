@@ -142,6 +142,8 @@ def main(argv: list[str]) -> int:
         if not args.archive or not args.members:
             raise Refused("need an archive and at least one member (or --prefix folder)")
         rl.validate_members(args.members)
+        if not args.prefix:
+            rl.refuse_part_collisions(args.members)
         root, rec = preconditions(args.archive)
         sizes = rl.load_indexed_sizes(args.archive, refaudio=REFAUDIO)
         if args.prefix and sizes is not None:

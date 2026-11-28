@@ -60,6 +60,10 @@ def preconditions(archive: str, members: list[str]) -> tuple[str, str]:
     if not members:
         raise Refused("no member paths given")
     rl.validate_members(members)
+    try:
+        rl.refuse_part_collisions(members)
+    except rl.Refused as why:
+        raise Refused(str(why)) from why
     return ssh, root
 
 

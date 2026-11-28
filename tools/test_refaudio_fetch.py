@@ -78,6 +78,41 @@ def test_bad_request_is_refused(lib, tmp_path, archive, member):
     assert cached(lib) == []
 
 
+# --- a member whose destination is another member's temporary path (#1697) ------
+#
+# `fetch_one()` writes `<member>.part` and renames it onto `<member>`, so a
+# member named `a/b.part` beside `a/b` made the second one's temporary file
+# the first one's finished file. Asked `a/b.part` first, that member was
+# FETCHED, then truncated, renamed away, and the second was FETCHED too: exit
+# 0, `2 fetched, 0 failed`, one file on disk. A false green, so REFUSED.
+
+def _landed(lib: pathlib.Path) -> list[str]:
+    return sorted(p.relative_to(lib / "cache" / "noindex").as_posix() for p in cached(lib))
+
+
+@pytest.mark.parametrize("asked", [["a/b.part", "a/b"], ["a/b", "a/b.part"]],
+                         ids=["part-first", "part-last"])
+def test_a_member_named_like_anothers_part_file_is_refused(lib, tmp_path, monkeypatch, capsys, asked):
+    """START RED (#1697): against 69ce038d both orders exited 0; the first left
+    only `a/b` on disk. Refused before any ssh, in either order, naming the pair."""
+    monkeypatch.setenv("STUB_BYTES", "8")
+    assert rf.main(["noindex.zip", *asked]) == rf.REFUSED
+    lines = capsys.readouterr().out.splitlines()
+    assert len(lines) == 1 and lines[0].startswith("REFUSED  "), lines
+    assert "'a/b.part'" in lines[0] and "'a/b'" in lines[0], lines[0]
+    assert not (tmp_path / "ssh.log").exists(), "REFUSED must not have tried the network"
+    assert cached(lib) == []
+
+
+def test_members_that_merely_end_in_part_are_fetched(lib, monkeypatch, capsys):
+    """The guard's over-refusal input (rule 8): `a/c.part` is nobody's
+    temporary path. Refusing by suffix alone would fail this."""
+    monkeypatch.setenv("STUB_BYTES", "8")
+    assert rf.main(["noindex.zip", "a/b", "a/c.part"]) == rf.FETCHED
+    assert capsys.readouterr().out.splitlines()[-1] == "2 fetched, 0 failed"
+    assert _landed(lib) == ["a/b", "a/c.part"]
+
+
 # --- the false-green cases ---------------------------------------------------
 
 def test_remote_exit_zero_with_no_bytes_is_a_fail_and_leaves_no_file(lib, monkeypatch):

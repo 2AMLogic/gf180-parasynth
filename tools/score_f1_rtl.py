@@ -67,6 +67,7 @@ for _p in (ROOT / "model", ROOT / "tools", ROOT / "tools" / "probes"):
         sys.path.insert(0, str(_p))
 
 import f1_rtl_filter_path as rtlpath   # noqa: E402
+import refusal                         # noqa: E402
 import run_case as rc                  # noqa: E402
 import scorecard                       # noqa: E402
 
@@ -206,7 +207,7 @@ def main(argv=None) -> int:
         record = rc.run_filter_case(case, "", keep_audio=not a.no_audio,
                                     engine_path=path,
                                     response_dest=response_dest)
-    except (rtlpath.Refused, rc.Refused) as exc:
+    except refusal.Refused as exc:      # any module's refusal, by class (#1643)
         print(f"score_f1_rtl: REFUSED -- {exc}", file=sys.stderr)
         return 2
 
