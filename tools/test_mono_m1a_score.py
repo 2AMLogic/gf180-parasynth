@@ -1,4 +1,6 @@
+import hashlib
 import json
+from pathlib import Path
 import numpy as np
 import pytest
 from scipy.io import wavfile
@@ -89,6 +91,110 @@ def test_missing_or_corrupt_reference_refuses(tmp_path):
         bass.load_reference(path)
 
 
+def _replace_on_first_open(monkeypatch, target, replacement, *, requested=None):
+    """An open handle keeps A while the next reader of the same path gets B."""
+    real_open = Path.open
+    requested = target if requested is None else requested
+
+    def open_then_replace(path, *args, **kwargs):
+        if path != requested:
+            return real_open(path, *args, **kwargs)
+        handle = real_open(target, *args, **kwargs)
+        if replacement.exists():
+            replacement.replace(target)
+        return handle
+
+    monkeypatch.setattr(Path, "open", open_then_replace)
+
+
+@pytest.fixture
+def reference_copy(tmp_path):
+    path = tmp_path / "manifest.json"
+    path.write_bytes(bass.MANIFEST.read_bytes())
+    for wav in bass.MANIFEST.parent.glob("*.wav"):
+        (tmp_path / wav.name).symlink_to(wav)
+    return path
+
+
+def test_reference_accepts_utf8_bom(reference_copy):
+    raw = reference_copy.read_bytes()
+    reference_copy.write_bytes(b"\xef\xbb\xbf" + raw)
+    manifest, _ = bass.load_reference(reference_copy)
+    assert manifest == json.loads(raw)
+
+
+@pytest.mark.parametrize("shared_file", [False, True], ids=["distinct", "shared"])
+def test_reference_render_digest_and_samples_survive_replacement(reference_copy, monkeypatch, shared_file):
+    manifest = json.loads(reference_copy.read_bytes())
+    first = manifest["renders"][0]
+    if shared_file:
+        # Two entries can name the same validated WAV.
+        manifest["renders"][1]["file"] = first["file"]
+        reference_copy.write_text(json.dumps(manifest))
+    target = reference_copy.parent / first["file"]
+    expected_digest = hashlib.sha256(target.read_bytes()).hexdigest()
+    sr, original = wavfile.read(target)
+    replacement = target.with_name("replacement.wav")
+    wavfile.write(replacement, sr, -original)
+    _replace_on_first_open(monkeypatch, target, replacement)
+
+    manifest, pcm = bass.load_reference(reference_copy)
+    assert not replacement.exists()
+    assert manifest["renders"][0]["sha256"] == expected_digest
+    np.testing.assert_array_equal(pcm, original)
+
+
+@pytest.fixture
+def model_record(tmp_path, monkeypatch):
+    pcm = np.asarray(signal() * 32768, dtype=np.int16)
+    monkeypatch.setattr(bass.lead.vf, "render_mono_fx", lambda *args: pcm)
+    case = next(c for c in run_case.load_cases() if c["case_id"] == "M1A")
+    return case, bass.run(case, wav_dest=tmp_path / "model.wav")
+
+
+@pytest.mark.parametrize("use_replacement_cache", [False, True], ids=["report", "cache"])
+def test_scorecard_binds_parsed_manifest_after_replacement(
+        tmp_path, monkeypatch, model_record, use_replacement_cache):
+    case, cached = model_record
+    raw = bass.MANIFEST.read_bytes()
+    original = json.loads(raw)
+    target = tmp_path / "manifest.json"
+    target.write_bytes(raw)
+    replacement = tmp_path / "replacement.json"
+    other = json.dumps({**original, "filter_rest_ring_hz": [2000]}).encode()
+    replacement.write_bytes(other)
+    # Redirect only the frozen manifest. The WAVs still come from its real directory.
+    _replace_on_first_open(monkeypatch, target, replacement, requested=bass.MANIFEST)
+
+    key = "frozen:M1A:manifest"
+    if use_replacement_cache:
+        cached["provenance"]["inputs"][key] = "sha256:" + hashlib.sha256(other).hexdigest()
+        with pytest.raises(bass.Refused, match="cached model reference differs"):
+            bass.run(case, cached_record=cached, keep_audio=False)
+    else:
+        record = bass.run(case, keep_audio=False)
+        assert not replacement.exists()
+        assert record["diagnostics"]["configuration"]["patch"] == bass.patch_for_reference(original)
+        assert record["provenance"]["inputs"][key] == "sha256:" + hashlib.sha256(raw).hexdigest()
+    assert target.read_bytes() == other
+
+
+def test_cached_render_digest_and_samples_survive_replacement(tmp_path, monkeypatch, model_record):
+    case, cached = model_record
+    target = bass.ROOT / cached["audio"]
+    expected_digest = hashlib.sha256(target.read_bytes()).hexdigest()
+    sr, original = wavfile.read(target)
+    replacement = tmp_path / "replacement.wav"
+    wavfile.write(replacement, sr, -original)
+    _replace_on_first_open(monkeypatch, target, replacement)
+
+    output = tmp_path / "reused.wav"
+    record = bass.run(case, cached_record=cached, wav_dest=output)
+    assert not replacement.exists()
+    assert record["diagnostics"]["model_audio_sha256"] == expected_digest
+    np.testing.assert_array_equal(wavfile.read(output)[1], original)
+
+
 def test_silent_and_truncated_candidates_refuse():
     clean = signal()
     with pytest.raises(bass.Refused):
@@ -129,7 +235,7 @@ def test_changed_cached_audio_refuses(tmp_path):
               "diagnostics": {"configuration": {"patch": {}, "engine": {}, "inject": None},
                               "model_audio_sha256": "original"}}
     with pytest.raises(bass.Refused, match="hash mismatch"):
-        bass.load_model_cache(record, {}, {})
+        bass.load_model_cache(record, {}, {}, manifest_sha256="0" * 64)
 
 
 # --- attack qualification on BOTH sides ---------------------------------------

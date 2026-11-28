@@ -6,6 +6,7 @@ explicit hypotheses, never inferred from the Mini V3 normalized knob numbers.
 """
 from __future__ import annotations
 import hashlib
+import io
 import json
 import math
 from pathlib import Path
@@ -25,13 +26,19 @@ PUBLISHED_MODEL_WAV = MANIFEST.parent / "m1a-model.wav"
 Refused = lead.Refused
 
 
+def _sha_bytes(data):
+    return hashlib.sha256(data).hexdigest()
+
+
 def sha(path):
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    return _sha_bytes(Path(path).read_bytes())
 
 
-def load_reference(path=MANIFEST):
+def _read_reference(path):
+    """Return the qualified manifest, reference PCM and digest of the parsed manifest bytes."""
     try:
-        manifest = json.loads(path.read_text())
+        manifest_bytes = path.read_bytes()
+        manifest = json.loads(manifest_bytes)
         import reference_suites
         try:
             reference_suites.require_suite(manifest, reference_suites.SUITE_V3_FROZEN)
@@ -41,21 +48,33 @@ def load_reference(path=MANIFEST):
             raise Refused("M1A reference manifest is not qualified")
         if manifest["events"] != list(reference.EVENTS):
             raise Refused("M1A reference timeline differs")
-        for item in [*manifest["renders"], *manifest["controls"].values()]:
-            if sha(path.parent / item["file"]) != item["sha256"]:
+        digests = {}
+        for index, item in enumerate([*manifest["renders"], *manifest["controls"].values()]):
+            audio_path = path.parent / item["file"]
+            if index == 0:
+                first_render = audio_path.read_bytes()
+                digests[audio_path] = _sha_bytes(first_render)
+            elif audio_path not in digests:
+                digests[audio_path] = sha(audio_path)
+            if digests[audio_path] != item["sha256"]:
                 raise Refused("M1A reference audio hash mismatch")
         if len(manifest["renders"]) != 3 or len({r["sha256"] for r in manifest["renders"]}) != 1:
             raise Refused("M1A reference lacks three identical repeats")
-        sr, pcm = wavfile.read(path.parent / manifest["renders"][0]["file"])
+        sr, pcm = wavfile.read(io.BytesIO(first_render))
         if sr != SR or pcm.dtype != np.float32 or pcm.ndim != 1:
             raise Refused("M1A reference format differs")
         if len(pcm) != round(reference.SECONDS * SR) - manifest["renders"][0]["apparatus"]["latency_removed"]:
             raise Refused("M1A reference length differs")
         if not np.isfinite(pcm).all() or np.max(np.abs(pcm)) <= 1e-5:
             raise Refused("M1A reference silent or non-finite")
-        return manifest, pcm.astype(np.float64)
+        return manifest, pcm.astype(np.float64), _sha_bytes(manifest_bytes)
     except (OSError, KeyError, ValueError) as exc:
         raise Refused(f"M1A reference unavailable: {exc}") from exc
+
+
+def load_reference(path=MANIFEST):
+    manifest, pcm, _ = _read_reference(path)
+    return manifest, pcm
 
 
 # The M1A patch is a NAMED, VERSIONED identity, applied in the instrument
@@ -345,7 +364,7 @@ def required_metrics(measured):
             "bass level": props["Gain"]}
 
 
-def load_model_cache(record, patch, engine):
+def load_model_cache(record, patch, engine, manifest_sha256):
     """Reanalyse a hash-bound model render only while its DSP tree is unchanged."""
     import subprocess
     pcm_path = ROOT / record["audio"]
@@ -354,9 +373,10 @@ def load_model_cache(record, patch, engine):
         raise Refused("cached model patch or engine differs")
     if config.get("inject") or record["engine"] != "fixed-model":
         raise Refused("only clean model audio may be reused")
-    if sha(pcm_path) != record["diagnostics"]["model_audio_sha256"]:
+    pcm_bytes = pcm_path.read_bytes()
+    if _sha_bytes(pcm_bytes) != record["diagnostics"]["model_audio_sha256"]:
         raise Refused("cached model audio hash mismatch")
-    if record["provenance"]["inputs"]["frozen:M1A:manifest"] != "sha256:" + sha(MANIFEST):
+    if record["provenance"]["inputs"]["frozen:M1A:manifest"] != "sha256:" + manifest_sha256:
         raise Refused("cached model reference differs")
     # Older records have shortened model hashes. Check every recorded DSP input
     # as well as the committed tree; retain their original dirty-tree identity.
@@ -368,7 +388,7 @@ def load_model_cache(record, patch, engine):
                              cwd=ROOT, capture_output=True, text=True)
     if changed.returncode != 0:
         raise Refused("cached model DSP sources differ or cannot be checked")
-    sr, pcm = wavfile.read(pcm_path)
+    sr, pcm = wavfile.read(io.BytesIO(pcm_bytes))
     if sr != SR or pcm.dtype != np.int16 or pcm.ndim != 1:
         raise Refused("cached model audio format differs")
     return pcm
@@ -394,7 +414,7 @@ def run(case, inject="", keep_audio=True, cached_record=None, wav_dest=None):
         load_reference(MANIFEST.parent / "missing-manifest.json")
     if inject not in ("", "MONO_PITCH_UP_25_CENTS"):
         raise Refused(f"unsupported M1A mutation: {inject}")
-    manifest, reference_pcm = load_reference()
+    manifest, reference_pcm, manifest_sha256 = _read_reference(MANIFEST)
     qualification = qualify_envelope_basis()
     patch = patch_for_reference(manifest)
     engine = lead.engine_configuration("selected")
@@ -403,7 +423,7 @@ def run(case, inject="", keep_audio=True, cached_record=None, wav_dest=None):
     if cached_record is not None:
         if inject:
             raise Refused("model mutations cannot reuse cached audio")
-        pcm = load_model_cache(cached_record, patch, engine)
+        pcm = load_model_cache(cached_record, patch, engine, manifest_sha256)
     else:
         voice = lead._voice_for_engine(engine)
         pcm = lead.vf.render_mono_fx(sequence, reference.SECONDS, voice)[:len(reference_pcm)]
@@ -431,7 +451,7 @@ def run(case, inject="", keep_audio=True, cached_record=None, wav_dest=None):
                   "filter_envelope": "fixed provisional 4 ms / 50 ms / zero sustain, 2x cutoff peak",
                   "resonance": "fixed low setting 0.05; not calibrated from plugin normalized value"}}
     inputs = run_case.model_input_hashes({
-        "frozen:M1A:manifest": "sha256:" + sha(MANIFEST),
+        "frozen:M1A:manifest": "sha256:" + manifest_sha256,
         "frozen:M1A:audio": "sha256:" + manifest["renders"][0]["sha256"],
         "tools/mono_m1a_score.py": "sha256:" + sha(Path(__file__)),
         "model/filter_rate_chain.py": "sha256:" + sha(ROOT / "model/filter_rate_chain.py"),
