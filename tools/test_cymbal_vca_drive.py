@@ -18,6 +18,9 @@ Three kinds of test, in the order they carry weight:
   3. REFUSALS. The pinned scan, and the committed balance record this module's
      headline is quoted against -- each refusing from `main()` with the declared
      REFUSED status, never with a status a runner reads as a measured FAIL (#1789).
+     And the clean run itself: when IT refuses, no control has run, so the gate
+     is NO EVIDENCE from `--check` and from `--json` alike, never a traceback
+     wearing exit 1 (#2056).
 """
 
 from __future__ import annotations
@@ -367,6 +370,168 @@ def test_the_record_does_not_call_a_gate_with_a_refused_control_ok(monkeypatch):
 
     assert rec["gate"] == {"ok": False, "refused": ["X: why"],
                            "lines": ["  REFUSED  X: why"]}
+
+
+# ---------------------------------------------------------------------------
+# 3c. A CLEAN run that REFUSES is NO EVIDENCE, never a traceback (#2056)
+#
+# #1819's handler covers the injected-defect loop. The call that decides
+# whether any control runs at all -- the clean `properties(config(), targets)`
+# -- had none, so a refusal there left `check()` as a traceback, through
+# `main()` and `record()`, and the shell saw exit 1: the status of a
+# comparison that ran and disagreed, for a comparison that never ran. Same
+# shape as #1992. The blindness loop's own escape is #1842 and is not touched.
+#
+# The plant raises the real `vd.Refused` for the clean config ONLY and drives
+# the real `check()`, `main()` and `record()`: what is exercised is the
+# handler that ships, not a mock of it.
+# ---------------------------------------------------------------------------
+
+_CLEAN_WHY = "planted: the clean run cannot be evaluated"
+_CLEAN_ROW = f"  REFUSED  clean run: {_CLEAN_WHY}"
+_CLEAN_ENTRY = f"clean run: {_CLEAN_WHY}"
+
+
+def _properties_refusing_the_clean_run():
+    """`vd.properties` refusing for the clean config (`defect is None`) and
+    measuring every injected defect, blind or not, for real."""
+    real = vd.properties
+
+    def properties(cfg=None, targets=None):
+        if (cfg or {}).get("defect") is None:
+            raise vd.Refused(_CLEAN_WHY)
+        return real(cfg, targets)
+
+    return properties
+
+
+def _properties_failing_one_clean_property():
+    """`vd.properties` measuring for real, with ONE property of the clean
+    config turned red: a comparison that ran and disagreed."""
+    real = vd.properties
+
+    def properties(cfg=None, targets=None):
+        got = real(cfg, targets)
+        if (cfg or {}).get("defect") is None:
+            got = dict(got)
+            name = next(iter(got))
+            got[name] = {**got[name], "ok": False}
+        return got
+
+    return properties
+
+
+def test_a_refused_clean_run_exits_no_evidence_not_a_traceback(monkeypatch, capsys):
+    """RED on the unfixed tree, where this very call raised
+    `cymbal_vca_drive.Refused: planted: ...` out of `main()` -- exit 1 at the
+    shell, a FAIL for a comparison that never ran."""
+    monkeypatch.setattr(vd, "properties", _properties_refusing_the_clean_run())
+
+    rc = vd.main(["--check"])
+
+    assert rc in exit_contract.NO_EVIDENCE
+    assert rc == REFUSED == 2 and rc != exit_contract.FAIL
+    out = capsys.readouterr().out
+    assert _CLEAN_ROW in out
+    assert "GATE: REFUSED" in out
+    assert "GATE: green" not in out and "GATE: RED" not in out
+    # no injected-defect control was evaluated, so none is reported as caught
+    assert "-- injected defects" not in out and "-- blindness" not in out
+    assert all(f"  {d}" not in out for d in vd.DEFECTS), out
+
+
+def test_control_the_plant_refuses_the_clean_run_and_nothing_else(monkeypatch):
+    """The premise of "no injected-defect control was evaluated": it is the
+    gate that stops, not a plant refusing everything. With the plant in place
+    every injected defect still measures for real."""
+    monkeypatch.setattr(vd, "properties", _properties_refusing_the_clean_run())
+    targets = vd.balance_targets()
+    for d in vd.DEFECTS:
+        assert vd.properties(vd.config(d), targets), d
+    with pytest.raises(vd.Refused) as exc:
+        vd.properties(vd.config(), targets)
+    assert str(exc.value) == _CLEAN_WHY
+
+
+def test_check_returns_a_refused_clean_run_as_its_own_row(monkeypatch):
+    """`check()` names the stage and the reason and claims no verdict: `ok`
+    stays True because nothing was measured, so nothing failed, and it is the
+    refusal -- not a FAIL -- that keeps the gate from green."""
+    monkeypatch.setattr(vd, "properties", _properties_refusing_the_clean_run())
+
+    ok, lines, refused = vd.check()
+
+    assert lines == [_CLEAN_ROW]
+    assert refused == [_CLEAN_ENTRY]
+    assert ok is True
+    assert vd.clean_run_refusal(refused) == _CLEAN_WHY
+
+
+def test_only_the_clean_runs_own_entry_reads_as_its_refusal():
+    """The discriminator the two callers share. A refusal booked against an
+    injected defect is not the clean run's, and an empty list is a gate that
+    refused nothing."""
+    assert vd.clean_run_refusal([]) is None
+    assert vd.clean_run_refusal([f"{_REFUSING}: {_WHY}"]) is None
+    assert vd.clean_run_refusal(["clean run: why"]) == "why"
+
+
+def test_a_refused_clean_run_writes_no_record_and_exits_the_same_status(monkeypatch,
+                                                                       tmp_path, capsys):
+    """`--json` is the other path the traceback took, through `record()`. It
+    ends the same way: the declared NO-EVIDENCE status, and no file -- a
+    record whose only content is a refusal is not written over whatever
+    record was there."""
+    monkeypatch.setattr(vd, "properties", _properties_refusing_the_clean_run())
+    path = tmp_path / "vca-drive.json"
+
+    assert vd.main(["--json", str(path)]) == REFUSED
+    assert vd.main(["--check", "--json", str(path)]) == REFUSED
+
+    assert not path.exists()
+    out = capsys.readouterr().out
+    assert _CLEAN_WHY in out and "wrote" not in out
+    assert "GATE: REFUSED" in out
+
+
+def test_record_does_not_raise_on_a_refused_clean_run_and_measures_nothing(monkeypatch):
+    """`record()` neither raises nor returns a measurement: what it returns
+    is the gate alone, saying so."""
+    monkeypatch.setattr(vd, "properties", _properties_refusing_the_clean_run())
+
+    rec = vd.record()
+
+    assert set(rec) == {"tool", "gate"}
+    assert rec["gate"] == {"ok": False, "refused": [_CLEAN_ENTRY], "lines": [_CLEAN_ROW]}
+
+
+def test_a_refused_control_still_records_its_measurements(monkeypatch, tmp_path):
+    """The control for the two above: a refusal from the injected-defect loop
+    is not the clean run's. The clean properties WERE measured, so the record
+    still carries them, beside a gate that is not ok, and `--json` writes it."""
+    monkeypatch.setattr(vd, "properties", _properties_that_refuse({_REFUSING}))
+    path = tmp_path / "vca-drive.json"
+
+    rec = vd.record()
+    vd.main(["--json", str(path)])
+
+    assert {"properties", "bandpass", "bandpass_peak", "envelope"} <= set(rec)
+    assert rec["gate"]["ok"] is False
+    assert rec["gate"]["refused"] == [f"{_REFUSING}: {_WHY}"]
+    assert vd.clean_run_refusal(rec["gate"]["refused"]) is None
+    assert path.exists()
+    written = json.loads(path.read_text())
+    assert "properties" in written and written["gate"] == rec["gate"]
+
+
+def test_a_clean_run_that_measures_a_failure_still_exits_fail(monkeypatch, capsys):
+    """The paired positive: a clean property that ran and disagreed is a
+    RESULT (1). The REFUSED handler must not absorb it."""
+    monkeypatch.setattr(vd, "properties", _properties_failing_one_clean_property())
+
+    assert vd.main(["--check"]) == exit_contract.FAIL == 1
+    out = capsys.readouterr().out
+    assert "GATE: RED" in out and "REFUSED" not in out
 
 
 # ---------------------------------------------------------------------------
