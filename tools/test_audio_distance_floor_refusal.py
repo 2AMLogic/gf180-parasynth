@@ -55,12 +55,14 @@ runs). The same inputs through the real CLI, exit code before -> after:
     full run, bd8/BD5050.WAV cut            1 -> 0   was `main:718 > e7_ceiling:611`
     full run, mt8/MT50.WAV cut              1 -> 0   was `e7_ceiling:612`
 
-A FULL RUN THEREFORE EXITS 0, NOT 2. The refusal is printed in its E7 and
-E9 rows and the process succeeds; that is what the in-band convention below
-already did for a file `load_ref` cannot read, and this fix does not change
-it. #1610's criterion says both "exits 2" and "follow the `refused:` entry
-convention"; for a full run those cannot both hold, and which is meant is
-left to the PR, not decided here.
+A FULL RUN THEREFORE EXITED 0, NOT 2, as #1646 merged it. The refusal is
+printed in its E7 and E9 rows and the process succeeded; that is what the
+in-band convention below already did for a file `load_ref` cannot read.
+#1610's criterion says both "exits 2" and "follow the `refused:` entry
+convention"; for a full run those cannot both hold, and #1646 left the
+choice open. #1699 RULED: a run in which any experiment refused exits 2,
+with every row that measured still reported and written. The controls for
+that ruling are the last section of this file, "A PARTIAL RUN IS REFUSED".
 
 WHAT THE PROBE OWES, and what these controls assert:
 
@@ -127,6 +129,8 @@ over 32768, so no input is known that makes `prepare` refuse there.
 """
 from __future__ import annotations
 
+import ast
+import json
 import os
 import pathlib
 import subprocess
@@ -332,3 +336,244 @@ def test_control_catches_a_handler_widened_to_except_exception(probe, monkeypatc
     relabelled = mutant.e7_ceiling()
     assert len(relabelled) == 3, relabelled
     assert all(str(v).startswith("refused: injected") for v in relabelled.values()), relabelled
+
+
+# ---------------------------------------------------------------------------
+# #1699: a run in which SOME experiments refused is REFUSED, not a pass
+# ---------------------------------------------------------------------------
+# RED FIRST (docs/verification-rules.md rule 1), against the probe as #1646
+# merged it plus a behaviour-free `_refusals` stub returning [] -- the right
+# ports and no behaviour, so each control fails on its own assertion and not
+# on a NameError (2026-11-28, this file alone, 202.10 s): 8 failed, 19 passed.
+# The two CLI refusal controls failed on `assert 0 == 2`: the process exited 0
+# with bd8/BD5050.WAV cut (70.8 s) and with mt8/MT50.WAV cut (61.0 s). The
+# missing-file control failed on `assert 0 == 3`, the nested, both-shapes and
+# writer-count controls on `assert [] == [...]`, and the two mutant controls
+# on "mutation site gone" -- a stub has nothing to mutate. The 19
+# green are green before AND after by design: the 17 above, the clean-corpus
+# exit-0 control (59.6 s) and the unprefixed-string control (a stub that sees
+# nothing ignores it too). With the ruling implemented: 27 passed in 188.16 s.
+#
+# THE THREE CLI CONTROLS RUN THE REAL PROCESS, at 54-71 s apiece (this file
+# was 10-16 s before). 81 % of a run is E4b, E5 and E6, none of which is
+# under test, and the alternative -- driving `main` in-process with those
+# three replaced by stand-ins -- would test an exit status of a probe that
+# does not ship. What is under test IS the process exit status, and only the
+# process has one. Exit code before -> after, with --json:
+#
+#     bd8/BD5050.WAV cut            0 -> 2   3 rows: E7's two BD5050 pairs, E9
+#     mt8/MT50.WAV cut              0 -> 2   1 row: E7's lt-vs-mt pair; E9 measured
+#     unmodified corpus             0 -> 0   no `refused` anywhere in the JSON
+#
+# THE MISSING-FILE PATH (#1699 moves it 0 -> 2 as well) is a committed
+# control one level in: the REAL e7 and e9 on a corpus without bd8/BD5050.WAV
+# refuse three times and the detector `main` reads finds all three. A full
+# CLI run of that corpus exits 2 with --json written too (60.3 s, by hand,
+# from this file's `_corpus` and `_probe`) -- corroboration, not evidence;
+# the evidence is the composition of that control with the three above.
+#
+# WHAT THE DETECTOR CATCHES (verification-rules 8), at any depth: a string
+# beginning `refused: ` and a `refused` key. E5's refusal sits two keys down
+# under `per_property_pitch_drop_hz`, where a scan of the first two levels --
+# the hand-kept shape the issue forbids -- never looks. Each injected mutant
+# below was run on a real result before anything was claimed about it: both
+# read it exactly as the real detector does (3 refusals where it reads 3), so
+# each is told apart by exactly ONE control, the nested one and the
+# unprefixed one. WRONG BEFORE IT WAS RIGHT, caught that way: the first
+# two-level mutant counted depth by the slashes in its path, and E7's pair
+# names (`bd8/BD5050.WAV vs sd8/SD5050.WAV`) contain two -- so it lost E7's
+# real rows as well, and the mt8/MT50.WAV control would have caught it too.
+# What the detector DELIBERATELY does not catch: a string saying `refused`
+# without the prefix (`"REFUSED: ..."`, `"refused"`, prose), which a
+# word-match would flag. The prefix is this file's own convention -- three
+# writers emit the string row (e5, e7 twice) and one the `{"refused": ...}`
+# record (e9) -- and the writer-count control pins that at (3, 1), so a fifth
+# writer, or one of the four moved to a third shape, cannot slip past unread.
+#
+# ALSO NOT REFUSALS, and not counted: E8's `"verdict": "no verdict"`
+# per-property rows -- the board's own T20 estimator declining the 1.2 s
+# render (`6-bit requantisation` / `decay`; E8 renders our own BD and reads
+# no corpus file, so the row is in every run, and the clean-corpus control
+# exits 0 with it there) -- and E5's `None` for an estimator that is not ok
+# without raising (it does not occur: all five read as floats). Those are
+# the estimators' answers, reported as findings about the board's metrics,
+# not an experiment that could not measure. Whether they should ALSO make
+# the run no-verdict is a ruling nobody has made, and it is not #1699's.
+
+
+def _full_run(sf, tmp_path: pathlib.Path, **kinds: str):
+    """The real CLI, `--json` and nothing else, over one synthetic corpus.
+    Returns the process and the parsed JSON (None when none was written)."""
+    out = tmp_path / "full-run.json"
+    p = _probe(_corpus(sf, tmp_path, **kinds), "--json", str(out))
+    return p, (json.loads(out.read_text()) if out.exists() else None)
+
+
+def _assert_partial_refusal(p, data, count: int, *refused_rows: str) -> None:
+    """Exit REFUSED with no traceback, AND the partial result kept: the report
+    printed, `--json` written, and the summary naming each refused row."""
+    assert p.returncode == exit_contract.REFUSED, (p.returncode, p.stdout[-600:], p.stderr[-600:])
+    assert "Traceback" not in p.stderr and "Traceback" not in p.stdout, p.stderr[-600:]
+    assert "E9  how much of a log-domain distance" in p.stdout, "the report was not printed"
+    assert data is not None, "--json was not written"
+    assert data["E0_ground_truth"]["ok"] is True and data["E1_determinism"]["bit_identical"] is True
+    tail = p.stdout[-2500:]
+    assert f"REFUSED: no measurement in {count} of the rows above" in tail, tail
+    for row in refused_rows:
+        assert row in tail, (row, tail)
+
+
+def test_full_run_with_bd5050_cut_into_the_strike_exits_refused_2(tmp_path, sf):
+    """#1646's own observation under #1699's ruling: 1 -> 0 -> 2. E7's two
+    BD5050 pairs and the whole of E9 refuse; every other experiment measures
+    and is still reported."""
+    p, data = _full_run(sf, tmp_path, **{"bd8/BD5050.WAV": "cut"})
+    _assert_partial_refusal(p, data, 3, "E7_ceiling/bd8/BD5050.WAV vs sd8/SD5050.WAV",
+                            "E7_ceiling/bd8/BD5050.WAV vs ch8/CH.WAV", "E9_noise_floor/refused")
+    e7 = data["E7_ceiling"]
+    for pair, v in e7.items():
+        if "bd8/BD5050.WAV" in pair:
+            assert isinstance(v, str) and v.startswith("refused: bd8/BD5050.WAV begins"), (pair, v)
+        else:
+            assert set(DISTANCE_KEYS) <= set(v), (pair, v)
+    assert list(data["E9_noise_floor"]) == ["refused"], data["E9_noise_floor"]
+    assert len(data["E4_sweeps"]) and len(data["E8_blind_spot"]["injections"]) == 3
+
+
+def test_full_run_with_mt50_cut_into_the_strike_exits_refused_2(tmp_path, sf):
+    """The e7 pair path alone: ONE of three pairs refuses, E9 measures in full,
+    and the run is still no verdict."""
+    p, data = _full_run(sf, tmp_path, **{"mt8/MT50.WAV": "cut"})
+    _assert_partial_refusal(p, data, 1, "E7_ceiling/lt8/LT50.WAV vs mt8/MT50.WAV")
+    e7 = data["E7_ceiling"]
+    assert str(e7["lt8/LT50.WAV vs mt8/MT50.WAV"]).startswith("refused: mt8/MT50.WAV begins"), e7
+    assert all(set(DISTANCE_KEYS) <= set(e7[k]) for k in e7 if "mt8/MT50.WAV" not in k), e7
+    assert "refused" not in data["E9_noise_floor"] and len(data["E9_noise_floor"]) == 5
+
+
+def test_full_run_on_an_unmodified_corpus_exits_0(tmp_path, sf):
+    """The green control: nothing refused, exit PASS, and no `refused` anywhere
+    in what was written."""
+    p, data = _full_run(sf, tmp_path)
+    assert p.returncode == exit_contract.PASS, (p.returncode, p.stdout[-600:], p.stderr[-600:])
+    assert data is not None and "refused" not in json.dumps(data)
+    assert "REFUSED:" not in p.stdout, p.stdout[-600:]
+
+
+def test_a_missing_corpus_file_is_a_refusal_too(probe, monkeypatch, tmp_path, sf):
+    """The pre-existing path #1699 moves from 0 to 2: a kit file that is not
+    on the host at all. The REAL e7 and e9 on a corpus without bd8/BD5050.WAV,
+    read by the detector `main` reads."""
+    root = _corpus(sf, tmp_path)
+    (root / "bd8" / "BD5050.WAV").unlink()
+    monkeypatch.setattr(probe, "REFDIR", root)
+    found = probe._refusals({"E7_ceiling": probe.e7_ceiling(), "E9_noise_floor": probe.e9_noise_floor()})
+    assert len(found) == 3, found
+    assert all("bd8/BD5050.WAV is not on this host" in r for r in found), found
+
+
+# The detector's own controls, in-process (milliseconds). Two shapes are all
+# the probe writes; each is found at any depth.
+NESTED = {"E0_ground_truth": {"ok": True},
+          "E5_tom_pitch_drop": {
+              "vs_shipped": {"1.24 more-accent": {"full": {"mss_l1": 0.1}}},
+              "per_property_pitch_drop_hz": {"1.06 unaccented": "refused: injected"}},
+          "E9_noise_floor": {"gated below -60 dBFS": {"mss_l1": 0.2}}}
+
+# Guard-defeat input 2 (verification-rules 8): `refused` WITHOUT the prefix.
+UNPREFIXED = {"upper": "REFUSED: upper case", "bare": "refused",
+              "prose": "the pair was refused by prepare",
+              "labelled": {"verdict": "refused"}}
+
+
+def test_detector_walks_to_a_refusal_nested_below_the_top_level(probe):
+    """Guard-defeat input 1 (verification-rules 8): the refusal sits two keys
+    down, where e5 writes one, and no top-level key holds one. A scan of the
+    first two levels -- E7's and E9's -- reads this as a clean run."""
+    assert probe._refusals(NESTED) == [
+        "E5_tom_pitch_drop/per_property_pitch_drop_hz/1.06 unaccented: injected"]
+
+
+def test_detector_reads_both_shapes_at_any_depth(probe):
+    assert probe._refusals({"refused": "top"}) == ["refused: top"]
+    assert probe._refusals({"E9_noise_floor": {"refused": "bd8/BD5050.WAV begins"}}) == [
+        "E9_noise_floor/refused: bd8/BD5050.WAV begins"]
+    assert probe._refusals({"a": {"b": [{"refused": "x"}]}}) == ["a/b[0]/refused: x"]
+    assert probe._refusals({"E7_ceiling": {"a vs b": "refused: top"}}) == [
+        "E7_ceiling/a vs b: top"]
+    assert probe._refusals({}) == [] and probe._refusals({"mss_l1": 0.0}) == []
+
+
+def test_detector_deliberately_ignores_a_string_that_is_not_prefixed(probe):
+    """Guard-defeat input 2, and the one the detector does NOT catch, on
+    purpose: a string saying `refused` without the `refused: ` prefix. The
+    prefix is this file's own convention; a word-match would flag prose. That
+    leaves a writer inventing a third shape unread -- the writer-count control
+    below is what closes that, and it is the reason this is safe to leave."""
+    assert probe._refusals(UNPREFIXED) == []
+
+
+def _refusal_writers() -> tuple[int, int]:
+    """(string rows, whole-result records) the probe's CODE writes. By AST, so
+    a docstring quoting `{"refused": ...}` is not a writer."""
+    tree = ast.parse(PROBE.read_text())
+    rows = [n for n in ast.walk(tree) if isinstance(n, ast.JoinedStr)
+            and isinstance(n.values[0], ast.Constant)
+            and str(n.values[0].value).startswith("refused: ")]
+    records = [n for n in ast.walk(tree) if isinstance(n, ast.Dict)
+               and any(isinstance(k, ast.Constant) and k.value == "refused" for k in n.keys)]
+    return len(rows), len(records)
+
+
+def test_every_refusal_writer_in_the_probe_uses_a_shape_the_detector_reads(probe):
+    """Three writers emit a `refused: ` string row (e5; e7 twice) and one a
+    `{"refused": ...}` record (e9). A fifth writer, or one of these four moved
+    to a third shape, moves this count: it must then be read by `_refusals`
+    before the count is updated.
+
+    THIS CONTROL'S OWN DEFEATING INPUT (verification-rules 8), stated rather
+    than left to be found: it counts those two LITERAL shapes, so a refusal
+    assembled any other way -- `f"{word}: {exc}"`, `"refused" + f": {exc}"`,
+    `dict(refused=str(e))`, or a bare reason with no label at all -- is not a
+    writer to it, the count stays (3, 1), and the exit-2 check misses the row.
+    None exists in this file. That is the price of a content-based detector
+    over a typed record, and it is why the count is a tripwire, not a proof."""
+    assert _refusal_writers() == (3, 1)
+    assert probe._refusals({"row": "refused: x"}) == ["row: x"]
+    assert probe._refusals({"rec": {"refused": "x"}}) == ["rec/refused: x"]
+
+
+def _mutant(old: str, new: str):
+    """The probe's source with ONE textual mutation, as a module. The mutation
+    site must still exist exactly once (verification-rules 5, condition 2: the
+    mutant must build)."""
+    source = PROBE.read_text()
+    assert source.count(old) == 1, f"mutation site gone or ambiguous: {old!r}"
+    mod = types.ModuleType("audio_distance_floor_mutant")
+    mod.__file__ = str(PROBE)
+    exec(compile(source.replace(old, new), str(PROBE), "exec"), mod.__dict__)
+    return mod
+
+
+def test_control_a_two_level_scan_misses_the_nested_refusal(probe):
+    """Injected bug: the detector stopped after two levels -- the hand-kept
+    shape, which reads E7's rows and E9's record and nothing deeper. On a
+    real result it reads exactly what the real detector reads, so only the
+    nested control can tell them apart."""
+    m = _mutant("out.extend(_refusals(v, here))",
+                "out.extend(_refusals(v, here) if not isinstance(v, dict) or path == '' else [])")
+    top = {"E7_ceiling": {"bd8/BD5050.WAV vs sd8/SD5050.WAV": "refused: top"},
+           "E9_noise_floor": {"refused": "record"}}
+    assert m._refusals(top) == probe._refusals(top) == [
+        "E7_ceiling/bd8/BD5050.WAV vs sd8/SD5050.WAV: top", "E9_noise_floor/refused: record"]
+    assert probe._refusals(NESTED) == ["E5_tom_pitch_drop/per_property_pitch_drop_hz/"
+                                       "1.06 unaccented: injected"] and m._refusals(NESTED) == []
+
+
+def test_control_a_word_match_flags_the_unprefixed_string(probe):
+    """Injected bug: the detector matching the WORD rather than this file's
+    prefix. Only the unprefixed control can catch it; every other control
+    stays green on this mutant."""
+    m = _mutant("node.startswith(REFUSED_PREFIX)", '"refused" in node.lower()')
+    assert probe._refusals(UNPREFIXED) == [] and m._refusals(UNPREFIXED)
+    assert m._refusals(NESTED) == probe._refusals(NESTED)
