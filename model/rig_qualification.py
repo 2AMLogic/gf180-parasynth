@@ -284,6 +284,27 @@ def _jsonable(o):
     return str(o)
 
 
+def _rendered(render, *args):
+    """`render(*args)` as 1-D float64, or `(None, why)` when the render
+    boundary REFUSED (#2106).
+
+    This battery returns records and does not raise, and a render the host
+    boundary refuses is a refusal to RECORD, not a traceback: the boundary
+    raises `InsufficientEvidence` for a non-finite buffer
+    (`audio_measure.require_finite`) and for a reported latency that leaves
+    nothing (`reference_rigs.RenderRefusal`), and both arrive here. The
+    boundary's own words are kept, because "reported latency >= render length"
+    and "the host returned an empty buffer" have different causes and a
+    refusal with the wrong reason is worse than none.
+
+    Nothing wider is caught. A render that raises anything else is a defect in
+    the harness, and a `Check(REFUSED)` would make it look like evidence."""
+    try:
+        return np.asarray(render(*args), dtype=np.float64).ravel(), None
+    except am.InsufficientEvidence as why:
+        return None, str(why)
+
+
 # ===========================================================================
 # the checks. Each one takes audio (or a render callable) and returns a Check.
 # None of them raises on a bad signal: a refusal is a return value here.
@@ -439,7 +460,12 @@ def check_pitch_causality(render_note, base_note: int, note_hz, *, sr: int = SR,
            "ratio_expected": want, "tol": tol}
     got = {}
     for label, note in (("base", int(base_note)), ("transposed", int(base_note) + int(semitones))):
-        y = np.asarray(render_note(note), dtype=np.float64).ravel()
+        y, refused = _rendered(render_note, note)
+        if refused is not None:
+            det[label] = {"note": note, "why": refused}
+            return Check(name, REFUSED,
+                         f"the {label} render at note {note} refused at the host "
+                         f"boundary: {refused}", det)
         s = check_sounding(y, name=name)
         if not s.ok:
             det[label] = {"note": note, **s.detail}
@@ -505,7 +531,13 @@ def check_filter_causality(render_cutoff, knobs, *, sr: int = SR,
                                     f"{len(knobs)}", det)
     cents, rows = [], []
     for k in knobs:
-        y = np.asarray(render_cutoff(k), dtype=np.float64).ravel()
+        y, refused = _rendered(render_cutoff, k)
+        if refused is not None:
+            rows.append({"knob": k, "centroid_hz": None, "why": refused})
+            det["sweep"] = rows
+            return Check(name, REFUSED,
+                         f"the render at knob {k:g} refused at the host boundary: "
+                         f"{refused}", det)
         s = check_sounding(y, name=name)
         if not s.ok:
             rows.append({"knob": k, "centroid_hz": None, "why": s.why})
@@ -583,6 +615,12 @@ def qualify_voice(*, rig: str, host: str, render_note, render_cutoff, note_hz,
     """Every check above, in one order, on one rig. Returns the record; it does
     NOT raise -- call `.require()` for that.
 
+    A render the host boundary REFUSES is a record too (#2106): the four checks
+    that read the first render come back REFUSED with the boundary's own words,
+    and the two causality checks refuse the same way when they render. What
+    would defeat this is a render raising anything else, which is left to
+    propagate: a harness defect must not arrive here dressed as a refusal.
+
     ORDER IS PART OF THE CONTRACT and it is the order the checks depend on
     each other in:
 
@@ -611,38 +649,44 @@ def qualify_voice(*, rig: str, host: str, render_note, render_cutoff, note_hz,
     if check_pins_fn is not None or n_pins is not None:
         checks.append(check_pins(check_pins_fn, n_pins=n_pins))
 
-    y = np.asarray(render_note(int(note)), dtype=np.float64).ravel()
-    checks.append(check_sounding(y))
-    checks.append(check_level(y, **level_kw))
-
-    cmd_hz = float(note_hz(int(note)))
-    ysteady = np.asarray(steady(y), dtype=np.float64).ravel()
-    pitch = check_pitch(ysteady, cmd_hz, sr=sr)
-    checks.append(pitch)
-
-    # The MEASURED fundamental where there is one, and no waveform claim at all
-    # where there is not. Falling back to the commanded value here would ask
-    # `waveform_id` whether an octave-down record repeats at the note that was
-    # asked for -- it does not, and the refusal would name a period residual
-    # instead of the octave. That is a wrong reason, which is worse than none.
-    #
-    # `subharmonic` FIRST, and this was wrong before it was right. On an
-    # octave-down record `refine_f0` reports `f0_measured` as the strongest
-    # component NEAR the command -- which is the record's SECOND harmonic,
-    # sitting exactly on the commanded note -- and `subharmonic` as the
-    # fundamental it found below it. Reading `f0_measured` here handed
-    # `waveform_id` 261.6 Hz for a 130.8 Hz saw, which refused with a 173.6 %
-    # period residual: the octave-down row of the discrimination matrix was
-    # green for the wrong reason. Caught by that matrix, not by inspection.
-    f0 = (pitch.detail.get("f0_hz") or pitch.detail.get("subharmonic")
-          or pitch.detail.get("f0_measured"))
-    if f0:
-        checks.append(check_waveform(ysteady, float(f0), sr=sr, expect=expect_wave))
+    y, refused = _rendered(render_note, int(note))
+    if refused is not None:
+        checks.extend(Check(n, REFUSED,
+                            f"the render refused at the host boundary: {refused}",
+                            {"render": "refused"})
+                      for n in ("sounding", "level", "pitch", "waveform"))
     else:
-        checks.append(Check("waveform", REFUSED,
-                            "no fundamental was measured, so there is no period to "
-                            "identify a waveform over",
-                            {"expect": expect_wave, "pitch_outcome": pitch.outcome}))
+        checks.append(check_sounding(y))
+        checks.append(check_level(y, **level_kw))
+
+        cmd_hz = float(note_hz(int(note)))
+        ysteady = np.asarray(steady(y), dtype=np.float64).ravel()
+        pitch = check_pitch(ysteady, cmd_hz, sr=sr)
+        checks.append(pitch)
+
+        # The MEASURED fundamental where there is one, and no waveform claim at all
+        # where there is not. Falling back to the commanded value here would ask
+        # `waveform_id` whether an octave-down record repeats at the note that was
+        # asked for -- it does not, and the refusal would name a period residual
+        # instead of the octave. That is a wrong reason, which is worse than none.
+        #
+        # `subharmonic` FIRST, and this was wrong before it was right. On an
+        # octave-down record `refine_f0` reports `f0_measured` as the strongest
+        # component NEAR the command -- which is the record's SECOND harmonic,
+        # sitting exactly on the commanded note -- and `subharmonic` as the
+        # fundamental it found below it. Reading `f0_measured` here handed
+        # `waveform_id` 261.6 Hz for a 130.8 Hz saw, which refused with a 173.6 %
+        # period residual: the octave-down row of the discrimination matrix was
+        # green for the wrong reason. Caught by that matrix, not by inspection.
+        f0 = (pitch.detail.get("f0_hz") or pitch.detail.get("subharmonic")
+              or pitch.detail.get("f0_measured"))
+        if f0:
+            checks.append(check_waveform(ysteady, float(f0), sr=sr, expect=expect_wave))
+        else:
+            checks.append(Check("waveform", REFUSED,
+                                "no fundamental was measured, so there is no period to "
+                                "identify a waveform over",
+                                {"expect": expect_wave, "pitch_outcome": pitch.outcome}))
 
     checks.append(check_pitch_causality(render_note, int(note), note_hz, sr=sr,
                                        semitones=semitones))
