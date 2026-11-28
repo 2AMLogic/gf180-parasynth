@@ -16,7 +16,10 @@ The module under test adds a QUALIFIED 1-2.5 kHz decay to the cymbal work
     is what the docstring claims (#101 was window leakage);
   * the real corpus's record lengths, which are what force two windows;
   * every injected defect turns at least one named property red, and the one
-    transformation asserted blind stays blind.
+    transformation asserted blind stays blind;
+  * one of them, `FORWARD_INTEGRAL`, does it by ANSWERING a wrong time: it
+    refused for its first two months and the refusal was credited as a catch,
+    so `edt-known` had no live control (#1869).
 """
 import json
 import math
@@ -464,13 +467,132 @@ def test_the_downward_property_is_seen_by_a_defect_and_is_not_decoration():
     assert saw, "no injected defect moves rho-inverts"
 
 
+def test_the_crossing_time_property_is_moved_by_a_wrong_answered_time_not_only_by_a_refusal():
+    """The twin of the test above, for `edt-known` -- and the hole #1869 is
+    about. A property no defect moves is coverage in costume; one that a defect
+    moves only by making the depth REFUSE has still never had its 5 %
+    comparison against the planted time exercised by a control. Both halves are
+    asserted: some defect reddens `edt-known`, and it does so with a NUMBER."""
+    saw = []
+    for d in lt.DEFECTS:
+        try:
+            got = lt.properties(defect=d)
+        except lt.Refused:
+            continue
+        if got["edt-known"][0] is False:
+            saw.append((d, got["edt-known"][1]))
+    assert saw, "no injected defect moves edt-known"
+    assert any(v is not None for _, v in saw), ("edt-known went red only by refusing", saw)
+
+
+# --------------------------------------------------------------------------
+# the forward integral: it must ANSWER WRONG, not refuse (#1869)
+# --------------------------------------------------------------------------
+# `FORWARD_INTEGRAL` refused from the day it was written -- `sch[0]` is the
+# first sample, not the band's total -- and `check()` credited the refusal as a
+# catch. A defect named here may not pass through a refusal in the matrix test
+# below: for it, refusing IS the failure being controlled.
+MUST_ANSWER = ("FORWARD_INTEGRAL",)
+
+
+def _arrival(tau, depth):
+    """The known-WRONG answer for `FORWARD_INTEGRAL`, derived here: the time at
+    which a fraction 10^(depth/10) of an exponential's energy has ARRIVED.
+
+    Power exp(-2t/tau) -> cumulative arrival 1 - exp(-2t/tau); solve for t. The
+    Schroeder time (`_planted`, above) asks when that fraction REMAINS. At
+    -10 dB the arrival time is 1/21.9 of the Schroeder time; at -5 dB, 1/3.0.
+    """
+    return 1e3 * (-tau / 2.0) * math.log(1.0 - 10 ** (depth / 10.0))
+
+
+def test_forward_integral_answers_a_wrong_time_and_edt_known_sees_it():
+    """The repair's own claim, on the record `edt-known` is judged on. There is
+    deliberately no try/except: a Refused out of `properties()` fails this
+    test, because a refusal credited as a catch is the defect being repaired."""
+    passed, ratio = lt.properties(defect="FORWARD_INTEGRAL")["edt-known"]
+    assert passed is False
+    assert ratio is not None, "edt-known went red only because the depth was refused"
+    ok, lines = lt.check()
+    assert ok, "\n".join(lines)
+    names = lt.DEFECTS + lt.BLIND_BY_CONSTRUCTION
+    rows = [ln for ln in lines if ln.strip().startswith(names)]
+    assert rows and not any("REFUSED" in r for r in rows), "\n".join(lines)
+
+
+def test_the_forward_integrals_answer_is_the_energy_arrival_time():
+    """What the defect computes, pinned against an independent one-liner
+    rather than against the module's own arithmetic: the first sample at which
+    the band's CUMULATIVE energy reaches 10^(d/10) of its total -- the same
+    level crossing `schroeder_times` reads, on an integral running the other
+    way. Same band signal, so the same sample to within a sample or two (the
+    tool subtracts a floor some 1e-7 of the peak; this does not)."""
+    y, sr = lt.synth(tau_l=0.35, a_h=0.0, a_m=0.0)
+    y = y[: lt.rc.required_lead_samples(sr) + int(lt.TRIM_S * sr)]     # what measure() analyses
+    xb = cb._bp(y, sr, *lt.BANDS[lt.REF_BAND])
+    frac = np.cumsum(xb * xb) / float(np.sum(xb * xb))
+    got = lt.measure(y, sr, defect="FORWARD_INTEGRAL")["bands"][lt.REF_BAND]["times_ms"]
+    for d in (-5.0, -10.0):
+        assert got[f"{d:.0f}"] is not None, got
+        want = 1e3 * float(np.argmax(frac >= 10 ** (d / 10.0))) / sr
+        assert abs(got[f"{d:.0f}"] - want) < 0.05, (d, got[f"{d:.0f}"], want)
+
+
+@pytest.mark.parametrize("tau", (0.15, 0.25, 0.45))
+@pytest.mark.parametrize("seed", (123, 2024))
+def test_the_forward_integral_reads_the_arrival_time_on_records_not_used_to_select_it(tau, seed):
+    """The claim confirmed where it was not selected. The reading was chosen on
+    ONE record -- tau 0.35, seed 7, the 2.0 s window, the Ln band -- so this
+    runs other taus, other seeds, a 2.5 s window and all three bands.
+
+    Judged as a ratio to the SAME record's clean reading, which is what makes
+    it a fair test: that ratio is independent of tau, of the seed and of the
+    window, and it must sit near the analytic arrival/Schroeder ratio (within a
+    factor of two, where the clean instrument sits at 1.0 -- 21.9x and 3.0x
+    above it at the two depths)."""
+    y, sr = lt.synth(tau_l=tau, a_h=0.0, a_m=0.0, seed=seed)
+    clean = lt.measure(y, sr, trim_s=2.5)["bands"]
+    fwd = lt.measure(y, sr, trim_s=2.5, defect="FORWARD_INTEGRAL")["bands"]
+    ref = clean[lt.REF_BAND]["times_ms"]
+    # The record is a fair one: the clean instrument reads the planted decay.
+    assert ref["-10"] is not None, clean[lt.REF_BAND]
+    assert ref["-10"] == pytest.approx(lt.t_edt(tau, -10.0), rel=0.10)
+    for d in (-5.0, -10.0):
+        k = f"{d:.0f}"
+        assert ref[k] is not None and fwd[lt.REF_BAND]["times_ms"][k] is not None
+        r = fwd[lt.REF_BAND]["times_ms"][k] / ref[k]
+        analytic = _arrival(tau, d) / lt.t_edt(tau, d)
+        assert analytic / 2.0 < r < 2.0 * analytic, (tau, seed, k, r, analytic)
+        # ... and every band ANSWERS: the leading-zero lead is not a refusal.
+        for band in lt.BANDS:
+            assert fwd[band]["times_ms"][k] is not None, (band, k, fwd[band]["refused"][k])
+
+
+@pytest.mark.parametrize("defect", (None, "FORWARD_INTEGRAL"))
+def test_a_band_with_no_energy_above_its_floor_refuses_whichever_way_the_integral_runs(defect):
+    """The no-energy guard must move with the normaliser (#1869). A flat band's
+    floor IS its whole power, so there is nothing above it to integrate from
+    either end; an exactly-zero band is caught one guard earlier. The paired
+    negative to the test above: the repair makes the defect answer on a record
+    that holds energy, not answer on one that holds none."""
+    n = lt.rc.required_lead_samples(lt.SR) + 2 * lt.SR
+    with pytest.raises(lt.Refused, match="band holds no energy above its floor"):
+        lt.schroeder_times(np.full(n, 0.5), lt.SR, defect=defect)
+    with pytest.raises(lt.Refused, match="band is silent"):
+        lt.schroeder_times(np.zeros(n), lt.SR, defect=defect)
+
+
 @pytest.mark.parametrize("defect", lt.DEFECTS)
 def test_each_injected_defect_turns_at_least_one_property_red(defect):
     """A control that cannot fail is worse than no control (#376). Each defect
-    must move something, and the matrix in `--check` records WHICH."""
+    must move something, and the matrix in `--check` records WHICH.
+
+    A defect in `MUST_ANSWER` may not pass through the refusal here: for it,
+    refusing is the failure being controlled, not a catch (#1869)."""
     try:
         got = lt.properties(defect=defect)
-    except lt.Refused:
+    except lt.Refused as e:
+        assert defect not in MUST_ANSWER, f"{defect} refused rather than answered: {e}"
         return                      # a defect that makes the tool refuse is caught
     red = [p for p in lt.PROPERTIES if got[p][0] is False]
     assert red, f"{defect} turned nothing red"
@@ -536,6 +658,107 @@ def test_the_committed_result_file_is_summarisable_and_says_what_the_scorecard_s
     assert s["windows"]["2.0s"]["rows"]["M-10"]["n_808_above_baseline_max"] == 10
     # Mn is the leakage-proof one: 8 of 10, which is the honest weaker figure.
     assert s["windows"]["2.0s"]["rows"]["Mn-10"]["n_808_above_baseline_max"] == 8
+
+
+# ---- a non-finite rho in the result file is REFUSED before sorted(), median(),
+# min() and max() aggregate it (#2081). `summarise` keeps a setting's rho when
+# it `is not None`, which a NaN is; a NaN compares with nothing, so a NaN that
+# is not the first setting is dropped: `argmin` / `argmax` named another 808,
+# `n_808_above_baseline_max` lost one, and the row still printed, exit 0.
+# `None` keeps its meaning -- that 808 refused the depth and is left out.
+RHO_SITES = [  # (window, 808 setting, band, depth) in the committed result file
+    pytest.param("2.0s", "CY0025", "M", "-10", id="first"),
+    pytest.param("2.0s", "CY1025", "M", "-10", id="non-first-argmax"),
+    pytest.param("2.0s", "CY2550", "M", "-10", id="non-first-argmin"),
+    pytest.param("1.5s", "CY1000", "Mn", "-5", id="other-window-band-depth"),
+]
+
+
+def _result_with(wname, setting, band, depth, value):
+    """The committed result file with ONE rho replaced."""
+    res = json.loads(RESULT.read_text())
+    res["windows"][wname]["fischer"][setting]["rho"][band][depth] = value
+    return res
+
+
+def _row(summary, wname, band, depth):
+    return summary["windows"][wname]["rows"][f"{band}{depth}"]
+
+
+def _moved(row):
+    """What a dropped NaN moves, in the order the row prints it."""
+    return (row["argmin"], row["min"], row["argmax"], row["max"], row["median"],
+            row["n_808_above_baseline_max"])
+
+
+def _summary(res):
+    """`summarise`'s answer: (summary, None), or (None, the `Refused` message)."""
+    try:
+        return lt.summarise(res), None
+    except lt.Refused as exc:
+        return None, str(exc)
+
+
+def test_the_committed_row_names_the_808s_the_controls_below_move():
+    """The control for everything below, green before and after the repair:
+    the 2.0 s window's M(-10) row off the committed file. Ten settings answer;
+    the least is CY2550 and the greatest CY1025; all ten clear the baseline."""
+    if not RESULT.is_file():
+        pytest.skip(f"{RESULT} is not present")
+    s, why = _summary(json.loads(RESULT.read_text()))
+    assert why is None, why
+    row = _row(s, "2.0s", "M", "-10")
+    assert (row["n_808"], row["argmin"], row["argmax"]) == (10, "CY2550", "CY1025"), row
+    assert (row["min"], row["max"], row["n_808_above_baseline_max"]) == (1.0476, 1.1392, 10), row
+
+
+@pytest.mark.parametrize("wname, setting, band, depth", RHO_SITES)
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), -float("inf")], ids=["nan", "inf", "-inf"])
+def test_a_non_finite_rho_is_refused_naming_where_it_sits(wname, setting, band, depth, bad):
+    """NaN, +inf and -inf in ONE rho of the committed file: REFUSED, naming
+    the window, the 808, the band and the depth, at every position -- the
+    builtins keep a FIRST NaN and drop any other, and both must refuse. Red
+    before the repair: `_summary` returned a row whose argmin or argmax was
+    another 808, and `--report` printed it with exit 0."""
+    s, why = _summary(_result_with(wname, setting, band, depth, bad))
+    assert why == (f"window {wname}: 808 {setting}'s rho_{band}({depth}) is {bad!r}, which is not a "
+                   "finite number; the file may not be summarised"), s and _moved(_row(s, wname, band,
+                                                                                       depth))
+
+
+@pytest.mark.parametrize("value", [True, "1.1"], ids=["bool", "string"])
+def test_a_rho_that_is_not_a_number_at_all_is_refused(value):
+    """A flag and a numeric string are not readings either (`is_finite_number`,
+    #718). The old code took the flag as 1.0 and named that 808 the LEAST of
+    the ten; the string was a traceback."""
+    s, why = _summary(_result_with("2.0s", "CY1025", "M", "-10", value))
+    assert why == (f"window 2.0s: 808 CY1025's rho_M(-10) is {value!r}, which is not a finite number; "
+                   "the file may not be summarised"), s and _moved(_row(s, "2.0s", "M", "-10"))
+
+
+def test_a_refused_depth_still_leaves_the_808_out_of_the_row_instead_of_refusing():
+    """`None` is "this 808 refused the depth", not a bad reading: the setting
+    is left out and the row is one shorter, as before the repair."""
+    s, why = _summary(_result_with("2.0s", "CY1025", "M", "-10", None))
+    assert why is None, why
+    row = _row(s, "2.0s", "M", "-10")
+    assert (row["n_808"], row["argmax"], row["max"]) == (9, "CY5025", 1.1202), row
+
+
+def test_report_refuses_a_result_file_whose_rho_is_nan(tmp_path, capsys):
+    """Through the tool's own reader: `json.dumps` writes a bare NaN, the
+    `--report` reader loads it back, and the answer is REFUSED (2) with no
+    row printed. Before the repair it printed the summary and exited 0."""
+    if not RESULT.is_file():
+        pytest.skip(f"{RESULT} is not present")
+    path = tmp_path / "low-tail.json"
+    path.write_text(json.dumps(_result_with("2.0s", "CY1025", "M", "-10", float("nan"))))
+    assert "NaN" in path.read_text()
+    code = lt.main(["--report", str(path)])
+    out = capsys.readouterr().out
+    assert code == lt.REFUSED, out
+    assert out.splitlines() == ["REFUSED: window 2.0s: 808 CY1025's rho_M(-10) is nan, which is not "
+                                "a finite number; the file may not be summarised"], out
 
 
 def test_the_three_frozen_windows_cover_every_setting_and_no_two_of_them_do():
