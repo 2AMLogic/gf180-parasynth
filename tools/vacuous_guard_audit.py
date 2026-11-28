@@ -87,6 +87,13 @@ BOUNDARIES = (
     ("tools/cymbal_band_balance.py", "preconditions", ("content_checked",), "#431",
      "filter-figure and vca-drive are answered by reading the artifact, "
      "not by path.exists()"),
+    ("tools/f1_level_capture.py", "load_manifest", ("not isinstance(clips, dict)", "not clips"),
+     "#1843",
+     "the population `verify` summarizes is read by this helper: a manifest "
+     "naming no clip left its loop nothing to do and it printed "
+     "`0 verified, 0 failed` -- nothing compared, the run a PASS. The loop only "
+     "counts, so the audit above cannot see it; the assertion lives where every "
+     "reader of the manifest passes it"),
 )
 
 #: What a refusal looks like in this repository.
