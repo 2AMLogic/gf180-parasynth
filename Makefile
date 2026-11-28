@@ -299,10 +299,20 @@ verify-fast:
 ## It needs Verilator. On iverilog the same thirteen runs are about three hours,
 ## which is past this target's cap -- so a runner without Verilator gets a
 ## NO-VERDICT from run_all.py rather than a quiet skip.
+##
+## THE CYMBAL-369 SOURCE-PROVENANCE GATE (#1940) is here and not in `verify`
+## because it needs full history and `origin/main`.
+## tools/check_cymbal_source_provenance.py resolves the `commit` of each result
+## record under docs/scorecard/cymbal-369/ that carries `controls_pass` against
+## main. From a shallow clone, or a checkout with no `origin/main`, it exits 2
+## and run_all.py records NO-VERDICT: it never calls an unresolvable commit
+## "unresolved" from a history that cannot show one. Its controls are in its own
+## test file, which the pytest job below already runs.
 verify-full:
 	@$(RUN) --timeout 7200 --json build/verification/verify-full.json \
 	  "$(PY) tools/score_ensemble_i2s.py --case E1A --jobs 1 --reuse --simulator verilator --out build/scorecard/E1A-integrated-rtl.json --audio build/scorecard/E1A-integrated-rtl-mix.wav --twin build/scorecard/E1A-fixed-model-twin.json" \
 	  "$(PY) -m pytest model/ spec/ tools/ fpga/ pnr/ rtl-sketch/test_verify_ctl_blindness.py rtl-sketch/test_verify_drums.py rtl-sketch/test_synth_count.py -q" \
+	  "$(PY) tools/check_cymbal_source_provenance.py" \
 	  "$(PY) rtl-sketch/verify_ladder.py" \
 	  "$(PY) rtl-sketch/verify_modal.py" \
 	  "$(PY) rtl-sketch/verify_ctl.py" \
@@ -575,6 +585,7 @@ verify-full:
 controls:
 	@$(PY) tools/run_controls.py --timeout 3600 --json build/verification/controls.json \
 	  "$(PY) tools/control_capability_verdicts.py" \
+	  "$(PY) tools/control_publish_selected_refusal.py" \
 	  "$(PY) tools/control_dag_issue_only.py" \
 	  "$(PY) tools/control_dag_verdictless_evidence.py" \
 	  "$(PY) tools/control_dag_churn.py" \

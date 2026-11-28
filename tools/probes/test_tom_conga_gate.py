@@ -11,6 +11,7 @@ import copy
 import json
 import os
 import pathlib
+import subprocess
 import sys
 
 import numpy as np
@@ -360,3 +361,116 @@ def test_injection_turns_its_known_answer_red(name):
     finally:
         tc.INJECT.discard(name)
     INJECTED[name]()               # and green again once removed
+
+
+# ---- #1774: a record the operator names that cannot be READ is REFUSED, never a traceback ----
+# `judge <record>` and `judge --twin <file>` read files the OPERATOR names on the command
+# line. The reader was `json.loads(path.read_text())`, so one that could not be read -- a
+# path that does not exist, truncated JSON, bytes that are not UTF-8 -- exited 1 by
+# traceback: FAIL, "the comparison ran and disagreed" (tools/exit_contract.py), where this
+# tool's declared refusal is exit 2 and nothing was judged. The refusal tests run the real
+# CLI as a subprocess, nothing stubbed: what is asserted is what an operator sees. The
+# injected-bug control drives `main()` in process, because a monkeypatch cannot reach a
+# subprocess, and the last control calls the loader itself. None of these needs the corpus.
+REPO = pathlib.Path(__file__).resolve().parents[2]
+ARCHIVED = REPO / "docs" / "scorecard" / "tom-conga-558"
+#: Each way a user-supplied file can fail to be read, with the exception the shipped
+#: reader died with: #1774's table, plus its test plan's two edge cases (an empty file;
+#: a directory where a file was named).
+RAW_READ_RAISES = {"missing": FileNotFoundError,
+                   "truncated": json.JSONDecodeError,
+                   "not-utf8": (UnicodeDecodeError, json.JSONDecodeError),  # locale-dependent: Latin-1 decodes ff fe, then JSON fails
+                   "empty": json.JSONDecodeError,
+                   "directory": IsADirectoryError}
+
+
+def _unreadable(tmp_path, kind) -> pathlib.Path:
+    """A path that cannot be read, for `kind`: #1774's own bytes for the three it
+    names. The path carries the kind, so a failure prints which one it was."""
+    p = tmp_path / kind / "record.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    if kind == "truncated":
+        p.write_text('{"rows": [1, 2')
+    elif kind == "not-utf8":
+        p.write_bytes(b"\xff\xfe" + bytes(range(256)) * 4)
+    elif kind == "empty":
+        p.write_text("")
+    elif kind == "directory":
+        p.mkdir(exist_ok=True)
+    return p
+
+
+def _judge_cli(*argv) -> subprocess.CompletedProcess:
+    """The real CLI as an operator runs it: a fresh interpreter, the file on disk."""
+    return subprocess.run([sys.executable, str(REPO / "tools" / "probes" / "tom_conga_gate.py"),
+                           "judge", *argv], cwd=REPO, capture_output=True, text=True, errors="replace")
+
+
+def _assert_refused(r: subprocess.CompletedProcess, named: pathlib.Path, out: pathlib.Path) -> None:
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert "REFUSED" in r.stdout and str(named) in r.stdout, r.stdout
+    assert "Traceback" not in r.stderr, r.stderr
+    assert not out.exists()
+
+
+@pytest.mark.parametrize("kind", list(RAW_READ_RAISES))
+def test_judge_refuses_a_record_that_cannot_be_read(tmp_path, kind):
+    rec, out = _unreadable(tmp_path, kind), tmp_path / "judge.json"
+    _assert_refused(_judge_cli(str(rec), "--out", str(out)), rec, out)
+
+
+@pytest.mark.parametrize("kind", list(RAW_READ_RAISES))
+def test_judge_refuses_a_twin_file_that_cannot_be_read(tmp_path, kind):
+    """The main record is the archived `run.json`, which judges on its own (the control
+    below): only `--twin` is unreadable, and the refusal names the twin, not the record."""
+    twin, out = _unreadable(tmp_path, kind), tmp_path / "judge.json"
+    _assert_refused(_judge_cli(str(ARCHIVED / "run.json"), "--twin", str(twin), "--out", str(out)), twin, out)
+
+
+def test_judge_still_judges_the_archived_run_record(tmp_path):
+    """The guard's other side (verification rule 8): a record `run` wrote is not refused.
+    Without it the refusals above would pass against a reader that refuses everything."""
+    out = tmp_path / "judge.json"
+    r = _judge_cli(str(ARCHIVED / "run.json"), "--out", str(out))
+    assert r.returncode == 0, r.stdout + r.stderr
+    res = json.loads(out.read_text())
+    assert res["selection"] and "post_hoc" not in res
+
+
+def test_judge_still_adds_the_tables_of_the_archived_twin(tmp_path):
+    out = tmp_path / "judge.json"
+    r = _judge_cli(str(ARCHIVED / "run.json"), "--twin", str(ARCHIVED / "twin.json"), "--out", str(out))
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert json.loads(out.read_text())["post_hoc"]
+
+
+@pytest.mark.parametrize("kind", list(RAW_READ_RAISES))
+def test_without_the_loader_judge_is_the_shipped_defect(tmp_path, monkeypatch, kind):
+    """Injected-bug control (#1774 AC 6), committed rather than described: the fix is
+    `load_record`, so reverted to the bare read it replaces, each input above is exit 1
+    by traceback again -- through `main()`, with the very exception #1774's table names,
+    at both read sites -- and nothing is written."""
+    monkeypatch.setattr(tc, "load_record", lambda path, what: json.loads(path.read_text()))
+    rec, out = _unreadable(tmp_path, kind), tmp_path / "judge.json"
+    with pytest.raises(RAW_READ_RAISES[kind]):
+        tc.main(["judge", str(rec), "--out", str(out)])
+    with pytest.raises(RAW_READ_RAISES[kind]):
+        tc.main(["judge", str(ARCHIVED / "run.json"), "--twin", str(rec), "--out", str(out)])
+    assert not out.exists()
+
+
+def test_the_loader_refuses_only_what_it_names(tmp_path, monkeypatch):
+    """#1774 AC 7: the catch is `manifest.Refused` and `OSError`, never `Exception`. An
+    exception that is neither -- an implementation error inside the reader -- is an
+    execution error: it leaves `load_record` as itself rather than being relabelled a
+    refusal, which is the inverse defect. Called on the loader directly, so it fails only
+    for that reason; whether the CLI reads THROUGH the loader is the refusal tests' to
+    assert."""
+    rec = tmp_path / "record.json"
+    rec.write_text("{}")
+
+    def boom(path, what):
+        raise TypeError("an implementation error inside the reader, not a refusal")
+    monkeypatch.setattr(tc.mf, "load_json_refused", boom)
+    with pytest.raises(TypeError, match="not a refusal"):
+        tc.load_record(rec, "the run record")
