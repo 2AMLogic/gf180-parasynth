@@ -231,6 +231,7 @@ import run_case as rc  # noqa: E402
 import cymbal_bands as cb  # noqa: E402
 from exit_contract import REFUSED  # noqa: E402  -- 2: the declared refusal status
 import refusal
+from finite_number import is_finite_number  # noqa: E402
 
 # FROZEN before this module was used to judge anything (#400 acceptance 1).
 LOW_BANDS = {"M": (891.0, 2828.0), "Mn": (891.0, 1782.0)}
@@ -898,7 +899,14 @@ def summarise(res: dict) -> dict:
     REFUSES a JSON whose `controls_pass` is not true. The tool that wrote the
     file already refuses in that case, so this is the second gate on the same
     precondition -- deliberately, because the JSON is what a reader picks up
-    later, by which time the console output is gone."""
+    later, by which time the console output is gone.
+
+    REFUSES also a skirt-baseline aggregate or a render's rho that is not a
+    finite number (#2110). Five numbers are read here rather than computed, and
+    a NaN compares with nothing: a NaN baseline top had every 808 FAIL to clear
+    it, so the row printed 0/10 where the scorecard quotes 10/10, and a NaN in
+    any of the other four printed as `nan` in its column -- exit 0 either way.
+    `None` is not that: it is a depth that record refused, and it stays."""
     if not res.get("controls_pass"):
         raise Refused("this result file's own controls did not pass; it may not be summarised")
     sb = res["skirt_baseline"]
@@ -913,6 +921,15 @@ def summarise(res: dict) -> dict:
                 if not v:
                     continue
                 b = sb[f"{band}_{depth}"]
+                cand = w.get("candidate", {}).get("rho", {}).get(band, {}).get(depth)
+                for field, x in ((f"skirt_baseline {band}_{depth} min", b["min"]),
+                                 (f"skirt_baseline {band}_{depth} max", b["max"]),
+                                 (f"skirt_baseline {band}_{depth} median", b["median"]),
+                                 (f"shipped rho_{band}({depth})", w["shipped"]["rho"][band][depth]),
+                                 (f"candidate rho_{band}({depth})", cand)):
+                    if x is not None and not is_finite_number(x):
+                        raise Refused(f"window {wname}: {field} is {x!r}, which is not a finite number; "
+                                      "the file may not be summarised")
                 vals = sorted(v.values())
                 rows[f"{band}{depth}"] = {
                     "n_808": len(v), "min": vals[0], "max": vals[-1],
@@ -921,7 +938,7 @@ def summarise(res: dict) -> dict:
                     "baseline_min": b["min"], "baseline_max": b["max"], "baseline_median": b["median"],
                     "n_808_above_baseline_max": sum(1 for x in vals if x > b["max"]),
                     "shipped": w["shipped"]["rho"][band][depth],
-                    "candidate": w.get("candidate", {}).get("rho", {}).get(band, {}).get(depth),
+                    "candidate": cand,
                 }
         out["windows"][wname] = {
             "n_answered": len(answered),
