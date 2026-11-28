@@ -52,6 +52,8 @@ import tempfile
 import numpy as np
 from scipy.io import wavfile
 
+import run_case
+
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 TRACED = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"],
                         capture_output=True, text=True).stdout.strip()
@@ -62,7 +64,6 @@ REPO = pathlib.Path(_common) if pathlib.Path(_common).is_absolute() else (ROOT /
 TOOLS_PATH = [str(ROOT / p) for p in ("tools", "model", "tools/probes", "audition")]
 FPGA_PATH = [str(ROOT / p) for p in ("fpga", "fpga/release", "model", "tools", "audition", "rtl-sketch")]
 MODEL_PATH = [str(ROOT / p) for p in ("model", "tools", "audition")]
-ENV_REFS = "GF180_TR808_REFS"
 #: where the private corpora and clones live; the runner points this at its
 #: scratch dir, so a fixture is made once per session however many rows use it
 SCRATCH = pathlib.Path(os.environ.get("REFUSAL_TRACE_SCRATCH") or tempfile.gettempdir())
@@ -77,7 +78,7 @@ def set_scratch(path) -> None:
 # inputs
 # ---------------------------------------------------------------------------
 def _refs() -> pathlib.Path | None:
-    r = pathlib.Path(os.environ.get(ENV_REFS) or "/tmp/tr808-ref")
+    r = run_case.configured_refs()  # REFUSES (RuntimeError) if the two variables disagree
     return r if (r / "bd8" / "BD5050.WAV").exists() else None
 
 
@@ -104,7 +105,7 @@ def corpus(ws: pathlib.Path, **replace) -> dict:
     when there is no corpus."""
     src = _refs()
     if src is None:
-        return {"unresolved": f"no Fischer corpus: set {ENV_REFS} (this caller reads reference audio)"}
+        return {"unresolved": f"no Fischer corpus: set the Fischer corpus location, see run_case.configured_refs() (this caller reads reference audio)"}
     dst = SCRATCH / "corpus" / _slug(",".join(sorted(replace)) or "as-cloned")
     if not dst.exists():
         shutil.copytree(src, dst, ignore=shutil.ignore_patterns(".git", "_soundmeta"))
@@ -359,13 +360,13 @@ for name, fn in (("uh.r1_kit()", uh.r1_kit), ("r1c.frozen_kit()", r1c.frozen_kit
 
 def adf(ws: pathlib.Path, ref: str, **replace) -> dict:
     return needs(corpus(ws, **replace),
-                 lambda refs: run(ADF, ["--ref", ref], env={ENV_REFS: str(refs)}))
+                 lambda refs: run(ADF, ["--ref", ref], env=run_case.refs_child_env(refs)))
 
 
 def hh5(ws: pathlib.Path, **replace) -> dict:
     return needs(corpus(ws, **replace),
                  lambda refs: run(HH5, ["--refs", str(refs), "--out", str(ws / "out"), "--quick"],
-                                  env={ENV_REFS: str(refs)}))
+                                  env=run_case.refs_child_env(refs)))
 
 
 for _line in (441, 446, 467, 489, 490, 540):
@@ -440,7 +441,7 @@ for _entry, _line, _argv, _literal in (
         wrap=["run_case.render_drum_solo"],
         working=lambda ws, e=_entry, a=_argv: needs(
             corpus(ws), lambda refs: run(e, [s.format(refs=refs, out=ws / "out") for s in a],
-                                         env={ENV_REFS: str(refs)})),
+                                         env=run_case.refs_child_env(refs))),
         refusing=None,
         boundary=[lambda ws: script(ws, "solo-arms", SOLO_ARMS, TOOLS_PATH)],
         invariant=_literal + "; no inject, hit_frame or frames is passed, and render_drum_solo refuses "
