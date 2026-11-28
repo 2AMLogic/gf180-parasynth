@@ -14,7 +14,7 @@ meant to check is empty -- and "empty" is exactly what a deleted child, a
 missing file or a dropped section looks like. Found by hand, one site at a time:
 #118 (schroeder_t20's truncation guard), #283 (trial receipt with zero required
 children), #431 (preconditions that gated on a file existing and never read it),
-#582 (`release_manifest.image_identity`, still open). This is the standing check
+#582 (`release_manifest.image_identity`, fixed in PR #686). This is the standing check
 for the class, modelled on `tools/nan_guard_audit.py` (#134): a triage list and
 a deliberately narrow gate.
 
