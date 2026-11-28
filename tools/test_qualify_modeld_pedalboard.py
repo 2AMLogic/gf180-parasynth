@@ -294,6 +294,110 @@ def test_a_failing_run_refuses_to_write_a_wav(monkeypatch, capsys, bundle, tmp_p
 
 
 # ===========================================================================
+# the record refuses after the rig qualified (#1980)
+# ===========================================================================
+_PLIST = (b'<?xml version="1.0"?><!DOCTYPE plist><plist version="1.0"><dict>'
+          b'<key>CFBundleShortVersionString</key><string>1.2.3</string>'
+          b'<key>CFBundleIdentifier</key><string>com.moog.modeld</string>'
+          b'</dict></plist>')
+
+
+def _bundle_at(root, binary_dir):
+    """A Model D bundle whose only binary, if any, sits in `binary_dir` under
+    `Contents/`. `None` is a bundle with nothing hashable anywhere."""
+    b = root / "Model D.vst3"
+    (b / "Contents").mkdir(parents=True)
+    (b / "Contents" / "Info.plist").write_bytes(_PLIST)
+    if binary_dir is not None:
+        (b / "Contents" / binary_dir).mkdir()
+        (b / "Contents" / binary_dir / "Model D").write_bytes(b"not a real binary")
+    return b
+
+
+def test_a_rig_that_qualifies_with_no_hashable_binary_is_REFUSED_not_a_traceback(
+        monkeypatch, capsys, tmp_path):
+    """Issue #1980. `report(dev, qual)` sat in main()'s `else:` clause, which
+    the `except rp.Refused` above it does not cover, and `report` refuses
+    through `rp.environment_tuple` when `plugin_identity` finds no binary to
+    hash. That refusal left main() uncaught: exit 1 by traceback, no --json
+    record, after the rig had QUALIFIED.
+
+    The fake host loads anything, so a bundle with no binary at all reaches
+    the record step -- and the record must come back as a REFUSAL, with the
+    sweep table still on stdout because the rig DID qualify."""
+    with_host(monkeypatch, _bundle_at(tmp_path, None))
+    out = tmp_path / "rec.json"
+    code = qmp.main(["--json", str(out)])
+    text = capsys.readouterr().out
+    assert code == rp.REFUSED
+    assert "REFUSED  " in text and "no binary hash" in text
+    rec = json.loads(out.read_text())
+    assert rec["outcome"] == "REFUSED"
+    assert "no binary hash" in rec["why"]
+    assert "environment" not in rec and "qualification" not in rec
+    # The table is the evidence of the attempt and must not be lost with the
+    # record -- but nothing that follows a QUALIFICATION may be printed.
+    assert "QUALIFIED" in text
+    assert "NEXT:" not in text
+    assert "the clip that qualified" not in text
+    # ...and #122 must not reopen: the plugin was measured and did fine. What
+    # was refused is the RECORD, and this file's third note says so.
+    assert "REOPENS" not in text
+    assert "NO-VERDICT" in text
+
+
+def test_a_plain_AssertionError_out_of_report_still_escapes(
+        monkeypatch, capsys, bundle, tmp_path):
+    """The control for the guard above: it is `except rp.Refused` and nothing
+    wider. A bug in `report` must surface as a bug, not be filed as a
+    refusal -- a guard that swallowed it would hide the next defect of this
+    class behind a clean exit 2."""
+    with_host(monkeypatch, bundle)
+
+    def broken(*a, **kw):
+        raise AssertionError("a bug in report, not a precondition")
+    monkeypatch.setattr(qmp, "report", broken)
+    with pytest.raises(AssertionError, match="a bug in report"):
+        qmp.main(["--json", str(tmp_path / "rec.json")])
+
+
+@pytest.mark.parametrize("platform, platforms_own, in_the_bundle, exits", [
+    ("linux", "x86_64-linux", "x86_64-linux", rp.OK),
+    ("win32", "x86_64-win", "x86_64-win", rp.OK),
+    ("darwin", "MacOS", "x86_64-linux", rp.REFUSED),
+], ids=["linux build on linux", "windows build on windows",
+        "linux build on a mac"])
+def test_the_binary_the_record_hashes_is_the_one_this_platform_loads(
+        monkeypatch, capsys, tmp_path, platform, platforms_own, in_the_bundle,
+        exits):
+    """The other half of #1980: `plugin_identity` looked only under
+    `Contents/MacOS`, so a host holding a NATIVE build of the plugin loaded
+    it, qualified, and then found "no binary" in its own bundle. The
+    directories are the VST3 spec's, hardcoded here rather than read from
+    `rr.VST3_BINARY_DIR`, so the test is not the fixture agreeing with itself;
+    the production table is checked against them instead.
+
+    The third row is a bundle this platform cannot load, where "no binary
+    hash" is now a TRUE reason: a clean REFUSED, not a traceback. `sys.platform`
+    is pinned so each row means the same thing on every runner."""
+    assert rr.VST3_BINARY_DIR[platform] == f"Contents/{platforms_own}"
+    monkeypatch.setattr(sys, "platform", platform)
+    with_host(monkeypatch, _bundle_at(tmp_path, in_the_bundle))
+    out = tmp_path / "rec.json"
+    code = qmp.main(["--json", str(out)])
+    text = capsys.readouterr().out
+    rec = json.loads(out.read_text())
+    assert code == exits, text
+    if exits == rp.OK:
+        assert rec["outcome"] == "QUALIFIED"
+        assert rec["environment"]["plugin"]["binary_sha256"]
+        assert "NEXT:" in text and "REOPENS" not in text
+    else:
+        assert rec["outcome"] == "REFUSED" and "no binary hash" in rec["why"]
+        assert "NEXT:" not in text and "REOPENS" not in text
+
+
+# ===========================================================================
 # the host-scoped verdict table (#123)
 # ===========================================================================
 def test_the_pedalboard_verdict_sits_beside_the_dawdreamer_one(monkeypatch):
