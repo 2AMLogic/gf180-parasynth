@@ -26,9 +26,14 @@ exist prints nothing, and a shell redirect of nothing is a zero-byte .wav that
 every downstream tool will open. So status comes from the process, an empty
 result is a FAIL, a partial file never survives, and a size that disagrees with
 the index is a FAIL -- the file on disk must be the file the index describes.
+
+The catalog lookup, the member path check and the index are `tools/refaudio_local.py`'s
+(`pack_record`, `validate_members`, `load_indexed_sizes`), shared with the local
+and S3 routes (#1602): a copy of each here had drifted from them. Only the
+transfer is this tool's own.
 """
 from __future__ import annotations
-import json, os, pathlib, shlex, subprocess, sys
+import os, pathlib, shlex, subprocess, sys
 import refusal
 import refaudio_local as rl
 
@@ -41,11 +46,6 @@ class Refused(refusal.Refused, Exception):
     """A precondition is not met; nothing was attempted."""
 
 
-def known_archives() -> set[str]:
-    cat = json.loads((REFAUDIO / "catalog.json").read_text(encoding="utf-8"))
-    return {p["archive"] for p in cat["packs"]}
-
-
 def indexed_sizes(archive: str) -> dict[str, int] | None:
     """member path -> bytes, or None when this pack has no committed index."""
     return rl.read_indexed_sizes(REFAUDIO / "index" / (archive[:-4] + ".tsv"))
@@ -56,14 +56,10 @@ def preconditions(archive: str, members: list[str]) -> tuple[str, str]:
     if not ssh or not root:
         raise Refused("REFAUDIO_SSH / REFAUDIO_ROOT are not set: this host has no route to the "
                       "reference-audio storage. Open a `reference-audio` issue instead.")
-    if archive not in known_archives():
-        raise Refused(f"{archive!r} is not an archive in refaudio/catalog.json")
+    rl.pack_record(archive, refaudio=REFAUDIO)       # Refused if not in catalog
     if not members:
         raise Refused("no member paths given")
-    for m in members:
-        parts = pathlib.PurePosixPath(m).parts
-        if m.startswith("/") or ".." in parts or not parts:
-            raise Refused(f"member path must be a relative path inside the archive: {m!r}")
+    rl.validate_members(members)
     try:
         rl.refuse_part_collisions(members)
     except rl.Refused as why:
@@ -119,11 +115,13 @@ def main(argv: list[str]) -> int:
     archive, members = argv[0], argv[1:]
     try:
         ssh, root = preconditions(archive, members)
-    except Refused as why:
+        sizes = rl.load_indexed_sizes(archive, refaudio=REFAUDIO)   # Refused, never a traceback (#1602)
+    except refusal.Refused as why:
+        # The base class, not this module's Refused: the catalog and index
+        # lookups raise refaudio_local's, a sibling of this one's (#1602).
         print(f"REFUSED  {why}")
         return REFUSED
 
-    sizes = indexed_sizes(archive)
     if sizes is None:
         print(f"note     no committed index for {archive}: sizes will NOT be checked")
     cache, bad = REFAUDIO / "cache", 0

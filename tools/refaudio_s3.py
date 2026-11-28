@@ -27,12 +27,23 @@ THREE OUTCOMES, the same as the other two routes:
                      hashed to the SHA-256 committed in refaudio/catalog.json
     exit 1  FAIL     the storage was reachable and the transfer went wrong
     exit 2  REFUSED  a precondition is not met (no REFAUDIO_S3, no `aws`, unknown
-                     archive, no hash to vouch with, hash mismatch), nothing used
+                     archive, no hash to vouch with, size or hash mismatch, a
+                     `--prefix` nothing is under, a member name that is not a
+                     relative path inside the archive), nothing used
 
-A zip whose hash disagrees with the catalog is deleted and REFUSED, never
-extracted. LICENCE: the library is single-user; the cache is gitignored
+A zip whose size or hash disagrees with the catalog is deleted and REFUSED,
+never extracted. LICENCE: the library is single-user; the cache is gitignored
 (refaudio/cache/) and `--clean` removes it. By default the multi-GB archive is
 deleted as soon as the requested members are extracted (`--keep-archive` to keep).
+
+WHAT IS CHECKED BEFORE THE DOWNLOAD (#1602). Everything the committed catalog
+and index can answer: the archive is catalogued, the typed members and
+prefixes are safe paths, the index is readable, and a `--prefix` on an indexed
+pack has something under it. Only the archive itself cannot be vouched for
+until it is here. `--prefix` on a pack with NO committed index (such as
+808_loops_from_mars.zip) can only be enumerated from the archive's own
+directory, so that one -- and the path check on every name it expands to --
+happens after the download and before anything is written.
 """
 from __future__ import annotations
 import argparse, os, pathlib, shutil, subprocess, sys, zipfile
@@ -66,7 +77,7 @@ def aws_cmd(*args: str) -> list[str]:
 
 
 def preconditions(archive: str) -> tuple[str, dict]:
-    rec = rl.pack_record(archive)               # Refused if not in catalog
+    rec = rl.pack_record(archive, refaudio=REFAUDIO)               # Refused if not in catalog
     if not rec.get("archive_sha256"):
         raise Refused(f"catalog.json has no archive_sha256 for {archive}: cannot vouch for a download")
     root = s3_root()
@@ -75,13 +86,18 @@ def preconditions(archive: str) -> tuple[str, dict]:
     return root, rec
 
 
+def _is_catalogued(path: pathlib.Path, archive: str, rec: dict) -> bool:
+    """Size first, then hash: both must be the catalog's."""
+    return rl.size_mismatch(path, archive, rec) is None and rl.sha256_of(path) == rec["archive_sha256"]
+
+
 def download(root: str, archive: str, rec: dict, keep_hash_ok: bool = True) -> pathlib.Path:
-    """The verified archive path. Reuses a cached copy only if it hashes right.
-    A wrong-hash file is deleted and REFUSED, never handed on."""
+    """The verified archive path. Reuses a cached copy only if it is the catalogued
+    size AND hashes right. A cached file that is not is replaced, not trusted; a
+    download that is not is deleted and REFUSED, never handed on."""
     ARCHIVES.mkdir(parents=True, exist_ok=True)
     dest = ARCHIVES / archive
-    want = rec["archive_sha256"]
-    if dest.is_file() and rl.sha256_of(dest) == want:
+    if dest.is_file() and _is_catalogued(dest, archive, rec):
         return dest
     dest.unlink(missing_ok=True)
     part = dest.with_name(dest.name + ".part")
@@ -91,10 +107,14 @@ def download(root: str, archive: str, rec: dict, keep_hash_ok: bool = True) -> p
         if proc.returncode != 0:
             raise RuntimeError(f"aws s3 cp exited {proc.returncode}: "
                                f"{proc.stderr.decode('utf-8', 'replace').strip()[:300]}")
+        why = rl.size_mismatch(part, archive, rec)
+        if why:
+            raise Refused(f"{why}; deleted, nothing extracted")
         got = rl.sha256_of(part)
-        if got != want:
-            raise Refused(f"{archive} from S3 hashes to {got}, catalog.json says {want}: "
-                          "not the archive the catalogue describes; deleted, nothing extracted")
+        if got != rec["archive_sha256"]:
+            raise Refused(f"{archive} from S3 hashes to {got}, catalog.json says "
+                          f"{rec['archive_sha256']}: not the archive the catalogue describes; "
+                          "deleted, nothing extracted")
         part.replace(dest)
         return dest
     finally:
@@ -121,13 +141,15 @@ def main(argv: list[str]) -> int:
     try:
         if not args.archive or not args.members:
             raise Refused("need an archive and at least one member (or --prefix folder)")
-        for m in args.members:
-            parts = pathlib.PurePosixPath(m).parts
-            if m.startswith("/") or ".." in parts or not parts:
-                raise Refused(f"member path must be a relative path inside the archive: {m!r}")
+        rl.validate_members(args.members)
         if not args.prefix:
             rl.refuse_part_collisions(args.members)
         root, rec = preconditions(args.archive)
+        sizes = rl.load_indexed_sizes(args.archive, refaudio=REFAUDIO)
+        if args.prefix and sizes is not None:
+            # The committed index already knows the answer: refuse an empty
+            # selection HERE, not after a multi-GB download (#1602).
+            rl.resolve_prefix_from_index(args.archive, args.members, sizes)
         z = download(root, args.archive, rec)
     except Refused as why:
         print(f"REFUSED  {why}")
@@ -137,29 +159,13 @@ def main(argv: list[str]) -> int:
         return FAIL
 
     try:
-        sizes = rl.indexed_sizes(args.archive)
         with zipfile.ZipFile(z) as zf:
-            members = args.members
-            if args.prefix:
-                names = sorted(sizes) if sizes is not None else sorted(
-                    i.filename for i in zf.infolist() if not i.is_dir())
-                members = [p for p in names if any(p.startswith(q) for q in args.members)]
-                if not members:
-                    print(f"REFUSED  no member under any of {args.members!r}")
-                    return REFUSED
-                rl.refuse_part_collisions(members)
-            bad = 0
-            for m in members:
-                want = None if sizes is None else sizes.get(m)
-                why = rl.extract(zf, args.archive, m, want, CACHE)
-                if why:
-                    bad += 1
-                    print(f"FAIL     {m}\n         {why}")
-                else:
-                    print(f"FETCHED  refaudio/cache/{args.archive[:-4]}/{m}  "
-                          f"({'size matches index' if want is not None else 'archive SHA-256 verified'})")
-        print(f"{len(members) - bad} fetched, {bad} failed")
-        return FAIL if bad else FETCHED
+            return rl.extract_from_archive(zf, args.archive, args.members, sizes, CACHE,
+                                           prefixes=args.members if args.prefix else None,
+                                           unchecked="archive SHA-256 verified")
+    except zipfile.BadZipFile as why:
+        print(f"FAIL     {args.archive} hashes right but does not open as a zip: {why}")
+        return FAIL
     except Refused as why:
         print(f"REFUSED  {why}")
         return REFUSED

@@ -244,3 +244,38 @@ def test_an_incomplete_index_row_is_an_error_naming_the_field_not_a_size(lib, ro
     (lib / "index" / "pack_a.tsv").write_text(f"path\tbytes\n{row}\n", encoding="utf-8")
     with pytest.raises(ValueError, match=f"missing {field}"):
         rf.indexed_sizes(ARCHIVE)
+
+
+# --- START RED (#1602): an index that cannot be read is REFUSED, before ssh ----
+# The three outcomes are kept apart on purpose: a malformed index is a precondition
+# not met, so it is exit 2 and no network. It used to escape `main()` as a
+# ValueError / OSError traceback -- exit 1, which every caller reads as FAIL.
+
+@pytest.mark.parametrize("tsv", [
+    pytest.param(f"path\tbytes\n{MEMBER}\t\n", id="row-with-no-bytes"),
+    pytest.param(f"path\tbytes\n{'x' * 200000}\t12\n", id="row-over-the-csv-field-limit"),
+])
+def test_a_malformed_index_is_REFUSED_and_ssh_is_never_tried(lib, tmp_path, capsys, tsv):
+    (lib / "index" / "pack_a.tsv").write_text(tsv, encoding="utf-8")
+    assert rf.main([ARCHIVE, MEMBER]) == rf.REFUSED
+    assert "REFUSED" in capsys.readouterr().out
+    assert not (tmp_path / "ssh.log").exists()
+    assert cached(lib) == []
+
+
+def test_an_index_that_cannot_be_opened_is_REFUSED_and_ssh_is_never_tried(lib, tmp_path):
+    tsv = lib / "index" / "pack_a.tsv"
+    tsv.unlink()
+    tsv.mkdir()                                  # IsADirectoryError, whoever runs the test
+    assert rf.main([ARCHIVE, MEMBER]) == rf.REFUSED
+    assert not (tmp_path / "ssh.log").exists()
+    assert cached(lib) == []
+
+
+def test_the_member_path_check_comes_from_the_shared_helper(lib, monkeypatch):
+    """One path check for the three routes (`rl.validate_members`), not a copy in each."""
+    seen = []
+    monkeypatch.setattr(rf.rl, "validate_members", lambda ms: seen.append(ms))
+    monkeypatch.setenv("STUB_BYTES", str(SIZE))
+    assert rf.main([ARCHIVE, MEMBER]) == rf.FETCHED
+    assert seen == [[MEMBER]]

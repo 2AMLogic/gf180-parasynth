@@ -27,8 +27,12 @@ import refaudio_s3 as s3                                           # noqa: E402
 import refaudio_member_list as ml                                 # noqa: E402
 
 ARCH = "808_loops_from_mars.zip"
+INDEXED = "808-from-mars.zip"                     # the real catalog indexes this one
 MEMBER = "808 Loops From Mars/WAV/03. Bass Drum/4x4/x.wav"
 FOLDER = "808 Loops From Mars/WAV/03. Bass Drum/4x4"
+# A benign prefix's member whose name climbs four directories: out of the pack's
+# cache directory, out of refaudio/cache/, and into the cache's parent.
+ESCAPE = "808 Loops From Mars/WAV/../../../../escaped.wav"
 
 
 def _zip(payload: bytes = b"RIFFfake") -> bytes:
@@ -48,10 +52,8 @@ def env(monkeypatch, tmp_path):
     return tmp_path
 
 
-def _fake_aws(monkeypatch, data: bytes, rc: int = 0, want_sha: str | None = None):
-    sha = want_sha or hashlib.sha256(data).hexdigest()
-    real = s3.rl.pack_record
-    monkeypatch.setattr(s3.rl, "pack_record", lambda a: {**real(a), "archive_sha256": sha})
+def _serve_aws(monkeypatch, data: bytes, rc: int = 0) -> list:
+    """The fake `aws` on its own: every `s3 cp` writes `data`. Returns the calls."""
     calls = []
 
     def run(cmd, **kw):
@@ -61,6 +63,28 @@ def _fake_aws(monkeypatch, data: bytes, rc: int = 0, want_sha: str | None = None
         return subprocess.CompletedProcess(cmd, rc, b"", b"AccessDenied" if rc else b"")
     monkeypatch.setattr(s3.subprocess, "run", run)
     return calls
+
+
+def _fake_aws(monkeypatch, data: bytes, rc: int = 0, want_sha: str | None = None, **override):
+    """`_serve_aws`, with the real catalog's record for the archive re-vouched for
+    `data`: its hash AND its size, because `download()` checks `archive_bytes`
+    before hashing, as the local route always did (#1602). `override` edits the
+    record after that, to state something the download must disagree with."""
+    sha = want_sha or hashlib.sha256(data).hexdigest()
+    real = s3.rl.pack_record
+    monkeypatch.setattr(s3.rl, "pack_record", lambda a, **kw: {
+        **real(a, **kw), "archive_sha256": sha, "archive_bytes": len(data), **override})
+    return _serve_aws(monkeypatch, data, rc)
+
+
+def _escaped(tmp_path) -> list[pathlib.Path]:
+    return sorted(tmp_path.rglob("escaped.wav"))
+
+
+def _landed() -> list[pathlib.Path]:
+    """Every file under the cache: what a run actually wrote for the user. The
+    empty `_archives/` the download step creates is not a file."""
+    return sorted(p for p in s3.CACHE.rglob("*") if p.is_file()) if s3.CACHE.exists() else []
 
 
 def test_no_env_is_refused(monkeypatch, capsys):
@@ -234,6 +258,116 @@ def test_profile_is_passed(env, monkeypatch):
     calls = _fake_aws(monkeypatch, _zip())
     s3.main([ARCH, MEMBER])
     assert calls[0][:3] == ["aws", "--profile", "batch-runner-submit"]
+
+
+# ---------------------------------------------------------------------------
+# START RED (#1602). Each of these was a live defect against origin/main
+# 1023ef4b: the S3 route carried its own copies of the catalog, path, index and
+# zip-loop logic, and the copies had drifted from the local and ssh routes.
+# INDEXED is a pack the REAL catalog indexes (refaudio/index/808-from-mars.tsv),
+# so its committed index is what refuses or checks, exactly as a user's would.
+# ---------------------------------------------------------------------------
+
+def test_a_member_under_a_prefix_that_climbs_out_of_the_cache_is_REFUSED(env, monkeypatch, capsys):
+    """The path check ran on the typed prefix alone, never on the names it expanded
+    to. This archive was FETCHED with exit 0 and the file written OUTSIDE
+    refaudio/cache/. Every expanded name is now checked before anything is written,
+    so nothing lands at all -- not even the member that was fine."""
+    b = io.BytesIO()
+    with zipfile.ZipFile(b, "w") as z:
+        z.writestr(MEMBER, b"RIFFfake")
+        z.writestr(ESCAPE, b"x")
+    _fake_aws(monkeypatch, b.getvalue())
+    assert s3.main(["--prefix", ARCH, "808 Loops From Mars/WAV/"]) == s3.REFUSED
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "relative path inside the archive" in out and ESCAPE in out
+    assert _escaped(env) == []
+    assert _landed() == [] and not (s3.CACHE / ARCH[:-4]).exists()
+
+
+def test_an_indexed_prefix_nothing_is_under_is_refused_without_a_download(env, monkeypatch, capsys):
+    """The committed index already says the folder is empty; the multi-GB download
+    used to happen anyway, and the refusal came only after the hash."""
+    calls = _fake_aws(monkeypatch, _zip())
+    assert s3.main(["--prefix", INDEXED, "NoSuchFolder/"]) == s3.REFUSED
+    assert calls == [], "REFUSED must come before the download"
+    assert "no indexed member" in capsys.readouterr().out
+    assert not s3.ARCHIVES.exists()
+
+
+def test_a_malformed_index_is_REFUSED_without_a_download(env, monkeypatch, capsys):
+    """A row with no size used to escape as a ValueError traceback -- exit 1, read
+    as FAIL -- after the whole archive had been downloaded and hashed."""
+    calls = _fake_aws(monkeypatch, _zip())
+
+    def malformed(tsv):
+        raise ValueError("line 2: missing bytes")
+    monkeypatch.setattr(s3.rl, "read_indexed_sizes", malformed)
+    assert s3.main([INDEXED, MEMBER]) == s3.REFUSED
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "missing bytes" in out
+    assert calls == []
+
+
+def test_a_member_absent_from_a_committed_index_says_its_size_is_unchecked(env, monkeypatch, capsys):
+    """The local and ssh routes say this out loud; this route said nothing."""
+    _fake_aws(monkeypatch, _zip())
+    assert s3.main([INDEXED, MEMBER]) == s3.FETCHED
+    out = capsys.readouterr().out
+    assert f"note     {MEMBER!r} is not in the index: size will NOT be checked" in out
+    assert "archive SHA-256 verified" in out
+
+
+def test_an_indexed_member_is_checked_against_the_index(env, monkeypatch, capsys):
+    """The control for the size check on an indexed pack: it was already here, and
+    the consolidation must not lose it. (Passes on origin/main too.)"""
+    member, size = next(iter(s3.rl.indexed_sizes(INDEXED).items()))
+    b = io.BytesIO()
+    with zipfile.ZipFile(b, "w") as z:
+        z.writestr(member, b"x" * (size + 1))
+    _fake_aws(monkeypatch, b.getvalue())
+    assert s3.main([INDEXED, member]) == s3.FAIL
+    assert f"size {size + 1} != {size} in the index" in capsys.readouterr().out
+    assert not (s3.CACHE / INDEXED[:-4] / member).exists()
+
+
+def test_an_archive_whose_size_disagrees_with_the_catalog_is_REFUSED(env, monkeypatch, capsys):
+    """`archive_bytes` was ignored on this route; the local route refuses on it
+    before hashing."""
+    calls = _fake_aws(monkeypatch, _zip(), archive_bytes=1_000_000_000)
+    assert s3.main([ARCH, MEMBER]) == s3.REFUSED
+    assert f"REFUSED  {ARCH} is {len(_zip())} bytes, catalog.json says 1000000000" in capsys.readouterr().out
+    assert len(calls) == 1, "a download's size can only be checked once it is here"
+    assert not (s3.ARCHIVES / ARCH).exists()
+    assert _landed() == []
+
+
+def test_a_cached_archive_that_is_not_the_catalogued_size_is_downloaded_again(env, monkeypatch):
+    """The control for the cached-copy branch: a cached file is trusted only when
+    it is the size AND the hash the catalog records. (Passes on origin/main too:
+    the hash caught it; the size is the cheap half that comes first.)"""
+    calls = _fake_aws(monkeypatch, _zip())
+    s3.ARCHIVES.mkdir(parents=True)
+    (s3.ARCHIVES / ARCH).write_bytes(b"stale")
+    assert s3.main(["--keep-archive", ARCH, MEMBER]) == s3.FETCHED
+    assert len(calls) == 1
+    assert (s3.ARCHIVES / ARCH).read_bytes() == _zip()
+
+
+def test_an_archive_that_hashes_right_but_is_not_a_zip_is_FAIL(env, monkeypatch, capsys):
+    """BadZipFile used to escape `main()` as a traceback."""
+    calls = _fake_aws(monkeypatch, b"not a zip")
+    assert s3.main([ARCH, MEMBER]) == s3.FAIL
+    assert "does not open as a zip" in capsys.readouterr().out
+    assert len(calls) == 1 and not (s3.ARCHIVES / ARCH).exists()
+    assert _landed() == []
+
+
+def test_a_prefix_that_is_not_a_relative_path_is_refused_before_the_download(env, monkeypatch):
+    for bad in ["../etc/", "/abs/", ""]:
+        calls = _fake_aws(monkeypatch, _zip())
+        assert s3.main(["--prefix", ARCH, bad]) == s3.REFUSED
+        assert calls == []
 
 
 # ---------------------------------------------------------------------------
