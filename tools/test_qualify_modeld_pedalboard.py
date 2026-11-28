@@ -24,6 +24,7 @@ import pathlib
 import sys
 import types
 
+import numpy as np
 import pytest
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -217,6 +218,95 @@ def test_a_qualifying_run_writes_the_clip_only_when_asked(
     sr, y = wavfile.read(str(wav))
     assert sr == 48000 and len(y) > 0
     assert float(abs(y).max()) <= rq.PEAK_MAX
+
+
+def _poison_the_clip_after_build(monkeypatch):
+    """Everything `with_host` installs, plus one change made AFTER the rig has
+    qualified: from then on `render_note` -- which `main` calls once more, to
+    freeze the clip -- hands back its audio with one NaN in it. The
+    qualification's own renders are untouched, so the rig still qualifies and
+    the run still reaches the clip. That ordering is the case: `code` is
+    already `OK` when the audio goes bad."""
+    real_build = qmp.build
+
+    def build():
+        dev = real_build()
+        render = dev.render_note
+
+        def render_note(note, seconds=None):
+            y = np.array(render(note, seconds))
+            y[len(y) // 2] = np.nan
+            return y
+        dev.render_note = render_note
+        return dev
+    monkeypatch.setattr(qmp, "build", build)
+
+
+def test_a_non_finite_clip_is_REFUSED_not_an_uncaught_Refused(
+        monkeypatch, capsys, bundle, tmp_path):
+    """The rig qualifies, and the clip it renders afterwards is not audio: one
+    NaN. `refprofile.write_clip` refuses to freeze it -- as `refprofile.Refused`,
+    its own class, having caught the estimator's `NonFiniteAudio` (#134). Until
+    2026-11-28 (#1919) that refusal escaped `main` as a traceback, exit 1:
+    the `except rp.Refused` at the top of `main` wraps `build()` alone, and the
+    write sits below it, under `if code == OK`.
+
+    More than an exit code was wrong. `OK` had been decided, the `--json`
+    record is written at the very end, and so a refusal the tool had already
+    stated in its own vocabulary cost the record as well.
+
+    What is asserted, and why each one could otherwise pass by accident:
+
+      * `the clip that qualified:` and the record's `qualified` -- the run
+        reached the clip path. A rig refused earlier also exits 2.
+      * `refusing to freeze clip.wav` -- the refusal is `write_clip`'s, so the
+        REAL `write_clip` raised it; the audio, not a stub, was refused.
+      * no `.wav` and no `.part` -- nothing from the refused clip is on disk.
+      * `outcome` is `REFUSED` while `qualification` still says `qualified` --
+        the run's outcome is the exit code's, and what was measured is kept.
+      * no `NEXT:` -- nothing tells the operator to record `qualified=True`.
+      * the #122 note and not the no-apparatus one: this run loaded and
+        measured the plugin; the clip is what could not be frozen."""
+    with_host(monkeypatch, bundle)
+    _poison_the_clip_after_build(monkeypatch)
+    wav, out = tmp_path / "clip.wav", tmp_path / "rec.json"
+    code = qmp.main(["--wav", str(wav), "--json", str(out)])
+    text = capsys.readouterr().out
+    assert code == rp.REFUSED, text
+    assert "the clip that qualified:" in text
+    assert "REFUSED  refusing to freeze clip.wav" in text, text
+    assert "non-finite samples" in text, "require_finite's diagnosis must survive"
+    assert not wav.exists(), "a clip that was refused must not be on disk"
+    assert not wav.with_name(wav.name + ".part").exists()
+    assert "NEXT:" not in text, "a refused clip must not be recorded as qualified"
+    assert "REOPENS" in text and "stated NO-VERDICT" not in text, text
+    rec = json.loads(out.read_text())
+    assert rec["outcome"] == "REFUSED"
+    assert "refusing to freeze clip.wav" in rec["why"]
+    assert rec["qualification"]["verdict"] == "qualified"
+    assert rec["environment"]["host"] == "pedalboard"
+
+
+def test_a_plain_AssertionError_at_the_clip_write_still_escapes(
+        monkeypatch, capsys, bundle, tmp_path):
+    """The control for the test above, and the reason its guard is
+    `except rp.Refused` and nothing wider.
+
+    `InsufficientEvidence` subclasses `AssertionError`, so a guard wide enough
+    to "catch the family" is an `except AssertionError` or `except Exception`:
+    one that would also turn a BUG in the clip path into a REFUSED with a
+    record to its name. A plain `AssertionError` raised at the same call must
+    come out of `main` uncaught. At `sys.exit(main())` that is exit 1 and no
+    record, which is the honest report of a bug."""
+    with_host(monkeypatch, bundle)
+
+    def not_a_refusal(path, y, sr=rp.SR):
+        raise AssertionError("injected at the clip write: a bug, not a refusal")
+    monkeypatch.setattr(rp, "write_clip", not_a_refusal)
+    wav = tmp_path / "clip.wav"
+    with pytest.raises(AssertionError, match="injected at the clip write"):
+        qmp.main(["--wav", str(wav)])
+    assert not wav.exists()
 
 
 def test_an_uncorrectable_octave_exits_FAIL_and_reopens_122(
