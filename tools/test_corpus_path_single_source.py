@@ -110,6 +110,10 @@ CORPUS_ENV_TEST_FILES = {
     pathlib.PurePosixPath("tools/test_estimator_defects_refusal.py"): frozenset({"_probe"}),
     pathlib.PurePosixPath("tools/test_probe_tom_numerator_refusal.py"): frozenset({"_probe"}),
     pathlib.PurePosixPath("tools/test_audio_distance_floor_refusal.py"): frozenset({"_corpus_env"}),
+    # #1892: cymbal_mid's non-finite-audio refusal controls drive the tool as a
+    # subprocess and set the corpus location on the CHILD's environment, same
+    # shape as `_corpus_env` above. `_env` only; any other read still trips.
+    pathlib.PurePosixPath("tools/test_cymbal_mid_nonfinite_refusal.py"): frozenset({"_env"}),
 }
 SELF = pathlib.PurePosixPath("tools/test_corpus_path_single_source.py")
 ENV_NAMES = {"GF180_TR808_REFS", "TR808_REFS", "GF180_TR808_REFS_DEFAULT"}   # env-var keys
