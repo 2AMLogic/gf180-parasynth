@@ -673,3 +673,28 @@ def test_prereg_splits_are_disjoint_and_cover_the_toms():
     assert sorted(sp) == sorted(f"{s}{c}" for s in tp.TOMS for c in ("00", "25", "50", "75", "10"))
     assert set(pre["corpus"]["sha256"]) == {tp.take_rel(c) for c in sp}
     json.dumps(pre)
+
+
+# ---- a fit record that cannot be read is REFUSED, not a traceback (#1604) --
+def _fit(monkeypatch, tmp_path, capsys, record):
+    """`main(["fit", ...])` over a record under tmp_path. `provenance()` refuses
+    on a dirty tree, and that precondition is not what these controls are
+    about, so it is answered rather than exercised; the record and the reader
+    are real."""
+    monkeypatch.setattr(tp, "provenance", lambda refs: {"commit": "stub"})
+    rec, out = tmp_path / "measure.json", tmp_path / "fit.json"
+    rec.write_text(json.dumps(record))
+    code = tp.main(["fit", str(rec), "--out", str(out)])
+    return code, capsys.readouterr().out, out
+
+
+def test_a_fit_record_without_rows_is_refused(monkeypatch, tmp_path, capsys):
+    # #1604's own input: `KeyError: 'rows'`, exit 1, no --out, before the repair
+    code, out, written = _fit(monkeypatch, tmp_path, capsys, {})
+    assert code == 2 and "REFUSED" in out and "'rows'" in out
+    assert not written.exists()
+
+
+def test_a_fit_record_with_null_rows_is_refused(monkeypatch, tmp_path, capsys):
+    code, out, written = _fit(monkeypatch, tmp_path, capsys, {"rows": None})
+    assert code == 2 and "'rows'" in out and not written.exists()

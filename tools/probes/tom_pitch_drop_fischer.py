@@ -74,6 +74,7 @@ _REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[2] / "tools")
 if _REFUSAL_TOOLS not in sys.path:
     sys.path.append(_REFUSAL_TOOLS)
 import refusal  # noqa: E402
+import manifest as mf  # noqa: E402
 
 PREREG = ROOT / "docs" / "scorecard" / "tom-pitch-drop-592" / "prereg.json"
 KA_ARCHIVE = PREREG.parent / "rerun-8fedbf4" / "knownanswer.json"
@@ -1409,6 +1410,7 @@ def main(argv=None) -> int:
             res = {"rows": measure_rows(a.refs, load_prereg(), a.split)}
         elif a.cmd == "fit":
             rec = json.loads(a.record.read_text())
+            mf.require_keys(rec, "rows", f"the fit record at {a.record}", refused=Refused)
             res = fit(rec["rows"], load_prereg())
             res["from_record"] = {"path": str(a.record), "sha256": _sha(a.record)}
             print(json.dumps(_json(res), indent=1))
