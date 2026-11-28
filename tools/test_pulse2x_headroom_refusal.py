@@ -81,10 +81,11 @@ THE KNOWN ANSWERS for those, independent of anything this repository models:
                   grid point, `mix` at its first rectangle row -- after the
                   baseline rows and the candidate's saw rows, which measure:
                   the partial-output hazard again, so no report may remain.
-  a square wave   +/-1 LSB has an RMS of exactly 1 LSB, -90.31 dBFS, below
-                  mono_artifact_probe's -90.0 activity floor; +/-2 LSB is
-                  -84.29 dBFS, above it. The floor is read from the probe's
-                  module at the call, so moving that attribute moves the tool's.
+  a square wave   +/-1 LSB has an RMS of exactly 1 LSB, -90.31 dBFS, 0.3 dB
+                  below mono_artifact_probe's -90.0 activity floor; +/-1.1 LSB
+                  is -89.48 dBFS, 0.5 dB above it. The floor is read from the
+                  probe's module at the call, so moving that attribute moves
+                  the tool's.
   NaN             every IEEE comparison with NaN is False (#134), so a guard
                   written `level < floor` lets a NaN level through: the rule-8
                   adversary for the new floor, committed as a control.
@@ -254,10 +255,11 @@ DEFAULT_PRESET_REASON = ("mix preset default MIDI 60 gain 0.000: silent: -inf dB
 QUIET_Q15 = 28         # three-rect MIDI 60 at -74.7 dBFS on main @ 3e2534c7: 15 dB above the floor
 
 
-def _square(amp: int, n: int = 24_000) -> np.ndarray:
+def _square(amp, n: int = 24_000) -> np.ndarray:
     """A +/- amp LSB square: RMS exactly amp LSB by definition, so its level
-    is known from arithmetic alone."""
-    return np.where(np.arange(n) % 2, -amp, amp).astype(np.int64)
+    is known from arithmetic alone. An integer amplitude gives an integer
+    array, like VoiceFx.note's render; a fractional one stays float64."""
+    return np.where(np.arange(n) % 2, -amp, amp)
 
 
 @pytest.mark.parametrize("mode, reason", [("decimator", DECIMATOR_REASON), ("fine", FINE_REASON)])
@@ -281,21 +283,21 @@ def test_mix_floor_is_the_probe_activity_floor_on_a_known_level(monkeypatch):
     import measure_pulse2x_headroom as mph
     import mono_artifact_probe as mp
 
-    one_lsb = 20 * math.log10(1 / 32768)      # -90.31 dBFS
-    two_lsb = 20 * math.log10(2 / 32768)      # -84.29 dBFS
-    assert one_lsb < mp.SILENT_DBFS < two_lsb, "the known levels must straddle the probe's floor"
-    assert mph.output_dbfs(_square(2), "known level") == pytest.approx(two_lsb, rel=1e-12)
+    below = 20 * math.log10(1 / 32768)          # -90.31 dBFS: 0.3 dB under the floor
+    above = 20 * math.log10(1.1 / 32768)        # -89.48 dBFS: 0.5 dB above it
+    assert below < mp.SILENT_DBFS < above, "the two known levels must straddle the probe's floor"
+    assert mph.output_dbfs(_square(1.1), "known level") == pytest.approx(above, rel=1e-12)
     floor = f"{mp.SILENT_DBFS:.1f}"
     for what, out, level in (("silence", np.zeros(24_000, dtype=np.int64), "-inf"),
-                             ("one LSB", _square(1), f"{one_lsb:.1f}")):
+                             ("one LSB", _square(1), f"{below:.1f}")):
         with pytest.raises(refusal.Refused) as e:
             mph.output_dbfs(out, f"mix preset {what} MIDI 0 gain x")
         assert str(e.value) == (f"mix preset {what} MIDI 0 gain x: silent: {level} dBFS "
                                 f"< activity floor {floor} dBFS")
     with pytest.raises(refusal.Refused):      # NaN: `level < floor` is False for it (#134)
         mph.output_dbfs(np.full(24_000, np.nan), "known level")
-    monkeypatch.setattr(mp, "SILENT_DBFS", one_lsb - 1.0)
-    assert mph.output_dbfs(_square(1), "known level") == pytest.approx(one_lsb, rel=1e-12), (
+    monkeypatch.setattr(mp, "SILENT_DBFS", below - 1.0)
+    assert mph.output_dbfs(_square(1), "known level") == pytest.approx(below, rel=1e-12), (
         "the floor is the probe's attribute, read at the call: a constant retyped "
         "in the tool would not move with it")
 
