@@ -46,7 +46,9 @@ calls at `fpga/verify_live_midi.py:107` are two rows here, `:107` and
 
 The record carries the scanner's revision, roots, classification counts and
 all 90 candidate rows under `scanner`, so a reader can compare the traced rows
-with the census they came from without re-deriving either.
+with the census they came from without re-deriving either. Each traced row
+names its call by path and callee, and every call record names the enclosing
+function it was made in (`calls[].caller.fn`).
 
 **The tree, and what differs from `ebba993d`.** Every row in the committed
 record was taken on a clean tree; `sessions` names the commit of each group.
