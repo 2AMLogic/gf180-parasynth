@@ -838,6 +838,14 @@ def test_a_modified_traced_file_is_refused_before_any_run(tmp_path, capsys, monk
     assert "caller.py is modified" in rec["unresolved"]
     assert "caller.py is modified" in capsys.readouterr().out
 
+    prior = tmp_path / "prior.json"
+    prior.write_text(json.dumps({"revision": "0" * 40, "tree_dirty": False, "dirty_paths": [],
+                                 "scanner": {}, "traces": []}))
+    assert rct.main([*argv, "--into", str(prior)]) == 0
+    [row] = json.loads(out.read_text())["traces"]
+    assert row["runs"]["working"][0]["verdict"] == rct.UNRESOLVED
+    assert clean.STARTED == ["working"] and sys.modules["plan_tmp_repo"].STARTED == []
+
 
 def test_resolve_reports_each_site_and_exits_nonzero_when_one_is_refused(tmp_path, capsys, monkeypatch):
     """The current-state report: every ID with the line it was traced under and

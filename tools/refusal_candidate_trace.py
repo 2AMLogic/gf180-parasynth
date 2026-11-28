@@ -1012,9 +1012,10 @@ def main(argv=None) -> int:
         traces = [t for t in traces if t["id"] in set(a.only)]
     sys.path.insert(0, str(ROOT / "tools"))
     import refusal_sibling_scan as rss
-    out = {"revision": _git("rev-parse", "HEAD"), "tree_dirty": bool(_git("status", "--porcelain").strip()),
-           "dirty_paths": [ln[3:] for ln in _git("status", "--porcelain").splitlines()],
-           "scanner": _scan_json(rss), "traces": []}
+    status = _git("status", "--porcelain").splitlines()
+    dirty = [ln[3:] for ln in status]
+    out = {"revision": _git("rev-parse", "HEAD"), "tree_dirty": any(ln.strip() for ln in status),
+           "dirty_paths": dirty, "scanner": _scan_json(rss), "traces": []}
     if a.into and a.into.exists():
         prior = json.loads(a.into.read_text())
         keep = [t for t in prior["traces"] if t["id"] not in {s["id"] for s in traces}]
@@ -1026,7 +1027,7 @@ def main(argv=None) -> int:
         module.set_scratch(workroot)
     cache: dict = {}
     all_wrap = sorted({w for t in module.TRACES for w in t["wrap"]})
-    refused = _dirty_sites(traces, out["dirty_paths"])
+    refused = _dirty_sites(traces, dirty)
     refused.update(resolve_sites(traces))
     for spec in traces:
         print(f"== {spec['id']}", flush=True)
