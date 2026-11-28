@@ -294,17 +294,26 @@ def test_a_handler_naming_only_valueerror_guards_when_the_table_says_so(monkeypa
 
 # --- the known match: the scratch census's 0 was wrong here -------------------
 
-def _manifest_line() -> int:
-    hits = [n for n, line in enumerate((TOOLS / "manifest.py").read_text().splitlines(), 1)
-            if "json.loads(path.read_text())" in line]
-    assert len(hits) == 1, hits
-    return hits[0]
+def _manifest_sites() -> list:
+    """The census sites inside `tools/manifest.py::load_json_refused`, located
+    by the function's AST span -- not by grepping source text, which pinned the
+    zero-argument `read_text()` and broke when #1849 added `encoding=`."""
+    import ast
+    src = (TOOLS / "manifest.py").read_text()
+    fns = [n for n in ast.walk(ast.parse(src))
+           if isinstance(n, ast.FunctionDef) and n.name == "load_json_refused"]
+    assert len(fns) == 1, [f.lineno for f in fns]
+    fn = fns[0]
+    return [s for s in jc.find_sites("tools/manifest.py", src)
+            if fn.lineno <= s.line <= fn.end_lineno]
 
 
-def test_the_manifest_load_json_refused_site_is_counted_and_is_bare():
-    sites = {s.line: s for s in jc.find_sites("tools/manifest.py", (TOOLS / "manifest.py").read_text())}
-    s = sites[_manifest_line()]
-    assert (s.path, s.read, s.guard) == ("tools/manifest.py", "read_text", None)
+def test_the_manifest_load_json_refused_site_is_counted():
+    # `guard` is deliberately not pinned on the live file: #2059 adds an
+    # `except OSError` there, and FIXTURE (S1-S14) already pins bare-vs-guarded.
+    sites = _manifest_sites()
+    assert len(sites) == 1, sites
+    assert (sites[0].path, sites[0].read) == ("tools/manifest.py", "read_text")
 
 
 def test_that_control_goes_red_when_the_finder_sees_nothing(monkeypatch):
