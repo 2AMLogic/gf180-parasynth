@@ -390,66 +390,75 @@ def main(argv=None) -> int:
     ap.add_argument("--no-grid", action="store_true", help="skip the brute-force check of the bound")
     a = ap.parse_args(argv)
 
-    taus = (dict(zip(("low", "decay", "short"), (float(x) for x in a.taus.split(","))))
-            if a.taus else None)
+    try:
+        taus = (dict(zip(("low", "decay", "short"), (float(x) for x in a.taus.split(","))))
+                if a.taus else None)
 
-    ok, lines = lt.check()
-    if not ok:
-        print("\n".join(lines))
-        print("REFUSED: the shared instrument's own controls do not pass")
-        return REFUSED            # was 1: a refusal, not a mismatch -- no result exists (#1789)
+        ok, lines = lt.check()
+        if not ok:
+            print("\n".join(lines))
+            print("REFUSED: the shared instrument's own controls do not pass")
+            return REFUSED        # was 1: a refusal, not a mismatch -- no result exists (#1789)
 
-    e = band_energies()
-    res = {"taus": taus or TAU_S, "energies": e, "bound": bound(e), "controls_pass": ok}
-    print("each band's documented cascade, dB relative to its OWN energy in Ln:")
-    print(f"  {'band':7s} {'M (808)':>9s} {'M (cand3)':>10s} {'tone moves M':>13s}   {'Mn (808)':>9s}")
-    for band, w in e.items():
-        print(f"  {band:7s} {w[f'ref_M_re_{REF}']:9.2f} {w[f'cand3_M_re_{REF}']:10.2f} "
-              f"{w['tone_shape_moves_M_by']:+13.2f}   {w[f'ref_Mn_re_{REF}']:9.2f}")
-    print(f"\nthe tone stage's SHAPE moves M by at most "
-          f"{max(abs(w['tone_shape_moves_M_by']) for w in e.values()):.2f} dB relative to Ln. "
-          f"It is not the difference.")
-    for name, b in res["bound"].items():
-        print(f"  no mix of the three can beat {name} re {REF} = {b['bound_db']:+.2f} dB "
-              f"(the {b['argmax_band']} band's own ratio)")
-    if not a.no_grid:
-        res["bound_grid"] = bound_grid(e)
-        for name, g in res["bound_grid"].items():
-            print(f"    brute force over the balance agrees for {name}: {g['best_db']:+.2f} dB")
+        e = band_energies()
+        res = {"taus": taus or TAU_S, "energies": e, "bound": bound(e), "controls_pass": ok}
+        print("each band's documented cascade, dB relative to its OWN energy in Ln:")
+        print(f"  {'band':7s} {'M (808)':>9s} {'M (cand3)':>10s} {'tone moves M':>13s}   {'Mn (808)':>9s}")
+        for band, w in e.items():
+            print(f"  {band:7s} {w[f'ref_M_re_{REF}']:9.2f} {w[f'cand3_M_re_{REF}']:10.2f} "
+                  f"{w['tone_shape_moves_M_by']:+13.2f}   {w[f'ref_Mn_re_{REF}']:9.2f}")
+        print(f"\nthe tone stage's SHAPE moves M by at most "
+              f"{max(abs(w['tone_shape_moves_M_by']) for w in e.values()):.2f} dB relative to Ln. "
+              f"It is not the difference.")
+        for name, b in res["bound"].items():
+            print(f"  no mix of the three can beat {name} re {REF} = {b['bound_db']:+.2f} dB "
+                  f"(the {b['argmax_band']} band's own ratio)")
+        if not a.no_grid:
+            res["bound_grid"] = bound_grid(e)
+            for name, g in res["bound_grid"].items():
+                print(f"    brute force over the balance agrees for {name}: {g['best_db']:+.2f} dB")
 
-    if a.result.is_file():
-        res["gap"] = gap(json.loads(a.result.read_text()))
-        print(f"\nagainst the machine ({res['gap']['n_808']} Fischer settings, "
-              f"{res['gap']['window']} window):")
-        for name, g in res["gap"]["bands"].items():
-            print(f"  {name} re {REF}: chain bound {g['chain_bound_db']:+.2f} dB, 808 measured "
-                  f"{g['measured_min']:+.2f}..{g['measured_max']:+.2f} "
-                  f"(median {g['measured_median']:+.2f}) -> the chain is SHORT by "
-                  f"{g['gap_median_db']:.2f} dB at the median and {g['gap_min_db']:.2f} dB at the "
-                  f"closest setting; {g['n_808_above_bound']}/{res['gap']['n_808']} settings "
-                  f"exceed the bound")
-            print(f"     ours: shipped {g.get('shipped')} dB, candidate {g.get('candidate')} dB")
-    else:
-        print(f"\n(no measurement at {a.result}; the energy gap is not reported)")
+        if a.result.is_file():
+            res["gap"] = gap(json.loads(a.result.read_text()))
+            print(f"\nagainst the machine ({res['gap']['n_808']} Fischer settings, "
+                  f"{res['gap']['window']} window):")
+            for name, g in res["gap"]["bands"].items():
+                print(f"  {name} re {REF}: chain bound {g['chain_bound_db']:+.2f} dB, 808 measured "
+                      f"{g['measured_min']:+.2f}..{g['measured_max']:+.2f} "
+                      f"(median {g['measured_median']:+.2f}) -> the chain is SHORT by "
+                      f"{g['gap_median_db']:.2f} dB at the median and {g['gap_min_db']:.2f} dB at the "
+                      f"closest setting; {g['n_808_above_bound']}/{res['gap']['n_808']} settings "
+                      f"exceed the bound")
+                print(f"     ours: shipped {g.get('shipped')} dB, candidate {g.get('candidate')} dB")
+        else:
+            print(f"\n(no measurement at {a.result}; the energy gap is not reported)")
 
-    res["sweep"] = sweep(which="ref", taus=taus)
-    res["verdict"] = verdict(res["sweep"])
-    print("\nand the decay: rho of a LINEAR mix vs the DECAY band's level re the low band")
-    for r in res["sweep"]:
-        s = "; ".join(f"{k}: {v}" for k, v in r["refused"].items())
-        print(f"  {r['decay_rel_db']:+6.1f} dB   rho_M(-10) {r['rho_M_-10']}"
-              + (f"   REFUSED {s}" if s else f"   rho_Mn(-10) {r['rho_Mn_-10']}"))
-    v = res["verdict"]
-    print(f"\nREFUSED to name a level: {v['refused']}" if v["reaches_target_at_db"] is None else
-          f"\nreaches the 808's weakest rho_M(-10) at {v['reaches_target_at_db']:+.1f} dB")
+        res["sweep"] = sweep(which="ref", taus=taus)
+        res["verdict"] = verdict(res["sweep"])
+        print("\nand the decay: rho of a LINEAR mix vs the DECAY band's level re the low band")
+        for r in res["sweep"]:
+            s = "; ".join(f"{k}: {v}" for k, v in r["refused"].items())
+            print(f"  {r['decay_rel_db']:+6.1f} dB   rho_M(-10) {r['rho_M_-10']}"
+                  + (f"   REFUSED {s}" if s else f"   rho_Mn(-10) {r['rho_Mn_-10']}"))
+        v = res["verdict"]
+        print(f"\nREFUSED to name a level: {v['refused']}" if v["reaches_target_at_db"] is None else
+              f"\nreaches the 808's weakest rho_M(-10) at {v['reaches_target_at_db']:+.1f} dB")
 
-    res["commit"] = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT,
-                                   capture_output=True, text=True).stdout.strip()
-    res["sources_dirty"] = subprocess.run(["git", "diff", "--quiet", "HEAD", "--", "model", "tools"],
-                                          cwd=ROOT).returncode != 0
-    if a.out:
-        a.out.parent.mkdir(parents=True, exist_ok=True)
-        a.out.write_text(json.dumps(res, indent=1, default=float) + "\n")
+        res["commit"] = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT,
+                                       capture_output=True, text=True).stdout.strip()
+        res["sources_dirty"] = subprocess.run(["git", "diff", "--quiet", "HEAD", "--", "model", "tools"],
+                                              cwd=ROOT).returncode != 0
+        if a.out:
+            a.out.parent.mkdir(parents=True, exist_ok=True)
+            a.out.write_text(json.dumps(res, indent=1, default=float) + "\n")
+    except refusal.Refused as exc:
+        # the base, not this module's own class: the werner_fig4 artifact and
+        # `run_case.prepare` raise their modules' Refused, siblings of ours, and
+        # before this handler both left main as an exit-1 traceback (#1878) --
+        # a refusal read as a measured FAIL. An implementation error is not a
+        # refusal and is not caught here.
+        print(f"REFUSED: {exc}", file=sys.stderr)
+        return REFUSED
     return 0
 
 

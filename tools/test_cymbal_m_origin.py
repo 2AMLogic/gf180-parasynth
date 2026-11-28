@@ -15,11 +15,18 @@ put it -- so what has to be tested is the bound, not a fit:
     sweep reports the garbage that motivated the refusal;
   * that `main` answers a failed shared control with the declared REFUSED
     status, not with a measured FAIL (#1789), and that passing controls do
-    not refuse.
+    not refuse;
+  * that a refusal RAISED inside `main` -- the werner_fig4 artifact absent
+    or without its level corner (`cymbal_tone_realisation.Refused`), this
+    module's own, or `run_case.prepare`'s from the sweep -- is caught at the
+    CLI boundary as REFUSED, not rendered as an exit-1 traceback (#1878), and
+    that an implementation error is not.
 """
 import json
 import math
+import os
 import pathlib
+import subprocess
 import sys
 
 import numpy as np
@@ -239,6 +246,137 @@ def test_control_passing_controls_do_not_refuse(monkeypatch, capsys, tmp_path):
     pass -- and `main` runs through to PASS without printing the refusal."""
     monkeypatch.setattr(mo.lt, "check", lambda: (True, []))
     rc = mo.main(["--no-grid", "--result", str(tmp_path / "no-such-result.json")])
-    out = capsys.readouterr().out
+    cap = capsys.readouterr()
     assert rc == PASS
-    assert "REFUSED: the shared instrument's own controls do not pass" not in out
+    assert "REFUSED: the shared instrument's own controls do not pass" not in cap.out
+    assert cap.err == "", "a clean run puts nothing on stderr"
+
+
+# --------------------------------------------------------------------------
+# a refusal RAISED inside main: caught at the CLI boundary, not a traceback
+# (#1878)
+# --------------------------------------------------------------------------
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+#: how `cymbal_tone_realisation.level_corner_hz` is made to refuse. Both drive
+#: its REAL raise sites -- the artifact file absent, and present without its
+#: level corner -- against nothing but a path under tmp_path. The function
+#: reads `wf.ARTIFACT` when it is called, so pointing that attribute at
+#: another path is pointing the artifact path; the CLI has no flag for it.
+_LEVEL_CORNER_ABSENCES = ("file-absent", "key-missing")
+
+
+def _refuse_level_corner(how, monkeypatch, tmp_path) -> str:
+    """Make `level_corner_hz` refuse and return what its reason must say."""
+    if how == "file-absent":
+        p = tmp_path / "no-such-werner_fig4.json"
+        monkeypatch.setattr(mo.tr.wf, "ARTIFACT", p)
+        return f"{p} is absent"
+    assert how == "key-missing", how
+    p = tmp_path / "werner_fig4.json"
+    p.write_text(json.dumps({"level_stage": {}}))
+    monkeypatch.setattr(mo.tr.wf, "ARTIFACT", p)
+    return "carries no level_stage.one_pole_corner_hz"
+
+
+def _refused_argv(tmp_path):
+    """`--no-grid`, so the run stops at the first thing measured after the
+    shared controls pass, plus a record path a refused run must not write."""
+    return (["--no-grid", "--result", str(tmp_path / "no-such-result.json"),
+             "--out", str(tmp_path / "o.json")], tmp_path / "o.json")
+
+
+def _raising(exc):
+    def plant(*a, **k):
+        raise exc
+    return plant
+
+
+@pytest.mark.parametrize("how", _LEVEL_CORNER_ABSENCES)
+def test_main_maps_a_realisation_refusal_to_refused_2(how, tmp_path, capsys, monkeypatch):
+    """Red-first on main @ ff1532c5 (2026-11-28): with the artifact absent
+    `main` returned nothing -- `cymbal_tone_realisation.Refused` left it
+    uncaught through band_energies, and the CLI exited 1 on a traceback, which
+    `tools/run_all.py` reads as a measured FAIL (#1878). The file had no
+    `except` at all: `lt.check()` is the real one here and passes, and the
+    refusal is raised by the first thing measured after it. The classes are
+    siblings, so only the base catches it."""
+    why = _refuse_level_corner(how, monkeypatch, tmp_path)
+    argv, out = _refused_argv(tmp_path)
+    rc = mo.main(argv)
+    err = capsys.readouterr().err
+    assert rc == REFUSED
+    assert "REFUSED:" in err and why in err, err
+    assert not out.exists(), "a run that measured nothing leaves no record"
+
+
+def test_main_process_exit_status_is_refused_2_with_the_artifact_absent(tmp_path):
+    """Through a real interpreter: the exit status a batch runner sees, and
+    no traceback on its stderr. `main` and the raise site are the real ones;
+    only the artifact path is redirected."""
+    absent = tmp_path / "no-such-werner_fig4.json"
+    out = tmp_path / "o.json"
+    code = ("import pathlib, sys\n"
+            "import cymbal_tone_realisation as tr\n"
+            "import cymbal_m_origin as mo\n"
+            "tr.wf.ARTIFACT = pathlib.Path(sys.argv[1])\n"
+            "raise SystemExit(mo.main(['--no-grid', '--result', sys.argv[2],\n"
+            "                          '--out', sys.argv[3]]))\n")
+    env = dict(os.environ, PYTHONPATH=os.pathsep.join(str(ROOT / d) for d in ("tools", "model")))
+    p = subprocess.run([sys.executable, "-c", code, str(absent),
+                        str(tmp_path / "no-such-result.json"), str(out)],
+                       check=False, capture_output=True, text=True, timeout=300, env=env)
+    assert p.returncode == REFUSED, p.stderr[-400:]
+    assert "REFUSED:" in p.stderr and f"{absent} is absent" in p.stderr, p.stderr[-400:]
+    assert "Traceback" not in p.stderr, p.stderr[-400:]
+    assert not out.exists()
+
+
+def test_main_maps_its_own_controls_did_not_pass_refusal_to_refused_2(tmp_path, capsys):
+    """This module's own class, from its real raise site: `measured_energies`
+    refuses a result file whose own controls did not pass, and `main` reaches
+    it through `gap` once `--result` names a file. It escaped the same way
+    before the fix, after the bound table had already been printed."""
+    bad = tmp_path / "low-tail.json"
+    bad.write_text(json.dumps({"controls_pass": False, "windows": {}}))
+    out = tmp_path / "o.json"
+    rc = mo.main(["--no-grid", "--result", str(bad), "--out", str(out)])
+    err = capsys.readouterr().err
+    assert rc == REFUSED
+    assert "REFUSED: this result file's own controls did not pass" in err, err
+    assert not out.exists()
+
+
+def test_main_maps_the_sweeps_prepare_refusal_to_refused_2(tmp_path, capsys, monkeypatch):
+    """The third census site, `run_case.prepare` in `mixture` (:336), by
+    execution rather than by reading the call graph: `main` -> `sweep` ->
+    `mixture` -> `prepare`. A zero time constant makes the envelope NaN at
+    t = 0 and the peak NaN, so the record `mixture` hands `prepare` is
+    entirely non-finite and `prepare` refuses it -- a third module's class,
+    `preparation_contract.Refused`. On main @ ff1532c5 it left `main` uncaught
+    through `sweep` (:347). The mixture prepends a true lead, so the
+    onset-cut refusal cannot be the one that fires here. The shared controls
+    are patched: the refusal is the point, not the instrument."""
+    monkeypatch.setattr(mo.lt, "check", lambda: (True, []))
+    argv, out = _refused_argv(tmp_path)
+    with np.errstate(divide="ignore", invalid="ignore"):   # the non-finite arithmetic is the input
+        rc = mo.main([*argv, "--taus", "0,0.38,0.02"])
+    err = capsys.readouterr().err
+    assert rc == REFUSED
+    assert "REFUSED:" in err and "non-finite" in err, err
+    assert not out.exists()
+
+
+def test_a_non_refusal_error_is_not_relabelled_refused(monkeypatch, capsys, tmp_path):
+    """Rule 8, the input that would defeat the guard: an implementation error
+    is an EXECUTION ERROR, never a refusal (tools/refusal.py), so the handler
+    is `except refusal.Refused` and not `except Exception`. Passes before the
+    fix as well -- there was no handler to defeat -- and is here to go red
+    if one is ever widened."""
+    monkeypatch.setattr(mo.lt, "check", lambda: (True, []))
+    monkeypatch.setattr(mo, "band_energies",
+                        _raising(ValueError("an implementation error, not a precondition")))
+    argv, _ = _refused_argv(tmp_path)
+    with pytest.raises(ValueError, match="an implementation error"):
+        mo.main(argv)
+    assert "REFUSED" not in capsys.readouterr().err
