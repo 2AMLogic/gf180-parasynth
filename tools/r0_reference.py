@@ -63,6 +63,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 for _p in ("fpga", "model", "rtl-sketch", "audition", "tools", "fpga/release"):
     sys.path.insert(0, str(ROOT / _p))
 import capture_commands
+import manifest as mf
 import refusal
 
 MANIFEST = capture_commands.MANIFESTS["r0"]
@@ -369,7 +370,9 @@ def render_one(key: str, spec: dict, manifest: dict, out: pathlib.Path,
                                   tail_frames=int(tail_s * SR), timeout_s=4 * 3600)
     if run is None:
         raise Refused(f"{key}: the replay did not run (see its output)")
-    rid = json.loads((work / "replay" / "run_identity.json").read_text())
+    rid_path = work / "replay" / "run_identity.json"
+    rid = json.loads(rid_path.read_text())
+    mf.require_keys(rid, "identity", f"the replay's run identity at {rid_path}", refused=Refused)
     probs = identity_problems(rid, manifest)
     if probs:
         raise Refused(f"{key}: the replay did not compile the image's sources: "
