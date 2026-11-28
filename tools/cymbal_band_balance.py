@@ -215,10 +215,6 @@ def filter_record(path: pathlib.Path | None = None) -> dict:
             curves, _blob = wf.from_artifact(p)
         except wf.Refused as exc:
             raise Refused(f"{p} is not a readable werner_fig4 record: {exc}") from None
-        except (json.JSONDecodeError, UnicodeDecodeError, KeyError, TypeError,
-               AttributeError) as exc:
-            raise Refused(f"{p} is not a readable werner_fig4 record "
-                          f"({type(exc).__name__}: {exc})") from None
         need = {"Hbp1", "Hbp2", "Hh1", "Hh2", "Hh3"}
         missing = need - set(curves)
         if missing:

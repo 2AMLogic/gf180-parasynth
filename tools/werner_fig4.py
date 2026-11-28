@@ -896,12 +896,24 @@ def from_artifact(path: pathlib.Path = ARTIFACT):
     """The digitised curves without the paper. The PDF is not redistributable
     and CI has no network, so the gate has to be runnable from the committed
     evidence -- a gate that only runs where the PDF happens to be present is a
-    gate that never runs."""
+    gate that never runs.
+
+    A record that cannot be read or shaped is REFUSED here, naming the file
+    (#1939): `main()` and `werner_fig9.check()` handle `Refused` alone, and
+    met a bare JSONDecodeError, KeyError or TypeError instead."""
     if not path.exists():
         raise Refused(f"{path} is absent; run --json with the paper present")
-    blob = json.loads(path.read_text())
-    return {k: (np.array(v["hz"]), np.array(v["db"]))
-            for k, v in blob["curves"].items()}, blob
+    try:
+        blob = json.loads(path.read_text())
+        curves = {k: (np.array(v["hz"]), np.array(v["db"]))
+                  for k, v in blob["curves"].items()}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+        raise Refused(
+            f"{path} could not be read as a werner_fig4 record "
+            f"({type(exc).__name__}: {exc}) -- a partial write or a wrong file; "
+            f"restore a tracked one with `git checkout -- {path}`, or re-derive "
+            f"it with --from-pdf --json") from exc
+    return curves, blob
 
 
 def load_pdf(path: pathlib.Path, allow_download: bool) -> bytes:
