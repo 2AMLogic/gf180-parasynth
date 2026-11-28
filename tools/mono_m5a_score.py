@@ -11,6 +11,7 @@ The model WAV is the record's artefact (`audio`) and an input to no metric.
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import math
 import pathlib
@@ -182,8 +183,9 @@ def _load_i2s_candidate(path, required_samples: int):
 
     candidate_path = pathlib.Path(path)
     try:
-        digest = hashlib.sha256(candidate_path.read_bytes()).hexdigest()
-        sr, candidate = wavfile.read(candidate_path)
+        candidate_bytes = candidate_path.read_bytes()
+        digest = hashlib.sha256(candidate_bytes).hexdigest()
+        sr, candidate = wavfile.read(io.BytesIO(candidate_bytes))
     except OSError as exc:
         raise Refused(f"decoded I2S WAV is unavailable: {exc}") from exc
     if sr != SR or candidate.dtype != np.int16 or candidate.ndim != 1:
@@ -295,8 +297,11 @@ def load_reference(case_id="M5A", *, manifest_path=None,
             # Preserve the test/CLI override used to exercise corrupt M5A references.
             manifest_path = MANIFEST
     manifest_path = pathlib.Path(manifest_path)
-    manifest = json.loads(manifest_path.read_text())
-    manifest_digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    # One read: the parsed manifest and its reported digest are the same bytes
+    # (a file replaced between two reads must not pair content with a digest).
+    manifest_bytes = manifest_path.read_bytes()
+    manifest = json.loads(manifest_bytes)
+    manifest_digest = hashlib.sha256(manifest_bytes).hexdigest()
     if manifest.get("case_id") != case_id:
         raise Refused(f"frozen manifest identifies as {manifest.get('case_id')!r}, expected {case_id}")
     import reference_suites
@@ -307,14 +312,15 @@ def load_reference(case_id="M5A", *, manifest_path=None,
     audio_meta = manifest["audio"]
     ref_path = reference_override or (manifest_path.parent / audio_meta["file"])
     try:
-        digest = hashlib.sha256(ref_path.read_bytes()).hexdigest()
+        audio_bytes = ref_path.read_bytes()
     except OSError as exc:
         raise Refused(f"cannot read frozen {case_id} audio {ref_path.name}: {exc}") from exc
+    digest = hashlib.sha256(audio_bytes).hexdigest()
     if digest != audio_meta["sha256"]:
         raise Refused(f"frozen {case_id} Mini V3 audio hash mismatch")
     from scipy.io import wavfile
 
-    sr, ref_pcm = wavfile.read(ref_path)
+    sr, ref_pcm = wavfile.read(io.BytesIO(audio_bytes))
     if sr != SR or ref_pcm.dtype != np.float32 or ref_pcm.ndim != 1:
         raise Refused(f"{case_id} reference WAV is not mono float32 at 48 kHz")
     ref_pcm = ref_pcm.astype(np.float64)

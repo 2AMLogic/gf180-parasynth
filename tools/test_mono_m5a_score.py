@@ -495,3 +495,73 @@ def test_selected_engine_voice_passes_blep_through_and_defaults_on():
     profile = score.engine_configuration("selected")
     assert score._voice_for_engine(profile).blep is True
     assert score._voice_for_engine(profile, blep=False).blep is False
+
+
+def _swap_after_first_read(monkeypatch, target, decoy_bytes):
+    """Replace `target` with `decoy_bytes` right after the first read of it."""
+    real_bytes, real_text = pathlib.Path.read_bytes, pathlib.Path.read_text
+    state = {"swapped": False}
+
+    def swap(path):
+        if pathlib.Path(path) == target and not state["swapped"]:
+            state["swapped"] = True
+            target.write_bytes(decoy_bytes)
+
+    def read_bytes(self):
+        data = real_bytes(self)
+        swap(self)
+        return data
+
+    def read_text(self, *args, **kwargs):
+        data = real_text(self, *args, **kwargs)
+        swap(self)
+        return data
+
+    monkeypatch.setattr(pathlib.Path, "read_bytes", read_bytes)
+    monkeypatch.setattr(pathlib.Path, "read_text", read_text)
+    return state
+
+
+def _m5a_copy(tmp_path):
+    manifest = json.loads(score.MANIFEST.read_text())
+    (tmp_path / manifest["audio"]["file"]).write_bytes(
+        (score.MANIFEST.parent / manifest["audio"]["file"]).read_bytes())
+    path = tmp_path / "manifest.json"
+    path.write_bytes(score.MANIFEST.read_bytes())
+    return path, manifest
+
+
+def test_load_reference_manifest_content_and_digest_come_from_one_read(tmp_path, monkeypatch):
+    # #1586 review: a file replaced between the parse and the hash must not pair
+    # one file's content with another's digest.
+    path, manifest = _m5a_copy(tmp_path)
+    original = path.read_bytes()
+    decoy = json.dumps({**manifest, "case_id": "M5B"}).encode()
+    state = _swap_after_first_read(monkeypatch, path, decoy)
+    reference = score.load_reference("M5A", manifest_path=path)
+    assert state["swapped"]
+    assert reference.manifest["case_id"] == "M5A"
+    assert reference.manifest_sha256 == hashlib.sha256(original).hexdigest()
+
+
+def test_load_reference_audio_content_and_digest_come_from_one_read(tmp_path, monkeypatch):
+    from scipy.io import wavfile
+
+    path, manifest = _m5a_copy(tmp_path)
+    audio = tmp_path / manifest["audio"]["file"]
+    silent = tmp_path / "silent.wav"
+    wavfile.write(silent, score.SR, np.zeros(int(manifest["audio"]["samples"]), np.float32))
+    state = _swap_after_first_read(monkeypatch, audio, silent.read_bytes())
+    reference = score.load_reference("M5A", manifest_path=path)
+    assert state["swapped"]
+    assert np.count_nonzero(reference.pcm) > 0
+    assert reference.audio_sha256 == manifest["audio"]["sha256"]
+
+
+def test_load_reference_accepts_a_manifest_with_a_utf8_bom(tmp_path):
+    # Attack-bias parsed bytes, so a BOM was accepted before it used this loader.
+    path, manifest = _m5a_copy(tmp_path)
+    path.write_bytes(b"\xef\xbb\xbf" + path.read_bytes())
+    reference = score.load_reference("M5A", manifest_path=path)
+    assert reference.manifest == manifest
+    assert reference.manifest_sha256 == hashlib.sha256(path.read_bytes()).hexdigest()

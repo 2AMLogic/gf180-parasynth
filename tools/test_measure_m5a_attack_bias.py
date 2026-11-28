@@ -76,3 +76,14 @@ def test_attack_bias_cli_maps_a_shared_refusal_to_exit_two(tmp_path, monkeypatch
     assert ab.main(["--manifest", str(manifest), "--out", "never-written.json"]) == 2
     assert "finite-sample" in capsys.readouterr().out
     assert not (tmp_path / "never-written.json").exists()
+
+
+def test_attack_bias_reports_the_digest_of_the_manifest_it_parsed(tmp_path, monkeypatch):
+    # #1586 review: the report's manifest hash must not be a second read of the path.
+    import hashlib
+    manifest = json.loads(ab.MANIFEST.read_text())
+    (tmp_path / manifest["audio"]["file"]).symlink_to(ab.MANIFEST.parent / manifest["audio"]["file"])
+    path = tmp_path / "manifest.json"
+    path.write_bytes(b"\xef\xbb\xbf" + ab.MANIFEST.read_bytes())
+    parsed = ab._reference_preconditions(path)
+    assert parsed[3] == hashlib.sha256(path.read_bytes()).hexdigest()

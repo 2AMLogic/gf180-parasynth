@@ -54,7 +54,7 @@ def _sha256(path: pathlib.Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _reference_preconditions(manifest_path: pathlib.Path) -> tuple[dict, pathlib.Path, str]:
+def _reference_preconditions(manifest_path: pathlib.Path) -> tuple[dict, pathlib.Path, str, str]:
     if not manifest_path.is_file():
         raise Refused(f"manifest is missing: {manifest_path}")
     reference = m5a.load_reference("M5A", manifest_path=manifest_path)
@@ -81,7 +81,7 @@ def _reference_preconditions(manifest_path: pathlib.Path) -> tuple[dict, pathlib
     if len(events) != 4:
         raise Refused(f"expected four frozen note measurements, found {len(events)}")
     return ({"events": events, "amp_attack_readback": 0.05},
-            reference.audio_path, reference.audio_sha256)
+            reference.audio_path, reference.audio_sha256, reference.manifest_sha256)
 
 
 def _known_carrier(f0: float, wave: str, phase: float, t: np.ndarray) -> np.ndarray:
@@ -124,7 +124,7 @@ def measure_attack_bias(manifest_path: pathlib.Path | str = MANIFEST, *, phases:
     if not 1 <= int(phases) <= 32:
         raise ValueError("phase count must be in 1..32")
     manifest_path = pathlib.Path(manifest_path).resolve()
-    apparatus, audio_path, audio_sha = _reference_preconditions(manifest_path)
+    apparatus, audio_path, audio_sha, manifest_sha = _reference_preconditions(manifest_path)
     conditions = [_measure_known_condition(f0, wave, int(phases))
                   for f0 in MIDI_HZ.values() for wave in ("saw", "pulse479")]
     observed = [row["attack_10_90_ms"] for row in apparatus["events"]]
@@ -146,7 +146,7 @@ def measure_attack_bias(manifest_path: pathlib.Path | str = MANIFEST, *, phases:
                          "median_bias_range_ms": [min(c["median_bias_ms"] for c in conditions),
                                                   max(c["median_bias_ms"] for c in conditions)]},
         "frozen_reference": {"audio_sha256": audio_sha,
-                             "manifest_sha256": _sha256(manifest_path),
+                             "manifest_sha256": manifest_sha,
                              "audio_path": str(audio_path.relative_to(ROOT)),
                              "manifest_path": str(manifest_path.relative_to(ROOT)),
                              "amp_attack_readback": apparatus["amp_attack_readback"],
