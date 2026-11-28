@@ -94,9 +94,11 @@ class Refused(refusal.Refused, RuntimeError):
 # 1. the precondition
 # ---------------------------------------------------------------------------
 def assert_realisation_is_the_validated_one() -> dict:
-    ok, lines = tn.check()
+    ok, lines, refused = tn.check()
     if not ok:
         raise Refused("tools/cymbal_tone_nodal.py --check does not pass:\n" + "\n".join(lines))
+    if refused:
+        raise Refused("tools/cymbal_tone_nodal.py --check REFUSED:\n" + "\n".join(lines))
     chosen = tn.chosen()
     for band, v in chosen.items():
         want = cc.TONE_R4[band]["pole_hz"]

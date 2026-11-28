@@ -30,7 +30,9 @@ a realisation that needs more bank sections than the 8-bit register map can
 address. `Refused` is not a failed check: it is the tool declining to answer.
 
   --report   the per-band tables, the chosen realisation and the TONE gain table
-  --check    the gate: named properties, and a properties x defects matrix
+  --check    the gate: named properties, and a properties x defects matrix. An
+             injected defect whose evaluation REFUSES is NO VERDICT, never a
+             failed control: exit 3 unless something else measured failed (#1820)
   --json P   write the evidence record
 
 No recording is read. This is transfer-function arithmetic against the nodal
@@ -620,8 +622,18 @@ def _tracked(band, ch, code, cfg):
     return tuple(out)
 
 
-def check(cfg=None) -> tuple[bool, list[str]]:
-    lines, ok = [], True
+def check(cfg=None) -> tuple[bool, list[str], dict[str, str]]:
+    """The gate, as `(ok, lines, refused)` -- three outcomes kept apart (#1820).
+
+    `ok` is False only when something was MEASURED and failed. `refused` maps
+    each injected defect whose evaluation REFUSED to its reason, and says
+    nothing about the design: a refusal used to become a row of REF, which
+    moves nothing, so the gate printed "turned NO property red -- a control
+    that cannot fail" on exit 1. A caller that needs the gate to have PASSED
+    must read both: `ok and not refused`. The base evaluation refusing is not
+    caught here; it propagates as `Refused`.
+    """
+    lines, ok, refused = [], True, {}
     base = properties(cfg)
     for name in PROPERTIES:
         p = base[name]
@@ -636,8 +648,10 @@ def check(cfg=None) -> tuple[bool, list[str]]:
             p = properties(config(defect=d))
             row = ["." if p[n]["ok"] else ("n/a" if p[n]["undecided"] else "RED")
                    for n in PROPERTIES]
-        except Refused:
-            row = ["REF"] * len(PROPERTIES)
+        except Refused as exc:
+            refused[d] = str(exc)
+            lines.append(f"{d:22s}  NO VERDICT {d}: {exc}")
+            continue
         moved = sum(1 for v in row if v == "RED")
         if moved == 0:
             ok = False
@@ -648,10 +662,13 @@ def check(cfg=None) -> tuple[bool, list[str]]:
             if dd == d and row[PROPERTIES.index(pp)] == "RED":
                 ok = False
                 lines.append(f"  !! {d} was asserted BLIND to {pp} and moved it")
+    if refused:
+        lines.append("NO VERDICT = the defect's evaluation REFUSED; nothing was measured "
+                     "about it, so it is neither a failed control nor a passed one.")
     lines.append("")
     lines.append("'n/a' = the property reads off a realisation that chosen() refused, so it is "
                  "UNDECIDED, not an independent catch.")
-    return ok, lines
+    return ok, lines, refused
 
 
 # ---------------------------------------------------------------------------
@@ -701,7 +718,7 @@ def report(cfg=None) -> list[str]:
 
 def record(cfg=None) -> dict:
     cfg = cfg if cfg is not None else config()
-    ok, lines = check(cfg)
+    ok, lines, refused = check(cfg)
     try:
         ch = chosen(cfg)
         bud = budget(ch)
@@ -716,7 +733,8 @@ def record(cfg=None) -> dict:
                          if not k.endswith("_raw")} for b in BANDS},
             "chosen": ch, "budget": bud,
             "tone_gain_db": tone_gain_db(cfg),
-            "properties": properties(cfg), "check_ok": ok, "check": lines}
+            "properties": properties(cfg), "check_ok": ok and not refused,
+            "check": lines}
 
 
 def main(argv=None) -> int:
@@ -732,9 +750,17 @@ def main(argv=None) -> int:
         if a.report:
             print("\n".join(report()))
         if a.check:
-            ok, lines = check()
+            ok, lines, refused = check()
             print("\n".join(lines))
-            rc_ = 0 if ok else 1
+            # (#1820) A measured failure is 1 and is the stronger statement; a
+            # defect whose evaluation REFUSED is REFUSED (3) only when nothing
+            # else failed.
+            if not ok:
+                rc_ = 1
+            elif refused:
+                print("REFUSED: " + "; ".join(f"{d}: {why}" for d, why in refused.items()),
+                      file=sys.stderr)
+                rc_ = 3
         if a.json:
             a.json.parent.mkdir(parents=True, exist_ok=True)
             a.json.write_text(json.dumps(record(), indent=1, default=json_leaf) + "\n")

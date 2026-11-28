@@ -134,6 +134,17 @@ def test_the_precondition_gate_refuses_a_gain_table_that_drifted(monkeypatch):
         tre.assert_realisation_is_the_validated_one()
 
 
+def test_the_precondition_gate_refuses_when_the_nodal_gate_has_no_verdict(monkeypatch):
+    """#1820: `tn.check()` answers `(ok, lines, refused)` and `ok` alone no
+    longer means the gate passed -- a defect whose evaluation REFUSED leaves it
+    True. Reading `ok` alone would start a render whose controls were never
+    evaluated."""
+    monkeypatch.setattr(tn, "check", lambda: (
+        True, [f"{'SIGN_A1':22s}  NO VERDICT SIGN_A1: planted"], {"SIGN_A1": "planted"}))
+    with pytest.raises(tre.Refused):
+        tre.assert_realisation_is_the_validated_one()
+
+
 # ---------------------------------------------------------------------------
 # the bracket, stated before the render
 # ---------------------------------------------------------------------------
