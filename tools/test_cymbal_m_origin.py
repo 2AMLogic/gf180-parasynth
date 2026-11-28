@@ -17,9 +17,10 @@ put it -- so what has to be tested is the bound, not a fit:
     status, not with a measured FAIL (#1789), and that passing controls do
     not refuse;
   * that a refusal RAISED inside `main` -- the werner_fig4 artifact absent
-    or without its level corner (`cymbal_tone_realisation.Refused`), or this
-    module's own -- is caught at the CLI boundary as REFUSED, not rendered
-    as an exit-1 traceback (#1878), and that an implementation error is not.
+    or without its level corner (`cymbal_tone_realisation.Refused`), this
+    module's own, or `run_case.prepare`'s from the sweep -- is caught at the
+    CLI boundary as REFUSED, not rendered as an exit-1 traceback (#1878), and
+    that an implementation error is not.
 """
 import json
 import math
@@ -343,6 +344,26 @@ def test_main_maps_its_own_controls_did_not_pass_refusal_to_refused_2(tmp_path, 
     err = capsys.readouterr().err
     assert rc == REFUSED
     assert "REFUSED: this result file's own controls did not pass" in err, err
+    assert not out.exists()
+
+
+def test_main_maps_the_sweeps_prepare_refusal_to_refused_2(tmp_path, capsys, monkeypatch):
+    """The third census site, `run_case.prepare` in `mixture` (:336), by
+    execution rather than by reading the call graph: `main` -> `sweep` ->
+    `mixture` -> `prepare`. A zero time constant makes the envelope NaN at
+    t = 0 and the peak NaN, so the record `mixture` hands `prepare` is
+    entirely non-finite and `prepare` refuses it -- a third module's class,
+    `preparation_contract.Refused`. On main @ ff1532c5 it left `main` uncaught
+    through `sweep` (:347). The mixture prepends a true lead, so the
+    onset-cut refusal cannot be the one that fires here. The shared controls
+    are patched: the refusal is the point, not the instrument."""
+    monkeypatch.setattr(mo.lt, "check", lambda: (True, []))
+    argv, out = _refused_argv(tmp_path)
+    with np.errstate(divide="ignore", invalid="ignore"):   # the non-finite arithmetic is the input
+        rc = mo.main([*argv, "--taus", "0,0.38,0.02"])
+    err = capsys.readouterr().err
+    assert rc == REFUSED
+    assert "REFUSED:" in err and "non-finite" in err, err
     assert not out.exists()
 
 
