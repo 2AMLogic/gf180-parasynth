@@ -31,6 +31,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 import mono_m1a_score as bass                                        # noqa: E402
 import manifest as mf                                                # noqa: E402
 import measure_m1a_volume_mapping as volume                           # noqa: E402
+from finite_number import is_finite_number  # noqa: E402
 
 RECORD = ROOT / "docs/scorecard/results/M1A.json"
 CANDIDATE = volume.OUT / "volume-minus4db.json"
@@ -107,7 +108,9 @@ def check(record: dict, candidate: dict, baseline: dict, manifest: dict) -> list
 
     REFUSES (`mf.Refused`) a record that lacks a key this function reads with
     `[]` (#1604), or carries one of a type it dereferences (#1679): that is a
-    partial record, not a mismatch."""
+    partial record, not a mismatch. And one whose v3 event attack is not a
+    finite number (#2081): a NaN `max()` would silently drop is not a mismatch
+    either."""
     # `kinds` names what each key is DEREFERENCED as, per key (#1679). The one
     # key left without a kind is measured, not forgotten: the candidate's
     # `patch` is only COMPARED, so a wrong type there is a clean named mismatch.
@@ -150,8 +153,14 @@ def check(record: dict, candidate: dict, baseline: dict, manifest: dict) -> list
            (ra.get("unqualified_value"), ra.get("unqualified_reference"), ra.get("unqualified_error")))
     if record.get("analysis_version") == bass.ANALYSIS_VERSION:
         # v3: the raw reading is the record's own worst event, not the v1 figure
-        pairs = [(e["attack_10_90_ms"]["model"], e["attack_10_90_ms"]["reference"])
-                 for e in record["diagnostics"]["events"]]
+        events = record["diagnostics"]["events"]
+        read = {f"diagnostics.events[{i}].attack_10_90_ms.{side}": e["attack_10_90_ms"][side]
+                for i, e in enumerate(events) for side in ("model", "reference")}
+        bad = [f"{where} = {value!r}" for where, value in read.items() if not is_finite_number(value)]
+        if bad:
+            raise mf.Refused("the M1A board record carries a value that is not a finite number: "
+                             + ", ".join(bad))
+        pairs = [(e["attack_10_90_ms"]["model"], e["attack_10_90_ms"]["reference"]) for e in events]
         m, r = max(pairs, key=lambda p: abs(p[0] - p[1]))
         if raw[0] is None or abs(raw[0] - m) > 1e-5 or abs(raw[1] - r) > 1e-5:
             problems.append("record attack reading is not its own worst event")
