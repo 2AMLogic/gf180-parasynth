@@ -9,7 +9,9 @@
 
     exit 0  OK       the pack ran
     exit 1  FAIL     the gate says this rig may not be used for this pack
-    exit 2  REFUSED  a precondition is unmet -- no plugin host on this box
+    exit 2  REFUSED  a precondition is unmet -- no plugin host on this box,
+                     or audio the measurement cannot answer for (a NaN or Inf
+                     record, or one too short for the estimator)
 
 WHY THIS FILE EXISTS
 --------------------
@@ -364,7 +366,11 @@ def cmd_run(pack: Pack, out: pathlib.Path | None) -> int:
     except rp.Refused as why:
         print(f"REFUSED  {why}")
         return REFUSED
-    res = measure(pack, audio)
+    try:
+        res = measure(pack, audio)
+    except am.InsufficientEvidence as why:
+        print(f"REFUSED  {pack.name}: the rig's audio cannot be measured -- {why}")
+        return REFUSED
     text = json.dumps(res, indent=1, sort_keys=False)
     if out:
         out.parent.mkdir(parents=True, exist_ok=True)
