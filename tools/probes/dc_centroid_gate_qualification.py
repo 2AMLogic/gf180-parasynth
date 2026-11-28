@@ -5,6 +5,10 @@ The gate in ``dc_blocker.py`` measures the centroid over the entire FFT.  A
 10 Hz contaminant is outside the protected audible band, but it still changes
 that global number.  This probe uses a closed-form two-tone signal so the
 failure is independent of the drum model.
+
+``--json PATH`` writes the measurement on BOTH outcomes, with ``qualified``
+saying which, before the exit status repeats it (0 qualified, 1 not).  The
+record is the evidence, so a gate that disagrees must still leave one.
 """
 from __future__ import annotations
 
@@ -59,15 +63,13 @@ def main(argv: list[str] | None = None) -> int:
     print("20 Hz+ centroid:    "
           f"{result['protected_before_hz']:.3f} -> {result['protected_after_hz']:.3f} Hz "
           f"({result['protected_shift_pct']:+.3f}%)")
-    if not (abs(result["global_shift_pct"]) >= TARGET_SHIFT_PCT - 0.2):
-        return 1
-    if not (abs(result["protected_shift_pct"]) < 0.01):
-        return 1
+    ok = ((abs(result["global_shift_pct"]) >= TARGET_SHIFT_PCT - 0.2)
+          and (abs(result["protected_shift_pct"]) < 0.01))
     if args.json:
         import json
         with open(args.json, "w") as output:
-            json.dump(result, output, indent=2)
-    return 0
+            json.dump({**result, "qualified": ok}, output, indent=2)
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":
