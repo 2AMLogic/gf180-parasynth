@@ -303,7 +303,7 @@ def test_publish_arty_cli_ends_refused_not_a_traceback(tmp_path):
     _plant_snapshot_xdc(art, UNMODELLED)
     out = tmp_path / "publication"
     r = subprocess.run([sys.executable, str(HERE / "publish_arty.py"), str(art), "--out", str(out)],
-                       capture_output=True, text=True, cwd=str(HERE.parent))
+                       capture_output=True, text=True, cwd=str(HERE.parent), check=False)
     assert r.returncode == 2, (r.returncode, r.stdout, r.stderr)
     assert "publish_arty: REFUSED --" in r.stdout and "does not model" in r.stdout, r.stdout
     assert "did not bind" not in r.stdout and "Traceback" not in r.stderr, (r.stdout, r.stderr)
