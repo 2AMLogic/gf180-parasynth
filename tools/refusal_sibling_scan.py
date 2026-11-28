@@ -88,20 +88,34 @@ is decided by tracing the caller with a known-answer input, as #1160 and
   * not modelled at all: `global`/`nonlocal` rebinding of an imported name,
     an import in a class body, and a name used in a decorator (evaluated in
     the enclosing scope) -- each contrived or a runtime error;
-  * handlers are found around the CALL SITE, plus ONE level above: the
-    module's CLI boundary (`main()` / the `__main__` dispatch), which is
-    where #1160/#1162's repairs live. Guards in intermediate library
-    frames are not modelled, and neither is a guard in the def that CALLS a
-    local helper -- a call written inside a nested def is lexically outside
-    its caller's try -- so `candidate-escape` means "unguarded here and no
-    base guard at the boundary", never "escapes at the exit". That last
-    shape is the one site `rtl-sketch/` adds to the census, and it is
-    ACCEPTED rather than repaired (#1577): `verify_synth_top.drum_solo_report`
-    calls its nested `_render` inside a try whose handler is
-    `except rc.Refused`, the callee's own class. The acceptance is observed,
-    not read -- `tools/test_refusal_sibling_scan.py` runs the shipped
-    function with a refusing callee (caught, returned in the report's
-    `refused` list) and with a sibling class (escapes);
+  * handlers are found around the CALL SITE, and then ON THE PATH (#1656):
+    a site is `covered(cli-*)` only when EVERY path from the module's entry
+    -- its top level, the `__main__` dispatch included -- to the site's own
+    def runs through that handler's try body. The path follows bare-name
+    calls through intermediate defs and a sealed dispatch table's
+    subscript, so a guard in a caller one or two frames up counts when
+    every caller guards (r2_release's `build()`), and so does one in the
+    def that CALLS a nested helper by name inside its try
+    (`verify_synth_top.drum_solo_report` -> `_render`), while a try in a
+    sibling helper, or in `main()` after its subcommand returned
+    (r0_capture's `except BaseException`), covers nothing. Until #1656 the
+    credit was by PRESENCE -- any handler directly in `main()` or under the
+    dispatch covered every site in the module, and nothing else did -- which
+    was wrong in both directions (#1656's table). The `via` field names the
+    handlers a row's credit rests on, as `<def>:<try line>`;
+  * the path credit can only LOSE credit, never grant it, by not knowing
+    the code: it follows bare-name calls resolved by lexical scope and
+    sealed dispatch tables, nothing else. Not followed, so never credited:
+    a method reached through an instance, a call written in a lambda, a
+    call from another module, `getattr`. A function whose name is read as a
+    VALUE anywhere in the module (`apply(helper, x)`, `pool.map(worker, ..)`)
+    has a path no call site shows, so it is credited nowhere even where a
+    bare-name call to it is guarded; a LOCAL of the same name reads nothing
+    of the def. Control flow inside a def is flattened -- every call
+    written there is an edge, whatever `if` hides it -- which adds paths. A
+    `main()` that nothing at module level calls is not an entry. So
+    `candidate-escape` means "no handler was established on every path",
+    never "escapes at the exit".
   * test files are excluded: they are not CLI callers and their
     `pytest.raises` sites are deliberate;
   * only `SCAN_ROOTS` is scanned: `tools`, `model`, `pnr`, `fpga`,
@@ -124,8 +138,12 @@ family class borrowed inside a function bound no family name, silencing
 its raises and handlers the way #1193's module-level borrow had;
 `rtl-sketch/` and `audition/` sat outside the roots; and inside a function
 scope the binding that won was the walk's breadth-first order where this
-list claimed last-import-wins. All three are closed. What #1577 left open
-on purpose is the one ACCEPTED census entry named under handlers above.
+list claimed last-import-wins. All three are closed. The one census entry
+#1577 left open on purpose -- `verify_synth_top.drum_solo_report` calling its
+nested `_render` inside a try the call is lexically outside -- stopped being
+an escape when the credit became by path (#1656): the call to the helper is
+an edge that carries the try. Its runtime evidence is kept where it was
+written, in the test file's #1577 section.
 
 NOT A GATE. Totals are reported, never pinned: the exit-status census
 (`tools/refusal_exit_census.py`) learned that a totals pin reds on every
@@ -141,6 +159,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import itertools
 import json
 import pathlib
 import subprocess
@@ -154,6 +173,10 @@ BASE_STEM = "refusal"                   # the module defining the common base cl
 # scope's name, not the enclosing function's (nor the module's)
 SCOPE_NODES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
 FUNCTION_NODES = (ast.FunctionDef, ast.AsyncFunctionDef)
+# a FRAME: the def (or lambda) a call is written in, the unit the per-path
+# credit of #1656 is computed for. A class body is no frame of its own: it
+# runs whoever executes the `class` statement.
+CALLER_NODES = FUNCTION_NODES + (ast.Lambda,)
 
 
 # ---------------------------------------------------------------------------
@@ -188,6 +211,40 @@ def _bind(stmt: ast.stmt, imports: dict[str, str],
             from_imports[nm] = (stem, a.name)
 
 
+def _local_bindings(scope: ast.AST) -> set[str]:
+    """Every name `scope` binds as its own local, decided the way Python
+    decides a name is local: bound by ANY statement of the body -- a
+    parameter, an assignment or an augmented one, a loop or `with` target,
+    an import, a nested def or class, an `except ... as`, a walrus, a
+    comprehension target, a `match` capture, a `del`. `global`/`nonlocal`
+    unbinds it here. A nested scope's own names are not ours: only the
+    name of the def itself is, and a lambda's are nothing."""
+    out: set[str] = set()
+    a = getattr(scope, "args", None)
+    if a is not None:
+        out.update(x.arg for x in (*a.posonlyargs, *a.args, *a.kwonlyargs))
+        out.update(x.arg for x in (a.vararg, a.kwarg) if x)
+    lifted: set[str] = set()
+    todo: list[ast.AST] = list(scope.body) if isinstance(scope.body, list) else [scope.body]
+    while todo:
+        n = todo.pop()
+        if isinstance(n, ast.Import):
+            out.update(x.asname or x.name.split(".")[0] for x in n.names)
+        elif isinstance(n, ast.ImportFrom):
+            out.update(x.asname or x.name for x in n.names)
+        elif isinstance(n, SCOPE_NODES):
+            out.add(n.name)
+            continue
+        elif isinstance(n, ast.Lambda):
+            continue
+        elif isinstance(n, (ast.Global, ast.Nonlocal)):
+            lifted.update(n.names)
+        elif isinstance(n, ast.Name) and isinstance(n.ctx, (ast.Store, ast.Del)):
+            out.add(n.id)
+        todo.extend(ast.iter_child_nodes(n))
+    return out - lifted
+
+
 class _Bindings:
     """The import bindings of ONE function scope, in the same representation
     the module's own bindings use."""
@@ -210,7 +267,17 @@ class ModInfo:
         self.has_family = False                  # a family name bound anywhere: module level or a def
         self.parents: dict[ast.AST, ast.AST] = {}          # child -> parent, for the scope walk
         self.scopes: dict[ast.AST, _Bindings] = {}         # function node -> its own bindings
+        # scope -> the name -> the defs written in ITS OWN body
+        self.direct_defs: dict[ast.AST, dict[str, list[ast.AST]]] = {}
+        self.local_names: dict[ast.AST, set[str]] = {}     # scope -> every name it binds itself
+        # a sealed dispatch table -> the defs it holds: keyed by its Dict
+        # node, or by its module-level name
+        self.tables: dict[object, list[ast.AST]] = {}
+        self.table_values: set[ast.Name] = set()           # table entries that are not unseen paths
+        self.names: dict[str, list[ast.Name]] = {}        # every Name node, by id
+        self.value_names: set[str] = set()   # names read as a value (not called) somewhere
         self._read_bindings()
+        self._read_calls()
 
     def resolve_head(self, head: str, at: ast.AST | None = None) -> str | None:
         """The module stem a local name is bound to, if an import binds it.
@@ -332,6 +399,166 @@ class ModInfo:
         self.has_family = bool(self.refused_names) or any(
             ent[1] == FAMILY_NAME for b in self.scopes.values()
             for ent in b.from_imports.values())
+
+    def _read_calls(self) -> None:
+        """Index what the per-path credit needs (#1656): the defs written
+        DIRECTLY in each scope (a def inside an `if` or a `try` of the body
+        still binds the body's name; one inside a nested def or class binds
+        that scope's), the dispatch tables, and every name read as a VALUE
+        outside a sealed one."""
+        scopes, dicts = [], []
+        for n in ast.walk(self.tree):          # one walk, three indexes
+            if isinstance(n, SCOPE_NODES):
+                scopes.append(n)
+            elif isinstance(n, ast.Dict):
+                dicts.append(n)
+            if isinstance(n, ast.Name):
+                self.names.setdefault(n.id, []).append(n)
+        for scope in [self.tree, *scopes]:
+            own: dict[str, list[ast.AST]] = {}
+            todo = list(scope.body)
+            while todo:
+                n = todo.pop()
+                if isinstance(n, SCOPE_NODES):
+                    own.setdefault(n.name, []).append(n)
+                    continue                  # a scope of its own: its defs are not ours
+                todo.extend(ast.iter_child_nodes(n))
+            self.direct_defs[scope] = own
+        self.local_names = {s: _local_bindings(s) for s in scopes}
+        self._read_tables(dicts)
+        for n in itertools.chain.from_iterable(self.names.values()):
+            if (isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)
+                    and n not in self.table_values
+                    and not (isinstance(self.parents.get(n), ast.Call)
+                             and self.parents[n].func is n)
+                    and self._names_function(n)):
+                self.value_names.add(n.id)
+
+    def _names_function(self, n: ast.Name) -> bool:
+        """Whether a value read of `n` reaches a function def: the innermost
+        scope that BINDS the name must bind it with one. A local variable of
+        the same name binds it first and reads nothing of the function --
+        cymbal_tone_knob's `check()` holds a `verdict` from a tuple-unpack
+        while `def verdict` sits at module level, and a `main` parameter of
+        run_case's is not its `def main`."""
+        cur, innermost = self.parents.get(n), True
+        while cur is not None:
+            if isinstance(cur, SCOPE_NODES + (ast.Lambda,)):
+                if not isinstance(cur, ast.Lambda) and not (
+                        isinstance(cur, ast.ClassDef) and not innermost):
+                    if n.id in self.local_names[cur]:
+                        return bool(self.direct_defs.get(cur, {}).get(n.id))
+                innermost = False
+            cur = self.parents.get(cur)
+        return bool(self.direct_defs[self.tree].get(n.id))
+
+    def _read_tables(self, dicts: list[ast.Dict]) -> None:
+        """A DISPATCH TABLE -- `{"compare": cmd_compare, ...}[cmd]()` -- is a
+        call, written through a subscript: the #1162/#1183 repairs in
+        rs_guard_band, rs_mode_drive, balance_line_shape and
+        measure_partial_balance all dispatch this way, under the try that is
+        their repair. Read as callbacks, its entries would each carry an
+        unseen path and lose the credit the try gives them. A literal of
+        constant keys and function names is followed, then, when it is
+        SEALED: subscripted and called at once, or bound to a module-level
+        name whose every binding is such a literal and whose every other
+        read is an immediate call or a read of its keys. Anything else done
+        with it -- stored in a variable, iterated, mutated, passed on --
+        leaves its entries the plain value references they are."""
+        parents = self.parents
+
+        def immediate(sub: ast.Subscript) -> bool:
+            return isinstance(parents.get(sub), ast.Call) and parents[sub].func is sub
+
+        cands: dict[ast.Dict, list[ast.AST]] = {}
+        for d in dicts:
+            if not d.keys or not all(isinstance(k, ast.Constant) for k in d.keys):
+                continue
+            callees: list[ast.AST] = []
+            for v in d.values:
+                if not (isinstance(v, ast.Name) and isinstance(v.ctx, ast.Load)):
+                    break
+                callees.extend(self._resolve_name(v.id, v))
+            else:
+                if callees:
+                    cands[d] = callees
+        bound: dict[str, list[ast.Dict]] = {}
+        for d, callees in cands.items():
+            up = parents.get(d)
+            if isinstance(up, ast.Subscript) and up.value is d and immediate(up):
+                self.tables[d] = callees
+                self.table_values.update(d.values)
+            elif (isinstance(up, ast.Assign) and up.value is d and parents.get(up) is self.tree
+                  and len(up.targets) == 1 and isinstance(up.targets[0], ast.Name)):
+                bound.setdefault(up.targets[0].id, []).append(d)
+
+        def keys_only(n: ast.Name) -> bool:
+            """A read of the table that iterates its KEYS and so cannot reach
+            an entry: a membership test, or `sep.join(TABLE)`, which yields
+            the keys (`', '.join(COMMANDS)` in a usage message)."""
+            up = parents.get(n)
+            if (isinstance(up, ast.Compare) and n in up.comparators
+                    and any(isinstance(op, (ast.In, ast.NotIn)) for op in up.ops)):
+                return True
+            return (isinstance(up, ast.Call) and n in up.args
+                    and isinstance(up.func, ast.Attribute) and up.func.attr == "join"
+                    and isinstance(up.func.value, ast.Constant)
+                    and isinstance(up.func.value.value, str))
+
+        for name, ds in bound.items():
+            sealed = True
+            for n in self.names.get(name, []):
+                up = parents.get(n)
+                if isinstance(n.ctx, ast.Store):
+                    sealed &= (isinstance(up, ast.Assign) and up.value in ds
+                               and parents.get(up) is self.tree)
+                elif isinstance(up, ast.Subscript) and up.value is n:
+                    sealed &= immediate(up)
+                else:
+                    sealed &= keys_only(n)
+            if sealed:
+                self.tables[name] = [c for d in ds for c in cands[d]]
+                for d in ds:
+                    self.table_values.update(d.values)
+
+    def caller_of(self, node: ast.AST) -> ast.AST:
+        """The frame `node` is written in: its innermost enclosing def or
+        lambda, else the module itself (its top level, the dispatch
+        included)."""
+        cur = self.parents.get(node)
+        while cur is not None and not isinstance(cur, CALLER_NODES):
+            cur = self.parents.get(cur)
+        return self.tree if cur is None else cur
+
+    def _resolve_name(self, name: str, at: ast.AST) -> list[ast.AST]:
+        """The function defs a name is bound to, the way Python binds it: the
+        innermost scope defining it wins, then the module. Nothing is guessed
+        -- a name no def binds (a from-import, a callback parameter, a class
+        instance) reaches no edge, and a class binding the name shadows an
+        outer def instead of falling through to it. A class body's names are
+        visible only to code written directly in it."""
+        cur, innermost = self.parents.get(at), True
+        while cur is not None:
+            if isinstance(cur, SCOPE_NODES + (ast.Lambda,)):
+                if not (isinstance(cur, ast.ClassDef) and not innermost):
+                    own = self.direct_defs.get(cur, {}).get(name, [])
+                    if own:
+                        return [d for d in own if isinstance(d, FUNCTION_NODES)]
+                innermost = False
+            cur = self.parents.get(cur)
+        return [d for d in self.direct_defs[self.tree].get(name, [])
+                if isinstance(d, FUNCTION_NODES)]
+
+    def resolve_call(self, call: ast.Call) -> list[ast.AST]:
+        """The function defs `call` reaches: by bare name, or through a
+        sealed dispatch table's subscript. Anything else reaches no edge."""
+        f = call.func
+        if isinstance(f, ast.Name):
+            return self._resolve_name(f.id, call)
+        if isinstance(f, ast.Subscript) and isinstance(f.value, (ast.Dict, ast.Name)):
+            table = f.value if isinstance(f.value, ast.Dict) else f.value.id
+            return list(self.tables.get(table, []))
+        return []
 
 
 def build_index(files: list[pathlib.Path]) -> dict[str, ModInfo]:
@@ -472,34 +699,131 @@ def handler_origins(mod: ModInfo, by_stem: dict[str, list[ModInfo]],
     return origins, shape
 
 
-def cli_boundary_guards(mod: ModInfo, by_stem: dict[str, list[ModInfo]]) -> list[tuple[set[str], str]]:
-    """The refusal handlers at the module's CLI boundary -- try statements
-    that sit directly in a `main()` def or in the `if __name__ == "__main__"`
-    dispatch, where #1160/#1162's repairs live. Returns (origins, shape) per
-    handler: `except refusal.Refused` covers every origin; an exact/alias
-    handler covers only its own origin (measure_partial_balance's
-    `except Refused` with `Refused = pc.Refused` is exact, not local-only)."""
-    parents: dict[ast.AST, ast.AST] = {}
-    for node in ast.walk(mod.tree):
-        for ch in ast.iter_child_nodes(node):
-            parents[ch] = node
-
-    def in_boundary(tr: ast.Try) -> bool:
-        cur = parents.get(tr)
-        if isinstance(cur, ast.FunctionDef) and cur.name == "main":
-            return True
-        while cur is not None:                # the __main__ dispatch block
-            if (isinstance(cur, ast.If) and isinstance(cur.test, ast.Compare)
-                    and getattr(cur.test.left, "id", "") == "__name__"):
-                return True
-            cur = parents.get(cur)
-        return False
-
-    out: list[tuple[set[str], str]] = []
-    for node in ast.walk(mod.tree):
-        if isinstance(node, ast.Try) and in_boundary(node):
-            out.extend(handler_origins(mod, by_stem, h) for h in node.handlers)
+def _handlers_within(mod: ModInfo, frame: ast.AST, call: ast.AST) -> list[ast.ExceptHandler]:
+    """The handlers of the tries, written in `frame`'s own body, whose BODY
+    holds `call`. The walk stops at `frame`: a try further out, around the
+    nested def the call sits in, guards the DEFINITION, not this call."""
+    out, cur = [], call
+    while cur is not frame:
+        prev, cur = cur, mod.parents[cur]
+        if isinstance(cur, ast.Try) and prev in cur.body:
+            out.extend(cur.handlers)
     return out
+
+
+def path_guards(mod: ModInfo, by_stem: dict[str, list[ModInfo]]
+                ) -> dict[ast.AST, tuple[bool, frozenset[str], bool, list[str]]]:
+    """Per frame, what EVERY path from the module's entry to that frame
+    catches (#1656): frame -> (a base handler, the origins an exact or local
+    handler catches, a broad handler, and `via`), where `via` names the
+    handlers nearest that frame on each path to it, as `<def>:<try line>` (a
+    hop with no handler is followed to its own callers). A frame nothing
+    reaches is absent, and is credited nothing.
+
+    The path is a call graph over bare-name calls and sealed dispatch tables
+    (`resolve_call`), rooted at the module's top level -- the `__main__`
+    dispatch included. An edge
+    carries what the tries whose body holds its call site catch. What a
+    frame is guaranteed is the INTERSECTION over its in-edges of (the
+    caller's guarantee + what the edge catches), the greatest fixed point of
+    that equation: a cycle converges, and a handler on SOME path is never
+    credited for one on EVERY path. It is what is caught that is
+    intersected, not which handler catches it -- capability_pack's `gate()`
+    is guarded by a different try in each of its two callers, and is covered
+    all the same. One edge is added that no call site writes: from the entry,
+    catching nothing, to each function whose name is read as a value
+    somewhere (a callback has a path the graph cannot see). Anything the
+    graph cannot resolve is simply not an edge, which leaves the callee
+    unreached and uncredited: the direction that can only lose credit."""
+    top = mod.tree
+    ins: dict[ast.AST, list[tuple[ast.AST, list[ast.ExceptHandler]]]] = {}
+    outs: dict[ast.AST, list[ast.AST]] = {}
+
+    def edge(caller: ast.AST, callee: ast.AST, held: list[ast.ExceptHandler]) -> None:
+        ins.setdefault(callee, []).append((caller, held))
+        outs.setdefault(caller, []).append(callee)
+
+    for node in ast.walk(top):
+        if isinstance(node, ast.Call):
+            caller = mod.caller_of(node)
+            for callee in mod.resolve_call(node):
+                edge(caller, callee, _handlers_within(mod, caller, node))
+    for own in mod.direct_defs.values():
+        for name, defs in own.items():
+            if name in mod.value_names:
+                for d in defs:
+                    if isinstance(d, FUNCTION_NODES):
+                        edge(top, d, [])
+    reach, todo = {top}, [top]
+    while todo:
+        for callee in outs.get(todo.pop(), []):
+            if callee not in reach:
+                reach.add(callee)
+                todo.append(callee)
+
+    # (base, origins, broad): what is caught, a lattice under componentwise
+    # or/union (join) and and/intersection (meet); a base handler catches
+    # every family, so it is `every` in the origins component too.
+    every = frozenset(s for s, mods in by_stem.items() if mods[0].refused_names)
+    NOTHING, EVERYTHING = (False, frozenset(), False), (True, every, True)
+
+    def caught(h: ast.ExceptHandler) -> tuple[bool, frozenset[str], bool]:
+        origins, shape = handler_origins(mod, by_stem, h)
+        kinds = set(shape.split("+"))
+        if "base" in kinds:
+            return (True, every, True)
+        return (False,
+                frozenset(origins) if kinds & {"exact", "local"} else frozenset(),
+                "broad" in kinds)
+
+    def join(a, b):
+        return (a[0] or b[0], a[1] | b[1], a[2] or b[2])
+
+    def meet(a, b):
+        return (a[0] and b[0], a[1] & b[1], a[2] and b[2])
+
+    def caught_on_edge(held: list[ast.ExceptHandler]):
+        out = NOTHING
+        for h in held:
+            out = join(out, caught(h))
+        return out
+
+    def where(h: ast.ExceptHandler) -> str:
+        tr = mod.parents[h]
+        w = mod.caller_of(tr)
+        return f"{w.name if isinstance(w, FUNCTION_NODES) else '<module>'}:{tr.lineno}"
+
+    terms = {n: [(c, caught_on_edge(held), held) for c, held in edges]
+             for n, edges in ins.items()}
+    guarantee = {n: EVERYTHING for n in reach}
+    guarantee[top] = NOTHING
+    changed = True
+    while changed:
+        changed = False
+        for n in reach:
+            if n is top:
+                continue
+            new = EVERYTHING
+            for c, cgt, _ in terms.get(n, []):
+                if c in reach:
+                    new = meet(new, join(guarantee[c], cgt))
+            if new != guarantee[n]:
+                guarantee[n], changed = new, True
+
+    def via(n: ast.AST, seen: frozenset = frozenset()) -> set[str]:
+        out = set()
+        for c, cgt, held in terms.get(n, []):
+            if c not in reach:
+                continue
+            if cgt != NOTHING:
+                out.update(where(h) for h in held if caught(h) != NOTHING)
+            elif c is not top and c not in seen:
+                out.update(via(c, seen | {n}))
+        return out
+
+    return {n: (*guarantee[n],
+                sorted(via(n), key=lambda w: (int(w.rsplit(":", 1)[1]), w)))
+            for n in reach}
 
 
 def _rel_label(path: pathlib.Path) -> str:
@@ -519,7 +843,7 @@ def scan(files: list[pathlib.Path], idx: dict[str, ModInfo]) -> list[dict]:
         mod = idx.get(str(f))
         if mod is None:
             continue
-        boundary = cli_boundary_guards(mod, by_stem)
+        guards = path_guards(mod, by_stem)
         label = _rel_label(f)
         for node in ast.walk(mod.tree):
             callee_stem = fname = None
@@ -585,19 +909,16 @@ def scan(files: list[pathlib.Path], idx: dict[str, ModInfo]) -> list[dict]:
                         covered |= ho & origins
                         shapes.append(shape)
             uncovered = origins - covered
-            bshapes = {shape for _, shape in boundary}
-            borigins: set[str] = set()
-            for ho, shape in boundary:
-                if shape == "base":
-                    borigins |= origins
-                elif shape != "broad" and shape != "other":
-                    borigins |= ho
-            if uncovered and "base" in bshapes:
-                # a base guard at the CLI boundary catches it on the way out
+            # the CLI credit is BY PATH (#1656): only what every path from
+            # the entry to THIS site's own def catches
+            base, borigins, broad, via = guards.get(
+                mod.caller_of(node), (False, frozenset(), False, []))
+            if uncovered and base:
+                # a base guard on every path catches it on the way out
                 classification, uncovered = "covered(cli-base)", []
             elif uncovered and uncovered <= borigins:
                 classification, uncovered = "covered(cli-exact)", []
-            elif uncovered and "broad" in bshapes:
+            elif uncovered and broad:
                 classification = "relabelled(cli-total)"
             else:
                 classification = ("candidate-escape" if uncovered
@@ -609,6 +930,7 @@ def scan(files: list[pathlib.Path], idx: dict[str, ModInfo]) -> list[dict]:
                 guard=",".join(shapes) or "none",
                 classification=classification,
                 uncovered=sorted(uncovered),
+                **({"via": via} if via and not classification.startswith("candidate") else {}),
             ))
     return sites
 
@@ -637,8 +959,9 @@ def main(argv=None) -> int:
         unc = f" uncovered={','.join(s['uncovered'])}" if s["uncovered"] else ""
         amb = (f" candidates={','.join('/'.join(c.split('/')[-2:]) for c in s['candidates'])}"
                if s.get("candidates") else "")
+        via = f" via={','.join(s['via'])}" if s.get("via") else ""
         print(f"{s['site']:58s} {s['callee']:34s} origins={','.join(s['origins']):30s} "
-              f"guard={s['guard']:12s} {s['classification']}{unc}{amb}")
+              f"guard={s['guard']:12s} {s['classification']}{unc}{amb}{via}")
     return 0
 
 
