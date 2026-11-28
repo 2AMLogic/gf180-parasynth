@@ -26,6 +26,14 @@ read after that. Everything printed here is a property of OUR side and of the
 grid, so running it cannot tell anybody how well the filter matches at the
 sealed setting. That asymmetry is the whole mechanism; see `tools/holdout.py`.
 
+EXIT.  0: every estimator returned a value at this setting. 1: at least one
+REFUSED -- this tool's ANSWER about the setting. 2: the selected path itself
+could not render the probe (`f1_filter_path.Refused`, caught by its base
+`refusal.Refused`), so nothing was measured and nothing printed is a finding
+about the setting; the reason is printed as the last line
+(`exit_contract.REFUSED`). A caller that sees only the exit code must be able
+to tell the two apart, which is why a dead path is not a 1 (#1780).
+
 Recorded output, res 0, probe amp 0.25, on `reference_compare.FREQS`
 (geomspace 40 Hz .. 12 kHz, 32 points):
 
@@ -59,6 +67,8 @@ import numpy as np                                                   # noqa: E40
 
 import refprofile as rp                                              # noqa: E402
 import run_case as rc                                                # noqa: E402
+import exit_contract                                                 # noqa: E402
+import refusal                                                       # noqa: E402
 
 
 def main(argv=None) -> int:
@@ -79,9 +89,13 @@ def main(argv=None) -> int:
     print(f"plateau band    {band[0]:.1f} .. {band[1]:.1f} Hz   {n_band} grid points")
 
     import f1_filter_path as fp
-    path = fp.SelectedFilterPath()
-    ours, _info = path.curve(freqs, a.cut, a.res, amp)
-    ours_open, _oinfo = path.curve(freqs, a.open_hz, a.res, amp)
+    try:
+        path = fp.SelectedFilterPath()
+        ours, _info = path.curve(freqs, a.cut, a.res, amp)
+        ours_open, _oinfo = path.curve(freqs, a.open_hz, a.res, amp)
+    except refusal.Refused as exc:
+        print(f"REFUSED  {exc}")
+        return exit_contract.REFUSED
     import audio_measure as am
     open_plateau = am.plateau_db(freqs, ours_open, rc._ref_band(freqs, a.cut))
 
