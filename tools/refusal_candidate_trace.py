@@ -71,6 +71,7 @@ import ast
 import functools
 import importlib.util
 import json
+import opcode
 import os
 import pathlib
 import signal
@@ -96,7 +97,7 @@ ESCAPED, HANDLED, NOT_RAISED, UNRESOLVED = "ESCAPED", "HANDLED", "NOT-RAISED", "
 _LOG: dict = {"calls": [], "follows": [], "uncaught": None, "system_exit": None,
               "wrap_missing": [], "python": sys.version.split()[0]}
 _POSITIONS: dict = {}      # code object -> its per-instruction (line, end) pairs
-_TREES: dict = {}         # source path -> (ast tree, {function first line: name})
+_TREES: dict = {}         # source path -> its ast tree, parsed once
 
 
 def _in_family(exc: BaseException) -> bool:
@@ -114,10 +115,15 @@ def _exc(exc: BaseException) -> dict:
             "in_family": _in_family(exc), "message": str(exc)[:400]}
 
 
+_ROOT = ROOT             # the TRACED tree's root: paths are named relative to it
+
+
 def _rel(path: str) -> str:
+    """Repo-relative inside the traced tree (site keys are), absolute outside
+    it -- a sandbox clone names its own root, never this file's checkout."""
     p = pathlib.Path(path)
     try:
-        return str(p.relative_to(ROOT))
+        return str(p.relative_to(_ROOT))
     except ValueError:
         return str(p)
 
@@ -172,28 +178,31 @@ def _brief(value, depth: int = 0) -> object:
 
 
 def _tree(path: str):
-    """(ast, {first line: function name}) for one source file, parsed once."""
-    t = _TREES.get(path)
-    if t is None:
-        try:
-            src = pathlib.Path(path).read_text()
-            tree = ast.parse(src)
-        except (OSError, SyntaxError, ValueError):
-            tree = None
-        t = (tree, {})
-        _TREES[path] = t
-    return t
-
-
-def _line_role(frame) -> tuple[str, str | None]:
-    """("except", clause) when the frame resumed inside an `except` body of
-    its own function, ("finally", None) inside a `finally`, else
-    ("other", None): resumption with no `except` clause, which is a context
-    manager's `__exit__` returning true or a `return` inside a `finally`."""
-    code = frame.f_code
-    tree, _ = _tree(code.co_filename)
+    """One source file's ast, parsed once (None if it cannot be read)."""
+    tree = _TREES.get(path)
     if tree is None:
-        return "other", None
+        try:
+            tree = ast.parse(pathlib.Path(path).read_text())
+        except (OSError, SyntaxError, ValueError):
+            tree = False                        # a cacheable "cannot be read"
+        _TREES[path] = tree
+    return tree or None
+
+
+def _line_role(frame) -> dict:
+    """What the line the frame just resumed on IS, in its own function.
+    {"role": "except", "clause": ..., "handler": (try line, header line, body
+    first line, body last line)} inside an `except` clause COUNTING ITS
+    HEADER -- CPython resumes an unwinding frame on the `except ...:` line to
+    test the match, matched or not; {"role": "finally"} inside a `finally`;
+    {"role": "other"} anywhere else, which while unwinding is a `with` header
+    or a resumption with no clause at all (a context manager's `__exit__`
+    returned true, a `return` written inside a `finally`)."""
+    code = frame.f_code
+    tree = _tree(code.co_filename)
+    other: dict = {"role": "other"}
+    if tree is None:
+        return other
 
     def owner(node) -> ast.AST | None:
         best = None
@@ -208,8 +217,7 @@ def _line_role(frame) -> tuple[str, str | None]:
         own = owner(node)
         if own is None:
             return code.co_name == "<module>"
-        first = own.lineno if not isinstance(own, ast.Lambda) else own.lineno
-        return first == code.co_firstlineno
+        return own.lineno == code.co_firstlineno
 
     line = frame.f_lineno
     handler, finally_hit = None, False
@@ -220,16 +228,23 @@ def _line_role(frame) -> tuple[str, str | None]:
             if stmt.lineno <= line <= stmt.end_lineno:
                 finally_hit = True
         for h in node.handlers:
-            body = h.body
-            # the header line too: CPython resumes a handling frame ON the
-            # `except ...:` line, before the body's first statement
-            if h.lineno <= line <= max(s.end_lineno for s in body):
+            if h.lineno <= line <= max(st.end_lineno for st in h.body):
                 if handler is None or node.lineno > handler[0]:
                     handler = (node.lineno, h)
     if handler is not None:
         h = handler[1]
-        return "except", (ast.unparse(h.type) if h.type is not None else "<bare>")
-    return ("finally", None) if finally_hit else ("other", None)
+        return {"role": "except",
+                "clause": ast.unparse(h.type) if h.type is not None else "<bare>",
+                "handler": (handler[0], h.lineno, h.body[0].lineno,
+                            max(st.end_lineno for st in h.body))}
+    return {"role": "finally"} if finally_hit else other
+
+
+def _opcode_at(frame) -> str:
+    """The instruction the frame is stopped on, by name. Read from the raw
+    bytecode: `f_lasti` is a byte offset, and is not an index into
+    `dis.get_instructions`, which hides inline cache entries."""
+    return opcode.opname[frame.f_code.co_code[frame.f_lasti]]
 
 
 class _Traced:
@@ -254,7 +269,10 @@ class _Traced:
 
 
 def _follow(exc: BaseException, caller, inject: frozenset) -> None:
-    """Tag `exc` and watch the frames it is about to unwind through."""
+    """Tag `exc` and watch the frames it is about to unwind through. Each of
+    them is suspended on a call into the callee, so its next event says what
+    it did: a clause it tested and did not match (`tested`), one it entered
+    (`handlers`), a `finally` or `with` it ran on the way out, or leaving."""
     token = object()
     try:
         setattr(exc, TAG, token)
@@ -266,29 +284,83 @@ def _follow(exc: BaseException, caller, inject: frozenset) -> None:
         stack.append(f)
         f = f.f_back
     ev = {"raised": _exc(exc), "stack": [_where(fr) for fr in stack],
-          "propagated_out": [], "handlers": [], "finally": [], "left_entry": False}
+          "propagated_out": [], "handlers": [], "tested": [], "finally": [],
+          "with_unwind": [], "left_entry": False}
     _LOG["follows"].append(ev)
     receiving: set[int] = {id(caller)} if stack else set()
     top = id(stack[-1]) if stack else None
+    pending: dict[int, dict] = {}       # frame -> the clause it is testing
+
+    def entered(frame, clause: dict) -> None:
+        ev["handlers"].append({**clause, "role": "except"})
+        receiving.discard(id(frame))
+        pending.pop(id(frame), None)
+
+    def tested(fid: int) -> None:
+        clause = pending.pop(fid, None)
+        if clause is not None:
+            ev["tested"].append({**clause, "role": "except"})
 
     def local(fr, event, arg):
+        fid = id(fr)
         if event == "exception":
             if getattr(arg[1], TAG, None) is token:
-                receiving.add(id(fr))                # a handler that re-raised it
-        elif event == "line" and id(fr) in receiving:
+                clause = pending.get(fid)
+                if clause is not None:               # `except X: raise`, one line
+                    entered(fr, clause)
+                receiving.add(fid)                   # a handler that re-raised it
+        elif event == "line" and fid in receiving:
             if "FINALLY_IS_HANDLER" in inject:
-                kind, clause = "except", "<injected: any resumption>"
+                tested(fid)
+                entered(fr, {**_where(fr), "clause": "<injected: any resumption>"})
+            elif _line_role(fr)["role"] == "other" and _opcode_at(fr) == "PUSH_EXC_INFO" \
+                    and "WITH_IS_HANDLER" not in inject:
+                # a `with` header, resumed to call `__exit__` (measured on
+                # CPython 3.12: PUSH_EXC_INFO on the header line): the frame
+                # is still unwinding and will either leave or carry on
+                tested(fid)
+                ev["with_unwind"].append(_where(fr))
             else:
-                kind, clause = _line_role(fr)
-            if kind == "finally":
-                ev["finally"].append(_where(fr))
+                role = _line_role(fr)
+                if role["role"] == "finally":
+                    tested(fid)
+                    ev["finally"].append(_where(fr))
+                elif role["role"] == "except":
+                    _try, header, first, last = role["handler"]
+                    clause = pending.get(fid)
+                    in_body = first > header and first <= fr.f_lineno <= last
+                    if clause is not None and clause["handler"] == header:
+                        if in_body:
+                            entered(fr, clause)
+                    elif in_body:
+                        entered(fr, {**_where(fr), "clause": role["clause"],
+                                     "handler": header})
+                    else:
+                        tested(fid)
+                        pending[fid] = {**_where(fr), "clause": role["clause"],
+                                        "handler": header, "one_line": header == first}
+                else:
+                    # the frame carried on with no clause of its own: either
+                    # a one-line `except X: ...` it just entered, or a
+                    # context manager's `__exit__` that swallowed the exception
+                    clause = pending.get(fid)
+                    if clause is not None and clause["one_line"]:
+                        entered(fr, clause)
+                    else:
+                        tested(fid)
+                        entered(fr, {**_where(fr), "clause": None})
+            return local
+        elif event == "return" and fid in receiving:
+            clause = pending.get(fid)
+            if clause is not None and clause["one_line"] and arg is not None:
+                entered(fr, clause)                  # `except X: return <value>`, one line
             else:
-                ev["handlers"].append({**_where(fr), "clause": clause, "role": kind})
-                receiving.discard(id(fr))
-        elif event == "return" and id(fr) in receiving:
-            receiving.discard(id(fr))
+                # a one-line `except X: return` that returns None is the one
+                # shape this cannot tell from a non-match: stated, not carried
+                tested(fid)
+            receiving.discard(fid)
             ev["propagated_out"].append(_where(fr))
-            if id(fr) == top:
+            if fid == top:
                 ev["left_entry"] = True
         return local
 
@@ -300,13 +372,12 @@ def _follow(exc: BaseException, caller, inject: frozenset) -> None:
         # `finally` that calls something) are followed; nothing else is
         return local if receiving else None
 
-    if "NO_FOLLOW" not in inject:
-        sys.settrace(glob)
-        try:
-            import threading
-            threading.settrace(glob)
-        except Exception:                                        # pragma: no cover
-            pass
+    sys.settrace(glob)
+    try:
+        import threading
+        threading.settrace(glob)
+    except Exception:                                            # pragma: no cover
+        pass
 
 
 class _WrapLoader:
@@ -353,10 +424,32 @@ class _WrapFinder:
         return None
 
 
+def _without_harness_frames(exc: BaseException):
+    """The exception's traceback with this file's frames unlinked, so the
+    child prints the traceback the real CLI prints, not one that names the
+    tracer. `__traceback__` is rewritten in place: the hook reads it there."""
+    keep = last = None
+    tb = exc.__traceback__
+    while tb is not None:
+        if tb.tb_frame.f_code.co_filename != str(HERE):
+            if last is None:
+                keep = tb
+            else:
+                last.tb_next = tb
+            last = tb
+        tb = tb.tb_next
+    if last is not None:
+        last.tb_next = None
+    exc.__traceback__ = keep
+    return keep
+
+
 def follow(plan_path: str, script: str, args: list[str]) -> int:
     plan = json.loads(pathlib.Path(plan_path).read_text())
     inject = frozenset(plan.get("inject", ()))
     script = str(pathlib.Path(script).resolve())
+    global _ROOT
+    _ROOT = pathlib.Path(plan["root"]).resolve()
     sys.meta_path.insert(0, _WrapFinder({k: list(v) for k, v in plan.get("wrap", {}).items()}, inject))
     for d in reversed(plan.get("path", ())):
         if d not in sys.path:
@@ -382,7 +475,7 @@ def follow(plan_path: str, script: str, args: list[str]) -> int:
             rc, _LOG["system_exit"] = 1, str(c)[:300]
     except BaseException as e:                                 # noqa: BLE001 -- the interpreter's own job
         _LOG["uncaught"] = {**_exc(e), "followed": hasattr(e, TAG)}
-        sys.excepthook(type(e), e, e.__traceback__)
+        sys.excepthook(type(e), e, _without_harness_frames(e))
         rc = 1
     finally:
         sys.settrace(None)
@@ -399,9 +492,10 @@ def run_child(run: dict, workdir: pathlib.Path, wrap: list[str], sites: list[str
     behalf: a timeout is recorded as `UNRESOLVED`, not as a verdict."""
     entry = str(pathlib.Path(run["entry"]).resolve())
     log = workdir / f"log-{time.time_ns()}.json"
+    root = pathlib.Path(run.get("root", ROOT)).resolve()
     plan = {"log": str(log), "wrap": {w.split(".")[0]: [] for w in wrap},
             "path": [str(p) for p in run.get("path", ())],
-            "prelude": run.get("prelude"), "inject": list(inject)}
+            "prelude": run.get("prelude"), "inject": list(inject), "root": str(root)}
     for w in wrap:
         mod, _, fn = w.partition(".")
         plan["wrap"][mod].append(fn)
@@ -414,8 +508,9 @@ def run_child(run: dict, workdir: pathlib.Path, wrap: list[str], sites: list[str
     env.pop("PYTHONDONTWRITEBYTECODE", None)
     cmd = [sys.executable, str(HERE), "follow", str(plan_path), entry, *[str(a) for a in run["argv"]]]
     started = time.time()
-    rec = {"entry": _rel(entry), "argv": [str(a) for a in run["argv"]], "role": run.get("role"),
-           "timeout_s": run.get("timeout", 900)}
+    rel = lambda p: str(pathlib.Path(p).relative_to(root)) if pathlib.Path(p).is_relative_to(root) else str(p)
+    rec = {"entry": rel(entry), "argv": [str(a) for a in run["argv"]], "role": run.get("role"),
+           "timeout_s": run.get("timeout", 900), "tree": str(root)}
     proc = subprocess.Popen(cmd, cwd=str(run.get("cwd", ROOT)), env=env, text=True,
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
     try:
@@ -512,10 +607,11 @@ def trace_one(spec: dict, workdir: pathlib.Path, roles: tuple[str, ...] = ("work
 
 
 def load_spec(path: pathlib.Path):
-    mod = importlib.util.module_from_spec(importlib.util.spec_from_file_location(path.stem, path))
-    sys.path.insert(0, str(path.parent))
+    """Import a spec module by file (its name is not importable elsewhere)."""
+    spec = importlib.util.spec_from_file_location(path.stem, path)
+    mod = importlib.util.module_from_spec(spec)
     sys.modules[path.stem] = mod
-    importlib.util.spec_from_file_location(path.stem, path).loader.exec_module(mod)
+    spec.loader.exec_module(mod)
     return mod.TRACES
 
 
@@ -533,12 +629,16 @@ def report(record: dict) -> str:
 
 
 def main(argv=None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "follow":
+        # not argparse: everything after the script belongs to the ENTRY
+        # POINT, its own options included
+        if len(argv) < 3:
+            print("usage: refusal_candidate_trace.py follow PLAN.json SCRIPT.py [args...]", file=sys.stderr)
+            return 2
+        return follow(argv[1], argv[2], argv[3:])
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
-    f = sub.add_parser("follow")
-    f.add_argument("plan")
-    f.add_argument("script")
-    f.add_argument("args", nargs="*")
     r = sub.add_parser("run")
     r.add_argument("--spec", type=pathlib.Path, required=True)
     r.add_argument("--out", type=pathlib.Path, required=True)
@@ -548,8 +648,6 @@ def main(argv=None) -> int:
     p = sub.add_parser("report")
     p.add_argument("record", type=pathlib.Path)
     a = ap.parse_args(argv)
-    if a.cmd == "follow":
-        return follow(a.plan, a.script, a.args)
     if a.cmd == "report":
         print(report(json.loads(a.record.read_text())))
         return 0
