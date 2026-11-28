@@ -227,9 +227,12 @@ against DECAY 75 at TONE 100). So:
 
   1. the rendered anchored H - L must RISE monotonically with TONE;
   2. it must land inside the bracket above -- and where inside is set by the
-     inter-band balance, which is #396's open half, so a miss at TONE 0 or
-     TONE 100 is a balance result and a miss in the MIDDLE (TONE 25, 75, where
-     the bracket is 4.3 and 3.0 dB wide) is a TONE-law result;
+     inter-band balance, which #396 had REFUSED by the time this prediction
+     landed (it closed 2026-09-28, the same morning this step did, on the
+     three swing VCAs' drive levels -- not established then, so the levels
+     stay on the shipped-kit rule), so a miss at TONE 0 or TONE 100 is a
+     balance result and a miss in the MIDDLE (TONE 25, 75, where the bracket
+     is 4.3 and 3.0 dB wide) is a TONE-law result;
   3. H's own EDT10 must FALL with TONE -- the short band, whose envelope is
      the fast one, takes over the high band as TONE opens. The 808's ratio to
      TONE 50 is 1.09-1.38 at TONE 0 and 0.58-0.76 at TONE 100. This is a
@@ -240,6 +243,14 @@ against DECAY 75 at TONE 100). So:
 
 Point 3 is the one worth the render. It is the only one of the four that no
 choice of inter-band balance can manufacture.
+
+(Later disposition of that balance: #369 step 11's schematic read of the VCA
+section, `docs/scorecard/cymbal-369/vca-drive/`, found the three stages
+component-identical and Q16 and Q17 on ONE drive node, so there are not three
+drive levels to read; the collector loads it did find supply +3.5 dB on DECAY
+and +5.0 dB on short, not the short band's +39.8 dB gap. The missing factor
+is not in the cymbal's VCA section, so the refusal no longer rests on a
+missing input -- it rests on a read that does not carry the factor.)
 
 ===========================================================================
 REVISION 5 (#411) CHANGES ONE NUMBER: Hh1's OWN gain register. Everything
