@@ -16,9 +16,10 @@ so replay() must REFUSE -- a tool that answers when it cannot is worse than
 one that is absent.
 """
 from __future__ import annotations
-import json, pathlib, subprocess
+import json, pathlib, subprocess, sys
 import pytest
 
+import exit_contract                                               # noqa: E402
 import measure_dag_churn as mc                                     # noqa: E402
 
 
@@ -175,3 +176,77 @@ def test_refuses_a_history_with_no_dag_commits(tmp_path):
     _commit(repo, "no dag commits here")
     with pytest.raises(SystemExit, match="REFUSED"):
         mc.replay(repo, 10)
+
+
+# ---- #1857: the exit status when nothing was replayed -----------------------
+#
+# `main` returned 0 after the totals, and `totals["commits"]` is 0 when every
+# [dag] commit it found was skipped -- a merge, or no readable results file.
+# Reproduced on origin/main @ 528a228b (2026-11-28): a history whose one [dag]
+# commit has no results file printed "replayed 0 linear [dag] commits: 0
+# record rewrites, 0 would have been suppressed (0%)" and exited 0. That
+# "(0%)" is a zero that looks like data, which this tool's own docstring says
+# it refuses rather than print.
+#
+# So ZERO REPLAYED is a refusal: the unit this instrument measures is a
+# replayed linear commit, and with none the question "which rewrites would the
+# rule have suppressed" was not put to any commit. ZERO RECORD REWRITES among
+# replayed commits is a measured zero and stays 0. The control below pins
+# the second over a window of exactly one such commit, so the same "(0%)"
+# text is shown to be a result when a commit was replayed.
+#
+# Red-first on that tree, 2026-11-28: the refusal test failed with rc 0 and
+# that control was green.
+
+
+def test_nothing_replayed_is_refused_not_a_pass(tmp_path, capsys):
+    repo = tmp_path / "synth"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    _git(repo, "config", "user.email", "t@example.com")
+    _git(repo, "config", "user.name", "t")
+    (repo / "README.md").write_text("# board\n")
+    _commit(repo, "init")
+    (repo / "README.md").write_text("# board\n\n[dag] touched\n")
+    _commit(repo, "[dag] regenerate the roadmap from evidence")
+
+    assert mc.main(["--repo", str(repo)]) == exit_contract.REFUSED
+    out = capsys.readouterr().out
+    assert "no results file at parent or commit -- skipped" in out, "the row is still on record"
+    assert "would have been suppressed" not in out, "no zero that looks like data: " + out
+    verdicts = [ln for ln in out.splitlines() if ln.startswith("REFUSED")]
+    assert len(verdicts) == 1 and out.splitlines()[-1] == verdicts[0], out
+    assert "0 of 1 [dag] commit(s) replayed" in verdicts[0], verdicts[0]
+
+    proc = subprocess.run([sys.executable, mc.__file__, "--repo", str(repo)],
+                          capture_output=True, text=True, timeout=120)
+    assert (proc.returncode, proc.stderr) == (exit_contract.REFUSED, ""), (proc.stdout, proc.stderr)
+    assert proc.stdout.splitlines()[-1].startswith("REFUSED:"), proc.stdout
+
+
+def test_the_control_replayed_commits_still_pass_even_when_nothing_is_suppressed(hist, capsys):
+    """THE CONTROL. `hist` replays two commits whose records were both
+    rewritten, one of them suppressible. A third [dag] commit that rewrites
+    no record adds a measured zero, and a window of that one commit alone
+    prints "0 record rewrites, 0 would have been suppressed (0%)" over ONE
+    replayed commit -- a result. Widening the rule to "nothing suppressed"
+    or to "(0%) in the headline" turns this red."""
+    repo, _ = hist
+    assert mc.main(["--repo", str(repo)]) == exit_contract.PASS
+    out = capsys.readouterr().out
+    assert "replayed 2 linear [dag] commits: 2 record rewrites, 1 would have been suppressed (50%)" in out, out
+    assert not any(ln.startswith("REFUSED") for ln in out.splitlines()), out
+
+    readme = repo / "README.md"
+    readme.write_text(readme.read_text().replace("tail one", "tail uno"))
+    _commit(repo, "[dag] regenerate the roadmap from evidence")
+
+    assert mc.main(["--repo", str(repo)]) == exit_contract.PASS
+    out = capsys.readouterr().out
+    assert "replayed 3 linear [dag] commits: 2 record rewrites, 1 would have been suppressed (50%)" in out, out
+    assert "1 of 3 commits' docs/dag-results.json diffs would have been empty" in out, out
+
+    assert mc.main(["--repo", str(repo), "--commits", "1"]) == exit_contract.PASS
+    out = capsys.readouterr().out
+    assert "replayed 1 linear [dag] commits: 0 record rewrites, 0 would have been suppressed (0%)" in out, out
+    assert not any(ln.startswith("REFUSED") for ln in out.splitlines()), out
