@@ -38,7 +38,33 @@ as it is rendered, with or without `--wav` -- until #1978 the check lived only
 in `write_clip`, so a run that asked for no file exited 0 and printed the NEXT
 banner over a clip that was not a signal -- and that refusal, raised after the
 measurement and not before it, is handled where it arises rather than escaping
-the `try` at the top of `main`.
+the `try` at the top of `main`. **Numbers are not yet a signal, and that is
+the next refusal (2026-11-28, #2044).** `require_finite` passes an empty buffer
+-- no sample in it is non-finite -- and an all-zero one. So until #2044 an
+empty clip reached the summary line, whose `np.abs(y).max()` raises on zero
+samples, and the run ended as a TRACEBACK with no record; and a silent one was
+reported QUALIFIED and, under `--wav`, frozen. The clip now also goes through
+`rig_qualification.check_sounding` -- the rig's own is-there-anything-at-all
+check, which the qualification applies to its own renders -- before the summary
+line. An empty or silent clip is REFUSED: exit 2, the record written with the
+check's `why`, nothing on disk.
+
+WHAT THE SOUNDING CHECK DOES NOT CATCH (rule 8)
+-----------------------------------------------
+What satisfies that check while violating its intent: a clip that peaks above
+the silence floor and is still not usable as a reference. At a peak of 1e-8 it
+passes -- it is reported QUALIFIED, its summary line reads `peak 0.000000`,
+and under `--wav` it is frozen. That is the accepted limit and not an
+oversight, and `tools/test_qualify_modeld_pedalboard.py` pins it so that it
+cannot drift unnoticed. The guard is the silence floor alone
+(`check_sounding`'s, 1e-9) because the question it answers is the one this
+clip adds: did the host produce a buffer of zeros on a re-render of the note
+the qualification has just measured. Whether the level is USABLE is
+`check_level`'s question, with its own window, and the qualification already
+asks it of its own renders; a second window on this clip was left out on
+purpose (#2044). A measured too-quiet-clip case is what would reopen that
+(`docs/verification-rules.md`, rule 8: a guard ships with the input that
+defeats it).
 
 WHAT A NON-ZERO EXIT MEANS FOR THE REST OF THE WORK
 ---------------------------------------------------
@@ -202,6 +228,9 @@ def main(argv=None) -> int:
         y = dev.render_note(dev.note)
         try:
             am.require_finite(y, "the clip that qualified")
+            sounding = rq.check_sounding(y, name="the clip that qualified")
+            if not sounding.ok:
+                raise rp.Refused(sounding.why)
             print(f"  {len(y)} frames  peak {float(np.abs(y).max()):.6f}  "
                   f"note {dev.note}  block {dev.block}  sr {dev.sr}")
             if a.wav:

@@ -409,6 +409,251 @@ def test_a_plain_AssertionError_at_the_finiteness_check_still_escapes(
         "a bug is not a refusal; there is no record to write"
 
 
+def _swap_the_clip_after_build(monkeypatch, swap):
+    """Everything `with_host` installs, plus one change made AFTER the rig has
+    qualified: from then on `render_note` -- which `main` calls once more, to
+    look at the clip -- returns `swap` applied to the audio it rendered. The
+    qualification's own renders are untouched, so the rig still qualifies and
+    the run still reaches the clip with `code` already `OK`.
+
+    The refused clips and the control go through this one harness, so the only
+    difference between them is what `swap` hands back."""
+    real_build = qmp.build
+
+    def build():
+        dev = real_build()
+        render = dev.render_note
+
+        def render_note(note, seconds=None):
+            return swap(np.array(render(note, seconds)))
+        dev.render_note = render_note
+        return dev
+    monkeypatch.setattr(qmp, "build", build)
+
+
+def _run_the_swapped_clip(monkeypatch, capsys, bundle, tmp_path, swap, wav):
+    """`main` over a rig whose post-qualification clip is `swap(rendered)`, on
+    the command line `wav` selects. Returns the exit code, everything printed,
+    the `--json` record and the `--wav` path (`None` when none was asked
+    for)."""
+    with_host(monkeypatch, bundle)
+    _swap_the_clip_after_build(monkeypatch, swap)
+    out = tmp_path / "rec.json"
+    clip = tmp_path / "clip.wav" if wav else None
+    code = qmp.main((["--wav", str(clip)] if clip else [])
+                    + ["--json", str(out)])
+    return code, capsys.readouterr().out, json.loads(out.read_text()), clip
+
+
+def _clip_files(tmp_path):
+    """Every file the clip path can leave: the `.wav` and its `.part`."""
+    return [p.name for p in tmp_path.rglob("clip.wav*")]
+
+
+@pytest.mark.parametrize("wav", [False, True], ids=["no --wav", "--wav"])
+def test_an_empty_clip_is_REFUSED_not_a_traceback(
+        monkeypatch, capsys, bundle, tmp_path, wav):
+    """The rig qualifies, and the clip it renders afterwards has no samples --
+    `y[:0]`, what a host that returns nothing for the second render hands
+    back. Until 2026-11-28 (#2044) this escaped `main` as a traceback, exit 1,
+    with no record: `require_finite` asks only whether the samples are
+    numbers, an empty buffer has no sample that is not one, and #1978's guard
+    passed it on to the summary line, whose `np.abs(y).max()` raises
+    `ValueError` on zero samples.
+
+    What is asserted, and why each one could otherwise pass by accident:
+
+      * `the clip that qualified:` and the record's `qualified` -- the run
+        reached the clip path. A rig refused earlier also exits 2.
+      * `REFUSED  the host returned an empty buffer` -- `check_sounding`'s own
+        words, so the REAL check refused the clip; and the record's `why` is
+        read from that check as well as pinned here.
+      * no summary line -- the refusal comes BEFORE the line whose
+        `np.abs(y).max()` is what raised. One printed after it would mean only
+        the exit code had changed.
+      * exactly one `REFUSED` line and no `NEXT:` -- one check, one refusal,
+        and nothing tells the operator to record `qualified=True`.
+      * no `.wav` and no `.part`, with or without `--wav`.
+      * the #122 note and not the no-apparatus one: this run loaded and
+        measured the plugin; the clip is what could not be frozen."""
+    code, text, rec, _clip = _run_the_swapped_clip(
+        monkeypatch, capsys, bundle, tmp_path, lambda y: y[:0], wav)
+    why = "the host returned an empty buffer"
+    assert code == rp.REFUSED, text
+    assert "the clip that qualified:" in text
+    assert f"REFUSED  {why}" in text, text
+    assert " frames  peak " not in text, \
+        "the refusal must come before the summary line"
+    assert sum(ln.startswith("REFUSED") for ln in text.splitlines()) == 1, text
+    assert "NEXT:" not in text, \
+        "a refused clip must not be recorded as qualified"
+    assert "REOPENS" in text and "stated NO-VERDICT" not in text, text
+    assert rec["outcome"] == "REFUSED"
+    assert rec["why"] == why == rq.check_sounding(
+        np.zeros(0), name="the clip that qualified").why
+    assert rec["qualification"]["verdict"] == "qualified"
+    assert rec["environment"]["host"] == "pedalboard"
+    assert _clip_files(tmp_path) == [], \
+        "nothing from a refused clip may be on disk"
+
+
+@pytest.mark.parametrize("wav", [False, True], ids=["no --wav", "--wav"])
+def test_a_silent_clip_is_REFUSED_not_QUALIFIED_and_frozen(
+        monkeypatch, capsys, bundle, tmp_path, wav):
+    """The same rig, and a clip that is all zeros -- `np.zeros_like(y)`, the
+    buffer a host hands back when it renders nothing for the second render.
+    Not hypothetical for this bundle: `RIG_VERDICTS['modeld']` records Model D
+    rendering exact silence under dawdreamer.
+
+    Until 2026-11-28 (#2044) this run exited 0, wrote `outcome: QUALIFIED`,
+    printed the NEXT banner over `peak 0.000000` and, with `--wav`, froze the
+    silent clip to disk. Every sample is finite, so #1978's guard passed it:
+    numbers are not yet a signal. The rig's own qualification refuses a silent
+    buffer (`check_sounding`), but only for the renders IT makes; this clip
+    was covered by the finiteness check alone.
+
+    What is asserted, and why each one could otherwise pass by accident:
+
+      * `the clip that qualified:` and the record's `qualified` -- the run
+        reached the clip path. A rig refused earlier also exits 2.
+      * `REFUSED  peak 0 is at or below the silence floor 1e-09: the host
+        rendered no signal` -- `check_sounding`'s words with the number it
+        read, so the real check refused it and not some other guard; the
+        record's `why` is read from that check as well as pinned here.
+      * no summary line -- `peak 0.000000` under "the clip that qualified:"
+        was the symptom, and it is what a run still prints if the check is
+        moved below it.
+      * exactly one `REFUSED` line and no `NEXT:`.
+      * no `.wav` and no `.part` under `--wav`: `write_clip` holds no silence
+        check of its own, so only the order guards the disk.
+      * the #122 note and not the no-apparatus one, as above."""
+    code, text, rec, _clip = _run_the_swapped_clip(
+        monkeypatch, capsys, bundle, tmp_path, np.zeros_like, wav)
+    why = ("peak 0 is at or below the silence floor 1e-09: "
+           "the host rendered no signal")
+    assert code == rp.REFUSED, text
+    assert "the clip that qualified:" in text
+    assert f"REFUSED  {why}" in text, text
+    assert " frames  peak " not in text, \
+        "the refusal must come before the summary line"
+    assert sum(ln.startswith("REFUSED") for ln in text.splitlines()) == 1, text
+    assert "NEXT:" not in text, \
+        "a refused clip must not be recorded as qualified"
+    assert "REOPENS" in text and "stated NO-VERDICT" not in text, text
+    assert rec["outcome"] == "REFUSED"
+    assert rec["why"] == why == rq.check_sounding(
+        np.zeros(4800), name="the clip that qualified").why
+    assert rec["qualification"]["verdict"] == "qualified"
+    assert rec["environment"]["host"] == "pedalboard"
+    assert _clip_files(tmp_path) == [], "a silent clip must not be frozen"
+
+
+@pytest.mark.parametrize("clip, why", [
+    (np.zeros(1), "peak 0 is at or below the silence floor 1e-09: "
+                  "the host rendered no signal"),
+    (np.full(4800, 1e-9), "peak 1e-09 is at or below the silence floor 1e-09: "
+                          "the host rendered no signal"),
+], ids=["one zero sample", "peak exactly at the floor"])
+def test_a_clip_at_the_edge_of_the_silence_floor_is_REFUSED_and_not_written(
+        monkeypatch, capsys, bundle, tmp_path, clip, why):
+    """The two ends of the empty-or-silent boundary, through `main` with
+    `--wav`, the path that writes. One sample of value zero is neither empty
+    (it has a sample) nor a signal. And a peak EQUAL to the floor is refused,
+    because the comparison is `<=`: a floor that let its own value through
+    would be off by one clip."""
+    code, text, rec, _clip = _run_the_swapped_clip(
+        monkeypatch, capsys, bundle, tmp_path, lambda y: clip, True)
+    assert code == rp.REFUSED, text
+    assert f"REFUSED  {why}" in text, text
+    assert rec["outcome"] == "REFUSED" and rec["why"] == why
+    assert rec["qualification"]["verdict"] == "qualified"
+    assert "NEXT:" not in text and _clip_files(tmp_path) == []
+
+
+@pytest.mark.parametrize("wav", [False, True], ids=["no --wav", "--wav"])
+def test_a_clip_with_a_real_signal_still_qualifies_through_the_same_swap(
+        monkeypatch, capsys, bundle, tmp_path, wav):
+    """The control for the three tests above: the same swapped rig, the same
+    command line, and a `swap` that hands the render back untouched. The
+    harness must not be what refuses -- a guard that refuses every clip passes
+    all of them -- so a clip with a signal exits 0, prints its summary line
+    and the NEXT banner, is recorded QUALIFIED, and is written exactly when
+    `--wav` asked for it."""
+    code, text, rec, clip = _run_the_swapped_clip(
+        monkeypatch, capsys, bundle, tmp_path, lambda y: y, wav)
+    assert code == rp.OK, text
+    assert " frames  peak " in text and "NEXT:" in text, text
+    assert sum(ln.startswith("REFUSED") for ln in text.splitlines()) == 0, text
+    assert rec["outcome"] == "QUALIFIED" and "why" not in rec
+    assert rec["qualification"]["verdict"] == "qualified"
+    assert _clip_files(tmp_path) == (["clip.wav"] if wav else [])
+    if wav:
+        from scipy.io import wavfile
+        sr, y = wavfile.read(str(clip))
+        assert sr == 48000 and float(abs(y).max()) > rq.SILENCE_FLOOR
+
+
+@pytest.mark.parametrize("wav", [False, True], ids=["no --wav", "--wav"])
+def test_a_clip_just_above_the_silence_floor_passes_and_that_is_the_limit(
+        monkeypatch, capsys, bundle, tmp_path, wav):
+    """The rule-8 question (`docs/verification-rules.md`) answered by running
+    it: what satisfies the new check while violating its intent? A clip whose
+    peak is above the floor and that is still not usable as a reference. Here,
+    the render scaled to a peak of 1e-8.
+
+    This PINS a limit the tool states in its docstring; it does not endorse
+    it. The clip is reported QUALIFIED, its summary line reads
+    `peak 0.000000`, and under `--wav` it is frozen. The guard is the silence
+    floor alone because the question it answers is "did the host produce a
+    buffer of zeros". Whether the level is USABLE is `check_level`'s question,
+    with its own window, and it was kept off this clip on purpose (#2044).
+
+    It goes red on purpose when a level floor is added here. That is why it
+    is written down: the limit is then a decision somebody made, and not one
+    nobody noticed."""
+    def scaled(y):
+        return y * (1e-8 / float(np.abs(y).max()))
+    code, text, rec, _clip = _run_the_swapped_clip(
+        monkeypatch, capsys, bundle, tmp_path, scaled, wav)
+    assert code == rp.OK, text
+    assert "peak 0.000000" in text and "NEXT:" in text, text
+    assert rec["outcome"] == "QUALIFIED"
+    assert rec["qualification"]["verdict"] == "qualified"
+    assert _clip_files(tmp_path) == (["clip.wav"] if wav else [])
+
+
+def test_a_plain_AssertionError_at_the_sounding_check_still_escapes(
+        monkeypatch, capsys, bundle, tmp_path):
+    """The reason a clip that fails `check_sounding` is turned into a refusal
+    explicitly, and not by a wider `except`.
+
+    `RigRefusal` subclasses `AssertionError`, so a guard written as `except
+    AssertionError` or `except Exception` would turn a BUG in the sounding
+    check into a REFUSED with a record to its name. A plain `AssertionError`
+    raised by the check itself must come out of `main` uncaught: exit 1 at
+    `sys.exit(main())` and no record, the honest report of a bug.
+
+    The injection is narrowed to the clip's own `name` and delegates every
+    other call to the real check. The qualification calls `check_sounding`
+    for its own renders inside `build()`; replaced outright, the bug would
+    fire there and the rig would never qualify."""
+    with_host(monkeypatch, bundle)
+    real = rq.check_sounding
+
+    def not_a_check(x, **kw):
+        if kw.get("name") != "the clip that qualified":
+            return real(x, **kw)
+        raise AssertionError(
+            "injected at the sounding check: a bug, not a refusal")
+    monkeypatch.setattr(rq, "check_sounding", not_a_check)
+    out = tmp_path / "rec.json"
+    with pytest.raises(AssertionError,
+                       match="injected at the sounding check"):
+        qmp.main(["--json", str(out)])
+    assert not out.exists(), \
+        "a bug is not a refusal; there is no record to write"
+
+
 def test_an_uncorrectable_octave_exits_FAIL_and_reopens_122(
         monkeypatch, capsys, bundle, tmp_path):
     """The gate's failure branch as the operator sees it: exit 1, the sweep
