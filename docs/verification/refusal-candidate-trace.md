@@ -122,6 +122,12 @@ record's 90, and three of the moves are rows this document discusses:
   candidates; `:372` is `:373` and is now `covered(base)` -- the repair. The
   committed calibration control is a differential and passes on the repaired
   tree.
+- #1699 grew `tools/probes/audio_distance_floor.py` by 57 lines. Its nine
+  rows above `main` moved by 11: `:441` is `:452`, `:446` `:457`, `:467`
+  `:478`, `:489` `:500`, `:490` `:501`, `:540` `:551`, `:611` `:622`, `:612`
+  `:623`, `:640` `:651`. Its two inside `main` moved by 45: `:687` is `:732`
+  and `:705` is `:750`. Each is still the call or handler it was; `:687`
+  reads `return exit_contract.REFUSED` -- the same status, by name.
 - `tools/mono_m5a_score.py` changed under #1570 and #1586 (a shared harmonic
   summary; hashes bound to the bytes measured). The two `:264` inputs were
   re-run on the merged tree and escape exactly as recorded.
