@@ -20,7 +20,6 @@ import json
 import os
 import pathlib
 import sys
-import wave
 
 import numpy as np
 
@@ -29,6 +28,7 @@ sys.path.insert(0, str(ROOT / "model"))
 sys.path.insert(0, str(ROOT / "audition"))
 
 import audio_measure as am  # noqa: E402
+import manifest as mf  # noqa: E402
 import reference_rigs as rr  # noqa: E402
 import voice_fx as vf  # noqa: E402
 import oversampled_osc as os2  # noqa: E402
@@ -51,16 +51,6 @@ def _sha256(path: pathlib.Path) -> str:
         for block in iter(lambda: fh.read(1 << 20), b""):
             h.update(block)
     return h.hexdigest()
-
-
-def _write_wav(path: pathlib.Path, x: np.ndarray) -> None:
-    y = np.clip(np.round(np.asarray(x, dtype=float) * 32767.0), -32768, 32767)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with wave.open(str(path), "wb") as out:
-        out.setnchannels(1)
-        out.setsampwidth(2)
-        out.setframerate(SR)
-        out.writeframes(y.astype("<i2").tobytes())
 
 
 def _assert_full_scale(name: str, x: np.ndarray) -> None:
@@ -161,9 +151,9 @@ def run(out: pathlib.Path) -> tuple[int, dict]:
         out.mkdir(parents=True, exist_ok=True)
         ref_wav, dut_wav = out / "reference-surge.wav", out / "dut-polyblep.wav"
         dut_2x_wav = out / "dut-2x-decimated.wav"
-        _write_wav(ref_wav, ref)
-        _write_wav(dut_wav, dut)
-        _write_wav(dut_2x_wav, dut_2x)
+        mf._write_wav16(ref_wav, ref, SR)
+        mf._write_wav16(dut_wav, dut, SR)
+        mf._write_wav16(dut_2x_wav, dut_2x, SR)
         report = {
             "status": "VALID",
             "case": "M5A-component",
