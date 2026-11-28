@@ -11,8 +11,6 @@ _ROOT = __import__("pathlib").Path(__file__).resolve().parents[3]
 import hashlib, itertools, json, math, os, subprocess, sys, time
 
 WT = str(_ROOT)
-SCRATCH = ("/private/tmp/claude-501/-Users-joseph-dev-2amlogic/"
-           "b50207d1-0443-45b1-85ae-6193fbb61d1b/scratchpad")
 sys.path.insert(0, os.path.join(WT, "model"))
 sys.path.insert(0, os.path.join(WT, "audition"))
 
@@ -27,6 +25,19 @@ from modal_fixed import RAW, BP, HP, pole_regs
 
 OUT: dict = {}
 def say(*a): print(*a, flush=True)
+
+def out_dir():
+    """Where these probes write their JSON: build/hihat-probes under the repo
+    root (gitignored), created on demand. REFUSES by name when the directory
+    cannot be created or written, rather than failing after the measurements."""
+    d = _ROOT / "build" / "hihat-probes"
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        raise SystemExit(f"REFUSED: cannot create the output directory {d}: {e}") from e
+    if not os.access(d, os.W_OK):
+        raise SystemExit(f"REFUSED: the output directory {d} is not writable")
+    return d
 
 # ---------------------------------------------------------------- provenance
 def provenance():
@@ -312,8 +323,8 @@ def main():
     OUT["sweep_two_filters"] = dict(cost=c2, f0a=f1, qa=q1, numa=n1, f0b=f2, qb=q2,
                                     shares=sh2)
 
-    json.dump(OUT, open(os.path.join(SCRATCH, "hh_cy.json"), "w"), indent=2, default=float)
-    json.dump(prov, open(os.path.join(SCRATCH, "hh_prov.json"), "w"), indent=2)
+    json.dump(OUT, open(out_dir() / "hh_cy.json", "w"), indent=2, default=float)
+    json.dump(prov, open(out_dir() / "hh_prov.json", "w"), indent=2)
     say("\n(written: hh_cy.json, hh_prov.json)")
 
 if __name__ == "__main__":

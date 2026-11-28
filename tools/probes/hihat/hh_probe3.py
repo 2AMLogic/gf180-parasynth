@@ -7,11 +7,8 @@ _ROOT = __import__("pathlib").Path(__file__).resolve().parents[3]
 import json, os, sys
 
 WT = str(_ROOT)
-SCRATCH = ("/private/tmp/claude-501/-Users-joseph-dev-2amlogic/"
-           "b50207d1-0443-45b1-85ae-6193fbb61d1b/scratchpad")
 sys.path.insert(0, os.path.join(WT, "model"))
 sys.path.insert(0, os.path.join(WT, "audition"))
-sys.path.insert(0, SCRATCH)
 
 import numpy as np
 import audio_measure as am
@@ -19,7 +16,7 @@ import drums_fx as dx
 from dsp import SR
 from modal_fixed import RAW, BP, HP
 from hh_probe import (say, render, fast_band_energy, fmt, dfmt, cost, gate,
-                      CY_BANDS, HAT_BANDS, HW_CY, HW_CH, HW_OH)
+                      CY_BANDS, HAT_BANDS, HW_CY, HW_CH, HW_OH, out_dir)
 from hh_probe2 import trim_onset
 
 OUT: dict = {}
@@ -112,7 +109,7 @@ def main():
     say(f"    shipped gate: " + ("RED on " + ",".join(bad) if bad else "GREEN -- blind to it"))
     OUT["control_numerator"] = dict(shares=list(shd), tight_red=red, shipped_red=bool(bad))
 
-    json.dump(OUT, open(os.path.join(SCRATCH, "hh_part3.json"), "w"), indent=2, default=float)
+    json.dump(OUT, open(out_dir() / "hh_part3.json", "w"), indent=2, default=float)
     say("\n(written hh_part3.json)")
 
 if __name__ == "__main__":

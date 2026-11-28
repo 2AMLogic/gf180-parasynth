@@ -55,8 +55,15 @@ What was folded, and what was deliberately not:
   guard are unchanged; that is the only change to either file since the rescue
   described above.
 - `hh_probe3.py`, `hh_probe4.py`, `combo.py` and `patch_q.py` had no helpers of
-  their own that overlap the harness -- they import `hh_probe`'s -- so they are
-  untouched.
+  their own that overlap the harness -- they import `hh_probe`'s. #1965 touched
+  the first two and not the last: all four probes now write their JSON to
+  `build/hihat-probes/` (gitignored, `hh_probe.out_dir()`) instead of a
+  hardcoded macOS scratch path, and `hh_probe4.py` prints a refused T20's
+  reason and `.require()`s the best-fit one instead of writing `None` and
+  crashing. Neither probe completes today, and that is the block's doing: its
+  CY output reaches its one-LSB floor 1.876 T20 after the -25 dB point where
+  `MIN_TAIL_T20` needs 2.0, so no render length lets `schroeder_t20` answer
+  (`test_hh_probe3_runs.py` measures this).
 - `hh_probe.py`'s renderer, filter derivations and `fast_band_energy` are
   hi-hat/cymbal apparatus, not validation methodology, and stay here.
 - `hh_probe5.py` (added after #104 was filed) keeps its own `Refused`

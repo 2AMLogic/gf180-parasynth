@@ -14,11 +14,8 @@ _ROOT = __import__("pathlib").Path(__file__).resolve().parents[3]
 import json, os, sys, time
 
 WT = str(_ROOT)
-SCRATCH = ("/private/tmp/claude-501/-Users-joseph-dev-2amlogic/"
-           "b50207d1-0443-45b1-85ae-6193fbb61d1b/scratchpad")
 sys.path.insert(0, os.path.join(WT, "model"))
 sys.path.insert(0, os.path.join(WT, "audition"))
-sys.path.insert(0, SCRATCH)
 
 import numpy as np
 import audio_measure as am
@@ -26,9 +23,17 @@ import drums_fx as dx
 from dsp import SR
 from modal_fixed import RAW, BP, HP
 from hh_probe import (say, render, fast_band_energy, fmt, dfmt, cost, gate,
-                      CY_BANDS, HW_CY)
+                      CY_BANDS, HW_CY, out_dir)
 
 OUT: dict = {}
+
+def t20_text(e):
+    """`T20 <ms>`, or the refusal's own reason. A refused estimate is never
+    printed as a NaN standing where a number was expected (#1965)."""
+    return f"T20 {e.value*1e3:4.0f} ms" if e.ok else f"T20 REFUSED: {e.reason}"
+
+def t20_row(e):
+    return e.value if e.ok else f"REFUSED: {e.reason}"
 
 def cy_kit(f0=dx.CY_HI_HZ, q=dx.CY_HI_Q, num=BP, low_gain=1.0):
     img = dict(dx.kit_with_sounds("CY"))
@@ -55,9 +60,9 @@ def main():
         _, x = render(cy_kit(f0=f0, q=q), 2.0)
         sh = fast_band_energy(x, CY_BANDS)
         t20 = am.schroeder_t20(x, SR)
-        rows.append((f0, q, list(sh), cost(sh, HW_CY), t20.value if t20.ok else None))
+        rows.append((f0, q, list(sh), cost(sh, HW_CY), t20_row(t20)))
         say(f"   M_CYHI {f0:6.0f} Hz Q {q:3.1f} BP  {fmt(sh)}  cost {cost(sh, HW_CY):5.1f}"
-            f"  T20 {t20.value*1e3 if t20.ok else float('nan'):4.0f} ms")
+            f"  {t20_text(t20)}")
     say(f"   machine                     {fmt(HW_CY)}        T20  798 ms")
     say("   -> the 9-13 kHz shoulder closes and OVERSHOOTS with the filter that")
     say("      already exists. Its shipped Q 2.5 is the whole difference.")
@@ -72,14 +77,15 @@ def main():
             c = cost(sh, HW_CY)
             t20 = am.schroeder_t20(x, SR)
             say(f"   Q {q:3.1f}  E_CYL x{g:4.2f}  {fmt(sh)}  cost {c:5.1f}"
-                f"  T20 {t20.value*1e3 if t20.ok else float('nan'):4.0f} ms")
+                f"  {t20_text(t20)}")
             if best is None or c < best[0]:
-                best = (c, q, g, list(sh), t20.value if t20.ok else None)
+                best = (c, q, g, list(sh), t20)
     c, q, g, sh, t20 = best
     say(f"\n   best on the block: M_CYHI 10750 Hz Q {q} BP, E_CYL x{g}")
     say(f"     machine  {fmt(HW_CY)}")
     say(f"     best     {fmt(sh)}   cost {c:.1f}  (shipped {cost(base, HW_CY):.1f})")
     gate(sh, "best, no filter added, fixed-point render")
+    t20 = t20.require(f"best-fit CY T20 on the block, E_CYL x{g}")
     say(f"     T20 {t20*1e3:.0f} ms vs the machine's 798 ms "
         f"(the cymbal T20 test allows +-20 %: 638-958 ms)")
     say("   E_CYL's peak is ALREADY a fit in drums_fx.py (the three CY envelope")
@@ -87,7 +93,7 @@ def main():
     say("   is re-fitting, and it is labelled a FIT, not a circuit value.")
     OUT["cy_block_fit"] = dict(cost=c, q=q, low_gain=g, shares=sh, t20=t20)
 
-    json.dump(OUT, open(os.path.join(SCRATCH, "hh_part4.json"), "w"), indent=2, default=float)
+    json.dump(OUT, open(out_dir() / "hh_part4.json", "w"), indent=2, default=float)
     say("\n(written hh_part4.json)")
 
 if __name__ == "__main__":
