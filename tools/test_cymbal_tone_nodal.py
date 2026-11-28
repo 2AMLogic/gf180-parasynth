@@ -363,11 +363,13 @@ def test_inverting_the_wiper_is_blind_at_the_anchor_and_caught_elsewhere():
 # ---------------------------------------------------------------------------
 # the gate itself
 # ---------------------------------------------------------------------------
-def test_the_gate_passes_on_the_current_tree():
+def test_the_gate_passes_on_the_current_tree(capsys):
     """CLAUDE.md: run a gate against the current state before committing it.
     An unsatisfiable gate is worse than no gate."""
-    ok, lines = tn.check()
-    assert ok, "\n".join(lines)
+    ok, lines, refused = tn.check()
+    assert ok and not refused, "\n".join(lines)
+    assert not any("NO VERDICT" in l for l in lines)
+    assert tn.main(["--check"]) == 0
 
 
 def test_every_injected_defect_turns_at_least_one_property_red():
@@ -393,6 +395,142 @@ def test_a_refused_realisation_is_reported_undecided_not_red():
         assert p[n]["undecided"], n
     assert p["chosen-in-bound"]["undecided"] is None
     assert not p["chosen-in-bound"]["ok"]
+
+
+# ---------------------------------------------------------------------------
+# the gate's third outcome: a defect whose evaluation REFUSES (#1820)
+# ---------------------------------------------------------------------------
+PLANTED_REFUSAL = "planted: the evaluation's precondition was not met"
+
+
+def _planted_properties(monkeypatch, *, refusing=(), blind=(), base_fails=None,
+                        unblind=()):
+    """Rewire `tn.properties`. The defects in `refusing` REFUSE; those in
+    `blind` are evaluated and move NOTHING (every property passes); `base_fails`
+    turns that property red in the base run; `unblind` turns property `p` red
+    under defect `d`. Everything else is the real function, so every row that is
+    not planted is the tree's own."""
+    original = tn.properties
+    refusing = [tn.config(defect=d) for d in refusing]
+    blind = [tn.config(defect=d) for d in blind]
+    unblind = [(tn.config(defect=d), p) for d, p in unblind]
+
+    def planted(cfg=None):
+        if cfg in refusing:
+            raise tn.Refused(PLANTED_REFUSAL)
+        out = original(cfg)
+        if cfg in blind:
+            for v in out.values():
+                v["ok"], v["undecided"] = True, None
+        if cfg is None and base_fails is not None:
+            out[base_fails]["ok"] = False
+        for c, prop in unblind:
+            if cfg == c:
+                out[prop]["ok"], out[prop]["undecided"] = False, None
+        return out
+
+    monkeypatch.setattr(tn, "properties", planted)
+
+
+def _row(text, defect):
+    """The matrix line for `defect` in a printed `--check` report."""
+    return next(l for l in text.splitlines() if l.startswith(f"{defect:22s}"))
+
+
+def test_a_refused_defect_evaluation_is_no_verdict_with_its_reason(monkeypatch, capsys):
+    """#1820, red-first. `properties()` refusing for one defect is the tool
+    declining to answer about that defect. The refusal became a row of REF,
+    which moves nothing, so the gate printed "turned NO property red -- a
+    control that cannot fail" on exit 1: a precondition reported as a measured
+    claim, and its reason never printed."""
+    _planted_properties(monkeypatch, refusing=["SIGN_A1"])
+    rc = tn.main(["--check"])
+    out, err = capsys.readouterr()
+    assert rc == 3, (rc, out, err)                    # REFUSED, this file's status
+    assert f"NO VERDICT SIGN_A1: {PLANTED_REFUSAL}" in _row(out, "SIGN_A1")
+    assert "a control that cannot fail" not in out
+    assert "REFUSED:" in err and PLANTED_REFUSAL in err
+
+
+@pytest.mark.parametrize("refused", [tn.DEFECTS[0], tn.DEFECTS[-1]],
+                         ids=["first-defect", "last-defect"])
+def test_a_refused_defect_leaves_the_rest_of_the_matrix_as_it_was(monkeypatch, refused):
+    """The refusal gets its own row and the remaining defects are still
+    evaluated: every other line is the clean run's, byte for byte."""
+    clean_ok, clean_lines, clean_refused = tn.check()
+    assert clean_ok and not clean_refused
+    _planted_properties(monkeypatch, refusing=[refused])
+    ok, lines, refused_by = tn.check()
+    assert ok is True, "\n".join(lines)               # nothing MEASURED failed
+    assert refused_by == {refused: PLANTED_REFUSAL}
+
+    def others(ls):
+        return [l for l in ls if not l.startswith(f"{refused:22s}")
+                and not l.startswith("NO VERDICT =")]
+
+    assert others(lines) == others(clean_lines)
+
+
+def test_when_every_defect_refuses_the_gate_is_refused_not_failed(monkeypatch, capsys):
+    _planted_properties(monkeypatch, refusing=tn.DEFECTS)
+    ok, lines, refused_by = tn.check()
+    assert ok is True, "\n".join(lines)
+    assert set(refused_by) == set(tn.DEFECTS)
+    rc = tn.main(["--check"])
+    out, err = capsys.readouterr()
+    assert rc == 3, (rc, out, err)
+    assert "a control that cannot fail" not in out
+    for d in tn.DEFECTS:
+        assert f"NO VERDICT {d}: {PLANTED_REFUSAL}" in _row(out, d)
+
+
+@pytest.mark.parametrize("planted, blind_pair", [
+    ({"blind": ["NO_TONE_NETWORK"]}, None),
+    ({"base_fails": "short-band-monotone"}, None),
+    ({"unblind": [("ALPHA_INVERTED", "nodal-grounded")]},
+     "!! ALPHA_INVERTED was asserted BLIND to nodal-grounded and moved it"),
+], ids=["blind-defect", "base-property", "blind-pair"])
+def test_a_measured_failure_still_exits_1_alongside_a_refused_defect(
+        monkeypatch, capsys, planted, blind_pair):
+    """A measured failure is the stronger statement: it stays 1, the refusal is
+    still in its own row, and stderr does not also claim REFUSED."""
+    _planted_properties(monkeypatch, refusing=["SIGN_A1"], **planted)
+    rc = tn.main(["--check"])
+    out, err = capsys.readouterr()
+    assert rc == 1, (rc, out, err)
+    assert f"NO VERDICT SIGN_A1: {PLANTED_REFUSAL}" in _row(out, "SIGN_A1")
+    if "blind" in planted:
+        assert _row(out, "NO_TONE_NETWORK").endswith(
+            "turned NO property red -- a control that cannot fail")
+    elif blind_pair is not None:
+        assert blind_pair in out
+    else:
+        assert "FAIL  short-band-monotone" in out
+    assert "REFUSED:" not in err
+
+
+def test_a_defect_that_is_evaluated_and_moves_nothing_is_still_a_failed_control(
+        monkeypatch, capsys):
+    """The control for the repair itself (verification rule 8): NO VERDICT is
+    reachable only through a refusal. A defect that is evaluated and moves
+    nothing is a control that cannot fail, and that is still a measured FAIL."""
+    _planted_properties(monkeypatch, blind=["NO_TONE_NETWORK"])
+    rc = tn.main(["--check"])
+    out, err = capsys.readouterr()
+    assert rc == 1, (rc, out, err)
+    assert _row(out, "NO_TONE_NETWORK").endswith(
+        "turned NO property red -- a control that cannot fail")
+    assert "NO VERDICT" not in out
+    assert "REFUSED:" not in err
+
+
+def test_the_record_does_not_call_a_refused_gate_ok(monkeypatch):
+    """`check_ok` keeps meaning "the gate passed": a defect nobody evaluated is
+    not a pass."""
+    _planted_properties(monkeypatch, refusing=["SIGN_A1"])
+    rec = tn.record()
+    assert rec["check_ok"] is False
+    assert any(f"NO VERDICT SIGN_A1: {PLANTED_REFUSAL}" in l for l in rec["check"])
 
 
 def test_the_record_is_serialisable_and_carries_its_bounds():
