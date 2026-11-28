@@ -29,6 +29,18 @@ note, and at order 5 and 6 it read the known -70 dB tone as 30 dB and -4 dB.
 known_inband caught it. The CIC is now exact wrapping int64 arithmetic, as a
 hardware CIC is, and reads the same figure at orders 3, 4 and 5.
 
+A bench that fails is the same outcome (#1662): a compile that fails, a vvp
+run that exits non-zero or hits its 1800 s timeout, or a stream that is not N
+frames of 0/1, is REFUSED (exit 2) with a reason naming what happened. Until
+that fix it left a traceback at exit 1 and wrote nothing, so an earlier run's
+PASS in --outdir stayed on disk to be read as this run's; fpga/build_arty_sd.py
+reads that file by default and builds a demo image over a PASS. From the
+moment main() has its --outdir, verification.json there says REFUSED, "run did
+not complete", until the verdict overwrites it, so a run that is killed cannot
+leave an earlier PASS behind either. Neither can a run that dies of an
+exception this tool does not name -- that one still exits 1 with its traceback,
+because an execution error is never reported as a refusal (tools/refusal.py).
+
 Cases and bounds (measured when the bounds were set, 2nd order vs 1st order,
 from the Python prototype of the same loop):
 
@@ -114,6 +126,10 @@ BOUNDS = {"sine-6": ("snr_db", ">=", 95.0), "held": ("snr_db", ">=", 90.0),
           "square": ("snr_db", ">=", 75.0), "silence": ("noise_dbfs", "<=", -110.0)}
 CONTROLS = {"SD_FIRST_ORDER": {"sine-6", "held"}, "SD_NO_SAT": {"square"},
             "I2S_RX_SHIFT": {"sine-6", "held", "square"}, "SD_DC_BIAS": {"silence"}}
+#: what a bench dies of when the run could not measure: run_bench's own two
+#: RuntimeErrors, a compile that failed, a vvp that hit its timeout
+BENCH_FAILURES = (RuntimeError, subprocess.CalledProcessError, subprocess.TimeoutExpired)
+INCOMPLETE = "run did not complete"  # what the record on disk says until there is a verdict
 
 
 class Refused(refusal.Refused, Exception):
@@ -225,10 +241,11 @@ def run_bench(exe: Path, work: Path, name: str, samples) -> np.ndarray:
                         f"+frames={len(samples)}", f"+bits={bits}"],
                        capture_output=True, text=True, timeout=1800)
     if r.returncode != 0 or "TB_SD_DAC DONE" not in r.stdout:
-        raise RuntimeError(f"bench failed: {r.stdout[-500:]} {r.stderr[-500:]}")
+        raise RuntimeError(f"bench {exe.stem}/{name} failed: {r.stdout[-500:]} {r.stderr[-500:]}")
     raw = np.frombuffer(bits.read_bytes(), dtype=np.uint8)
     if len(raw) != (len(samples) + 2) * OSR or not np.all((raw == 48) | (raw == 49)):
-        raise RuntimeError(f"bench stream is not {len(samples) + 2} frames of 0/1")
+        raise RuntimeError(f"bench {exe.stem}/{name} stream is not "
+                           f"{len(samples) + 2} frames of 0/1")
     return np.where(raw == 49, FB, -FB).astype(np.int64)
 
 
@@ -262,17 +279,37 @@ def sha(p: Path) -> str:
     return hashlib.sha256(p.read_bytes()).hexdigest()
 
 
+def why(exc: BaseException) -> str:
+    """The reason a refused run carries: the class, since `RuntimeError` alone
+    says nothing; its message; and for a failed command what the command said,
+    which str() leaves out (it names the command and the status only)."""
+    text = f"{type(exc).__name__}: {exc}"
+    if isinstance(exc, subprocess.CalledProcessError):
+        for stream in (exc.stderr, exc.stdout):
+            if stream:
+                text += f"\n{stream.strip()[:2000]}"
+    return text
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--outdir", type=Path, default=ROOT / "build/sd-dac")
     a = ap.parse_args(argv)
     a.outdir.mkdir(parents=True, exist_ok=True)
+    path = a.outdir / "verification.json"
+
+    def write(body: dict) -> None:
+        path.write_text(json.dumps(body, indent=2) + "\n")
+
+    # before anything below can raise: an earlier run's file must not outlive
+    # this one, whatever ends it, so a refusal stands in until the verdict
+    write({"state": "REFUSED", "reason": INCOMPLETE})
     record = {"state": "REFUSED", "bounds": {k: list(v) for k, v in BOUNDS.items()},
               "lag_cycles_expected": LAG_CYCLES,
               "source_sha256": {str(p.relative_to(ROOT)): sha(p) for p in SOURCES}}
 
     def save(code):
-        (a.outdir / "verification.json").write_text(json.dumps(record, indent=2) + "\n")
+        write(record)
         print(f"verify_sd_dac: {record['state']}"
               + (f" -- {record['reason']}" if "reason" in record else ""))
         return code
@@ -287,14 +324,18 @@ def main(argv=None) -> int:
         record["reason"] = str(exc)
         return save(2)
 
-    with tempfile.TemporaryDirectory() as tmp:
-        work = Path(tmp)
-        builds = [None] + list(CONTROLS)
-        exes = {b: compile_bench(work, b) for b in builds}
-        jobs = [(b, c) for b in builds for c in stim]
-        with ThreadPoolExecutor(max_workers=4) as pool:
-            streams = dict(zip(jobs, pool.map(
-                lambda j: run_bench(exes[j[0]], work, j[1], stim[j[1]]), jobs)))
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            builds = [None] + list(CONTROLS)
+            exes = {b: compile_bench(work, b) for b in builds}
+            jobs = [(b, c) for b in builds for c in stim]
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                streams = dict(zip(jobs, pool.map(
+                    lambda j: run_bench(exes[j[0]], work, j[1], stim[j[1]]), jobs)))
+    except BENCH_FAILURES as exc:
+        record["reason"] = why(exc)
+        return save(2)
 
     ok = True
     lag = lag_search(streams[(None, "sine-6")], stim["sine-6"])
