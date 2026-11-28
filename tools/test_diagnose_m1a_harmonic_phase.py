@@ -4,13 +4,20 @@ Every estimator the diagnosis reports through is checked here on signals whose
 answer is known independently of the model or the reference, and the
 classifier is checked on the three synthetic phrases whose answer is known by
 construction. The injected-defect tests show each check can turn red."""
+import io
 import json
 import math
+import os
+import shutil
+import struct
+import sys
 
 import numpy as np
 import pytest
+from scipy.io import wavfile
 
 import diagnose_m1a_harmonic_phase as d
+import refusal
 
 SR = d.SR
 EVENT = d.EVENTS[0]
@@ -166,3 +173,80 @@ def test_injected_defect_ratio_only_attribution_fails_the_changing_fundamental_c
         k: ("within tolerance" if abs(v - errors["h1"]) <= tol else "partial")
         for k, v in errors.items() if k != "h1"})
     assert not d.synthetic_control()["changing fundamental"]["ok"]
+
+
+# ---- the committed audio the reproduction preconditions read (#1862) ----
+def _bad_wavs():
+    """One file per way a header can fail its reader: ValueError, struct.error
+    (a header cut inside a chunk), UnboundLocalError (a size field that lies)."""
+    buf = io.BytesIO()
+    wavfile.write(buf, SR, np.zeros(4800, dtype=np.int16))
+    good = buf.getvalue()
+    fmt, data = good[20:36], good[44:]
+    chunk = lambda cid, payload: cid + struct.pack("<I", len(payload)) + payload
+    return {"non-RIFF": b"not a WAV", "empty": b"", "cut-inside-chunk": good[:20],
+            "RIFF-magic-only": b"RIFF",
+            "size-field-lies": b"RIFF" + struct.pack("<I", 4 + 8 + len(fmt)) + b"WAVE"
+                              + chunk(b"fmt ", fmt) + chunk(b"data", data)}
+
+
+BAD_WAVS = {"missing": None, **_bad_wavs()}
+N_REF = len(d.bass.load_reference()[1])
+
+
+def _main_without_rendering(monkeypatch):
+    """main() with every render answering the same int16 silence, so the
+    committed-audio reads and the refusal boundary are what is exercised."""
+    monkeypatch.setattr(d, "render", lambda patch, osc2_phase=0, mix=None: np.zeros(N_REF, dtype=np.int16))
+    monkeypatch.setattr(sys, "argv", ["diagnose_m1a_harmonic_phase.py"])
+
+
+@pytest.mark.parametrize("name", sorted(BAD_WAVS))
+def test_unreadable_committed_model_wav_is_refused_naming_it(monkeypatch, tmp_path, capsys, name):
+    _main_without_rendering(monkeypatch)
+    model = tmp_path / "m1a-model.wav"
+    if BAD_WAVS[name] is not None:
+        model.write_bytes(BAD_WAVS[name])
+    monkeypatch.setattr(d, "MODEL_WAV", model)
+    before = (d.OUT / "report.json").read_bytes()
+    assert d.main() == 2
+    out = capsys.readouterr().out
+    assert "REFUSED:" in out and "m1a-model.wav" in out
+    assert (d.OUT / "report.json").read_bytes() == before
+
+
+@pytest.mark.parametrize("name", sorted(BAD_WAVS))
+def test_unreadable_detune_diagnostic_wav_is_refused_naming_it(monkeypatch, tmp_path, capsys, name):
+    """Past the first precondition: the committed model WAV reproduces the
+    (stubbed) selected render, so the run reaches the detune-diagnostic read."""
+    _main_without_rendering(monkeypatch)
+    model = tmp_path / "m1a-model.wav"
+    wavfile.write(model, SR, np.zeros(N_REF, dtype=np.int16))
+    monkeypatch.setattr(d, "MODEL_WAV", model)
+    detune = tmp_path / "volume-mapping"
+    detune.mkdir()
+    shutil.copy(d.DETUNE_DIR / "detune-diagnostic.json", detune / "detune-diagnostic.json")
+    if BAD_WAVS[name] is not None:
+        (detune / "detune-diagnostic.wav").write_bytes(BAD_WAVS[name])
+    monkeypatch.setattr(d, "DETUNE_DIR", detune)
+    before = (d.OUT / "report.json").read_bytes()
+    assert d.main() == 2
+    out = capsys.readouterr().out
+    assert "REFUSED:" in out and "detune-diagnostic.wav" in out
+    assert (d.OUT / "report.json").read_bytes() == before
+
+
+def test_a_missing_isolated_control_wav_is_refused_before_reference_audio_reads_it(tmp_path, monkeypatch):
+    """Pin (#1862 section D): `load_reference()` hashes every control WAV under
+    `except (OSError, KeyError, ValueError)`, so the read at `reference_audio()`
+    is never reached with a control that is not there. The refusal is
+    `bass.Refused`, the PARENT of this module's class -- the cross-module shape
+    #1265 fixed at the CLI boundary, and why the pin asserts the base class."""
+    manifest = json.loads(d.bass.MANIFEST.read_text())
+    for item in manifest["renders"]:
+        os.symlink(d.bass.MANIFEST.parent / item["file"], tmp_path / item["file"])
+    (tmp_path / "manifest.json").write_text(json.dumps(manifest))     # names controls that are absent
+    real = d.bass.load_reference
+    monkeypatch.setattr(d.bass, "load_reference", lambda path=None: real(tmp_path / "manifest.json"))
+    with pytest.raises(refusal.Refused, match="unavailable"):
+        d.reference_audio()

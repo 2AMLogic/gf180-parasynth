@@ -178,16 +178,23 @@ def harmonic_summary(model, reference, f0_model, f0_reference, sr, *, context=""
 
 
 def _load_i2s_candidate(path, required_samples: int):
-    """Load only a complete mono signed-int16 I2S phrase at the target rate."""
+    """Load only a complete mono signed-int16 I2S phrase at the target rate.
+
+    A file the reader cannot parse REFUSES, naming it. That handler is
+    deliberately total on the parser call alone -- the reason and the corpus are
+    in `analyse_m1a_phase_cycle.read_wav`."""
     from scipy.io import wavfile
 
     candidate_path = pathlib.Path(path)
     try:
         candidate_bytes = candidate_path.read_bytes()
-        digest = hashlib.sha256(candidate_bytes).hexdigest()
-        sr, candidate = wavfile.read(io.BytesIO(candidate_bytes))
     except OSError as exc:
         raise Refused(f"decoded I2S WAV is unavailable: {exc}") from exc
+    digest = hashlib.sha256(candidate_bytes).hexdigest()
+    try:
+        sr, candidate = wavfile.read(io.BytesIO(candidate_bytes))
+    except Exception as exc:  # noqa: BLE001 -- see the docstring
+        raise Refused(f"decoded I2S WAV {candidate_path} is not a readable WAV: {exc}") from exc
     if sr != SR or candidate.dtype != np.int16 or candidate.ndim != 1:
         raise Refused("decoded I2S WAV must be mono signed-int16 at 48 kHz")
     if len(candidate) < int(required_samples):

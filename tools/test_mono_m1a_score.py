@@ -1,4 +1,9 @@
+import hashlib
+import io
 import json
+import shutil
+import struct
+
 import numpy as np
 import pytest
 from scipy.io import wavfile
@@ -293,3 +298,63 @@ def test_qualification_refuses_a_stale_attack_suite(monkeypatch):
     monkeypatch.setattr(bass, "sha", lambda p: "0" * 64 if str(p).endswith("attack_fit_v3.py") else real(p))
     with pytest.raises(bass.Refused, match="stale"):
         bass.qualify_envelope_basis()
+
+
+# ---- the cached model WAV `load_model_cache` reads (#1862) ----
+def _bad_wavs():
+    """One file per way a header can fail its reader: ValueError, struct.error
+    (a header cut inside a chunk), UnboundLocalError (a size field that lies)."""
+    buf = io.BytesIO()
+    wavfile.write(buf, bass.SR, np.zeros(4800, dtype=np.int16))
+    good = buf.getvalue()
+    fmt, data = good[20:36], good[44:]
+    chunk = lambda cid, payload: cid + struct.pack("<I", len(payload)) + payload
+    return {"non-RIFF": b"not a WAV", "empty": b"", "cut-inside-chunk": good[:20],
+            "RIFF-magic-only": b"RIFF",
+            "size-field-lies": b"RIFF" + struct.pack("<I", 4 + 8 + len(fmt)) + b"WAVE"
+                              + chunk(b"fmt ", fmt) + chunk(b"data", data)}
+
+
+def _cached_record(path, digest):
+    """A record whose every precondition but the audio itself holds: the patch
+    and engine match, the manifest hash is the committed one, and no DSP source
+    changed since `source_commit`."""
+    import run_case
+    return {"audio": str(path), "engine": "fixed-model", "source_commit": run_case.source_commit(),
+            "diagnostics": {"configuration": {"patch": {}, "engine": {}, "inject": None},
+                            "model_audio_sha256": digest},
+            "provenance": {"inputs": {"frozen:M1A:manifest": "sha256:" + bass.sha(bass.MANIFEST)}}}
+
+
+def test_a_missing_cached_model_wav_refuses_naming_it(tmp_path):
+    record = _cached_record(tmp_path / "absent.wav", "0" * 64)
+    with pytest.raises(bass.Refused, match=r"absent\.wav"):
+        bass.load_model_cache(record, {}, {})
+
+
+@pytest.mark.parametrize("name", sorted(_bad_wavs()))
+def test_an_unreadable_cached_model_wav_matching_its_hash_refuses(tmp_path, name):
+    """The hash binds the WAV to the record; when the record names the bad bytes
+    themselves, only the reader is left to refuse."""
+    path = tmp_path / "cached.wav"
+    path.write_bytes(_bad_wavs()[name])
+    record = _cached_record(path, hashlib.sha256(path.read_bytes()).hexdigest())
+    with pytest.raises(bass.Refused, match=r"cached\.wav"):
+        bass.load_model_cache(record, {}, {})
+
+
+def test_regen_m1a_units_refuses_when_the_cached_wav_is_missing(tmp_path, monkeypatch, capsys):
+    """The CLI that reads the cache: `regen_m1a_units.main()` catches
+    `refusal.Refused` only, so a missing WAV was an exit-1 traceback."""
+    import regen_m1a_units as regen
+    record_copy = tmp_path / "M1A.json"
+    shutil.copy2(bass.ROOT / "docs/scorecard/results/M1A.json", record_copy)
+    old = json.loads(record_copy.read_text())
+    old["audio"] = str(tmp_path / "absent-model.wav")
+    record_copy.write_text(json.dumps(old))
+    before = record_copy.read_bytes()
+    monkeypatch.setattr(regen, "RECORD", record_copy)
+    assert regen.main() == 2
+    out = capsys.readouterr().out
+    assert "REFUSED:" in out and "absent-model.wav" in out
+    assert record_copy.read_bytes() == before

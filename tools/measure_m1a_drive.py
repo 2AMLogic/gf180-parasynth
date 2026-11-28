@@ -21,7 +21,6 @@ import subprocess
 import sys
 
 import numpy as np
-from scipy.io import wavfile
 
 import analyse_m1a_phase_cycle as ap
 import mono_m1a_score as bass
@@ -163,7 +162,7 @@ def main():
 
         base_patch = phrase_patch(manifest, BASELINE_DRIVE)
         base_pcm = render_phrase(base_patch, n)
-        rate, committed = wavfile.read(bass.MANIFEST.parent / "m1a-model.wav")
+        rate, committed = ap.read_wav(bass.MANIFEST.parent / "m1a-model.wav")
         if pcm_sha(base_pcm) != pcm_sha(committed):
             raise Refused("baseline render does not reproduce the committed m1a-model.wav")
         base = bass.compare_audio(base_pcm.astype(np.float64) / 32768, reference)

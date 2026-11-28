@@ -1,6 +1,7 @@
 """Qualify the octave-detune measurement with independently defined signals."""
 import json
 import math
+import os
 import shutil
 import tempfile
 from pathlib import Path
@@ -72,3 +73,22 @@ def test_report_embeds_the_v3_attack_qualification_not_the_retired_v2_one(monkey
     assert attack["estimator"] == "attack_fit_v3"
     assert attack["cases"] == 1898
     assert attack["domain"] == probe.bass.qualified_attack_domain()
+
+
+def test_a_missing_isolated_control_wav_is_refused_before_oscillator_mapping_reads_it(tmp_path, monkeypatch, capsys):
+    """Pin (#1862 section D): `oscillator_mapping` reads the isolated controls
+    with no guard of its own; the guard is `load_reference()` one line earlier,
+    which hashes every control under `except (OSError, KeyError, ValueError)`.
+    The order is the guard, so the order is what this test pins."""
+    manifest = json.loads(probe.bass.MANIFEST.read_text())
+    for item in manifest["renders"]:
+        os.symlink(probe.bass.MANIFEST.parent / item["file"], tmp_path / item["file"])
+    (tmp_path / "manifest.json").write_text(json.dumps(manifest))     # names controls that are absent
+    real = probe.bass.load_reference
+    monkeypatch.setattr(probe.bass, "load_reference", lambda path=None: real(tmp_path / "manifest.json"))
+
+    def unreached(*args, **kwargs):
+        raise AssertionError("oscillator_mapping read a control WAV load_reference never verified")
+    monkeypatch.setattr(probe, "oscillator_mapping", unreached)
+    assert probe.main() == 2
+    assert "REFUSED:" in capsys.readouterr().out

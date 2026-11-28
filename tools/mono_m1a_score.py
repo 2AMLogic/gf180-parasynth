@@ -346,7 +346,11 @@ def required_metrics(measured):
 
 
 def load_model_cache(record, patch, engine):
-    """Reanalyse a hash-bound model render only while its DSP tree is unchanged."""
+    """Reanalyse a hash-bound model render only while its DSP tree is unchanged.
+
+    A cached WAV that is missing, or that the reader cannot parse, REFUSES
+    naming it. The reader's handler is deliberately total on the parser call
+    alone -- the reason and the corpus are in `analyse_m1a_phase_cycle.read_wav`."""
     import subprocess
     pcm_path = ROOT / record["audio"]
     config = record["diagnostics"]["configuration"]
@@ -354,7 +358,11 @@ def load_model_cache(record, patch, engine):
         raise Refused("cached model patch or engine differs")
     if config.get("inject") or record["engine"] != "fixed-model":
         raise Refused("only clean model audio may be reused")
-    if sha(pcm_path) != record["diagnostics"]["model_audio_sha256"]:
+    try:
+        audio_sha = sha(pcm_path)
+    except OSError as exc:
+        raise Refused(f"cached model audio {pcm_path} cannot be read: {exc}") from exc
+    if audio_sha != record["diagnostics"]["model_audio_sha256"]:
         raise Refused("cached model audio hash mismatch")
     if record["provenance"]["inputs"]["frozen:M1A:manifest"] != "sha256:" + sha(MANIFEST):
         raise Refused("cached model reference differs")
@@ -368,7 +376,10 @@ def load_model_cache(record, patch, engine):
                              cwd=ROOT, capture_output=True, text=True)
     if changed.returncode != 0:
         raise Refused("cached model DSP sources differ or cannot be checked")
-    sr, pcm = wavfile.read(pcm_path)
+    try:
+        sr, pcm = wavfile.read(pcm_path)
+    except Exception as exc:  # noqa: BLE001 -- see the docstring
+        raise Refused(f"cached model audio {pcm_path} is unreadable: {exc}") from exc
     if sr != SR or pcm.dtype != np.int16 or pcm.ndim != 1:
         raise Refused("cached model audio format differs")
     return pcm

@@ -257,17 +257,31 @@ def _git(*args):
     return subprocess.check_output(["git", *args], cwd=ROOT, text=True).strip()
 
 
+def read_wav(path):
+    """`wavfile.read`, or Refused naming `path`.
+
+    Deliberately total, on the parser call alone -- the reason and the corpus
+    are in `analyse_m1a_phase_cycle.read_wav`. The CLI boundary's handler lists
+    only OSError and ValueError: a non-RIFF file was refused without saying
+    which of the five frozen WAVs it was, and a header cut inside a chunk or a
+    lying size field escaped it as exit 1."""
+    try:
+        return wavfile.read(path)
+    except Exception as exc:  # noqa: BLE001 -- see the docstring
+        raise Refused(f"{path}: unreadable WAV ({exc})") from exc
+
+
 def reproduce_frozen(manifest):
     """Precondition 2: the frozen phrase and both isolated controls, bit-exact."""
     rows = []
     audio, _ = m1a.render()
     for r in manifest["renders"]:
-        rate, frozen = wavfile.read(FROZEN / r["file"])
+        rate, frozen = read_wav(FROZEN / r["file"])
         same = rate == ref.SR and np.array_equal(np.asarray(audio, dtype=np.float32), frozen)
         rows.append({"file": r["file"], "bit_exact": bool(same)})
     for label, overrides in (("osc1_open", CONDITIONS["osc1_open"]), ("osc2_open", CONDITIONS["osc2_open"])):
         audio, _ = m1a.render(overrides)
-        rate, frozen = wavfile.read(FROZEN / manifest["controls"][label]["file"])
+        rate, frozen = read_wav(FROZEN / manifest["controls"][label]["file"])
         same = rate == ref.SR and np.array_equal(np.asarray(audio, dtype=np.float32), frozen)
         rows.append({"file": manifest["controls"][label]["file"], "bit_exact": bool(same)})
     bad = [r["file"] for r in rows if not r["bit_exact"]]

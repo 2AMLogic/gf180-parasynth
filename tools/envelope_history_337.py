@@ -40,8 +40,24 @@ class Refused(refusal.Refused, Exception):
     """The instrument will not answer."""
 
 
+def read_wav(path: Path):
+    """`wavfile.read`, or Refused naming `path`.
+
+    Deliberately total, on the parser call alone -- the reason and the corpus
+    are in `analyse_m1a_phase_cycle.read_wav`. Each render is hashed first, so
+    the reader is reached only by bytes the report itself names."""
+    try:
+        return wavfile.read(path)
+    except Exception as exc:  # noqa: BLE001 -- see the docstring
+        raise Refused(f"{path}: unreadable WAV ({exc})") from exc
+
+
 def sha256(path: Path) -> str:
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    """The file's SHA-256, or Refused naming a `path` that is not there to hash."""
+    try:
+        return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    except OSError as exc:
+        raise Refused(f"{path}: cannot be read ({exc})") from exc
 
 
 def _rms(x: np.ndarray) -> float:
@@ -124,13 +140,17 @@ def verdict(per_wave):
 
 
 def measure(src: Path = SRC):
-    rep = json.loads((src / "report.json").read_text())
+    report = src / "report.json"
+    try:
+        rep = json.loads(report.read_text())
+    except OSError as exc:
+        raise Refused(f"{report}: cannot be read ({exc})") from exc
     rows = []
     for row in rep["renders"]:
         path = src / row["wav"]
         if sha256(path) != row["sha256"]:
             raise Refused(f"hash mismatch: {row['wav']}")
-        sr, pcm = wavfile.read(path)
+        sr, pcm = read_wav(path)
         x = pcm.astype(np.float64) / 32768.0 if pcm.dtype.kind == "i" else pcm.astype(np.float64)
         t = row["events"][-1]
         on, off = t["on_s"], t["on_s"] + t["gate_s"]
