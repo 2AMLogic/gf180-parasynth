@@ -1,4 +1,6 @@
+import hashlib
 import importlib.util
+import json
 import subprocess
 import sys
 from textwrap import dedent
@@ -61,3 +63,71 @@ def test_player_paths_work_without_scipy():
                                    "--note", "72", "--fixture", "none", "--image", "r1"]) == 0
     """)
     subprocess.run([sys.executable, "-E", "-c", player], cwd=preset.ROOT / "fpga", check=True)
+
+
+def run_cli(manifest, out):
+    """The real command as a subprocess, reading `manifest` where it would read
+    the frozen one. The frozen manifest and its audio live in the checkout,
+    which a test must not drift, so the driver rebinds `mono_m5a_score.MANIFEST`
+    before the script's own import finds that module."""
+    driver = dedent("""\
+        import runpy, sys
+        from pathlib import Path
+        script, manifest, out = sys.argv[1:4]
+        root = Path(script).resolve().parents[1]
+        sys.path[:0] = [str(root / "model"), str(root / "tools")]
+        import mono_m5a_score as score
+        score.MANIFEST = Path(manifest)
+        sys.argv = ["selected_preset.py", "m5a-saw", "--out", out]
+        runpy.run_path(script, run_name="__main__")
+    """)
+    return subprocess.run([sys.executable, "-E", "-c", driver, str(preset.__file__), str(manifest), str(out)],
+                          capture_output=True, text=True)
+
+
+def test_reference_audio_drift_is_refused_at_the_cli_and_writes_nothing(tmp_path):
+    """The hash the manifest names is not the hash the audio has. The command
+    parsed and the preset name is valid, so this is REFUSED -- exit 2, the
+    reason on stderr, nothing written, not even --out's directory -- never a
+    traceback at exit 1, which a caller reads as a FAIL (#1674)."""
+    frozen = json.loads(preset.score.MANIFEST.read_text())
+    frozen["audio"]["file"] = str(preset.score.MANIFEST.parent / frozen["audio"]["file"])
+    drifted = hashlib.sha256(b"not the reference audio").hexdigest()
+    assert drifted != frozen["audio"]["sha256"], "the drifted hash must differ from the frozen one"
+    frozen["audio"]["sha256"] = drifted
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(json.dumps(frozen, indent=2) + "\n")
+    out = tmp_path / "written" / "m5a-saw.json"
+    done = run_cli(manifest, out)
+    assert done.returncode == 2, done.stderr
+    assert done.stderr == "REFUSED: selected preset reference audio differs from frozen manifest\n"
+    assert done.stdout == ""
+    assert not out.parent.exists(), "the refusal created --out's directory"
+
+
+def test_an_unrelated_value_error_stays_an_execution_error_at_the_cli(tmp_path):
+    """The control for the refusal above: the handler catches `Refused` and
+    nothing wider. Invalid JSON in the manifest raises JSONDecodeError, which
+    IS a ValueError, and it must leave as a traceback at exit 1 -- a handler
+    written `except ValueError` would render this REFUSED, an execution error
+    dressed as an unmet precondition."""
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text('{"audio": ')
+    out = tmp_path / "written" / "m5a-saw.json"
+    done = run_cli(manifest, out)
+    assert done.returncode == 1, done.stderr
+    assert "Traceback" in done.stderr and "JSONDecodeError" in done.stderr
+    assert "REFUSED" not in done.stderr
+    assert not out.parent.exists()
+
+
+def test_clean_run_writes_the_preset_and_exits_zero(tmp_path):
+    """The positive control: the real command on the unmodified tree exits 0
+    and writes exactly `definition()`'s preset."""
+    out = tmp_path / "written" / "m5a-saw.json"
+    done = subprocess.run([sys.executable, "-E", str(preset.__file__), "m5a-saw", "--out", str(out)],
+                          capture_output=True, text=True)
+    assert done.returncode == 0, done.stderr
+    assert done.stdout == f"{out}\n"
+    assert done.stderr == ""
+    assert json.loads(out.read_text()) == json.loads(json.dumps(preset.definition("m5a-saw")))
