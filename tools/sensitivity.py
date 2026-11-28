@@ -43,6 +43,7 @@ import subprocess
 import sys
 from pathlib import Path
 import refusal
+from finite_number import non_finite
 
 ROOT = Path(__file__).resolve().parents[1]
 DIR = ROOT / "docs" / "sensitivity"
@@ -364,6 +365,11 @@ def evaluate(rec: dict, root: Path = ROOT, overrides: dict | None = None) -> dic
             "manufacture a plateau")
 
     recorded = {float(p["value"]): float(p["objective"]) for p in rec.get("points", [])}
+    bad = non_finite({f"points[value={value:g}].objective": objective
+                      for value, objective in recorded.items()})
+    if bad:
+        raise Refused(f"{ident}: the record carries a value that is not a finite number: "
+                      + ", ".join(bad))
     for value, objective in measured:
         if value not in recorded:
             problems.append(f"{ident}: point {value:g} is measured but not recorded")

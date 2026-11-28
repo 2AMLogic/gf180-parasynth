@@ -1,6 +1,8 @@
 """Known answers for the drive experiment's pre-declared rules: the volume
 compensation, the regression detector and the choice rule. Each check is also
 shown to fire on an injected defect."""
+import copy
+
 import pytest
 
 import measure_m1a_drive as m
@@ -48,3 +50,60 @@ def test_choice_rule():
     assert m.choose({.75: base, .5: _row([], 19.5, 8.)}, base) is None          # < 0.5 dB better
     assert m.choose({.75: base, .5: _row([], 18.0, 10.5)}, base) is None        # odd range not reduced
     assert m.choose({.75: base}, base) is None                                   # baseline never chosen
+
+
+NON_FINITE = [float("nan"), float("inf"), -float("inf")]
+
+
+def _record_of(measured):
+    """An M1A record whose graded properties are exactly `measured`'s."""
+    return {"diagnostics": {"properties": copy.deepcopy(measured["properties"])}}
+
+
+def test_the_baseline_reproduces_a_record_holding_its_own_values():
+    """The control for the refusals below (#1994). They exist because every
+    ordering comparison against NaN is False (#134): `abs(value - recorded) >
+    tol` did not trip on a recorded NaN, so "the baseline reproduces the
+    record" was satisfied by a value that is not a number. Each control
+    replaces the RECORD operand; the operand this render computes is not what
+    they assert."""
+    measured = _measured()
+    assert m.reproduces_record(measured, _record_of(measured)) is None
+
+
+def test_a_recorded_property_the_render_does_not_reproduce_is_refused():
+    measured, record = _measured(), _record_of(_measured())
+    record["diagnostics"]["properties"]["Gain"]["value"] += 1e-5
+    with pytest.raises(m.Refused, match="baseline Gain does not reproduce"):
+        m.reproduces_record(measured, record)
+
+
+@pytest.mark.parametrize("bad", NON_FINITE, ids=["nan", "inf", "-inf"])
+def test_a_recorded_property_that_is_not_a_finite_number_is_refused_naming_it(bad):
+    """NaN in only the record operand: refused, naming the property."""
+    measured, record = _measured(), _record_of(_measured())
+    record["diagnostics"]["properties"]["Gain"]["value"] = bad
+    with pytest.raises(m.Refused) as info:
+        m.reproduces_record(measured, record)
+    assert "diagnostics.properties[Gain].value" in str(info.value) and repr(bad) in str(info.value)
+
+
+def _curves(range_db):
+    return {h: {"range_db": range_db} for h in m.ODD}
+
+
+def test_the_baseline_moving_phase_curves_reproduce_219_and_a_moved_one_is_refused():
+    assert m.reproduces_model_curves(_curves(10.0), _curves(10.0)) is None
+    with pytest.raises(m.Refused, match="does not reproduce #219's model curves"):
+        m.reproduces_model_curves(_curves(10.0), _curves(10.0 + 1e-8))
+
+
+@pytest.mark.parametrize("bad", NON_FINITE, ids=["nan", "inf", "-inf"])
+def test_a_recorded_219_curve_range_that_is_not_a_finite_number_is_refused_naming_the_partial(bad):
+    """NaN in only the record operand: refused, naming the partial."""
+    recorded = _curves(10.0)
+    recorded[m.ODD[2]]["range_db"] = bad
+    with pytest.raises(m.Refused) as info:
+        m.reproduces_model_curves(_curves(10.0), recorded)
+    assert f"summaries.model.partials.{m.ODD[2]}.range_db" in str(info.value), str(info.value)
+    assert repr(bad) in str(info.value)

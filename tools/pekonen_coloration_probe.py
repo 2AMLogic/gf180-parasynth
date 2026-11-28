@@ -39,6 +39,7 @@ sys.path.insert(0, os.path.join(ROOT, "model"))
 sys.path.insert(0, os.path.join(ROOT, "audition"))
 import audio_measure as am
 import refusal
+from finite_number import non_finite
 
 RESULTS = os.path.join(ROOT, "docs", "reference-voice-results.json")
 KMAX = 12
@@ -119,7 +120,12 @@ def ours_rerender(note):
 
 
 def build_residuals(mini, ours, rerender=ours_rerender):
-    """(note, k, f0, residual_dB = Mini V3 - ours) for every qualifying harmonic."""
+    """(note, k, f0, residual_dB = Mini V3 - ours) for every qualifying harmonic.
+
+    A recorded level that is not a finite number REFUSES before it is used
+    (#1994): every ordering comparison against NaN is False, so a NaN 'ours'
+    read as current, and a NaN Mini V3 level went into the residual the pole
+    is fitted to without any comparison at all."""
     out, excluded = [], []
     for note in sorted(mini):
         if not_a_saw(mini[note]):
@@ -130,6 +136,12 @@ def build_residuals(mini, ours, rerender=ours_rerender):
             rec, now, ref = ours[note].get(f"h{k}"), s.get(f"h{k}"), mini[note].get(f"h{k}")
             if rec is None or now is None or ref is None:
                 continue
+            bad = non_finite({f"ours[{note}].h{k}": rec, f"miniv3[{note}].h{k}": ref})
+            if bad:
+                raise Refused(f"the reference rows hold a value that is not a finite number: "
+                              + ", ".join(bad)
+                              + " -- a recorded level that is not a number cannot be paired "
+                              "with the model; re-run reference_voice.py --stage osc")
             if abs(rec - now) > STALE_OURS_DB:
                 raise Refused(f"ours h{k} at note {note}: recorded {rec:.2f} dB but the "
                               f"model now renders {now:.2f} dB -- the reference rows are "

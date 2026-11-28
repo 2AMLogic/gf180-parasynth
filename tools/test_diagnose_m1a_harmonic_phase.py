@@ -166,3 +166,41 @@ def test_injected_defect_ratio_only_attribution_fails_the_changing_fundamental_c
         k: ("within tolerance" if abs(v - errors["h1"]) <= tol else "partial")
         for k, v in errors.items() if k != "h1"})
     assert not d.synthetic_control()["changing fundamental"]["ok"]
+
+
+NON_FINITE = [float("nan"), float("inf"), -float("inf")]
+
+
+def _scored_inputs():
+    """Model and reference ratio rows, and a record scored from them (model
+    minus reference), so the scored errors reproduce by construction."""
+    model = [{"ratio_db": {"h5": 1.0, "h8": -2.0}} for _ in range(3)]
+    reference = [{"ratio_db": {"h5": 2.0, "h8": -1.0}} for _ in range(3)]
+    scored = [{k: model[i]["ratio_db"][k] - reference[i]["ratio_db"][k]
+               for k in model[i]["ratio_db"]} for i in range(3)]
+    return model, reference, scored
+
+
+def test_the_scored_errors_reproduce_the_record_and_a_moved_one_is_refused():
+    """The witness for the refusal below, and the control that the extracted
+    rule still compares. The refusals exist (#1994) because every ordering
+    comparison against NaN is False (#134): `abs(mine - recorded) > 1e-6` did
+    not trip on a recorded NaN, so "the scored errors reproduce the record"
+    was satisfied by a value that is not a number."""
+    model, reference, scored = _scored_inputs()
+    assert d.scored_reproduce_record(model, reference, scored) is None
+    scored[2]["h8"] += 1e-5
+    with pytest.raises(d.Refused, match="does not reproduce the record at event 2 h8"):
+        d.scored_reproduce_record(model, reference, scored)
+
+
+@pytest.mark.parametrize("bad", NON_FINITE, ids=["nan", "inf", "-inf"])
+def test_a_scored_error_that_is_not_a_finite_number_is_refused_naming_event_and_partial(bad):
+    """NaN in only the record operand: refused, naming the event and partial."""
+    model, reference, scored = _scored_inputs()
+    scored[1]["h5"] = bad
+    with pytest.raises(d.Refused) as info:
+        d.scored_reproduce_record(model, reference, scored)
+    text = str(info.value)
+    assert "events[1].harmonic_error_db_model_minus_reference.h5" in text, text
+    assert repr(bad) in text

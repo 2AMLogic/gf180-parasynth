@@ -27,6 +27,7 @@ import analyse_m1a_phase_cycle as ap
 import mono_m1a_score as bass
 import refusal
 import run_all
+from finite_number import non_finite
 
 ROOT, SR, lead = bass.ROOT, bass.SR, bass.lead
 OUT = ROOT / "docs/scorecard/mono-m1a-miniv3/drive-experiment"
@@ -108,6 +109,36 @@ def choose(rows, baseline_row):
     return max(eligible, key=eligible.get)
 
 
+def reproduces_record(measured, record):
+    """Refuse unless every property the M1A record graded is the value this
+    render measured: the baseline IS the record's patch, so a difference means
+    the experiment does not stand on the record it reads. A recorded value that
+    is not a finite number is refused before it is compared (#1994): every
+    ordering comparison against NaN is False, so one read as reproduced."""
+    for name, prop in record["diagnostics"]["properties"].items():
+        if not prop.get("valid"):
+            continue
+        bad = non_finite({f"diagnostics.properties[{name}].value": prop["value"]})
+        if bad:
+            raise Refused(f"results/M1A.json holds a value that is not a finite number: "
+                          + ", ".join(bad))
+        if abs(measured["properties"][name]["value"] - prop["value"]) > 1e-6:
+            raise Refused(f"baseline {name} does not reproduce results/M1A.json")
+
+
+def reproduces_model_curves(partials, report_partials):
+    """Refuse unless the baseline's moving-phase odd-partial ranges are #219's
+    model curves: the #219 model condition must reproduce exactly. A recorded
+    range that is not a finite number is refused first (#1994)."""
+    for h in ODD:
+        bad = non_finite({f"summaries.model.partials.{h}.range_db": report_partials[h]["range_db"]})
+        if bad:
+            raise Refused(f"#219's report holds a value that is not a finite number: "
+                          + ", ".join(bad))
+        if abs(partials[h]["range_db"] - report_partials[h]["range_db"]) > 1e-9:
+            raise Refused("baseline moving-phase render does not reproduce #219's model curves")
+
+
 # ------------------------------------------------------------- rendering
 def phrase_patch(manifest, drive, vol=None):
     patch = bass.patch_for_reference(manifest)
@@ -167,9 +198,7 @@ def main():
         if pcm_sha(base_pcm) != pcm_sha(committed):
             raise Refused("baseline render does not reproduce the committed m1a-model.wav")
         base = bass.compare_audio(base_pcm.astype(np.float64) / 32768, reference)
-        for name, prop in record["diagnostics"]["properties"].items():
-            if prop.get("valid") and abs(base["properties"][name]["value"] - prop["value"]) > 1e-6:
-                raise Refused(f"baseline {name} does not reproduce results/M1A.json")
+        reproduces_record(base, record)
         base_rms = [e["rms_dbfs"]["model"] for e in base["events"]]
 
         for drive in DRIVES:
@@ -188,9 +217,7 @@ def main():
             mp = moving_phase(patch, cents)
             if drive == BASELINE_DRIVE:
                 # the #219 model condition must reproduce exactly
-                for h in ODD:
-                    if abs(mp["partials"][h]["range_db"] - phase["summaries"]["model"]["partials"][h]["range_db"]) > 1e-9:
-                        raise Refused("baseline moving-phase render does not reproduce #219's model curves")
+                reproduces_model_curves(mp["partials"], phase["summaries"]["model"]["partials"])
             props = measured["properties"]
             rows[drive] = {
                 "drive": drive, "vol": vol, "vol_register_q15": int(round(vol * 32768)),

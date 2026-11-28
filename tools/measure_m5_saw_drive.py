@@ -42,16 +42,20 @@ import mono_artifact_probe as mp  # noqa: E402
 import measure_m5_operating_level as ol  # noqa: E402
 import refusal  # noqa: E402
 from exit_contract import REFUSED  # noqa: E402
+from finite_number import non_finite  # noqa: E402
 
 BASE_DRIVE = 0.75
 CANDIDATES = (0.5, 0.35, 0.3)
 SAW_VOL = 0.45 * 10 ** (-0.45428 / 20)
 UNTOUCHED = (36, 48, 60, 72, 108, 120)
 DEV = (84, 96)
+BASE_ERRORS = ("Gain", "Envelope attack", "Harmonic shape")
+CANDIDATE_ERRORS = BASE_ERRORS + ("Foldback energy", "Clipping")
 
 
 class Refused(refusal.Refused, RuntimeError):
-    """A requested saw drive is outside the frozen candidate budget."""
+    """A requested saw drive is outside the frozen candidate budget, or a row
+    the selection rule reads carries a value that is not a finite number."""
 
 
 @contextlib.contextmanager
@@ -122,9 +126,23 @@ def r1_binding(drive: float, f: float) -> dict:
             "tree_matches_pin": now == pinned, "candidate_changes_r1_bytes": cand != pinned}
 
 
+def _require_finite_row(row: dict, drive, errors) -> None:
+    """Refuse a row carrying a compared value that is not a finite number
+    (#1994): every ordering comparison against NaN is False, so a NaN read as
+    within every bound."""
+    read = {f"rows[{drive}].M5A.errors.{k}": row["M5A"]["errors"][k] for k in errors}
+    read.update({f"rows[{drive}].probe.{nt}.upper_wanted_rel_db":
+                 row["probe"][str(nt)]["upper_wanted_rel_db"] for nt in DEV})
+    bad = non_finite(read)
+    if bad:
+        raise Refused("the selection rows carry a value that is not a finite number: "
+                      + ", ".join(bad))
+
+
 def select(rows):
     b = rows[str(BASE_DRIVE)]
     be = b["M5A"]["errors"]
+    _require_finite_row(b, BASE_DRIVE, BASE_ERRORS)
     verdicts = {}
     for d in CANDIDATES:
         r = rows.get(str(d))
@@ -132,6 +150,7 @@ def select(rows):
             verdicts[str(d)] = {"admissible": False, "reasons": [f"REFUSED: {r and r.get('refused')}"]}
             continue
         c = r["M5A"]["errors"]
+        _require_finite_row(r, d, CANDIDATE_ERRORS)
         why = []
         if abs(abs(c["Gain"]) - abs(be["Gain"])) > 0.5:
             why.append(f"gain {c['Gain']:+.3f} vs {be['Gain']:+.3f}")

@@ -45,16 +45,21 @@ import mono_artifact_probe as mp  # noqa: E402
 import measure_pulse2x_headroom as hr  # noqa: E402
 import refusal  # noqa: E402
 from exit_contract import REFUSED  # noqa: E402
+from finite_number import non_finite  # noqa: E402
 
 BASE_DRIVE = 0.75
 CANDIDATE_DRIVES = (0.5, 0.35, 0.25)          # the whole budget
 RECT_GAIN = hr.q15(0.74)
 CAL_NOTE = 84
 PROBE_NOTES = (36, 48, 60, 72, 84, 96, 108, 120)
+BASE_ERRORS = ("Gain", "Envelope attack", "Harmonic shape")
+CANDIDATE_ERRORS = BASE_ERRORS + ("Foldback energy", "Clipping")
+DARKER_PROBES = ("saw/84", "saw/96", "pulse29/84", "pulse29/96")
 
 
 class Refused(refusal.Refused, RuntimeError):
-    """A requested drive is outside the frozen candidate budget."""
+    """A requested drive is outside the frozen candidate budget, or a row the
+    selection rule reads carries a value that is not a finite number."""
 
 
 def voice(engine: str) -> vf.VoiceFx:
@@ -138,8 +143,23 @@ def probe(engine: str, drive: float, vol_factor: float) -> dict:
     return out
 
 
+def _require_finite_row(row: dict, drive, errors) -> None:
+    """Refuse a row carrying a compared value that is not a finite number
+    (#1994): every ordering comparison against NaN is False, so a NaN read as
+    within every bound. An absent upper wanted reading is 0 dB, as the rule
+    reads it."""
+    read = {f"rows[{drive}].M5A.errors.{k}": row["M5A"]["errors"][k] for k in errors}
+    read.update({f"rows[{drive}].probe.{k}.upper_wanted_rel_db":
+                 row["probe"][k]["upper_wanted_rel_db"] or 0 for k in DARKER_PROBES})
+    bad = non_finite(read)
+    if bad:
+        raise Refused("the selection rows carry a value that is not a finite number: "
+                      + ", ".join(bad))
+
+
 def select(rows: dict) -> dict:
     base = rows[str(BASE_DRIVE)]["M5A"]["errors"]
+    _require_finite_row(rows[str(BASE_DRIVE)], BASE_DRIVE, BASE_ERRORS)
     verdicts = {}
     for d in CANDIDATE_DRIVES:
         if "refused" in rows[str(d)]:
@@ -147,6 +167,7 @@ def select(rows: dict) -> dict:
                                 "reasons": [f"REFUSED: {rows[str(d)]['refused']}"]}
             continue
         c = rows[str(d)]["M5A"]["errors"]
+        _require_finite_row(rows[str(d)], d, CANDIDATE_ERRORS)
         why = []
         if abs(abs(c["Gain"]) - abs(base["Gain"])) > 0.5:
             why.append(f"gain {c['Gain']:+.2f} vs {base['Gain']:+.2f}")
@@ -157,7 +178,7 @@ def select(rows: dict) -> dict:
         if c["Envelope attack"] - base["Envelope attack"] > 0.5:
             why.append(f"attack {c['Envelope attack']:.2f} vs {base['Envelope attack']:.2f}")
         bp, cp = rows[str(BASE_DRIVE)]["probe"], rows[str(d)]["probe"]
-        darker = [k for k in ("saw/84", "saw/96", "pulse29/84", "pulse29/96")
+        darker = [k for k in DARKER_PROBES
                   if (cp[k]["upper_wanted_rel_db"] or 0) < (bp[k]["upper_wanted_rel_db"] or 0) - 0.05]
         if darker:
             why.append(f"darker at {darker}")
