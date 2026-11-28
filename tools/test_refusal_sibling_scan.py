@@ -27,12 +27,17 @@ accepted is covered by it, and the sibling-helper, try-after-dispatch,
 value-reference and dispatch-table shapes are each pinned both ways.
 The #1641 section pins the CLI boundary reached through a `_cli()` wrapper the
 dispatch calls -- the placement hh_probe5's first repair used, which the
-census read as no guard -- and the inputs that must not be credited as one.
+census read as no guard -- and the inputs that must not be credited as one. The
+#1718 section plants an `async def` callee, which `funcs` did not register: each
+control RUNS the planted coroutine code first and holds the census row to the
+interpreter's verdict, and each fix is reverted in memory to show that its
+control goes red without it.
 """
 from __future__ import annotations
 
 import ast
-import importlib
+import asyncio
+import importlib.util
 import json
 import pathlib
 import sys
@@ -3132,6 +3137,411 @@ def test_the_label_and_the_shipped_cli_agree(tmp_path, monkeypatch, _real_tree, 
     assert escaped == polarities.pop(), [(s["site"], s["classification"]) for s in rows]
 
 
+# ---------------------------------------------------------------------------
+# #1718 controls: an `async def` callee is in the census
+# ---------------------------------------------------------------------------
+# `ModInfo.funcs` registered `ast.FunctionDef` alone, so `raise_origins` found
+# no def for an `async def` callee, read the call as raising nothing, and the
+# site was ABSENT from the census -- not misclassified: the optimistic
+# direction, the shape #1573 found for function-level imports.
+# `cli_boundary_guards.in_boundary` matched `ast.FunctionDef` named `main` the
+# same way, so a try in an `async def main()` guarded nothing. The real tree
+# held 0 async production defs at 710d3f66, so every control here PLANTS its
+# shape. The await rule is a claim about where PYTHON raises a coroutine's
+# refusal, so each control runs the planted files first -- imported as real
+# modules from the very files the census then reads -- and holds the census
+# row to the interpreter's verdict.
+
+ASYNC_CALLEE = '''
+import refusal
+
+class Refused(refusal.Refused, Exception):
+    pass
+
+CALLS = []                       # written when `load` RUNS: a 'caught' is never a silent callee
+
+async def load(path):
+    CALLS.append(path)
+    raise Refused(f"unusable: {path}")
+
+def load_sync(path):
+    raise Refused(f"unusable: {path}")
+'''
+
+# the issue's caller.py, with the sync twin the census listed all along
+ASYNC_CALLER = '''
+import callee
+
+async def go(p):
+    return await callee.load(p)
+
+def go_sync(p):
+    return callee.load_sync(p)
+'''
+
+ASYNC_AWAITED_BASE_GUARD = '''
+import refusal
+import callee
+
+async def go(p):
+    try:
+        return await callee.load(p)      # raised HERE, in the body: covered
+    except refusal.Refused as e:
+        return f"REFUSED  {e}"
+'''
+
+ASYNC_AWAITED_SIBLING_GUARD = '''
+import refusal
+import callee
+
+class Refused(refusal.Refused, Exception):   # the caller's OWN class: a sibling
+    pass
+
+async def go(p):
+    try:
+        return await callee.load(p)
+    except Refused as e:
+        return f"REFUSED  {e}"
+'''
+
+ASYNC_STORED_THEN_AWAITED_AFTER = '''
+import refusal
+import callee
+
+async def go(p):
+    try:
+        coro = callee.load(p)            # CREATED in the body: no callee code ran
+    except refusal.Refused as e:
+        return f"REFUSED  {e}"
+    return await coro                    # RAISED here: past the try
+'''
+
+ASYNC_STORED_AND_AWAITED_INSIDE = '''
+import refusal
+import callee
+
+async def go(p):
+    try:
+        coro = callee.load(p)
+        return await coro                # awaited INSIDE the try: Python catches it
+    except refusal.Refused as e:
+        return f"REFUSED  {e}"
+'''
+
+SYNC_CALLER_STORES_COROUTINE = '''
+import asyncio
+import refusal
+import callee
+
+def go(p):                               # a sync caller can only CREATE it
+    try:
+        coro = callee.load(p)
+    except refusal.Refused as e:
+        return f"REFUSED  {e}"
+    return asyncio.run(coro)             # and drive it after the try
+'''
+
+ASYNC_MAIN_BOUNDARY = '''
+import asyncio
+import sys
+import refusal
+import callee
+
+async def go(p):
+    return await callee.load(p)          # unguarded HERE; caught at the boundary
+
+async def main(p):
+    try:
+        return await go(p)
+    except refusal.Refused as e:
+        return f"REFUSED  {e}"
+
+if __name__ == "__main__":
+    sys.exit(asyncio.run(main("x")))
+'''
+
+# The same boundary, but the dispatch does NOT call `main` by bare name, so the
+# #1641 wrapper branch of `in_boundary` cannot credit it: only the `main`
+# branch can. After #1641 landed, ASYNC_MAIN_BOUNDARY alone no longer isolates
+# that branch (main is a bare-name dispatch callee there, hence a wrapper too).
+ASYNC_MAIN_BOUNDARY_NOT_BARE = ASYNC_MAIN_BOUNDARY.replace(
+    'asyncio.run(main("x"))', 'asyncio.run(globals()["main"]("x"))')
+
+ASYNC_MAIN_STORED_THEN_AWAITED_AFTER = '''
+import asyncio
+import sys
+import refusal
+import callee
+
+async def main(p):
+    try:
+        coro = callee.load(p)            # CREATED inside the boundary try...
+    except refusal.Refused as e:
+        return f"REFUSED  {e}"
+    return await coro                    # ...and RAISED after it: past the guard
+
+if __name__ == "__main__":
+    sys.exit(asyncio.run(main("x")))
+'''
+
+ASYNC_NON_MAIN_GUARD = '''
+import refusal
+import callee
+
+async def go(p):
+    return await callee.load(p)
+
+async def run(p):                        # the same try in any other async def
+    try:
+        return await go(p)
+    except refusal.Refused as e:
+        return f"REFUSED  {e}"
+'''
+
+PLAY_ASYNC_RAISER = '''
+import refusal
+
+class Refused(refusal.Refused, Exception):
+    pass
+
+async def fetch(p):
+    raise Refused("no records")
+'''
+
+CALLER_AMBIG_ASYNC_AWAITED = '''
+import refusal
+from play import fetch
+
+async def go(p):
+    try:
+        return await fetch(p)
+    except refusal.Refused:
+        return None
+'''
+
+CALLER_AMBIG_ASYNC_STORED = '''
+import refusal
+from play import fetch
+
+async def go(p):
+    try:
+        coro = fetch(p)
+    except refusal.Refused:
+        return None
+    return await coro
+'''
+
+
+def _async_files(tmp_path, extra: dict[str, str]) -> list[pathlib.Path]:
+    """The issue's two-file tree plus one caller per entry: `callee.py`,
+    whose `load` is an `async def` that refuses, and the given callers."""
+    p = tmp_path / "callee.py"
+    p.write_text(ASYNC_CALLEE)
+    files = [p]
+    for name, body in extra.items():
+        q = tmp_path / f"{name}.py"
+        q.write_text(body)
+        files.append(q)
+    return files
+
+
+def _async_tree(tmp_path, extra: dict[str, str]):
+    files = _async_files(tmp_path, extra)
+    return files, rss.build_index(files)
+
+
+def _import(monkeypatch, path: pathlib.Path):
+    """`path` imported as a real module under its own stem, for this test."""
+    monkeypatch.setattr(sys, "dont_write_bytecode", True)
+    spec = importlib.util.spec_from_file_location(path.stem, path)
+    mod = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, path.stem, mod)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _coroutine_verdict(monkeypatch, tmp_path: pathlib.Path, caller: str,
+                       fn: str = "go") -> str:
+    """What the INTERPRETER does with a planted caller: `fn` is run against
+    the callee that always refuses. 'caught' when it returns after the
+    callee RAISED, 'escaped' when the refusal leaves it, 'not-run' when the
+    callee was never reached -- a defect in the planting, not a verdict."""
+    callee = _import(monkeypatch, tmp_path / "callee.py")
+    mod = _import(monkeypatch, tmp_path / f"{caller}.py")
+    f = getattr(mod, fn)
+    try:
+        if asyncio.iscoroutinefunction(f):
+            asyncio.run(f("x"))
+        else:
+            f("x")
+    except callee.Refused:
+        verdict = "escaped"
+    else:
+        verdict = "caught"
+    return verdict if callee.CALLS else "not-run"
+
+
+def _scanner_with(old: str, new: str):
+    """The shipped scanner with ONE fix reverted, compiled in memory from
+    its own source. `old` must be there exactly once or the mutant is
+    REFUSED: an injection point that moved is drift to surface, never a
+    mutant that changed nothing and passed."""
+    path = ROOT / "tools" / "refusal_sibling_scan.py"
+    src = path.read_text()
+    assert src.count(old) == 1, (src.count(old), old)
+    m = types.ModuleType("rss_mutant")
+    m.__file__ = str(path)
+    exec(compile(src.replace(old, new), str(path), "exec"), m.__dict__)  # noqa: S102
+    return m
+
+
+def test_a_call_to_an_async_def_callee_is_a_site(tmp_path, monkeypatch):
+    """The issue's two-file tree, red first: `callee.funcs` held the sync
+    twin alone, so `callee.load_sync` was reported and `callee.load` -- the
+    call Python raises out of `go` -- was in no census. The module-level
+    assertions keep the control honest about which fix passes it: the async
+    def is REGISTERED, as itself, not read through some other path."""
+    files, idx = _async_tree(tmp_path, {"caller_async": ASYNC_CALLER})
+    funcs = idx[str(tmp_path / "callee.py")].funcs
+    assert "load" in funcs and isinstance(funcs["load"], ast.AsyncFunctionDef), sorted(funcs)
+    assert isinstance(funcs["load_sync"], ast.FunctionDef), sorted(funcs)
+    assert _coroutine_verdict(monkeypatch, tmp_path, "caller_async") == "escaped"
+    got = {s["callee"]: s for s in _sites_for(files, idx, "caller_async")}
+    assert sorted(got) == ["callee.load", "callee.load_sync"], got
+    for s in got.values():
+        assert (s["origins"], s["classification"], s["guard"], s["uncovered"]) == (
+            ["callee"], "candidate-escape", "none", ["callee"]), s
+
+
+def test_a_try_in_an_async_main_is_the_cli_boundary(tmp_path):
+    """A module whose `main` is an `async def` had no boundary in the census
+    (#1718): a site that module's `main()` catches was reported a candidate
+    escape, the repair shape of #1160/#1162 read as still open. Since #1656
+    the credit is by path, so the control is the row: the site in `go`, under
+    `await go(p)` in main's try, is `covered(cli-base)`. The second assertion
+    is the control's other side: the same try in an async def the entry never
+    reaches credits nothing, as for a def."""
+    files = _async_files(tmp_path, {"caller_async_main": ASYNC_MAIN_BOUNDARY,
+                                    "caller_async_run": ASYNC_NON_MAIN_GUARD})
+    idx = rss.build_index(files)
+    got = _sites_for(files, idx, "caller_async_main")
+    assert [(s["classification"], s["guard"]) for s in got] == [("covered(cli-base)", "none")], got
+    got = _sites_for(files, idx, "caller_async_run")
+    assert [(s["classification"], s["guard"]) for s in got] == [("candidate-escape", "none")], got
+
+
+@pytest.mark.parametrize("src,fn,python,row", [
+    pytest.param(ASYNC_AWAITED_BASE_GUARD, "go", "caught",
+                 ("covered(base)", "base", []), id="awaited-under-a-base-guard"),
+    pytest.param(ASYNC_AWAITED_SIBLING_GUARD, "go", "escaped",
+                 ("candidate-escape", "local", ["callee"]), id="awaited-under-a-sibling"),
+    pytest.param(ASYNC_STORED_THEN_AWAITED_AFTER, "go", "escaped",
+                 ("candidate-escape", "none", ["callee"]), id="created-then-awaited-after"),
+    pytest.param(ASYNC_STORED_AND_AWAITED_INSIDE, "go", "caught",
+                 ("candidate-escape", "none", ["callee"]), id="created-and-awaited-inside"),
+    pytest.param(SYNC_CALLER_STORES_COROUTINE, "go", "escaped",
+                 ("candidate-escape", "none", ["callee"]), id="sync-caller-drives-it-after"),
+    pytest.param(ASYNC_MAIN_BOUNDARY, "main", "caught",
+                 ("covered(cli-base)", "none", []), id="async-main-boundary"),
+    pytest.param(ASYNC_MAIN_STORED_THEN_AWAITED_AFTER, "main", "escaped",
+                 ("candidate-escape", "none", ["callee"]), id="async-main-created-then-awaited"),
+    pytest.param(ASYNC_NON_MAIN_GUARD, "run", "caught",
+                 ("candidate-escape", "none", ["callee"]), id="async-def-not-named-main"),
+])
+def test_the_census_row_of_an_async_callee_follows_the_interpreter(
+        tmp_path, monkeypatch, src, fn, python, row):
+    """The await rule, held to what Python does. A coroutine is only
+    CREATED by the call and raises where it is AWAITED: the three
+    created-then-awaited rows raise past a try whose body holds the Call
+    node, so a walk that credits the Call node's own try reports a false
+    covered there. The rule credits a call to an `async def` -- by the tries
+    around it and by the CLI boundary -- only when it is written
+    `await <call>`. One row is the rule's own stated cost: a coroutine
+    awaited INSIDE the try that created it is 'caught' by Python and
+    'candidate-escape' by the census, because where the coroutine is awaited
+    is not in the AST at the Call node. The last row is no cost of the rule:
+    Python catches that refusal in an intermediate frame, a blind spot the
+    module docstring already lists; it is here as the other side of the
+    boundary fix, the same try in an async def not named main."""
+    files, idx = _async_tree(tmp_path, {"caller_async": src})
+    assert _coroutine_verdict(monkeypatch, tmp_path, "caller_async", fn) == python, src
+    got = _sites_for(files, idx, "caller_async")
+    assert len(got) == 1, got
+    assert (got[0]["classification"], got[0]["guard"], got[0]["uncovered"]) == row, got
+
+
+@pytest.mark.parametrize("caller,row", [
+    pytest.param(CALLER_AMBIG_ASYNC_AWAITED, ("covered(base)", "base"),
+                 id="awaited-under-a-base-guard"),
+    pytest.param(CALLER_AMBIG_ASYNC_STORED, ("ambiguous-callee", "none"),
+                 id="created-then-awaited-after"),
+])
+def test_the_await_rule_reaches_the_stem_collision_branch(tmp_path, caller, row):
+    """The collision branch reads the tries around the call on its own, to
+    settle a base or broad guard the same way for every same-stem candidate;
+    a bare call to a callee that MAY be an `async def` must settle nothing
+    there either. The interpreter's verdict is not re-run here: which module
+    the import binds is the undecidable fact the branch exists for."""
+    files = _collision_tree(tmp_path, PLAY_ASYNC_RAISER, PLAIN, "caller_amb_async", caller)
+    idx = rss.build_index(files)
+    got = _sites_for(files, idx, "caller_amb_async")
+    assert len(got) == 1, got
+    assert (got[0]["classification"], got[0]["guard"]) == row, got
+    assert len(got[0]["candidates"]) == 2, got
+
+
+def test_with_the_registration_reverted_the_async_site_is_absent_again(tmp_path):
+    """Mutant 1 of 3: `funcs` back to `ast.FunctionDef` alone. The issue's
+    own measurement, re-derived on the shipped source -- `callee.funcs ==
+    ['load_sync']`, the sync twin a site, the async site gone -- so the
+    first control is red under it and green only through the registration."""
+    ind = " " * 16                    # the registration line's own indentation
+    mut = _scanner_with(
+        f"if isinstance(node, FUNCTION_NODES):\n{ind}self.funcs.setdefault(node.name, node)",
+        f"if isinstance(node, ast.FunctionDef):\n{ind}self.funcs.setdefault(node.name, node)")
+    files = _async_files(tmp_path, {"caller_async": ASYNC_CALLER})
+    idx = mut.build_index(files)
+    # the revert is ACTIVE: the async def is unregistered again
+    assert sorted(idx[str(tmp_path / "callee.py")].funcs) == ["load_sync"]
+    got = sorted(s["callee"] for s in mut.scan(files, idx))
+    # the control's claim is false: `callee.load` is gone, the twin remains
+    assert got == ["callee.load_sync"], got
+
+
+def test_with_the_async_resolution_reverted_an_async_main_is_no_boundary(tmp_path):
+    """Mutant 2 of 3: name resolution back to `ast.FunctionDef` alone, so
+    `asyncio.run(main("x"))` reaches no def. `async def main` is unreached,
+    the try in it is on no path, and the site it catches is a candidate
+    escape again -- the control above red under this revert."""
+    mut = _scanner_with(
+        "        return [d for d in own if isinstance(d, FUNCTION_NODES)]",
+        "        return [d for d in own if isinstance(d, ast.FunctionDef)]")
+    files = _async_files(tmp_path, {"caller_async": ASYNC_MAIN_BOUNDARY})
+    idx = mut.build_index(files)
+    # the shipped scanner credits it: the revert below is what removes that
+    ship = rss.build_index(files)
+    shipped = [s for s in rss.scan(files, ship) if "caller_async.py" in s["site"]]
+    assert [s["classification"] for s in shipped] == ["covered(cli-base)"], shipped
+    got = [s for s in mut.scan(files, idx) if "caller_async.py" in s["site"]]
+    assert [(s["classification"], s["guard"]) for s in got] == [("candidate-escape", "none")], got
+
+
+def test_with_the_await_rule_reverted_a_bare_call_borrows_the_trys_handler(tmp_path):
+    """Mutant 3 of 3: `refusal_runs_at_call` answering True for every call,
+    the census with the two registrations fixed and no await rule. The Call
+    node sits in the try body, so the walk lends it the handler, and a
+    refusal Python raises after the try reads `covered(base)` -- the false
+    covered the rule exists to withhold."""
+    mut = _scanner_with(
+        "    return not any(isinstance(c.funcs.get(fname), ast.AsyncFunctionDef)"
+        " for c in callees)",
+        "    return True")
+    files = _async_files(tmp_path, {"caller_async": ASYNC_STORED_THEN_AWAITED_AFTER})
+    idx = mut.build_index(files)
+    got = [s for s in mut.scan(files, idx) if "caller_async.py" in s["site"]]
+    assert [(s["classification"], s["guard"]) for s in got] == [("covered(base)", "base")], got
+
+
 # --- #1641 controls: the CLI boundary reached through a wrapper ---------------
 # `hh_probe5`'s first repair (#1611, `513b0213`) put `try/except
 # refusal.Refused` in a `_cli()` wrapper that the `__main__` block calls.
@@ -3301,3 +3711,127 @@ def helper():
 ''')
     assert s["classification"] == "candidate-escape", s
     assert s["uncovered"] == ["mod_a"], s
+
+
+# --- #1688 review, round 2: a DEFERRED call inherits no handler ----------------
+# A call that only CREATES a generator, a coroutine or a generator expression
+# runs its body later, under whatever is around the code that drives it. The
+# path graph gave such an edge no handlers of its own and then let it inherit
+# its CREATOR's outcome, so a try around `factory()` was credited for a
+# refusal Python raises after that try exited. Each deferred fixture below was
+# run under Python 3.12 against the scanner at 18807d7a: the scanner said
+# `covered(cli-base)`, the interpreter exited 1 with an uncaught
+# `callee.Refused`. The eager control is the same tree with the call made on
+# the spot: Python catches it, and the scanner must keep crediting it.
+
+DEFERRED_CALLEE = '''
+import refusal
+
+class Refused(refusal.Refused, Exception):
+    pass
+
+CALLS = []
+
+def load():
+    CALLS.append(1)
+    raise Refused("factory control")
+'''
+
+_DEFERRED_MAIN = '''
+def main():
+    try:
+        pending = factory()
+    except refusal.Refused:
+        print("caught")
+        return 2
+    return {drive}
+
+if __name__ == "__main__":
+    sys.exit(main())
+'''
+
+DEFERRED_GENERATOR = '''
+import sys, refusal, callee
+def helper():
+    yield callee.load()
+
+def factory():
+    return helper()
+''' + _DEFERRED_MAIN.format(drive="next(pending)")
+
+DEFERRED_COROUTINE = '''
+import sys, asyncio, refusal, callee
+async def helper():
+    return callee.load()
+
+def factory():
+    return helper()
+''' + _DEFERRED_MAIN.format(drive="asyncio.run(pending)")
+
+DEFERRED_GENEXP = '''
+import sys, refusal, callee
+def helper():
+    return callee.load()
+
+def factory():
+    return (helper() for _ in (0,))
+''' + _DEFERRED_MAIN.format(drive="next(pending)")
+
+EAGER_CONTROL = '''
+import sys, refusal, callee
+def helper():
+    return callee.load()
+
+def factory():
+    return helper()
+''' + _DEFERRED_MAIN.format(drive="pending")
+
+
+def _deferred_tree(tmp_path, body: str):
+    (tmp_path / "callee.py").write_text(DEFERRED_CALLEE)
+    (tmp_path / "caller_d.py").write_text(body)
+    files = [tmp_path / "callee.py", tmp_path / "caller_d.py"]
+    return files, rss.build_index(files)
+
+
+def _deferred_python_verdict(monkeypatch, tmp_path) -> str:
+    """'escaped' / 'caught' from RUNNING the planted caller; 'not-run' when the
+    callee was never reached (a defect in the planting, not a verdict)."""
+    callee = _import(monkeypatch, tmp_path / "callee.py")
+    mod = _import(monkeypatch, tmp_path / "caller_d.py")
+    try:
+        mod.main()
+    except callee.Refused:
+        verdict = "escaped"
+    else:
+        verdict = "caught"
+    return verdict if callee.CALLS else "not-run"
+
+
+@pytest.mark.parametrize("body,python,classification", [
+    pytest.param(DEFERRED_GENERATOR, "escaped", "candidate-escape", id="generator"),
+    pytest.param(DEFERRED_COROUTINE, "escaped", "candidate-escape", id="coroutine"),
+    pytest.param(DEFERRED_GENEXP, "escaped", "candidate-escape", id="genexp"),
+    pytest.param(EAGER_CONTROL, "caught", "covered(cli-base)", id="eager-control"),
+])
+def test_a_deferred_call_is_not_credited_the_creators_handler(
+        tmp_path, monkeypatch, body, python, classification):
+    files, idx = _deferred_tree(tmp_path, body)
+    assert _deferred_python_verdict(monkeypatch, tmp_path) == python
+    got = [s for s in rss.scan(files, idx) if "caller_d.py" in s["site"]]
+    assert [s["classification"] for s in got] == [classification], got
+
+
+@pytest.mark.parametrize("body", [DEFERRED_GENERATOR, DEFERRED_COROUTINE, DEFERRED_GENEXP])
+def test_with_the_deferral_reverted_the_creators_handler_is_credited_again(tmp_path, body):
+    """Injected defect: a deferred edge inherits its caller's outcome again
+    (the empty-edge fallback). Each deferred fixture then reads
+    `covered(cli-base)` -- the false covered the three controls above refuse."""
+    mut = _scanner_with(
+        '                    if deferred:\n'
+        '                        new.add(("none", None))\n'
+        '                        continue\n', '')
+    files, idx = _deferred_tree(tmp_path, body)
+    midx = mut.build_index(files)
+    got = [s for s in mut.scan(files, midx) if "caller_d.py" in s["site"]]
+    assert [s["classification"] for s in got] == ["covered(cli-base)"], got

@@ -68,7 +68,21 @@ WHAT THIS SCAN RESOLVES that the #1160 one-off dotted-call grep could not:
     at the raise and at the handler alike. So the name shadows the module's
     own `Refused` inside that def and leaves every sibling def reading the
     module's. It never sets `<mod>.Refused`: a function-local name is not a
-    module attribute.
+    module attribute;
+  * an `async def` callee is a callee (#1718): `funcs` registered
+    `ast.FunctionDef` alone, so a call to an `async def` resolved to no def,
+    read as raising nothing and was ABSENT from the census -- not
+    misclassified, the same optimistic direction #1573 found for
+    function-level imports. It is registered now and its raises are read
+    like any def's; a try in an `async def main()` is the CLI boundary like
+    one in `main()`. Whether the guards around such a call can catch what
+    it raises is decided by where Python raises it, and the call only
+    CREATES the coroutine: `await callee.load(p)` raises in the try body it
+    is written in, while `coro = callee.load(p)` in a try with `await coro`
+    after it raises past the try, though the Call node sits in its body. So
+    a call to an `async def` is credited by the tries around it and by the
+    CLI boundary only when it is written `await <call>`; a bare call reads
+    `candidate-escape` with no guard and every origin uncovered.
 
 WHAT IT CANNOT TELL YOU, and why the per-site list is an inventory, not a
 verdict. A dotted call is not necessarily a raising call on the CLI's input
@@ -120,6 +134,18 @@ is decided by tracing the caller with a known-answer input, as #1160 and
     `main()` that nothing at module level calls is not an entry. So
     `candidate-escape` means "no handler was established on every path",
     never "escapes at the exit".
+  * that await rule is conservative where only the await could tell: a bare
+    call to an `async def` whose coroutine is awaited INSIDE the try that
+    created it reads `candidate-escape`, though Python catches it there,
+    and so does one awaited under a guard further up the call chain. Which
+    variable holds the coroutine, and where it is awaited, is not in the AST
+    at the Call node; the same goes for the driver forms,
+    `asyncio.run(callee.load(p))` and `asyncio.gather(callee.load(p))` inside
+    a try, which surface the refusal there yet read `candidate-escape`. The
+    price is a row to triage, never a false covered.
+    An `async def` that yields is read as a coroutine function: its refusal
+    surfaces at the `async for` that drives it, which the rule does not
+    model;
   * test files are excluded: they are not CLI callers and their
     `pytest.raises` sites are deliberate;
   * only `SCAN_ROOTS` is scanned: `tools`, `model`, `pnr`, `fpga`,
@@ -287,7 +313,7 @@ class ModInfo:
         self.tree = ast.parse(path.read_text(), filename=str(path))
         self.imports: dict[str, str] = {}                  # local name -> module stem
         self.from_imports: dict[str, tuple[str, str]] = {}  # local name -> (stem, original name)
-        self.funcs: dict[str, ast.FunctionDef] = {}
+        self.funcs: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {}
         self.refused_origin: str | None = None   # stem whose class our Refused is
         self.refused_names: dict[str, str] = {}  # family name -> stem it last resolved to
         self.has_local_family = False            # a local `class Refused` def (maybe shadowed)
@@ -403,7 +429,7 @@ class ModInfo:
         for node in ast.walk(self.tree):
             for ch in ast.iter_child_nodes(node):
                 self.parents[ch] = node
-            if isinstance(node, ast.FunctionDef):
+            if isinstance(node, FUNCTION_NODES):
                 self.funcs.setdefault(node.name, node)
         scoped: dict[ast.AST, list[ast.stmt]] = {}
         for node in ast.walk(self.tree):
@@ -747,7 +773,8 @@ def handler_origins(mod: ModInfo, by_stem: dict[str, list[ModInfo]],
     return origins, shape
 
 
-def _handlers_within(mod: ModInfo, frame: ast.AST, call: ast.AST) -> list[ast.ExceptHandler]:
+def _handlers_within(mod: ModInfo, frame: ast.AST,
+                     call: ast.AST) -> tuple[list[ast.ExceptHandler], bool]:
     """The handlers of the tries, written in `frame`'s own body, whose BODY
     holds `call` -- innermost try first, a try's handlers in source order, so
     the first that matches is the one Python runs. The walk stops at `frame`:
@@ -755,16 +782,19 @@ def _handlers_within(mod: ModInfo, frame: ast.AST, call: ast.AST) -> list[ast.Ex
     DEFINITION, not this call. It stops at a generator expression too, unless
     the call is in its first iterable (evaluated at once): the rest of its
     body runs when something iterates it, which may be after the try has
-    exited, so a try around its CREATION guards nothing (#1688 review)."""
+    exited, so a try around its CREATION guards nothing (#1688 review). The
+    second value is True when the walk stopped at such a generator expression:
+    the call runs LATER, under no handler of this frame at all, so the edge is
+    deferred (see `path_guards`)."""
     out, cur, prev, prev2 = [], call, None, None
     while cur is not frame:
         prev2, prev, cur = prev, cur, mod.parents[cur]
         if (isinstance(cur, ast.GeneratorExp)
                 and not (prev is cur.generators[0] and prev2 is prev.iter)):
-            return out
+            return out, True
         if isinstance(cur, ast.Try) and prev in cur.body:
             out.extend(cur.handlers)
-    return out
+    return out, False
 
 
 def _is_generator(fn: ast.AST) -> bool:
@@ -801,10 +831,13 @@ def path_guards(mod: ModInfo, by_stem: dict[str, list[ModInfo]]):
     somewhere (a callback has a path the graph cannot see). A call
     written in a frame the entry cannot reach (a lambda, a method) is an
     unguarded entry edge to its callee, so it cannot be dropped. A call that
-    only CREATES a generator or coroutine carries no handlers (its body runs
-    when something iterates or awaits it, perhaps after the try exited),
-    unless a coroutine is awaited on the spot; the same holds for a call in
-    a generator expression's body. Anything else the graph cannot resolve is
+    only CREATES a generator or coroutine is DEFERRED (its body runs when
+    something iterates or awaits it, perhaps after the try exited), unless a
+    coroutine is awaited on the spot; the same holds for a call in a
+    generator expression's body. A deferred edge carries no handler AND does
+    not inherit its caller's outcome: the path through it ends in "none", so
+    a try around the creation is never credited. The price is a row to
+    triage when the generator is in fact driven inside that try. Anything else the graph cannot resolve is
     not an edge: it loses credit only for a callee with no resolvable
     in-edge. The invariant is PER MODULE: a caller in another scanned module
     is not seen (the blind-spot list says so). `try*` (TryStar) is not an
@@ -812,25 +845,32 @@ def path_guards(mod: ModInfo, by_stem: dict[str, list[ModInfo]]):
     granted. A handler whose class the scanner cannot resolve is read as not
     catching, as before."""
     top = mod.tree
-    ins: dict[ast.AST, list[tuple[ast.AST, list[ast.ExceptHandler]]]] = {}
+    ins: dict[ast.AST, list[tuple[ast.AST, list[ast.ExceptHandler], bool]]] = {}
     outs: dict[ast.AST, list[ast.AST]] = {}
 
-    def edge(caller: ast.AST, callee: ast.AST, held: list[ast.ExceptHandler]) -> None:
-        ins.setdefault(callee, []).append((caller, held))
+    def edge(caller: ast.AST, callee: ast.AST, held: list[ast.ExceptHandler],
+             deferred: bool = False) -> None:
+        ins.setdefault(callee, []).append((caller, held, deferred))
         outs.setdefault(caller, []).append(callee)
 
     for node in ast.walk(top):
         if isinstance(node, ast.Call):
             caller = mod.caller_of(node)
             for callee in mod.resolve_call(node):
-                held = _handlers_within(mod, caller, node)
+                held, deferred = _handlers_within(mod, caller, node)
                 # a call that only creates a generator or coroutine runs its
                 # body later -- unless it is awaited on the spot (#1688 review)
                 gen = _is_generator(callee)
                 if (gen or isinstance(callee, ast.AsyncFunctionDef)) and not (
                         not gen and isinstance(mod.parents.get(node), ast.Await)):
-                    held = []
-                edge(caller, callee, held)
+                    deferred = True
+                # DEFERRED is not "no handler here": the body runs when
+                # something iterates or awaits it, under whatever is around
+                # THAT, which the graph cannot see. An ordinary call with no
+                # handler inherits its caller's outcome; a deferred one must
+                # not, or the creator's try is credited for code that runs
+                # after the try exited (#1688 review, round 2).
+                edge(caller, callee, [] if deferred else held, deferred)
     for own in mod.direct_defs.values():
         for name, defs in own.items():
             if name in mod.value_names:
@@ -848,7 +888,7 @@ def path_guards(mod: ModInfo, by_stem: dict[str, list[ModInfo]]):
     # Dropping the edge would let a guarded sibling caller alone carry the
     # intersection; make it an unguarded entry edge instead (#1688 review).
     for callee, edges in list(ins.items()):
-        if callee in reach and any(c not in reach for c, _ in edges):
+        if callee in reach and any(c not in reach for c, _, _ in edges):
             edge(top, callee, [])
 
     handler_kinds: dict[ast.ExceptHandler, tuple[frozenset[str], set[str]]] = {}
@@ -893,8 +933,11 @@ def path_guards(mod: ModInfo, by_stem: dict[str, list[ModInfo]]):
                 if n is top:
                     continue
                 new: set[tuple[str, str | None]] = set()
-                for c, held in ins.get(n, []):
+                for c, held, deferred in ins.get(n, []):
                     if c not in reach:
+                        continue
+                    if deferred:
+                        new.add(("none", None))
                         continue
                     first = next(((k, where(h)) for h in held if (k := match(h, origin))), None)
                     new |= {first} if first else out[c]
@@ -917,6 +960,22 @@ def path_guards(mod: ModInfo, by_stem: dict[str, list[ModInfo]]):
         return weakest, sorted(wheres, key=lambda w: (int(w.rsplit(":", 1)[1]), w))
 
     return lookup
+
+
+def refusal_runs_at_call(mod: ModInfo, call: ast.Call, callees: list[ModInfo],
+                         fname: str) -> bool:
+    """Whether a refusal raised through this call would surface where the
+    Call node stands, so that the tries around it -- and the CLI boundary --
+    can catch it from there. False for one shape only (#1718): a bare call
+    to an `async def` CREATES a coroutine and runs none of the callee's code;
+    the refusal is raised wherever the coroutine is awaited, which no walk
+    up from the Call node can see. Only `await <call>` runs the callee where
+    the call is written. Among same-stem candidates one `async def` decides:
+    which module the import binds is not decidable, and the reading that
+    cannot report a false covered is the one taken."""
+    if isinstance(mod.parents.get(call), ast.Await):
+        return True
+    return not any(isinstance(c.funcs.get(fname), ast.AsyncFunctionDef) for c in callees)
 
 
 def _rel_label(path: pathlib.Path) -> str:
@@ -956,6 +1015,9 @@ def scan(files: list[pathlib.Path], idx: dict[str, ModInfo]) -> list[dict]:
             cands = by_stem.get(callee_stem, [])
             if not cands:
                 continue                      # callee outside the tracked tree
+            # (#1718) a bare call to an `async def` is credited by no guard
+            # at all: its refusal is raised where the coroutine is awaited
+            runs_here = refusal_runs_at_call(mod, node, cands, fname or "")
             if len(cands) > 1:
                 # stem collision: which module the import binds is not
                 # decidable from the AST, so name the candidates instead of
@@ -969,7 +1031,7 @@ def scan(files: list[pathlib.Path], idx: dict[str, ModInfo]) -> list[dict]:
                            for c in cands):
                     continue
                 ashapes = []
-                for tr in enclosing_try_parents(mod.tree, node):
+                for tr in (enclosing_try_parents(mod.tree, node) if runs_here else []):
                     for h in tr.handlers:
                         _, shape = handler_origins(mod, by_stem, h)
                         if shape in ("base", "broad"):
@@ -992,7 +1054,7 @@ def scan(files: list[pathlib.Path], idx: dict[str, ModInfo]) -> list[dict]:
             if not origins:
                 continue                      # this function raises no refusal
             covered, shapes = set(), []
-            for tr in enclosing_try_parents(mod.tree, node):
+            for tr in (enclosing_try_parents(mod.tree, node) if runs_here else []):
                 for h in tr.handlers:
                     ho, shape = handler_origins(mod, by_stem, h)
                     if shape in ("base", "broad"):
@@ -1004,7 +1066,8 @@ def scan(files: list[pathlib.Path], idx: dict[str, ModInfo]) -> list[dict]:
             uncovered = origins - covered
             # the CLI credit is BY PATH (#1656): only what every path from
             # the entry to THIS site's own def catches
-            kind, via = guards(mod.caller_of(node), set(uncovered))
+            kind, via = (guards(mod.caller_of(node), set(uncovered))
+                         if runs_here else ("none", []))
             if uncovered and kind == "base":
                 # a base guard is the first handler on every path
                 classification, uncovered = "covered(cli-base)", []
