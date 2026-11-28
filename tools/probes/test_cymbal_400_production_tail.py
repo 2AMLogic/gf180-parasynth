@@ -282,18 +282,17 @@ def test_mutant_no_prep_assert_lets_the_unprepared_record_through(ref_long):
 
 def test_mutant_no_finite_check_bypasses_the_guard_and_downstream_still_refuses(ref_long):
     """The finite guard is DEFENCE IN DEPTH, not the only thing stopping NaN input: with it removed,
-    `classify` refuses energy ("a side is missing or non-finite") and cymbal_mid's floor gate refuses
-    decay. What the guard adds is an early, side-named refusal of the whole record. This asserts what
-    the mutant actually produces, so a downstream change that let NaN through to a verdict goes red."""
+    `cymbal_mid.leak_dominance_db` refuses a non-finite mid band (#1743), which `_side` re-raises as a
+    record-level `Refused` naming the side. What the guard adds is the earlier, distinct reason
+    ("record is not finite"). This asserts what the mutant actually produces, so a downstream change
+    that let NaN through to a verdict goes red."""
     y = ref_long.copy()
     y[-1000] = np.nan
     with pytest.raises(pt.Refused, match="production: record is not finite"):
         pt.compare_records(y, SR, ref_long, SR, prod_has_hh1=True)
-    r = pt.compare_records(y, SR, ref_long, SR, prod_has_hh1=True, defect="NO_FINITE_CHECK")
-    for k in ("energy", "decay"):
-        assert r[k]["verdict"] == "REFUSED", (k, r[k])
-        assert "record is not finite" not in r[k]["reason"], "mutant still hit the finite guard: not the mutant"
-    assert r["joint"] is False
+    with pytest.raises(pt.Refused, match="production: .*non-finite") as ei:
+        pt.compare_records(y, SR, ref_long, SR, prod_has_hh1=True, defect="NO_FINITE_CHECK")
+    assert "record is not finite" not in str(ei.value), "mutant still hit the finite guard: not the mutant"
 
 
 def test_mutant_wrong_hh1_declaration_changes_the_leak_prediction(ref_long):
@@ -357,13 +356,13 @@ def test_control_matrix_energy_decay_x_defects_is_printed_and_no_defect_goes_uns
         for prop, (clean, mutant, seen) in cells.items():
             print(f"  {name:16s} {prop:6s} {seen:5s}  clean={clean} -> mutant={mutant}")
     # The finite guard is defence in depth: its removal must be distinguishable from the
-    # downstream refusals that survive it -- the reason changes, the verdicts do not.
+    # downstream refusal that survives it -- the reason changes, the (record-level) verdict does not.
     fin = rows["NO_FINITE_CHECK"]
     for prop in ("energy", "decay"):
         assert "not finite" in fin[prop][0][3], (prop, fin[prop][0])
-        assert fin[prop][1][0] == "REFUSED", (prop, fin[prop][1])
-        assert "not finite" not in fin[prop][1][3], (prop, fin[prop][1])
-    assert fin["energy"][0][0] == "REFUSED(record-level)" and fin["energy"][1][0] == "REFUSED"
+        assert fin[prop][1][0] == "REFUSED(record-level)", (prop, fin[prop][1])
+        assert "not finite" not in fin[prop][1][3] and "non-finite" in fin[prop][1][3], (prop, fin[prop][1])
+    assert fin["energy"][0][0] == "REFUSED(record-level)" and fin["energy"][1][0] == "REFUSED(record-level)"
 
 
 # ---------------------------------------------------------------- source-tree identity (freeze closure)
