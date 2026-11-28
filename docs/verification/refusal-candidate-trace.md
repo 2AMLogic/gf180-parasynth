@@ -324,5 +324,5 @@ python tools/refusal_candidate_trace.py report build/refusal-candidate-trace.jso
 
 A tampered input is always a fresh clone of the traced revision under the
 scratch directory, never the working tree. The whole plan is about an hour of
-single-process time; `build/launch_final.py`-style grouping in
-`tools/run_all.py` runs it in seventeen minutes.
+single-process time; split into six `--only` groups and run five at a time
+through `tools/run_all.py`, it takes seventeen minutes.
