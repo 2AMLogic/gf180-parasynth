@@ -286,3 +286,70 @@ def test_main_prints_an_exactly_zero_harmonic_without_crashing(tmp_path, capsys,
     assert rc == 0
     assert "h2   -inf" in out and "h3  -40.0" in out
     assert "recordings passing the admission test: 1 of 2" in out
+
+
+# ---- #1745 review findings --------------------------------------------------
+
+def test_scan_refuses_unsigned_pcm_silence_on_disk(tmp_path):
+    """uint8 silence is 128, not 0. Read as DC it scanned as f0 26 Hz."""
+    wavfile.write(str(tmp_path / "u8.wav"), SR, np.full(SR, 128, dtype=np.uint8))
+    with pytest.raises(mp.ScanRefused) as e:
+        mp.scan(str(tmp_path))
+    assert "u8.wav" in str(e.value)
+
+
+def test_scan_refuses_a_nonfinite_float_wav_without_a_warning(tmp_path):
+    x = np.sin(2 * np.pi * 220.0 * T).astype(np.float32)
+    x[SR // 2] = np.inf
+    wavfile.write(str(tmp_path / "inf.wav"), SR, x)
+    _tone(tmp_path / "z_good.wav")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        with pytest.raises(mp.ScanRefused) as e:
+            mp.scan(str(tmp_path))
+    assert [s[0] for s in e.value.skipped] == ["inf.wav"]
+
+
+def test_unsigned_pcm_tone_still_measures(tmp_path):
+    """Control: centring must not break real uint8 audio."""
+    x = (128 + 100 * np.sin(2 * np.pi * 440.0 * T)).astype(np.uint8)
+    wavfile.write(str(tmp_path / "t.wav"), SR, x)
+    assert mp.scan(str(tmp_path))[0][3]["f0"] == pytest.approx(440.0, abs=2.0)
+
+
+def test_harmonic_whose_centre_is_past_nyquist_is_none_even_with_a_neighbour():
+    """h7 of 3440 Hz is 24080 Hz > 24000; a 23800 Hz line is in its +-1.5% band."""
+    x = np.sin(2 * np.pi * 3440.0 * T) + 0.1 * np.sin(2 * np.pi * 23800.0 * T)
+    h = mp.harmonics(x, SR)
+    assert h["f0"] == pytest.approx(3440.0, abs=1.0)
+    assert h["h7"] is None
+
+
+@pytest.mark.parametrize("scale", [1e-166, 1e160, 1e-300])
+def test_harmonics_two_tone_survives_extreme_but_finite_scales(scale):
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        h = mp.harmonics(scale * TWO_TONE, SR)
+    assert h["h2"] == pytest.approx(-20.0, abs=1e-6)
+
+
+def test_main_reports_unavailable_comparison_not_a_conclusion(tmp_path, capsys):
+    """1600 Hz at 8 kHz: h3 = 4800 Hz is past Nyquist. No -inf, no nan, no verdict."""
+    sr = 8000
+    t = np.arange(sr) / sr
+    wavfile.write(str(tmp_path / "hi.wav"), sr, (0.5 * np.sin(2 * np.pi * 1600.0 * t) * 32767).astype(np.int16))
+    rc = mp.main(["--set", str(tmp_path)])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "nan" not in out and "-inf" not in out
+    assert "UNAVAILABLE" in out and "n/a" in out
+    assert "NO recording in this set" not in out and "NO measurable recording" not in out
+
+
+def test_main_refuses_a_slope_probe_input_with_no_peak_band(tmp_path, capsys):
+    sr = 100
+    t = np.arange(sr) / sr
+    wavfile.write(str(tmp_path / "WEIRD-ResonanceZone.wav"), sr, (np.sin(2 * np.pi * 30.0 * t) * 20000).astype(np.int16))
+    rc = mp.main(["--set", str(tmp_path)])           # must refuse, not raise from argmax
+    assert rc == 2
+    assert "REFUSED" in capsys.readouterr().out

@@ -110,6 +110,8 @@ def harmonics(x: np.ndarray, sr: int, n_harm: int = 8, f0_lo=25.0, f0_hi=4000.0)
     REFUSES (Refused, so nothing is measured) when the steady middle is empty
     or holds a non-finite sample, when `sr` is not a positive finite number,
     or when the fundamental band `(f0_lo, f0_hi)` holds no spectral energy.
+    A harmonic whose centre `n*f0` exceeds Nyquist is `None`, whatever else
+    falls inside its band.
     Exact silence is that last case. Until #1736 a `1e-12` floor read it as
     h1..hN = 0 dB at a fabricated f0 of 26 Hz, and read a clip under the
     floor as flat too."""
@@ -120,6 +122,9 @@ def harmonics(x: np.ndarray, sr: int, n_harm: int = 8, f0_lo=25.0, f0_hi=4000.0)
         raise Refused("the steady middle of the clip is empty or holds a non-finite sample")
     if not np.isfinite(sr) or sr <= 0:
         raise Refused(f"sample rate {sr!r} is not a positive finite number")
+    peak = float(np.max(np.abs(m)))
+    if peak > 0.0:
+        m = m / peak          # scale-safe: band norms below neither underflow nor overflow
     w = m * np.hanning(len(m))
     X = np.abs(np.fft.rfft(w))
     fr = np.fft.rfftfreq(len(m), 1.0 / sr)
@@ -131,7 +136,10 @@ def harmonics(x: np.ndarray, sr: int, n_harm: int = 8, f0_lo=25.0, f0_hi=4000.0)
     out, h1 = {}, None
     for n in range(1, n_harm + 1):
         band = (fr > n * f0 * 0.985) & (fr < n * f0 * 1.015)
-        a = float(np.sqrt((X[band] ** 2).sum())) if band.any() else 0.0
+        # A harmonic whose centre is past Nyquist is unobservable: a
+        # neighbouring component inside the +-1.5% band is not it (#1745).
+        beyond = n * f0 > sr / 2.0
+        a = float(np.sqrt((X[band] ** 2).sum())) if band.any() and not beyond else 0.0
         if n == 1:
             if not a > 0.0:
                 raise Refused(f"the fundamental band at {f0:.1f} Hz holds no energy")
@@ -184,6 +192,8 @@ def rolloff_slope(x: np.ndarray, sr: int, band=(1.3, 4.0)) -> dict:
     X = np.abs(np.fft.rfft(m * np.hanning(len(m))))
     fr = np.fft.rfftfreq(len(m), 1.0 / sr)
     sel = (fr > 60) & (fr < 8000)
+    if not sel.any():
+        raise Refused("no spectral bins in the 60-8000 Hz band for the rolloff probe")
     fpk = float(fr[sel][np.argmax(X[sel])])
     lo, hi = fpk * band[0], min(fpk * band[1], sr / 2 * 0.9)
     m2 = (fr > lo) & (fr < hi) & (X > 0)
@@ -242,6 +252,26 @@ def peak_shape(x: np.ndarray, sr: int) -> dict:
                 Q=float(fpk / bw) if bw and np.isfinite(bw) and bw > 0 else float("nan"))
 
 
+def _read_wav(path: str):
+    """(sr, x) with x float, mono, centred and peak-normalised -- or Refused.
+
+    Unsigned 8-bit PCM stores silence as 128, so it is centred before use: left
+    alone the midpoint reads as DC and a silent file as a tone (#1745).
+    Finiteness is checked BEFORE normalisation, so a non-finite float sample is
+    a refusal rather than a RuntimeWarning out of the divide."""
+    sr, x = wavfile.read(path)
+    if x.dtype == np.uint8:
+        x = x.astype(float) - 128.0
+    else:
+        x = x.astype(float)
+    if x.ndim > 1:
+        x = x.mean(1)
+    if not np.all(np.isfinite(x)):
+        raise Refused("the recording holds a non-finite sample")
+    x = x / max(abs(x).max() if x.size else 0.0, 1.0)
+    return sr, x
+
+
 def scan(setdir: str, n_harm: int = 8, expect: int | None = None) -> list:
     """Harmonic fingerprint of every WAV in `setdir` -- or REFUSE.
 
@@ -257,17 +287,16 @@ def scan(setdir: str, n_harm: int = 8, expect: int | None = None) -> list:
     for p in sorted(glob.glob(os.path.join(setdir, "*.wav"))):
         name = os.path.basename(p)
         try:
-            sr, x = wavfile.read(p)
+            sr, x = _read_wav(p)
+        except Refused as e:
+            skipped.append((name, str(e)))
+            continue
         except (ValueError, OSError, EOFError) as e:
             skipped.append((name, f"unreadable: {type(e).__name__}: {e}"))
             continue
-        x = x.astype(float)
-        if x.ndim > 1:
-            x = x.mean(1)
         if len(x) < sr // 2:
             skipped.append((name, f"{len(x) / sr:.3f} s, under the 0.5 s minimum"))
             continue
-        x /= max(abs(x).max(), 1.0)
         try:
             h = harmonics(x, sr, n_harm)
         except Refused as e:
@@ -394,40 +423,65 @@ def main(argv=None) -> int:
         print("  admission result over them would mean anything.")
         return 2
     print(f"\n== {len(rows)} recordings scanned ==")
-    pure = sorted(rows, key=lambda r: _db(r[3]["h2"]))
+    # a recording whose h2 is above Nyquist has no h2 to rank by: it sorts last
+    pure = sorted(rows, key=lambda r: (2 * r[3]["f0"] > r[1] / 2.0, _db(r[3]["h2"])))
     print("  the 10 purest tones in the set (lowest h2):")
     for nm, sr, dur, h in pure[:10]:
-        print(f"    {nm[:46]:46s} f0 {h['f0']:7.1f}  h2 {_fmt(h['h2'])}  h3 {_fmt(h['h3'])}")
+        na = lambda n: "   n/a" if n * h["f0"] > sr / 2.0 else _fmt(h[f"h{n}"])
+        print(f"    {nm[:46]:46s} f0 {h['f0']:7.1f}  h2 {na(2)}  h3 {na(3)}")
+
+    def observable(r, n: int) -> bool:
+        """Harmonic n sits at or below Nyquist. Past it there is no level to
+        compare -- unlike an exactly-zero one, which is -inf (#1745)."""
+        return n * r[3]["f0"] <= r[1] / 2.0
+
+    def comparable(r) -> bool:
+        """Both h2 and h3 exist for this recording, so (a) and (b) can be asked."""
+        return observable(r, 2) and observable(r, 3)
 
     def odd_symmetric(r) -> bool:
         """(a). An exactly-zero h2 is -inf and passes; an exactly-zero h3 is
         no level to compare against and cannot (#1736)."""
         h = r[3]
-        return h["h3"] is not None and _db(h["h2"]) - h["h3"] <= EVEN_ODD_MAX
+        return comparable(r) and h["h3"] is not None and _db(h["h2"]) - h["h3"] <= EVEN_ODD_MAX
 
     def near_sine(r) -> bool:
         """(b), which is a statement about h3 and so needs one."""
-        return r[3]["h3"] is not None and r[3]["h3"] <= H3_MAX
+        return comparable(r) and r[3]["h3"] is not None and r[3]["h3"] <= H3_MAX
 
     admitted = [r for r in rows if odd_symmetric(r) and near_sine(r)]
     odd_only = [r for r in rows if odd_symmetric(r)]
     pure_only = [r for r in rows if near_sine(r)]
+    unavailable = [r for r in rows if not comparable(r)]
+
+    def median_of(vals) -> str:
+        return f"{np.median(vals):.0f}" if vals else "n/a"
+
     print(f"\n  passing (a) odd-symmetric: {len(odd_only)} of {len(rows)} -- but these are "
           f"oscillator waveforms (median h3 "
-          f"{np.median([r[3]['h3'] for r in odd_only]):.0f} dB, a square wave is -9.5)")
+          f"{median_of([r[3]['h3'] for r in odd_only])} dB, a square wave is -9.5)")
     print(f"  passing (b) near-sine:     {len(pure_only)} of {len(rows)} -- but these carry "
           f"even harmonics AT or ABOVE their odd ones (median h2-h3 "
-          f"{np.median([_db(r[3]['h2']) - r[3]['h3'] for r in pure_only]):+.0f} dB), which is an "
+          f"{median_of([_db(r[3]['h2']) - r[3]['h3'] for r in pure_only])} dB), which is an "
           f"asymmetric source in the path")
+    if unavailable:
+        print(f"  comparison UNAVAILABLE for {len(unavailable)} of {len(rows)} (h2 or h3 above "
+              f"Nyquist, nothing to compare): "
+              + ", ".join(r[0][:30] for r in unavailable[:5]))
     print(f"\n  recordings passing the admission test: {len(admitted)} of {len(rows)}")
-    if not admitted:
-        print("  -> NO recording in this set is a ladder ringing on its own. Every one")
+    if not admitted and unavailable:
+        print(f"  -> no measurable recording passes, but {len(unavailable)} of {len(rows)} "
+              "could not be compared at all; no conclusion about the set is drawn from them.")
+    if not admitted and len(unavailable) < len(rows):
+        scope = "Every measurable one" if unavailable else "Every one"
+        print(f"  -> NO measurable recording in this set is a ladder ringing on its own. {scope}"
+              if unavailable else "  -> NO recording in this set is a ladder ringing on its own. Every one")
         print("     of them carries an even harmonic within 12 dB of its odd one, which")
         print("     an odd-symmetric ladder alone cannot produce: these are oscillator")
         print("     tones through the filter. THE AVAILABLE RECORDINGS DO NOT SUPPORT A")
         print("     LADDER-STRUCTURE PROBE. DR 0001 stays supported by circuit")
         print("     derivation alone, which is where it already was.")
-    else:
+    elif admitted:
         for nm, sr, dur, h in sorted(admitted, key=lambda r: _db(r[3]["h5"]) - r[3]["h3"])[:8]:
             print(f"    {nm[:44]:44s} f0 {h['f0']:7.1f}  h3 {h['h3']:6.1f}  "
                   f"h5-h3 {_db(h['h5']) - h['h3']:+6.1f}")
@@ -436,14 +490,10 @@ def main(argv=None) -> int:
         p = os.path.join(a.set, nm)
         if not os.path.exists(p):
             continue
-        sr, x = wavfile.read(p)
-        x = x.astype(float)
-        if x.ndim > 1:
-            x = x.mean(1)
-        x /= max(abs(x).max(), 1.0)
-        r = rolloff_slope(x, sr)
         try:
-            q = peak_shape(x, sr)
+            sr, x = _read_wav(p)
+            q = peak_shape(x, sr)          # the guarded probe first (#1745)
+            r = rolloff_slope(x, sr)
         except Refused as e:
             print(f"\nREFUSED: {nm}: {e}.")
             print("  No peak shape was measured for it, so the characterisation above")
