@@ -303,6 +303,18 @@ or incomplete inventory or folder) leaves a pre-existing `--json` result
 untouched; a refusal from the audit itself (e.g. every loop excluded) still
 replaces `take_to_take` with the refusal record, as before this change.
 
+Since #1768 the same exit 2 is returned when loops were admitted and a planned
+metric still has no spread, or an audited loop's file name carries no bpm: that
+run is no verdict. The table and `--json` still carry every metric that
+measured, `outcome` reads `REFUSED`, and `REFUSED:` lines name what went
+unanswered. Loops excluded as not one strike per beat, copy-pasted loops and
+per-strike refusals inside a measured row do not count, so a corpus that
+excludes and declines loops those ways still measures: over a complete
+inventory with one loop excluded and one pasted, every planned metric is
+measured and the run exits 0.
+<!-- claim: test=tools/test_measure_repeatability.py::test_a_planned_metric_with_no_row_at_all_is_refused -->
+<!-- claim: test=tools/test_measure_repeatability.py::test_by_design_exclusions_do_not_refuse_the_run -->
+
 **Audit (passed — not REFUSED).** 27 loops in `4x4/`. The audit does not trust
 the folder name: onsets are detected and counted, and a loop is admitted only if
 it holds **one strike per beat** across the whole file (spread-blind: strikes
