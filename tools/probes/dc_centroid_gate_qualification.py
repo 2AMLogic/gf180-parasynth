@@ -62,12 +62,16 @@ def _prepare_destination(path: str) -> str | None:
     case instead, it was a ``FileNotFoundError`` and exit 1 -- the status of
     "measured and disagreed" (#2040)."""
     target = pathlib.Path(path)
-    if target.is_dir():
-        return f"--json {path} is a directory; name the file to write"
+    # is_dir() is inside the try: it re-raises EACCES (unsearchable ancestor) and
+    # ENAMETOOLONG, which would exit 1 with a traceback instead of REFUSING.
     try:
-        target.parent.mkdir(parents=True, exist_ok=True)
+        is_dir = target.is_dir()
+        if not is_dir:
+            target.parent.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
         return f"--json {path}: its parent directory cannot be created ({exc.strerror or exc})"
+    if is_dir:
+        return f"--json {path} is a directory; name the file to write"
     return None
 
 
@@ -75,7 +79,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--json", type=str)
     args = parser.parse_args(argv)
-    if args.json:
+    if args.json is not None:
         refused = _prepare_destination(args.json)
         if refused:
             print(f"REFUSED: {refused}")
@@ -91,7 +95,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     if not (abs(result["protected_shift_pct"]) < 0.01):
         return 1
-    if args.json:
+    if args.json is not None:
         import json
         try:
             with open(args.json, "w") as output:

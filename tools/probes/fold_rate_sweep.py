@@ -341,12 +341,16 @@ def _prepare_destination(path: Path) -> str | None:
     A missing parent is made here.  A directory given as the file, or a parent
     that cannot be made, is a refusal with nothing measured; found after the
     sweep instead, it was a ``FileNotFoundError`` and exit 1 (#2040)."""
-    if path.is_dir():
-        return f"-o {path} is a directory; name the file to write"
+    # is_dir() is inside the try: it re-raises EACCES (unsearchable ancestor) and
+    # ENAMETOOLONG, which would exit 1 with a traceback instead of REFUSING.
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
+        is_dir = path.is_dir()
+        if not is_dir:
+            path.parent.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
         return f"-o {path}: its parent directory cannot be created ({exc.strerror or exc})"
+    if is_dir:
+        return f"-o {path} is a directory; name the file to write"
     return None
 
 

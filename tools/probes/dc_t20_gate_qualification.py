@@ -254,12 +254,16 @@ def _prepare_destination(path: str) -> str | None:
     case instead, it was a ``FileNotFoundError`` and exit 1 -- this probe's
     NOT QUALIFIED (#2040)."""
     target = pathlib.Path(path)
-    if target.is_dir():
-        return f"--json {path} is a directory; name the file to write"
+    # is_dir() is inside the try: it re-raises EACCES (unsearchable ancestor) and
+    # ENAMETOOLONG, which would exit 1 with a traceback instead of REFUSING.
     try:
-        target.parent.mkdir(parents=True, exist_ok=True)
+        is_dir = target.is_dir()
+        if not is_dir:
+            target.parent.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
         return f"--json {path}: its parent directory cannot be created ({exc.strerror or exc})"
+    if is_dir:
+        return f"--json {path} is a directory; name the file to write"
     return None
 
 
@@ -271,7 +275,7 @@ def main(argv: list[str] | None = None) -> int:
                          "remove this qualification's own premise and watch "
                          "it REFUSE rather than report")
     a = ap.parse_args(argv)
-    if a.json:
+    if a.json is not None:
         refused = _prepare_destination(a.json)
         if refused:
             print(f"REFUSED: {refused}")
@@ -344,7 +348,7 @@ def main(argv: list[str] | None = None) -> int:
     print()
     print("QUALIFIED: the decay gate must be read on the >= 20 Hz band"
           if ok else "NOT QUALIFIED")
-    if a.json:
+    if a.json is not None:
         try:
             with open(a.json, "w") as fh:
                 json.dump(r, fh, indent=2)

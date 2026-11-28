@@ -715,12 +715,16 @@ def _prepare_destination(path: pathlib.Path) -> str | None:
     that cannot be made, is a refusal with nothing measured; found after the
     nine experiments instead, it was a ``FileNotFoundError`` and exit 1 --
     FAIL, for a run that measured (#2040)."""
-    if path.is_dir():
-        return f"--json {path} is a directory; name the file to write"
+    # is_dir() is inside the try: it re-raises EACCES (unsearchable ancestor) and
+    # ENAMETOOLONG, which would exit 1 with a traceback instead of REFUSING.
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
+        is_dir = path.is_dir()
+        if not is_dir:
+            path.parent.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
         return f"--json {path}: its parent directory cannot be created ({exc.strerror or exc})"
+    if is_dir:
+        return f"--json {path} is a directory; name the file to write"
     return None
 
 

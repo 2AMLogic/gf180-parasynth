@@ -273,13 +273,17 @@ def _require_writable(path: pathlib.Path) -> None:
     A missing parent is made here.  A directory given as the file, or a parent
     that cannot be made, is a refusal with nothing compared; found after the
     comparison instead, it was a `FileNotFoundError` and exit 1 (#2040)."""
-    if path.is_dir():
-        raise Refused(f"--json {path} is a directory; name the file to write")
+    # is_dir() is inside the try: it re-raises EACCES (unsearchable ancestor) and
+    # ENAMETOOLONG, which would exit 1 with a traceback instead of REFUSING.
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
+        is_dir = path.is_dir()
+        if not is_dir:
+            path.parent.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
         raise Refused(f"--json {path}: its parent directory cannot be created "
                       f"({exc.strerror or exc})") from exc
+    if is_dir:
+        raise Refused(f"--json {path} is a directory; name the file to write")
 
 
 def main(argv=None) -> int:
