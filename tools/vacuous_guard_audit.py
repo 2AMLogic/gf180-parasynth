@@ -82,6 +82,9 @@ BOUNDARIES = (
      "the filter-figure record must carry every curve it is read from"),
     ("tools/cymbal_band_balance.py", "filter_record", ("len(hz)", "5"), "#431",
      "a curve with too few points answers nothing about a peak or pass band"),
+    ("tools/cymbal_band_balance.py", "filter_record", ("_first_non_finite",), "#1837",
+     ("a NaN ordinate reads as a NaN peak and abs(nan - want) > tol is False, so "
+      "the cross-check against the pinned constants cannot see it")),
     ("tools/cymbal_band_balance.py", "vca_drive_record", ("vca_term_db",), "#431",
      "vca-drive.json is read and schema-checked, not merely required to exist"),
     ("tools/cymbal_band_balance.py", "preconditions", ("content_checked",), "#431",

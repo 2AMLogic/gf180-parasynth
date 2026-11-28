@@ -185,9 +185,9 @@ def band_filter_db(band, hz, *, defect=None):
 # file: an empty file at that path satisfied it. `filter_record` opens it,
 # re-derives each peak and pass band from the digitised curves the same way
 # `tools/werner_fig4.py --fit` does, and REFUSES if the file is absent,
-# unreadable, missing a curve, or if what it says disagrees with the pinned
-# constants `band_filter_db` actually applies -- a schema-mismatched or
-# drifted artifact is a REFUSAL, not a pass.
+# unreadable, missing a curve, carries a non-finite ordinate (#1837), or if
+# what it says disagrees with the pinned constants `band_filter_db` actually
+# applies -- a schema-mismatched or drifted artifact is a REFUSAL, not a pass.
 # ---------------------------------------------------------------------------
 
 _FILTER_CACHE: dict = {}
@@ -200,11 +200,28 @@ _FILTER_CACHE: dict = {}
 FILTER_TOL_DB = 0.05
 
 
+def _first_non_finite(arr):
+    """`(index, value)` of the first ordinate of `arr` that is not a finite
+    number, or None when every one is. An array `np.isfinite` cannot read --
+    the object dtype `np.array` gives a JSON `null`, a string -- is its first
+    ordinate: the caller refuses it either way and must not crash in the guard.
+    """
+    a = np.asarray(arr).reshape(-1)
+    try:
+        bad = ~np.isfinite(a)
+    except TypeError:
+        bad = np.ones(a.size, dtype=bool)
+    if not bad.any():
+        return None
+    i = int(np.argmax(bad))
+    return i, a[i]
+
+
 def filter_record(path: pathlib.Path | None = None) -> dict:
     """`werner-fig4.json`'s band-pass peaks and high-pass pass bands, read and
     cross-checked against the pinned constants `band_filter_db` applies -- or a
-    REFUSAL naming the command that writes the artifact, or the value that
-    disagrees with it.
+    REFUSAL naming the command that writes the artifact, the curve carrying a
+    non-finite ordinate, or the value that disagrees with it.
     """
     p = path or wf.ARTIFACT
     key = str(p)
@@ -229,6 +246,15 @@ def filter_record(path: pathlib.Path | None = None) -> dict:
                 raise Refused(
                     f"{p} curve {k!r} has {len(hz)} hz / {len(db)} db points; "
                     "too few (or mismatched) to read a peak or pass band from")
+            # #1837: `wf.peak` answers a NaN ordinate with a NaN peak and raises
+            # nothing, and `abs(nan - want) > tol` is False, so the cross-check
+            # below cannot see it. Every ordinate is a finite number first.
+            for axis, arr in (("hz", hz), ("db", db)):
+                if (bad := _first_non_finite(arr)) is not None:
+                    raise Refused(
+                        f"{p} curve {k!r} has a non-finite {axis} ordinate: "
+                        f"{axis}[{bad[0]}] = {bad[1]!r}; a peak or pass band "
+                        "cannot be read from it")
         try:
             peak_db = {"low": wf.peak(*curves["Hbp1"])[1],
                       "high": wf.peak(*curves["Hbp2"])[1]}
@@ -238,6 +264,19 @@ def filter_record(path: pathlib.Path | None = None) -> dict:
         except Exception as exc:                       # noqa: BLE001
             raise Refused(f"{p}'s curves could not be read as band-pass peaks "
                           f"/ high-pass pass bands: {exc}") from None
+        # #1837: finite ordinates can still overflow the reader (a parabola
+        # through three huge values), so the levels themselves are asserted
+        # too, before the comparison a NaN walks straight through.
+        for what, levels, read_from in (
+                ("band-pass peak", peak_db, {"low": "Hbp1", "high": "Hbp2"}),
+                ("high-pass pass band", pass_db,
+                 {"low": "Hh1", "decay": "Hh2", "short": "Hh3"})):
+            for k, v in levels.items():
+                if not math.isfinite(v):
+                    raise Refused(
+                        f"{p} curve {read_from[k]!r} reads a non-finite {what} "
+                        f"for the {k} band ({v!r} dB) although every ordinate "
+                        "is finite")
         want_peak = dict(cc.BP_PEAK_DB)
         want_pass = {"low": cc.HH1_PASS_DB, "decay": cc.HH2_PASS_DB,
                     "short": cc.HH3_PASS_DB}
