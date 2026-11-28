@@ -122,11 +122,23 @@ QUALIFICATION = ROOT / "docs/scorecard/mono-m1a-miniv3/attack-qualification"
 ANALYSIS_VERSION = "m1a-envelope-score-v3"
 
 
+def _read_qualification():
+    """qualification.json read ONCE as bytes: the parsed report and the digest
+    of those same bytes, so the digest run() publishes is provably that of the
+    report whose v3.domain gated the attack metric (#1677)."""
+    try:
+        raw = (QUALIFICATION / "qualification.json").read_bytes()
+        return json.loads(raw), hashlib.sha256(raw).hexdigest()
+    except (OSError, ValueError) as exc:
+        raise Refused(f"attack qualification unavailable: {exc}") from exc
+
+
 def _qualified_attack_report():
-    """qualification.json, after the checks qualified_attack_domain() names."""
+    """qualification.json, after the checks qualified_attack_domain() names:
+    the report, and the digest of the bytes it was parsed from."""
+    report, qualification_sha256 = _read_qualification()
     try:
         suite = json.loads((QUALIFICATION / "suite-v3.json").read_text())
-        report = json.loads((QUALIFICATION / "qualification.json").read_text())
     except (OSError, ValueError) as exc:
         raise Refused(f"attack qualification unavailable: {exc}") from exc
     for rel, digest in suite["sources_sha256"].items():
@@ -135,13 +147,15 @@ def _qualified_attack_report():
     domain = report["v3"]["domain"]
     if not domain or any(r["max_abs_error_ms"] > report["bound_ms"] for r in domain):
         raise Refused("attack qualification has no row within its error bound")
-    return report
+    return report, qualification_sha256
 
 
-def qualified_attack_domain():
+def qualified_attack_domain(report=None):
     """The v3 qualified domain; REFUSES if the suite that produced it was not
-    run on the estimator and signal sources now in the tree."""
-    return _qualified_attack_report()["v3"]["domain"]
+    run on the estimator and signal sources now in the tree. `report` is one
+    _qualified_attack_report() already returned, for a caller that read the
+    file once and binds its digest; None reads it here."""
+    return (_qualified_attack_report()[0] if report is None else report)["v3"]["domain"]
 
 
 def attack_fit_qualified(fit, domain=None):
@@ -157,7 +171,7 @@ def attack_fit_qualified(fit, domain=None):
     return None
 
 
-def qualify_envelope_basis():
+def qualify_envelope_basis(report=None):
     """What this analysis rests on: the release basis compare_audio() measures
     with, and attack_fit_v3's known-answer qualification as committed.
 
@@ -167,7 +181,9 @@ def qualify_envelope_basis():
     closed-form T20, read by the 40 ms RMS window, with the 5 ms lead window as
     the control that must fail -- is carried here, and the attack entry
     summarises qualification.json, whose sources qualified_attack_domain()
-    checks. The suite is not re-run."""
+    checks. The suite is not re-run. `report` is one _qualified_attack_report()
+    already returned, for a caller that read the file once and binds its
+    digest; None reads it here."""
     t = np.arange(round(reference.SECONDS * SR)) / SR
     audio = np.zeros_like(t)
     for event in reference.EVENTS:
@@ -187,7 +203,8 @@ def qualify_envelope_basis():
                        "max_error_ms": max(abs(v - expected) for v in values)}
     if rows["bass_window"]["max_error_ms"] >= 10 or rows["lead_window"]["max_error_ms"] <= 10:
         raise Refused("bass envelope qualification or wrong-window control failed")
-    report = _qualified_attack_report()
+    if report is None:
+        report = _qualified_attack_report()[0]
     v3 = report["v3"]
     return {"known_release_ms": expected, **rows, "spectral_window_s": .25,
             "scope": "40 ms RMS window qualified for release ONLY; attack is "
@@ -223,9 +240,11 @@ def _envelope_metric(name, value, ref, units, tolerance, basis):
             "tolerance": tolerance, "valid": True, "tolerance_basis": basis}
 
 
-def compare_audio(ours, ref, *, attack_domain_rule=True):
+def compare_audio(ours, ref, *, attack_domain_rule=True, report=None):
     """`attack_domain_rule=False` exists ONLY for the control that shows the
-    pre-rule scorer would have graded an out-of-domain attack."""
+    pre-rule scorer would have graded an out-of-domain attack. `report` is one
+    _qualified_attack_report() already returned, for a caller that read the
+    file once and binds its digest; None reads it here."""
     ours, ref = np.asarray(ours, dtype=np.float64), np.asarray(ref, dtype=np.float64)
     if ours.shape != ref.shape or ours.ndim != 1 or len(ref) < round(7.4 * SR):
         raise Refused("bass comparison requires complete matching phrases")
@@ -233,7 +252,7 @@ def compare_audio(ours, ref, *, attack_domain_rule=True):
         raise Refused("bass comparison audio is silent or non-finite")
     am = lead.am
     envelopes = [am.rms_envelope(x, ms=reference.ENVELOPE_WINDOW_MS, sr=SR) for x in (ours, ref)]
-    domain = qualified_attack_domain()
+    domain = qualified_attack_domain(report)
     values = {name: [] for name in ("Pitch", "Harmonic shape", "Envelope attack",
                                     "Envelope release", "Gain")}
     rows = []
@@ -395,7 +414,8 @@ def run(case, inject="", keep_audio=True, cached_record=None, wav_dest=None):
     if inject not in ("", "MONO_PITCH_UP_25_CENTS"):
         raise Refused(f"unsupported M1A mutation: {inject}")
     manifest, reference_pcm = load_reference()
-    qualification = qualify_envelope_basis()
+    report, qualification_sha256 = _qualified_attack_report()
+    qualification = qualify_envelope_basis(report)
     patch = patch_for_reference(manifest)
     engine = lead.engine_configuration("selected")
     sequence = [(e["on_s"], e["note"] + (.25 if inject else 0), e["gate_s"],
@@ -407,7 +427,7 @@ def run(case, inject="", keep_audio=True, cached_record=None, wav_dest=None):
     else:
         voice = lead._voice_for_engine(engine)
         pcm = lead.vf.render_mono_fx(sequence, reference.SECONDS, voice)[:len(reference_pcm)]
-    measured = compare_audio(pcm.astype(np.float64) / 32768., reference_pcm)
+    measured = compare_audio(pcm.astype(np.float64) / 32768., reference_pcm, report=report)
     if wav_dest is not None:
         output = Path(wav_dest)
     elif inject:
@@ -437,7 +457,7 @@ def run(case, inject="", keep_audio=True, cached_record=None, wav_dest=None):
         "model/filter_rate_chain.py": "sha256:" + sha(ROOT / "model/filter_rate_chain.py"),
         "tools/measure_mono_m1a_reference.py": "sha256:" + sha(ROOT / "tools/measure_mono_m1a_reference.py"),
         "tools/attack_fit_v3.py": "sha256:" + sha(ROOT / "tools/attack_fit_v3.py"),
-        "attack-qualification/qualification.json": "sha256:" + sha(QUALIFICATION / "qualification.json")})
+        "attack-qualification/qualification.json": "sha256:" + qualification_sha256})
     for rel in ("audition/dsp.py", "model/fixed.py"):
         inputs[rel] = "sha256:" + sha(ROOT / rel)
     provenance = run_case.provenance(inputs, artifacts, config)
