@@ -14,6 +14,7 @@ import pytest
 from scipy.io import wavfile
 
 import score_drum_i2s as score
+import run_case
 
 FRAMES = int(2.2 * 48000)          # run_case's SD render length
 
@@ -282,4 +283,111 @@ def test_main_refuses_a_two_run_transcript_before_reading_the_window(
     assert score.main(["--case", "D02A", "--wav", str(wav), "--verification", str(report),
                        "--out", str(out)]) == 2
     assert "REFUSED -- ambiguous transcript" in capsys.readouterr().out
+    assert not out.exists()
+
+
+# ---- the reference corpus boundary (#1920) --------------------------------
+#
+# The #1782 census listed this module as Refused-only against the estimator's
+# `NonFiniteAudio`, and about this module it is right -- but nothing this
+# module accepts makes the estimator refuse, because `run_case.load_reference`
+# converts the refusal before it returns. Observed on `8f3d8ed2`, through the
+# real `__main__` with a float32 NaN where the corpus keeps SD: exit 2,
+#
+#   score_drum_i2s: REFUSED -- reference recording sd8/SD5050.WAV holds 1
+#   non-finite samples of 2000 (1 NaN, 0 Inf; first at index 500): this is not
+#   audio. Every threshold guard downstream of here would be DEFEATED by it
+#   rather than tripped, because NaN compares False against any bound (#133,
+#   #134)
+#
+# and nothing on stderr, no report. Unreachable, so no handler was widened.
+
+REF_SAMPLES = 2000
+
+
+def _ref_corpus(tmp_path: pathlib.Path, x) -> tuple:
+    """A one-recording Fischer corpus holding `x` where `load_reference` reads
+    SD from. Returns the corpus root, the recording's relative name, and what
+    scipy reads BACK, so a test asserts what the loader was handed rather than
+    what the test wrote."""
+    rel = run_case.REF_MAIN["SD"][0]
+    refdir = tmp_path / "refs"
+    (refdir / rel).parent.mkdir(parents=True)
+    wavfile.write(refdir / rel, 48000, x)
+    return refdir, rel, wavfile.read(refdir / rel)[1]
+
+
+def _bound_inputs(tmp_path: pathlib.Path) -> list:
+    """The argv for a window and a transcript bound to its digest: enough for
+    `main` to get past its own gates and reach the reference read, which is
+    the site under test."""
+    x = np.zeros(FRAMES, dtype=np.int16)
+    x[10] = 1000
+    wav = _wav(tmp_path, x)
+    report = tmp_path / "report.txt"
+    report.write_text(_transcript(sha=hashlib.sha256(wav.read_bytes()).hexdigest()))
+    return ["--case", "D02A", "--wav", str(wav), "--verification", str(report)]
+
+
+@pytest.mark.parametrize("bad,nan,inf", [(np.nan, 1, 0), (np.inf, 0, 1)],
+                         ids=["nan", "inf"])
+def test_a_non_finite_reference_is_refused_before_it_can_leave_as_nonfiniteaudio(
+        tmp_path, capsys, bad, nan, inf):
+    """Pins the gate that makes the #1920 candidate unreachable, by its REASON
+    and not only by its exit code: a float32 file is also what the width guard
+    below the finiteness assert refuses, and an exit code alone cannot tell
+    "holds a NaN" from "is float32". Goes red the moment `run_case.load_reference`
+    stops converting `NonFiniteAudio` (the class then leaves `main`) or moves
+    that conversion behind the width guard."""
+    ref = np.zeros(REF_SAMPLES, dtype=np.float32)
+    ref[10] = 1000.0
+    ref[500] = bad
+    refdir, rel, back = _ref_corpus(tmp_path, ref)
+    assert back.dtype == np.float32 and not np.isfinite(back[500])
+    assert int(np.isfinite(back).sum()) == REF_SAMPLES - 1
+    out = tmp_path / "D02A.json"
+    assert score.main(_bound_inputs(tmp_path)
+                      + ["--refs", str(refdir), "--out", str(out)]) == 2
+    assert (f"score_drum_i2s: REFUSED -- reference recording {rel} holds 1 "
+            f"non-finite samples of {REF_SAMPLES} ({nan} NaN, {inf} Inf; first at "
+            f"index 500): this is not audio") in capsys.readouterr().out
+    assert not out.exists()
+
+
+def test_an_int16_reference_through_the_same_seam_is_not_refused_as_non_finite(tmp_path):
+    """The control for the rows above: the same corpus root, the same file
+    name, the same writer, and 16-bit PCM -- the one Fischer format
+    `load_reference` accepts, which cannot hold a NaN. Nothing is refused as
+    non-finite. Without this a refusal up there could be the apparatus (a
+    path scipy cannot read, a directory in the wrong place) rather than the
+    NaN."""
+    x = np.zeros(REF_SAMPLES, dtype=np.int16)
+    x[10] = 1000
+    refdir, rel, back = _ref_corpus(tmp_path, x)
+    assert back.dtype == np.int16
+    y, _sr, rel_back, _setting = run_case.load_reference("SD", refdir)
+    assert rel_back == rel
+    assert bool(np.isfinite(y).all()) and y[10] == pytest.approx(1000 / 32768.0)
+
+
+@pytest.mark.parametrize("fault", [AssertionError, run_case.am.NonFiniteAudio],
+                         ids=["plain-AssertionError", "NonFiniteAudio"])
+def test_this_module_alone_does_not_stop_an_assertionerror_at_the_reference_seam(
+        tmp_path, monkeypatch, fault):
+    """The census row, run rather than argued: a plain `AssertionError` -- and
+    the `NonFiniteAudio` that subclasses it -- raised where `main` calls
+    `run_case.load_reference` passes both of this module's handlers and leaves
+    `main`, an exit-1 traceback from `__main__`. That is the contract
+    (`tools/refusal.py`: an unexpected exception is an execution error, never
+    a refusal), and it is why the NaN rows are load-bearing: nothing in
+    `tools/score_drum_i2s.py` stops the estimator's refusal; only
+    `run_case.load_reference` does. Goes red if this handler is ever widened
+    to `AssertionError` or `Exception`, or `InsufficientEvidence` is named
+    here as well."""
+    def seam(*_, **__):
+        raise fault("injected at the load_reference seam")
+    monkeypatch.setattr(run_case, "load_reference", seam)
+    out = tmp_path / "D02A.json"
+    with pytest.raises(fault, match="injected at the load_reference seam"):
+        score.main(_bound_inputs(tmp_path) + ["--refs", str(tmp_path), "--out", str(out)])
     assert not out.exists()
