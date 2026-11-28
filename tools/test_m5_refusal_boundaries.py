@@ -389,13 +389,21 @@ def test_require_measured_names_the_verdict_that_is_not_measured(measured_row, s
         assert f"verdict {verdict}" in text and "planted reason" in text, text
 
 
-@pytest.mark.parametrize("stages", [{}, {"output": None}, {"output": []}, {"output": "x"}, None])
+@pytest.mark.parametrize("stages", [
+    {}, {"ladder_out": None}, {"ladder_out": []}, {"ladder_out": "x"}, {"ladder_out": 0},
+    [], None,
+])
 def test_require_measured_names_a_stage_that_is_not_a_dict(measured_row, stages):
     # The guard-defeat: the verdict says MEASURED, the stage is not there.
+    # The key must be the one asked for ("ladder_out"), or every case just
+    # takes the missing-key path and the isinstance(got, dict) guard is never
+    # exercised; fields=() and the exact message pin the stage refusal itself
+    # (a missing-field refusal would otherwise satisfy a loose match).
     import mono_artifact_probe as probe
     row = {**measured_row, "stages": stages}
-    with pytest.raises(probe.Refused, match="where: w.*ladder_out"):
-        probe.require_measured(row, "ladder_out", ("harmonics_rel_h1_db",), "where: w")
+    with pytest.raises(probe.Refused,
+                       match="where: w: measure_point verdict MEASURED has no 'ladder_out' stage"):
+        probe.require_measured(row, "ladder_out", (), "where: w")
 
 
 def test_require_measured_names_a_row_with_no_stages_at_all(measured_row):
