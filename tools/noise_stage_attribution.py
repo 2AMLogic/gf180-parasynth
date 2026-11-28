@@ -358,7 +358,7 @@ def main(argv=None) -> int:
         res["prediction"] = prediction_check(res)
         if a.refs is not None:
             res["vs_reference"] = attribute_vs_reference(a.sound, a.refs)
-    except Refused as e:
+    except refusal.Refused as e:
         print(f"REFUSED: {e}")
         return 2
     txt = json.dumps(res, indent=1, default=float)

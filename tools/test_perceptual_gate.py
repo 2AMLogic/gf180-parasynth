@@ -310,15 +310,15 @@ def _write_rf64(path, sr, sig):
                      + struct.pack("<I", 0xFFFFFFFF) + q.tobytes())
 
 
-def _write_aiff(path, sig, sr=SR):
+def _write_aiff(path, frames, sr=SR, width=2):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
         import aifc                  # what `_load_aiff` itself imports
     with aifc.open(str(path), "wb") as f:
         f.setnchannels(1)
-        f.setsampwidth(2)
+        f.setsampwidth(width)
         f.setframerate(sr)
-        f.writeframes(np.round(sig * 32767).astype(">i2").tobytes())
+        f.writeframes(frames)
 
 
 def _damage(path, kind):
@@ -331,7 +331,7 @@ def _damage(path, kind):
     elif kind == "directory":
         path.mkdir()
     elif kind == "truncated":
-        _write_aiff(path, _sine())
+        _write_aiff(path, np.round(_sine() * 32767).astype(">i2").tobytes())
         path.write_bytes(path.read_bytes()[:40])      # the header, no frames
     return path
 
@@ -382,9 +382,21 @@ def test_load_wav_reads_an_rf64_file_as_the_known_answer(tmp_path):
 
 def test_load_wav_reads_a_good_aiff_as_the_known_answer(tmp_path):
     p = tmp_path / "good.aif"
-    _write_aiff(p, _sine())
+    _write_aiff(p, np.round(_sine() * 32767).astype(">i2").tobytes())
     x, sr = g.load_wav(p)
     assert sr == SR and abs(np.abs(x).max() - 0.5) < 1e-3, np.abs(x).max()
+
+
+def test_load_wav_refuses_an_aiff_width_it_cannot_decode(tmp_path):
+    """Found by #1860's same-shape search, in the function the issue names: an
+    8-bit AIFF is readable, and the reader's own two-entry width table answered
+    KeyError -- not a refusal. START RED on main (KeyError: 1)."""
+    p = tmp_path / "width1.aif"
+    _write_aiff(p, (128 + 100 * np.sin(2 * np.pi * 1000.0 * np.arange(SR // 4) / SR)).astype(np.uint8).tobytes(),
+                width=1)
+    with pytest.raises(g.Refused) as why:
+        g.load_wav(p)
+    assert str(p) in str(why.value) and "8-bit" in str(why.value), str(why.value)
 
 
 def _refused_argv(cmd, tmp_path):
@@ -422,7 +434,9 @@ def test_main_exits_refused_when_a_reference_cannot_be_read(cmd, tmp_path, capsy
 def test_the_script_exits_2_without_a_traceback_on_a_git_lfs_pointer(tmp_path):
     """The process, as `tools/run_all.py` sees it: exit status 2 and a REFUSED
     line on stderr, which is what separates NO-VERDICT from FAIL."""
-    p = _damage(tmp_path / "bd8" / "BD5050.WAV", "git-lfs-pointer")
+    p = tmp_path / "bd8" / "BD5050.WAV"
+    p.parent.mkdir(parents=True)
+    _damage(p, "git-lfs-pointer")
     r = subprocess.run([sys.executable, str(pathlib.Path(g.__file__).resolve()),
                         "pair", "BD", str(p), str(tmp_path / "other.WAV")],
                        capture_output=True, text=True, timeout=120)

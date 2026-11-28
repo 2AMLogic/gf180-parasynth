@@ -166,9 +166,16 @@ class Refused(refusal.Refused, RuntimeError):
 # conditioning: rate, AC coupling, alignment, level (frozen, see module doc)
 # ---------------------------------------------------------------------------
 def load_wav(path) -> tuple:
+    """(float64 mono in interface full scale, rate). REFUSES, naming the path,
+    on a file scipy or aifc cannot decode: absent, a directory, an unpulled
+    git-lfs pointer, a 0-byte file; and on an AIFF whose sample width this
+    reader has no decoding for."""
     if str(path).lower().endswith((".aif", ".aiff")):
         return _load_aiff(path)
-    sr, raw = wavfile.read(str(path))
+    try:
+        sr, raw = wavfile.read(str(path))
+    except (OSError, ValueError) as exc:
+        raise Refused(f"{path}: unreadable WAV ({type(exc).__name__}: {exc})") from exc
     x = np.asarray(raw, dtype=np.float64)
     if x.ndim > 1:
         x = x.mean(axis=1)
@@ -182,9 +189,15 @@ def _load_aiff(path) -> tuple:
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
         import aifc
-    with aifc.open(str(path), "rb") as f:
-        n, ch, w, sr = f.getnframes(), f.getnchannels(), f.getsampwidth(), f.getframerate()
-        b = f.readframes(n)
+    try:
+        with aifc.open(str(path), "rb") as f:
+            n, ch, w, sr = f.getnframes(), f.getnchannels(), f.getsampwidth(), f.getframerate()
+            b = f.readframes(n)
+    except (OSError, EOFError, aifc.Error) as exc:
+        raise Refused(f"{path}: unreadable AIFF ({type(exc).__name__}: {exc})") from exc
+    if w not in (2, 3, 4):
+        raise Refused(f"{path}: {8 * w}-bit AIFF samples; this reader decodes "
+                      f"16, 24 and 32-bit integer PCM")
     if w == 3:
         a = np.frombuffer(b, dtype=np.uint8).reshape(-1, 3).astype(np.int32)
         v = (a[:, 0] << 24 | a[:, 1] << 16 | a[:, 2] << 8) >> 8

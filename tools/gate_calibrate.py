@@ -68,6 +68,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import exit_contract  # noqa: E402
 import perceptual_gate as pg  # noqa: E402
+import refusal  # noqa: E402
 
 ROOT = pg.ROOT
 CACHE = ROOT / "refaudio" / "cache" / "808-from-mars" / "808 From Mars" / "WAV" / "01. Individual Hits"
@@ -528,42 +529,48 @@ def main(argv=None) -> int:
                    help="DIAGNOSTIC: override the pre-registered k; the result is labelled not-authority")
     c.add_argument("--out", type=pathlib.Path, required=True)
     a = ap.parse_args(argv)
-    if a.cmd == "measure":
-        res = {}
-        for s in a.sounds:
-            res[s] = measure(s, a.refs, corrupt=a.corrupt)
-            print(s, len(res[s]["rows"]), "takes,", len(res[s]["missing"]), "no-verdict", flush=True)
-        a.out.parent.mkdir(parents=True, exist_ok=True)
-        a.out.write_text(json.dumps(pg._r({"corrupt": a.corrupt, "archive": ARCHIVE, "tables": res}), indent=1) + "\n")
-        return 0
-    tabs = json.loads(a.tables.read_text())["tables"]
-    cal = calibrate(tabs, a.force_k)
-    ours = {}
-    if a.ours:
-        for s in pg.SOUNDS16:
-            p = a.ours / f"{s}.wav"
-            if p.exists():
-                ours[s] = pg.load_wav(p)
-    inj = None
-    if a.corrupt_tables:
-        ci = calibrate(json.loads(a.corrupt_tables.read_text())["tables"], a.force_k)
-        qi = qualify(ci, a.refs, ours) if ci.get("k") else None
-        # A refusal is not a pass: if the corrupted corpus is refused by the same
-        # rule that refused the clean one, the control saw nothing (None, REFUSED).
-        inj, inj_dec = injected_outcome(qi)
-        cal["injected_control"] = {"corrupt": json.loads(a.corrupt_tables.read_text())["corrupt"],
-                                   "calibration_status": ci["status"], "qualified": inj,
-                                   "decision": inj_dec}
-    q = qualify(cal, a.refs, ours) if cal.get("k") else None
-    dec = decide(q, inj) if q else {"status": "REFUSED", "why": cal["status"]}
-    if q and cal.get("diagnostic"):
-        dec["status"] = f"DIAGNOSTIC (not authority): {dec['status']}"
-    cal["old_bar_context"] = old_bar_context(regroup(tabs), a.refs, ours)
-    res = {"calibration": cal, "qualification": q, "decision": dec, "provenance": pg.provenance(a)}
+    try:
+        if a.cmd == "measure":
+            res = {}
+            for s in a.sounds:
+                res[s] = measure(s, a.refs, corrupt=a.corrupt)
+                print(s, len(res[s]["rows"]), "takes,", len(res[s]["missing"]), "no-verdict", flush=True)
+            payload = {"corrupt": a.corrupt, "archive": ARCHIVE, "tables": res}
+            code = exit_contract.PASS
+        else:
+            tabs = json.loads(a.tables.read_text())["tables"]
+            cal = calibrate(tabs, a.force_k)
+            ours = {}
+            if a.ours:
+                for s in pg.SOUNDS16:
+                    p = a.ours / f"{s}.wav"
+                    if p.exists():
+                        ours[s] = pg.load_wav(p)
+            inj = None
+            if a.corrupt_tables:
+                ci = calibrate(json.loads(a.corrupt_tables.read_text())["tables"], a.force_k)
+                qi = qualify(ci, a.refs, ours) if ci.get("k") else None
+                # A refusal is not a pass: if the corrupted corpus is refused by the same
+                # rule that refused the clean one, the control saw nothing (None, REFUSED).
+                inj, inj_dec = injected_outcome(qi)
+                cal["injected_control"] = {"corrupt": json.loads(a.corrupt_tables.read_text())["corrupt"],
+                                           "calibration_status": ci["status"], "qualified": inj,
+                                           "decision": inj_dec}
+            q = qualify(cal, a.refs, ours) if cal.get("k") else None
+            dec = decide(q, inj) if q else {"status": "REFUSED", "why": cal["status"]}
+            if q and cal.get("diagnostic"):
+                dec["status"] = f"DIAGNOSTIC (not authority): {dec['status']}"
+            cal["old_bar_context"] = old_bar_context(regroup(tabs), a.refs, ours)
+            payload = {"calibration": cal, "qualification": q, "decision": dec,
+                       "provenance": pg.provenance(a)}
+            print(json.dumps(dec, indent=1))
+            code = decision_exit(dec)
+    except refusal.Refused as e:
+        print(f"REFUSED: {e}", file=sys.stderr)
+        return exit_contract.REFUSED
     a.out.parent.mkdir(parents=True, exist_ok=True)
-    a.out.write_text(json.dumps(pg._r(res), indent=1) + "\n")
-    print(json.dumps(dec, indent=1))
-    return decision_exit(dec)
+    a.out.write_text(json.dumps(pg._r(payload), indent=1) + "\n")
+    return code
 
 
 if __name__ == "__main__":

@@ -1612,7 +1612,11 @@ def load_reference(voice: str, refdir: pathlib.Path, inject: str = "") -> tuple:
                       f"tidalcycles/sounds-tr808-fischer or set {REFS_ENV}")
     if not path.exists():
         raise Refused(f"reference recording missing: {rel} under {refdir}")
-    sr, x = wavfile.read(str(path))
+    try:
+        sr, x = wavfile.read(str(path))
+    except (OSError, ValueError) as exc:
+        raise Refused(f"reference recording unreadable: {path} "
+                      f"({type(exc).__name__}: {exc})") from exc
     raw = x                       # keep the dtype: the width guard below needs it
     x = np.asarray(x, dtype=np.float64)
     if x.ndim > 1:
