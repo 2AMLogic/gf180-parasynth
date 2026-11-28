@@ -19,7 +19,7 @@ inputs are permanent tests; `red-verdict-guards.txt` records them failing before
 | item | state |
 |---|---|
 | apparatus qualified on constant-offset / short-burst / zero-mean / added-HF ground truth, MOVED/BLIND matrix | **done**, `controls-matrix.txt`, 123 passing |
-| start-red record | **done**, `red-start.txt` (estimator stubbed to NaN, fixtures executed, assertions failed); `red-h-ch2.txt` (the H_CH2 defeater against the one-sided rule); `red-verdict-guards.txt` (the `--verdict` provenance / non-finite / singleton defeaters) |
+| start-red record | **done**, `red-start.txt` (estimator stubbed to NaN, fixtures executed, assertions failed); `red-h-ch2.txt` (the H_CH2 defeater against the one-sided rule); `red-verdict-guards.txt` (the `--verdict` provenance / non-finite / singleton defeaters); `red-refused-cells.txt` (#1785: a property that REFUSED under a defect read MOVED, and `--controls` exited 0 on refusals alone) |
 | dev condition, CH / RS / BD / HT | **done**, `screen-dev-subjects.txt` / `.json`, `detail-dev.txt`, rendered from clean commit `cae21c566571` |
 | per-subject ending produced by the tool | **done**: `--verdict`; on the dev record alone it REFUSES (confirm missing), as it must |
 | dev condition, the other 11 non-CY voices | **NO VERDICT: not run on this host** (batch below) |

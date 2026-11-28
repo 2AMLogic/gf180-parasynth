@@ -1,0 +1,48 @@
+# red start for #1785 (a property that REFUSES under a defect was recorded MOVED), before the fix
+# tools/probes/residual_dc.py at 1c56aaf6 (origin/main); the final tools/probes/test_residual_dc.py
+# python3 -m pytest tools/probes/test_residual_dc.py -q --tb=no -rf -p no:cacheprovider -k 'refused_cell or caught_by_refusals or exit_precedence or reads_a_refused_row or refusal_credited or matrix_can_be_printed or carries_refused or fails_loudly or shipped_tree or label_path or start_red'
+FAILED tools/probes/test_residual_dc.py::test_start_red_the_no_intervention_stub_fails_the_property_set - AttributeError: module 'residual_dc' has no attribute '_cell'. Did you mean: '_cls'?
+FAILED tools/probes/test_residual_dc.py::test_a_property_the_estimator_refuses_to_is_a_refused_cell_not_moved[lead-silence] - AssertionError: {'offset->OFFSET': 'MOVED', 'burst->SKIRT': 'MOVED', 'z...
+FAILED tools/probes/test_residual_dc.py::test_a_property_the_estimator_refuses_to_is_a_refused_cell_not_moved[tail-pad] - AssertionError: {'offset->OFFSET': 'MOVED', 'burst->SKIRT': 'MOVED', 'zero-...
+FAILED tools/probes/test_residual_dc.py::test_controls_exits_2_not_0_when_a_defect_is_caught_by_refusals_alone - AssertionError: assert 0 == 2
+FAILED tools/probes/test_residual_dc.py::test_controls_exit_precedence_fail_then_refused_then_pass[refused-only] - AssertionError: assert 1 == 2
+FAILED tools/probes/test_residual_dc.py::test_controls_exit_precedence_fail_then_refused_then_pass[moved-and-refused] - AssertionError: assert 0 == 2
+FAILED tools/probes/test_residual_dc.py::test_controls_exit_precedence_fail_then_refused_then_pass[all-refuse] - AssertionError: assert 1 == 2
+FAILED tools/probes/test_residual_dc.py::test_controls_exit_precedence_fail_then_refused_then_pass[clean-refused] - AssertionError: assert 0 == 2
+FAILED tools/probes/test_residual_dc.py::test_a_floor_property_the_probe_refuses_to_is_a_refused_cell_not_moved - AssertionError: assert {'oracle-fixt... 'MOVED', ...} == {'oracle-fixt...REFUSED', ...
+FAILED tools/probes/test_residual_dc.py::test_a_property_that_reads_a_refused_row_is_refused_not_moved - AssertionError: {'oracle-fixture': 'blind', 'mean-diff-known': 'blind', 'production-identity...
+FAILED tools/probes/test_residual_dc.py::test_the_wrong_gain_window_shared_cell_was_a_refusal_credited_as_a_detection - AssertionError: {'(clean)': {'oracle-fixture': 'ok', 'mean-diff-known': 'ok',...
+FAILED tools/probes/test_residual_dc.py::test_the_floor_matrix_can_be_printed - KeyError: 'offset->OFFSET'
+FAILED tools/probes/test_residual_dc.py::test_the_floor_report_carries_refused_cells_through_unchanged - AssertionError: assert 'MOVED' == 'REFUSED'
+FAILED tools/probes/test_residual_dc.py::test_the_start_red_control_fails_loudly_when_a_property_refuses - AttributeError: module 'residual_dc' has no attribute '_cell'. Did you mean: '_cls'?
+14 failed, 7 passed, 179 deselected in 6.07s
+
+# Red on the behaviour (12):
+#   --controls exited 0 for a stub whose two properties REFUSE -- and again for a matrix
+#   with a REFUSED cell beside a MOVED one, and for a clean row that refused.
+#   A defect answered by nothing but refusals and blinds exited 1 (FAIL): nothing was measured.
+#   The shipped output-floor matrix: wrong gain / window-shared read MOVED.
+#   The shipped floor matrix could not be printed at all (KeyError).
+# Red only because the shared classifier `_cell` did not exist yet (2): the two start-red tests.
+# Green before AND after (7) -- pins that must survive:
+#   ...exit_precedence[measured-blind] [refused-beside-measured-blind] [red-outranks-refused] [clean-red-and-refused] [pass]
+#   test_controls_on_the_shipped_tree_exits_0
+#   test_the_one_refusal_still_rendered_moved_is_the_pinned_label_path
+
+# The OLD start-red control, verbatim (1c56aaf6:tools/probes/test_residual_dc.py:705-714), against the unmodified module:
+#   _NoIntervention                    PASSES (not all ok)  oracle-fixture False, mean-diff-known False -- measured
+#   _NoIntervention + refusing window  PASSES (not all ok)  identity-guard-fires and window-shared counted as failed:
+#                                                            both were rows REFUSED at the window, nothing measured
+#   _RefusesEverywhere                 ERRORS at line 707   Refused('stub: floor refuses')
+# So a stub that RAISES never satisfied the control; a stub whose rows refuse did, with the refusals
+# counted among the failures (the pass did not rest on them: the oracle's measured False was already one).
+
+# Refusals credited as MOVED on the shipped tree before the fix (103 cells = 54 class + 49 output-floor):
+#   raised door  (the property calls the estimator and it raises)          0 cells
+#   status door  (the row path answers REFUSED; a property reads the row)  1 cell  accumulator at the wrong gain / window-shared
+#   label door   (classify answers its REFUSED label; a property compares)  1 cell  fixed 48 kHz bin map / sample-rate
+# The label-door cell is that defect's ONLY non-blind cell: --controls exits 0 on the shipped tree
+# through a refusal. It is pinned, not relabelled; see the test named in the green list above.
+# After the fix the same inventory is reproduced by tests: test_controls_on_the_shipped_tree_exits_0
+# (no REFUSED cell in the class matrix), test_the_wrong_gain_window_shared_cell_... (exactly one
+# REFUSED cell in the floor matrix), and the label-path pin (exactly one label-door cell).
