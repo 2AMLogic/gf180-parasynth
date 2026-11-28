@@ -175,6 +175,57 @@ def test_pack_without_an_index_says_size_is_unchecked(lib, monkeypatch, capsys):
     assert "sizes will NOT be checked" in capsys.readouterr().out
 
 
+# --- a member that cannot be landed (#1684) ------------------------------------
+#
+# Not a false green: the process exited 1. The shape was wrong. `fetch_one()`
+# promises "the reason it failed", and an `OSError` from its `mkdir`, its
+# `part.open` or its `replace` escaped `main()` instead, so the tally never
+# printed.
+
+@pytest.mark.parametrize(("asked", "stuck", "says"), [
+    (["a", "a/b.wav"], "a/b.wav", "FileExistsError"),
+    (["a/b.wav", "a"], "a", "IsADirectoryError"),
+], ids=["mkdir-onto-a-file", "rename-onto-a-directory"])
+def test_a_member_that_cannot_land_is_its_own_fail_and_the_run_finishes(
+        lib, monkeypatch, capsys, asked, stuck, says):
+    """START RED (#1684): against a3186508 both orders escaped `main()` as the
+    exception in `says`. The stub answers every member, so what stands in the
+    way is the name alone: `a` on disk is a file when `a/b.wav` wants it as a
+    directory, and a directory when `a` wants it as a file."""
+    monkeypatch.setenv("STUB_BYTES", "8")
+    assert rf.main(["noindex.zip", *asked]) == rf.FAIL
+    lines = capsys.readouterr().out.splitlines()
+    i = lines.index(f"FAIL     {stuck}")
+    assert says in lines[i + 1], lines
+    assert lines[-1] == "1 fetched, 1 failed"
+    good = [m for m in asked if m != stuck]
+    assert [ln.split("  (")[0] for ln in lines if ln.startswith("FETCHED")] == \
+        [f"FETCHED  refaudio/cache/noindex/{m}" for m in good]
+    assert sorted(p.relative_to(lib / "cache" / "noindex").as_posix() for p in cached(lib)) == sorted(good)
+    assert {p.stat().st_size for p in cached(lib)} == {8}
+
+
+@pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0,
+                    reason="root writes into a read-only directory, so nothing refuses")
+def test_a_read_only_cache_directory_is_the_members_fail_at_part_open(lib, tmp_path, monkeypatch, capsys):
+    """START RED (#1684): against a3186508 this escaped `main()` as
+    `PermissionError`. `mkdir` succeeds because the directory is there; it is
+    `part.open` that is refused, before any ssh, and nothing is created."""
+    monkeypatch.setenv("STUB_BYTES", "8")
+    pack = lib / "cache" / "noindex"
+    pack.mkdir(parents=True)
+    pack.chmod(0o500)
+    try:
+        assert rf.main(["noindex.zip", "x.wav"]) == rf.FAIL
+    finally:
+        pack.chmod(0o700)
+    lines = capsys.readouterr().out.splitlines()
+    assert "PermissionError" in lines[lines.index("FAIL     x.wav") + 1]
+    assert lines[-1] == "0 fetched, 1 failed"
+    assert cached(lib) == []
+    assert not (tmp_path / "ssh.log").exists()
+
+
 # --- the index the sizes are checked against ----------------------------------
 
 @pytest.mark.parametrize(("row", "field"), [
