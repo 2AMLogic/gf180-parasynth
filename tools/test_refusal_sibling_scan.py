@@ -34,6 +34,14 @@ refusal: each row is held to the interpreter's verdict on the planted files,
 the same-named class outside the family is the rule-8 control, and each of
 the fix's three parts is reverted in memory to show which control goes red
 without it. One blind spot the fix leaves is pinned as such: a dotted base.
+The #2015 section plants that subclass lent to a BORROWER which binds no
+family name and raises it there, by from-import and dotted -- in no census
+on the raise or the handler side. Each row is held to the interpreter's
+verdict, each part of the fix is reverted in memory, and the inputs that
+defeat a cheaper fix are planted: the same name outside the family, the
+borrowed name rebound by a later local class, and a borrower's other dotted
+raises. Two limits are pinned as such: a colliding lender, and a subclass
+handler's reach over the lender's whole family.
 """
 from __future__ import annotations
 
@@ -2690,19 +2698,23 @@ def other(p):
 
 
 def _subclass_verdict(monkeypatch, tmp_path: pathlib.Path, caller: str,
-                      fn: str | None = "go") -> str:
-    """What the INTERPRETER does with a planted caller of `subclass_callee`:
+                      fn: str | None = "go", stems: tuple[str, ...] | None = None,
+                      callee: str = "subclass_callee", arg: str = "x") -> str:
+    """What the INTERPRETER does with a planted caller of `callee` (the
+    #1956 tree's `subclass_callee` unless named):
     'caught' when the callee RAISED and the caller came back, 'escaped' when
     the refusal left it, 'left-as-<class>' when something that is no refusal
     left it, 'not-run' when the callee never raised -- a defect in the
     planting, not a verdict. `fn=None` runs the module as `__main__`, the CLI
     boundary itself, and reads its exit status: the fixture exits 2 from its
-    handler and 0 from a returned value."""
+    handler and 0 from a returned value. `stems` are imported first, in
+    order, where present (#2015's tree names its lenders that way); `fn` is
+    given `arg`."""
     import refusal                            # noqa: E402  (tools/ is on sys.path above)
-    for stem in ("mod_a", "mod_b", "relay", "foreign", "subclass_callee"):
+    for stem in stems or ("mod_a", "mod_b", "relay", "foreign", "subclass_callee"):
         if (tmp_path / f"{stem}.py").exists():
             _import(monkeypatch, tmp_path / f"{stem}.py")
-    callee = sys.modules["subclass_callee"]
+    callee_mod = sys.modules[callee]
     path = tmp_path / f"{caller}.py"
     if fn is None:
         monkeypatch.setattr(sys, "dont_write_bytecode", True)
@@ -2720,14 +2732,14 @@ def _subclass_verdict(monkeypatch, tmp_path: pathlib.Path, caller: str,
     else:
         mod = _import(monkeypatch, path)
         try:
-            getattr(mod, fn)("x")
+            getattr(mod, fn)(arg)
         except refusal.Refused:
             verdict = "escaped"
         except Exception as e:               # noqa: BLE001  reported, never swallowed
             verdict = f"left-as-{type(e).__name__}"
         else:
             verdict = "caught"
-    return verdict if callee.RAISED else "not-run"
+    return verdict if callee_mod.RAISED else "not-run"
 
 
 def test_a_def_raising_only_a_local_subclass_is_a_site(tmp_path):
@@ -3033,3 +3045,816 @@ def test_with_every_local_class_counted_the_rule_8_control_goes_red(tmp_path):
     got = [s for s in mut.scan(files, idx) if "caller_sub_unguarded.py" in s["site"]]
     assert [(s["callee"], s["classification"]) for s in got] == [
         ("subclass_callee.load_capture", "candidate-escape")], got
+
+
+# ---------------------------------------------------------------------------
+# #2015 controls: a family subclass raised under ANOTHER module's name
+# ---------------------------------------------------------------------------
+# #1956 reads a raise of a subclass defined in the CALLEE's own module. The
+# same subclass lent to a borrower and raised there -- `from a import
+# Unbindable` then `raise Unbindable(...)`, or `raise a.Unbindable(...)`
+# through its module -- is neither a family NAME nor a class of the
+# callee's, and the census held no row: `raise_origins` read the bare name
+# as raising nothing and the dotted one as the root stem, which `scan` then
+# dropped, since the borrower binds no family name, at its "callee has no
+# family at all" pre-filter. The optimistic direction again. The guard
+# written for it, `except a.Unbindable` / a from-imported `except
+# Unbindable`, read as shape `other`, so a resolved raise would have been an
+# escape under the one handler that catches it. At dd0449e0 the real tree
+# holds no such raise (the issue's count), so each control plants its shape
+# and RUNS it: lender, borrower and caller are imported as real modules from
+# the very files the census then reads, and each row is held to what the
+# interpreter does with the refusal.
+#
+# Widening the pre-filter alone would be a regression, and that shapes the
+# fix. The pre-filter is what masked the old dotted credit -- ANY dotted
+# raise counted as its root's stem, `raise self.Error(...)` included -- on a
+# callee without a family, and a borrower is exactly that. So the lender's
+# subclass is read precisely, the borrower is kept in the census for it, and
+# the old credit is held to callees WITH a family, where it was already
+# visible. Rule 8's inputs, one per part: the same name on a class the
+# lender does NOT derive from the family; the borrowed name rebound by a
+# later local class; and the borrower's OTHER dotted raises.
+
+SUBCLASS_LENDER = '''
+import refusal
+
+class Refused(refusal.Refused, Exception):
+    pass
+
+class Unbindable(Refused):                 # a SUBCLASS of the lender's own family
+    pass
+'''
+
+UNRELATED_LENDER = '''
+import refusal
+
+class Refused(refusal.Refused, Exception):
+    pass
+
+class Bindable(Refused):                  # a subclass of the family, under ANOTHER name
+    pass
+
+class Unbindable(Exception):               # the SAME name, NOT of the family
+    pass
+'''
+
+CHAIN_LENDER = '''
+import refusal
+
+class Refused(refusal.Refused, Exception):
+    pass
+
+class A(Refused):                          # one level under the family
+    pass
+
+class B(A):                                # two levels: a refusal all the same
+    pass
+'''
+
+# the family re-exported through #1214's relay: the subclass is this
+# lender's, the class it derives from is mod_a's
+REEXPORT_LENDER = '''
+from relay import Refused
+
+class Unbindable(Refused):
+    pass
+'''
+
+BORROWER = '''
+from lender_a import Unbindable           # the subclass by from-import: no family NAME here
+import lender_a
+
+RAISED = []              # written when a def RUNS: a 'caught' is never a silent callee
+
+def by_name(p):
+    RAISED.append(p)
+    raise Unbindable(f"cannot bind {p}")        # the from-imported name
+
+def dotted(p):
+    RAISED.append(p)
+    raise lender_a.Unbindable(f"cannot bind {p}")   # the subclass through its module
+'''
+
+BORROWER_OTHER = '''
+from unrelated_lender import Unbindable    # the same borrow, of no family
+import unrelated_lender
+
+RAISED = []
+
+def by_name(p):
+    RAISED.append(p)
+    raise Unbindable(f"cannot bind {p}")
+
+def dotted(p):
+    RAISED.append(p)
+    raise unrelated_lender.Unbindable(f"cannot bind {p}")
+'''
+
+BORROWER_ALIAS = '''
+import lender_a as la                     # the lender under another name
+
+RAISED = []
+
+def aliased(p):
+    RAISED.append(p)
+    raise la.Unbindable(f"cannot bind {p}")
+'''
+
+BORROWER_CHAIN = '''
+from chain_lender import B                # a subclass of a subclass, lent
+
+RAISED = []
+
+def two_levels(p):
+    RAISED.append(p)
+    raise B(f"cannot bind {p}")
+'''
+
+BORROWER_REEXPORT = '''
+from reexport_lender import Unbindable
+
+RAISED = []
+
+def by_name(p):
+    RAISED.append(p)
+    raise Unbindable(f"cannot bind {p}")
+'''
+
+BORROWER_SCOPED = '''
+from lender_a import Unbindable           # the module-level borrow
+
+RAISED = []
+
+def module_level(p):
+    RAISED.append(p)
+    raise Unbindable(f"cannot bind {p}")
+
+def own_def(p):
+    from mod_a import Refused as Unbindable  # THIS def's binding, here only: a family NAME
+    RAISED.append(p)
+    raise Unbindable(p)                     # mod_a's class, not the subclass
+
+def local_borrow(p):
+    from lender_a import Unbindable          # the subclass imported INSIDE the def
+    RAISED.append(p)
+    raise Unbindable(f"cannot bind {p}")
+'''
+
+# the borrowed name rebound by a later class of the same name, outside the family
+BORROWER_SHADOWED = '''
+from lender_a import Unbindable           # BEFORE the class: the class wins
+
+class Unbindable(Exception):               # the same name, of no family
+    pass
+
+RAISED = []
+
+def at_module_level(p):
+    RAISED.append(p)
+    raise Unbindable(f"cannot bind {p}")
+
+def after_own_import(p):
+    from lender_a import Unbindable          # the def's own borrow of the name
+    class Unbindable(Exception):             # ...rebound in that def, as at module level
+        pass
+    RAISED.append(p)
+    raise Unbindable(f"cannot bind {p}")
+'''
+
+# the module-level borrow left intact and rebound inside ONE def
+BORROWER_SHADOWED_IN_DEF = '''
+from lender_a import Unbindable           # live at module level
+
+RAISED = []
+
+def over_the_module_borrow(p):
+    class Unbindable(Exception):             # THIS def's class, in this def only
+        pass
+    RAISED.append(p)
+    raise Unbindable(f"cannot bind {p}")
+'''
+
+# a quiet same-stem twin for the collision controls
+BORROWER_QUIET = '''
+def by_name(p):
+    return p
+'''
+
+# a borrower with no family at all: its OTHER dotted raises must invent no origin
+BORROWER_OTHER_DOTTED = '''
+import lender_a
+
+RAISED = []
+
+def of_self(p):
+    RAISED.append(p)
+    raise self.Error(p)                   # the shape the pre-filter used to mask
+
+def of_the_lender(p):
+    RAISED.append(p)
+    raise lender_a.NotAClass(p)           # a dotted name the lender's map does not hold
+'''
+
+# a def raising the subclass AND the lender's own class: the handler's limit
+BORROWER_MIXED = '''
+from lender_a import Unbindable
+import lender_a
+
+RAISED = []
+
+def mixed(p):
+    RAISED.append(p)
+    if p:
+        raise Unbindable(f"cannot bind {p}")     # the subclass
+    raise lender_a.Refused("plain")              # the family's own class, in the same def
+'''
+
+# the lenders, then the borrower, in the order Python imports them
+BORROWED_STEMS = ("mod_a", "mod_b", "relay", "lender_a", "unrelated_lender",
+                  "chain_lender", "reexport_lender", "borrower", "borrower_reexport")
+
+BORROWED_CALLER_UNGUARDED = '''
+import borrower
+
+def go(p):
+    return borrower.by_name(p)            # unguarded: the site the census lost
+
+def other(p):
+    return borrower.dotted(p)             # the dotted raise, as unguarded
+'''
+
+# `{fn}` is the borrower's def, `{guard}` the class its handler catches
+BORROWED_CALLER_PLAIN = '''
+import borrower
+
+def go(p):
+    return borrower.{fn}(p)               # unguarded
+'''
+
+BORROWED_CALLER_GUARD = '''
+import borrower
+import lender_a
+
+def go(p):
+    try:
+        return borrower.{fn}(p)
+    except {guard} as e:
+        print("REFUSED", e)
+'''
+
+BORROWED_CALLER_FROM_GUARD = '''
+from lender_a import Unbindable           # the guard: the from-imported subclass
+import borrower
+
+def go(p):
+    try:
+        return borrower.by_name(p)
+    except Unbindable as e:
+        print("REFUSED", e)
+'''
+
+BORROWED_CALLER_DOTTED_GUARD = '''
+import borrower
+import lender_a
+
+def go(p):
+    try:
+        return borrower.dotted(p)
+    except lender_a.Unbindable as e:      # the guard: the subclass through its module
+        print("REFUSED", e)
+'''
+
+BORROWED_CALLER_SIBLING = '''
+import refusal
+import borrower
+
+class Refused(refusal.Refused, Exception):   # the caller's OWN class: a sibling
+    pass
+
+def go(p):
+    try:
+        return borrower.by_name(p)
+    except Refused as e:
+        print("REFUSED", e)
+'''
+
+# the HANDLER's def defines a class of the borrowed name: another class entirely
+BORROWED_CALLER_DEF_LOCAL_GUARD = '''
+from lender_a import Unbindable           # the subclass, by from-import
+import borrower
+
+def go(p):
+    class Unbindable(Exception):         # THIS def's class shadows the borrow
+        pass
+    try:
+        return borrower.by_name(p)
+    except Unbindable as e:              # catches the def's class, not the lender's subclass
+        print("REFUSED", e)
+'''
+
+BORROWED_CALLER_CLI = '''
+import sys
+import lender_a
+import borrower
+
+def go(p):
+    return borrower.by_name(p)            # unguarded HERE; the guard is the boundary
+
+if __name__ == "__main__":
+    try:
+        sys.exit(go("x"))
+    except lender_a.Unbindable as e:
+        print(f"REFUSED  {e}")
+        sys.exit(2)
+'''
+
+BORROWED_CALLER_SCOPED = '''
+import borrower
+
+def go(p):
+    return borrower.module_level(p)       # the module-level borrow
+
+def own(p):
+    return borrower.own_def(p)            # the def's own binding: a family name there
+
+def local(p):
+    return borrower.local_borrow(p)       # the def's own borrow of the subclass
+'''
+
+BORROWED_CALLER_TWO = '''
+import borrower
+
+def go(p):
+    return borrower.{first}(p)
+
+def other(p):
+    return borrower.{second}(p)
+'''
+
+BORROWED_REEXPORT_CALLER = '''
+import borrower_reexport
+import reexport_lender
+import mod_a
+import mod_b
+
+def go(p):
+    try:
+        return borrower_reexport.by_name(p)
+    except {guard} as e:
+        print("REFUSED", e)
+'''
+
+CALLER_AMBIG_BORROWER = '''
+from play import by_name
+
+def go(p):
+    return by_name(p)                   # WHICH play? the census must not guess
+'''
+
+
+def test_a_borrowed_subclass_raised_in_the_borrower_is_a_site(tmp_path, monkeypatch):
+    """The issue's three-file tree, red first. The lender's subclass, lent by
+    from-import and raised in a module that binds no family NAME, was in no
+    census: bare, it read as raising nothing; dotted, as the root stem --
+    then dropped at the pre-filter. Two unguarded callers, no rows. The
+    module-level assertions keep the control honest about which fix passes
+    it: the subclass is the LENDER's (its map says so), the borrower binds
+    no family name, and the origin is the lender's -- the one a plain
+    `raise Refused` there has, which the next control holds a
+    `lender_a.Refused` handler to."""
+    files, idx = _local_tree(tmp_path, {"lender_a": SUBCLASS_LENDER, "borrower": BORROWER,
+                                        "caller_borrowed": BORROWED_CALLER_UNGUARDED})
+    lender = idx[str(tmp_path / "lender_a.py")]
+    borrower = idx[str(tmp_path / "borrower.py")]
+    assert lender.family_subclasses == {"Unbindable": frozenset({"lender_a"})}, vars(lender)
+    assert borrower.refused_names == {}, vars(borrower)
+    assert borrower.from_imports == {"Unbindable": ("lender_a", "Unbindable")}, vars(borrower)
+    for fn in ("go", "other"):
+        assert _subclass_verdict(monkeypatch, tmp_path, "caller_borrowed", fn,
+                                 BORROWED_STEMS, "borrower") == "escaped", fn
+    got = {s["callee"]: s for s in _sites_for(files, idx, "caller_borrowed")}
+    assert sorted(got) == ["borrower.by_name", "borrower.dotted"], got
+    for s in got.values():
+        assert (s["origins"], s["classification"], s["guard"], s["uncovered"]) == (
+            ["lender_a"], "candidate-escape", "none", ["lender_a"]), s
+
+
+@pytest.mark.parametrize("caller,fn,python,row", [
+    pytest.param(BORROWED_CALLER_FROM_GUARD, "go", "caught",
+                 ("covered(exact)", "exact", []), id="from-imported-handler"),
+    pytest.param(BORROWED_CALLER_DOTTED_GUARD, "go", "caught",
+                 ("covered(exact)", "exact", []), id="dotted-handler"),
+    pytest.param(BORROWED_CALLER_GUARD.format(fn="by_name", guard="lender_a.Refused"), "go",
+                 "caught", ("covered(exact)", "exact", []), id="the-familys-own-class"),
+    pytest.param(BORROWED_CALLER_GUARD.format(fn="by_name", guard="lender_a.Unbindable"), "go",
+                 "caught", ("covered(exact)", "exact", []), id="subclass-through-its-module"),
+    pytest.param(BORROWED_CALLER_SIBLING, "go", "escaped",
+                 ("candidate-escape", "local", ["lender_a"]), id="sibling-guard"),
+    pytest.param(BORROWED_CALLER_CLI, None, "caught",
+                 ("covered(cli-exact)", "none", []), id="cli-exact-boundary"),
+])
+def test_the_census_row_of_a_borrowed_subclass_raise_follows_the_interpreter(
+        tmp_path, monkeypatch, caller, fn, python, row):
+    """Read to the lender's origin, the borrowed raise reads as a plain
+    family raise of the lender's: covered by the subclass's own handler
+    under either spelling, and by the family's own class, which it derives
+    from; an escape under a sibling's; caught by the subclass's handler at a
+    CLI boundary. Each row is what the interpreter did with the planted
+    files, so the two sides cannot drift: a handler read to any origin but
+    the raise's leaves the site an escape under a handler that caught it."""
+    files, idx = _local_tree(tmp_path, {"lender_a": SUBCLASS_LENDER, "borrower": BORROWER,
+                                        "caller_borrowed": caller})
+    assert _subclass_verdict(monkeypatch, tmp_path, "caller_borrowed", fn,
+                             BORROWED_STEMS, "borrower") == python, caller
+    got = _sites_for(files, idx, "caller_borrowed")
+    assert len(got) == 1, got
+    assert (got[0]["origins"], got[0]["classification"], got[0]["guard"],
+            got[0]["uncovered"]) == (["lender_a"], *row), got[0]
+
+
+@pytest.mark.parametrize("extra,borrower,fn,origin", [
+    pytest.param({}, BORROWER_ALIAS, "aliased", "lender_a", id="lender-under-an-alias"),
+    pytest.param({"chain_lender": CHAIN_LENDER}, BORROWER_CHAIN, "two_levels", "chain_lender",
+                 id="subclass-of-a-subclass"),
+])
+def test_a_borrow_through_an_alias_or_of_a_deeper_subclass_is_the_lenders(
+        tmp_path, monkeypatch, extra, borrower, fn, origin):
+    """`import a as la; raise la.Unbindable(...)`: the root is read through
+    the binding, as a call's is. `class B(A)` after `class A(Refused)`: the
+    lender's map already holds every depth (#1956), and the borrower reads
+    it from there -- `chain_lender`, the module B's family runs back to."""
+    files, idx = _local_tree(tmp_path, {"lender_a": SUBCLASS_LENDER, "borrower": borrower,
+                                        "caller_borrowed": BORROWED_CALLER_PLAIN.format(fn=fn),
+                                        **extra})
+    if "chain_lender" in extra:
+        chain = idx[str(tmp_path / "chain_lender.py")]
+        assert chain.family_subclasses == {"A": frozenset({"chain_lender"}),
+                                           "B": frozenset({"chain_lender"})}, vars(chain)
+    assert _subclass_verdict(monkeypatch, tmp_path, "caller_borrowed", "go",
+                             BORROWED_STEMS, "borrower") == "escaped", borrower
+    got = _sites_for(files, idx, "caller_borrowed")
+    assert len(got) == 1, got
+    assert (got[0]["callee"], got[0]["origins"], got[0]["classification"],
+            got[0]["uncovered"]) == (f"borrower.{fn}", [origin], "candidate-escape",
+                                     [origin]), got[0]
+
+
+def test_a_borrowed_name_outside_the_family_is_not_counted(tmp_path, monkeypatch):
+    """Rule 8: the input that would satisfy a fix counting ANY borrowed name.
+    `class Unbindable(Exception)` in a lender that DOES hold a family
+    subclass, under another name, so the borrower passes the pre-filter and
+    the lookup alone decides -- lent and raised by both spellings: what
+    leaves the caller is not a refusal, whichever guard is written, and
+    there is no row. A class is read by its base, never by its name, and
+    the interpreter is asked, so 'not a refusal' is Python's verdict and
+    not the census's."""
+    files, idx = _local_tree(tmp_path, {
+        "unrelated_lender": UNRELATED_LENDER, "borrower": BORROWER_OTHER,
+        "caller_borrowed": BORROWED_CALLER_UNGUARDED})
+    lender = idx[str(tmp_path / "unrelated_lender.py")]
+    assert lender.family_subclasses == {"Bindable": frozenset({"unrelated_lender"})}, vars(lender)
+    assert idx[str(tmp_path / "borrower.py")].imports == {"unrelated_lender": "unrelated_lender"}
+    for fn in ("go", "other"):
+        assert _subclass_verdict(monkeypatch, tmp_path, "caller_borrowed", fn,
+                                 BORROWED_STEMS, "borrower") == "left-as-Unbindable", fn
+    assert _sites_for(files, idx, "caller_borrowed") == []
+
+
+def test_a_borrowed_subclass_of_a_reexported_family_resolves_to_the_definer(
+        tmp_path, monkeypatch):
+    """`defining()`, on a borrowed subclass: the lender's family is relay's
+    re-export of mod_a's class, so the subclass's origin is mod_a -- the
+    origin a plain `raise Refused` in the lender has. `except mod_a.Refused`
+    covers it and `except mod_b.Refused`, a sibling, does not; the
+    subclass's own handler covers it. The interpreter is asked for each, so
+    a resolution to the re-exporter's stem cannot pass: `mod_a.Refused`
+    is `exact` here and would leave that origin uncovered."""
+    rows = [("mod_a.Refused", "caught", ("covered(exact)", "exact")),
+            ("mod_b.Refused", "escaped", ("candidate-escape", "exact")),
+            ("reexport_lender.Unbindable", "caught", ("covered(exact)", "exact"))]
+    extra = {f"caller_reexport{i}": BORROWED_REEXPORT_CALLER.format(guard=guard)
+             for i, (guard, _, _) in enumerate(rows)}
+    files, idx = _local_tree(tmp_path, {"relay": RELAY, "reexport_lender": REEXPORT_LENDER,
+                                        "borrower_reexport": BORROWER_REEXPORT, **extra})
+    # the map holds the lender of the NAME, the re-exporter; defining() takes
+    # it to mod_a, in the lender's own reading and so in the borrower's
+    assert idx[str(tmp_path / "reexport_lender.py")].family_subclasses == {
+        "Unbindable": frozenset({"relay"})}, vars(idx[str(tmp_path / "reexport_lender.py")])
+    for i, (_, python, row) in enumerate(rows):
+        name = f"caller_reexport{i}"
+        assert _subclass_verdict(monkeypatch, tmp_path, name, "go",
+                                 BORROWED_STEMS, "borrower_reexport") == python, name
+        got = _sites_for(files, idx, name)
+        assert len(got) == 1 and (got[0]["origins"], got[0]["classification"],
+                                  got[0]["guard"]) == (["mod_a"], *row), (name, got)
+
+
+def test_a_borrowed_subclass_name_is_read_innermost_scope_first(tmp_path, monkeypatch):
+    """The scope rule of #1573/#1577, on a borrowed class: the module-level
+    borrow reads the lender's subclass; a def's own `from mod_a import
+    Refused as Unbindable` makes the name a family NAME there -- read first,
+    as everywhere else, to mod_a -- and a def's own import of the subclass
+    reads the lender, there and only there. The lender is asked of each def,
+    and every one escapes."""
+    files, idx = _local_tree(tmp_path, {"lender_a": SUBCLASS_LENDER, "borrower": BORROWER_SCOPED,
+                                        "caller_borrowed": BORROWED_CALLER_SCOPED})
+    for fn in ("go", "own", "local"):
+        assert _subclass_verdict(monkeypatch, tmp_path, "caller_borrowed", fn,
+                                 BORROWED_STEMS, "borrower") == "escaped", fn
+    got = {s["callee"]: (s["origins"], s["classification"], s["uncovered"])
+           for s in _sites_for(files, idx, "caller_borrowed")}
+    assert got == {"borrower.module_level": (["lender_a"], "candidate-escape", ["lender_a"]),
+                   "borrower.own_def": (["mod_a"], "candidate-escape", ["mod_a"]),
+                   "borrower.local_borrow": (["lender_a"], "candidate-escape",
+                                             ["lender_a"])}, got
+
+
+@pytest.mark.parametrize("borrower,caller,fns", [
+    pytest.param(BORROWER_SHADOWED,
+                 BORROWED_CALLER_TWO.format(first="at_module_level", second="after_own_import"),
+                 ("go", "other"), id="at-module-level-and-after-the-defs-own-import"),
+    pytest.param(BORROWER_SHADOWED_IN_DEF,
+                 BORROWED_CALLER_PLAIN.format(fn="over_the_module_borrow"),
+                 ("go",), id="over-a-live-module-level-borrow"),
+])
+def test_a_borrowed_name_rebound_by_a_later_local_class_is_no_longer_the_subclass(
+        tmp_path, monkeypatch, borrower, caller, fns):
+    """Python's last binding wins for a borrowed name as for the callee's
+    own (#1956): a `class Unbindable(Exception)` AFTER the from-import
+    rebinds the name -- at module level, in the def that imported it, or
+    over a module-level borrow that stays live elsewhere -- and the later
+    raise is that class, not the subclass. The input that defeats a fix
+    reading the import alone: each would be a candidate escape for a raise
+    Python does not catch as a refusal. A def or class statement binds its
+    name as an import does; an assignment is still not read (a stated blind
+    spot, unchanged)."""
+    files, idx = _local_tree(tmp_path, {"lender_a": SUBCLASS_LENDER, "borrower": borrower,
+                                        "caller_borrowed": caller})
+    assert idx[str(tmp_path / "lender_a.py")].family_subclasses == {
+        "Unbindable": frozenset({"lender_a"})}, "the subclass is still the lender's"
+    for fn in fns:
+        assert _subclass_verdict(monkeypatch, tmp_path, "caller_borrowed", fn,
+                                 BORROWED_STEMS, "borrower") == "left-as-Unbindable", fn
+    assert _sites_for(files, idx, "caller_borrowed") == []
+    if borrower is BORROWER_SHADOWED:
+        # the class statement unbound the name at module level
+        assert "Unbindable" not in idx[str(tmp_path / "borrower.py")].from_imports
+
+
+def test_a_handler_name_rebound_by_a_def_local_class_covers_nothing(tmp_path, monkeypatch):
+    """The binding rule on the HANDLER side, where what is at stake is a
+    false covered. `except Unbindable` in a def that defines its own
+    `Unbindable(Exception)` names that class, and the lender's subclass the
+    borrower raises goes past it -- the interpreter says so -- so the
+    handler covers nothing and the site is an escape. The def-local class is
+    in no import table: only the scope's own names stop the lookup from
+    falling through to the module's from-import, which reads
+    `covered(exact)` here."""
+    files, idx = _local_tree(tmp_path, {
+        "lender_a": SUBCLASS_LENDER, "borrower": BORROWER,
+        "caller_borrowed": BORROWED_CALLER_DEF_LOCAL_GUARD})
+    assert _subclass_verdict(monkeypatch, tmp_path, "caller_borrowed", "go",
+                             BORROWED_STEMS, "borrower") == "escaped"
+    got = _sites_for(files, idx, "caller_borrowed")
+    assert len(got) == 1, got
+    assert (got[0]["origins"], got[0]["classification"], got[0]["guard"],
+            got[0]["uncovered"]) == (["lender_a"], "candidate-escape", "none", ["lender_a"]), got[0]
+
+
+def test_a_borrowers_other_dotted_raises_invent_no_origin(tmp_path):
+    """The pre-filter's widening is no licence for the old dotted credit.
+    Before #2015 a callee without a family was dropped before ANY of its
+    raises was read, which is what masked `raise self.Error(...)` counting
+    as an origin `self`; a borrower is such a callee and is read now, so the
+    credit is held to callees WITH a family. Nothing here is a refusal and
+    nothing is a row. Not run: neither raise can produce one -- `self` is no
+    name, and the lender defines no `NotAClass` -- which is the point."""
+    files, idx = _local_tree(tmp_path, {
+        "lender_a": SUBCLASS_LENDER, "borrower": BORROWER_OTHER_DOTTED,
+        "caller_borrowed": BORROWED_CALLER_TWO.format(first="of_self", second="of_the_lender")})
+    borrower = idx[str(tmp_path / "borrower.py")]
+    assert borrower.refused_names == {} and borrower.imports == {"lender_a": "lender_a"}, vars(
+        borrower)                       # the shape the widened pre-filter lets through
+    assert _sites_for(files, idx, "caller_borrowed") == []
+
+
+def test_a_collision_on_the_lender_leaves_the_raise_unread(tmp_path):
+    """A stated blind spot, pinned. Two indexed modules carry the lender's
+    stem, so which one's `Unbindable` the borrower raises is not decidable
+    from the AST, and it is not guessed -- the rule `origin_of` follows for
+    a family. No row: the census can name a CALLEE's candidates, not a
+    lender's, and that output is not this fix's. Not run -- Python would
+    import whichever `lender_a` leads on its path, which is the guess."""
+    files, _ = _local_tree(tmp_path, {"borrower": BORROWER, "caller_borrowed":
+                                      BORROWED_CALLER_PLAIN.format(fn="by_name")})
+    for sub in ("alpha", "beta"):
+        (tmp_path / sub).mkdir()
+        p = tmp_path / sub / "lender_a.py"
+        p.write_text(SUBCLASS_LENDER)
+        files.append(p)
+    idx = rss.build_index(files)
+    assert len(rss.stem_map(idx)["lender_a"]) == 2
+    assert _sites_for(files, idx, "caller_borrowed") == []
+
+
+def test_a_handler_naming_the_subclass_is_exact_for_the_lenders_whole_family(
+        tmp_path, monkeypatch):
+    """A stated limit, pinned. The raise side gives a class and its subclass
+    one origin, so a handler naming the SUBCLASS covers every raise of that
+    origin in the def: under `except lender_a.Unbindable`, a def raising the
+    subclass for one input and the family's own class for another reads
+    `covered(exact)` -- right for the first, and the interpreter lets the
+    plain refusal out for the second. It takes both raises in one def AND a
+    caller guarding the subclass alone; an origin per class would tell them
+    apart, and that is #1956's output to change, not this fix's."""
+    files, idx = _local_tree(tmp_path, {
+        "lender_a": SUBCLASS_LENDER, "borrower": BORROWER_MIXED,
+        "caller_borrowed": BORROWED_CALLER_GUARD.format(fn="mixed", guard="lender_a.Unbindable")})
+    for arg, python in (("x", "caught"), ("", "escaped")):
+        assert _subclass_verdict(monkeypatch, tmp_path, "caller_borrowed", "go",
+                                 BORROWED_STEMS, "borrower", arg) == python, arg
+    got = _sites_for(files, idx, "caller_borrowed")
+    assert len(got) == 1 and (got[0]["origins"], got[0]["classification"]) == (
+        ["lender_a"], "covered(exact)"), got
+
+
+@pytest.mark.parametrize("alpha,is_a_site", [
+    pytest.param(BORROWER, True, id="raising-candidate-borrows-a-subclass"),
+    pytest.param(BORROWER_OTHER, False, id="no-candidate-can-refuse"),
+])
+def test_a_collision_where_a_candidate_borrows_a_subclass(tmp_path, alpha, is_a_site):
+    """The collision branch of `scan` tests each candidate for a family --
+    and now for a borrowed subclass -- before emitting a row, so a borrower
+    candidate counts there as in the single-callee branch; dropped there,
+    the site is lost as a quiet collision. The second row is the
+    multi-candidate mirror of the rule-8 control: two candidates whose
+    borrow, if any, is of no family cannot refuse under any resolution. Not
+    run: which `play` Python imports is the guess the census refuses."""
+    files = _collision_tree(tmp_path, alpha, BORROWER_QUIET, "caller_amb_borrowed",
+                            CALLER_AMBIG_BORROWER)
+    for stem, body in (("lender_a", SUBCLASS_LENDER), ("unrelated_lender", UNRELATED_LENDER)):
+        p = tmp_path / f"{stem}.py"
+        p.write_text(body)
+        files.append(p)
+    got = _sites_for(files, rss.build_index(files), "caller_amb_borrowed")
+    if not is_a_site:
+        assert got == [], got
+        return
+    assert len(got) == 1, got
+    assert (got[0]["classification"], got[0]["guard"], len(got[0]["candidates"])) == (
+        "ambiguous-callee", "none", 2), got[0]
+
+
+def _mutant_rows(mut, files, caller: str) -> list[tuple]:
+    """The mutant's rows at ONE caller's sites, as (callee, classification,
+    origins): the flat tree's own rows are not what any mutant is about."""
+    idx = mut.build_index(files)
+    return sorted((s["callee"], s["classification"], tuple(s["origins"]))
+                  for s in mut.scan(files, idx)
+                  if s["site"].split("/")[-1].startswith(f"{caller}.py:"))
+
+
+def test_with_the_lender_lookup_reverted_the_borrowed_raise_is_absent_again(tmp_path):
+    """Mutant 1 of 9: `raise_origins` back to reading a family name and the
+    callee's own class alone, compiled in memory from the shipped source.
+    The issue's own measurement, re-derived -- the borrower's def raises
+    nothing the census knows -- so the red-first control is red under it and
+    green only through the lookup."""
+    mut = _scanner_with(
+        "            lent = (_lender_subclass_origins(mod, txt, node, by_stem)\n"
+        "                    if fam is None and not subs else set())",
+        "            lent = set()")
+    files, idx = _local_tree(tmp_path, {"lender_a": SUBCLASS_LENDER, "borrower": BORROWER,
+                                        "caller_borrowed": BORROWED_CALLER_UNGUARDED})
+    assert _mutant_rows(mut, files, "caller_borrowed") == []
+    assert [(s["callee"], s["origins"], s["classification"])
+            for s in _sites_for(files, idx, "caller_borrowed")] == [
+        ("borrower.by_name", ["lender_a"], "candidate-escape"),
+        ("borrower.dotted", ["lender_a"], "candidate-escape")]
+
+
+def test_with_the_prefilter_unwidened_the_borrower_is_dropped_again(tmp_path):
+    """Mutant 2 of 9: the single-callee pre-filter back to a family NAME
+    alone. The lookup is intact and resolves the raise, and the row is gone
+    anyway -- the borrower binds no family name, which is the second half of
+    the issue and the half a lookup alone leaves unfixed."""
+    mut = _scanner_with(
+        "            if not (callee.has_family or _imports_subclass_lender(callee, by_stem)):",
+        "            if not callee.has_family:")
+    files, _ = _local_tree(tmp_path, {"lender_a": SUBCLASS_LENDER, "borrower": BORROWER,
+                                      "caller_borrowed": BORROWED_CALLER_UNGUARDED})
+    assert _mutant_rows(mut, files, "caller_borrowed") == []
+
+
+def test_with_the_collision_prefilter_unwidened_the_borrowing_candidate_is_dropped(tmp_path):
+    """Mutant 3 of 9: the collision branch's pre-filter, the mirror of the
+    last one. A borrower candidate reads as unable to refuse, and the site
+    is lost as a quiet collision."""
+    mut = _scanner_with(
+        "                if not any((c.has_family or _imports_subclass_lender(c, by_stem))\n"
+        "                           and raise_origins(c, fname or \"\", by_stem) for c in cands):",
+        "                if not any(c.has_family and raise_origins(c, fname or \"\", by_stem)\n"
+        "                           for c in cands):")
+    files = _collision_tree(tmp_path, BORROWER, BORROWER_QUIET, "caller_amb_borrowed",
+                            CALLER_AMBIG_BORROWER)
+    p = tmp_path / "lender_a.py"
+    p.write_text(SUBCLASS_LENDER)
+    files.append(p)
+    assert _mutant_rows(mut, files, "caller_amb_borrowed") == []
+
+
+def test_with_the_handler_reading_reverted_a_guarded_borrower_is_an_escape(tmp_path):
+    """Mutant 4 of 9: `handler_origins` back to `other` for a name that is
+    neither a family nor `.Refused`. The raise still resolves and the
+    caller is reported a candidate escape under the one handler that
+    catches it -- the shape the issue named, and the interpreter says so."""
+    mut = _scanner_with(
+        "        lent = _lender_subclass_origins(mod, txt, handler, by_stem)",
+        "        lent = set()")
+    files = _local_tree(tmp_path, {"lender_a": SUBCLASS_LENDER, "borrower": BORROWER,
+                                   "caller_borrowed": BORROWED_CALLER_FROM_GUARD})[0]
+    assert _mutant_rows(mut, files, "caller_borrowed") == [
+        ("borrower.by_name", "candidate-escape", ("lender_a",))]
+
+
+def test_with_every_borrowed_name_counted_the_rule_8_control_goes_red(tmp_path):
+    """Mutant 5 of 9: the fix as its own cheap imitation -- any name borrowed
+    from a module with a family subclass counts as one, the lender's map
+    aside. `Unbindable(Exception)` beside an intact family is red under it:
+    two sites invented for raises Python does not catch as refusals."""
+    mut = _scanner_with(
+        "    subs = lender.family_subclasses.get(ent[1])\n"
+        "    if not subs:\n"
+        "        return set()",
+        "    subs = lender.family_subclasses.get(ent[1]) or frozenset({lender.path.stem})")
+    files = _local_tree(tmp_path, {"unrelated_lender": UNRELATED_LENDER,
+                                   "borrower": BORROWER_OTHER,
+                                   "caller_borrowed": BORROWED_CALLER_UNGUARDED})[0]
+    assert _mutant_rows(mut, files, "caller_borrowed") == [
+        ("borrower.by_name", "candidate-escape", ("unrelated_lender",)),
+        ("borrower.dotted", "candidate-escape", ("unrelated_lender",))]
+
+
+def test_with_the_class_binding_reverted_a_shadowed_borrow_is_counted_again(tmp_path):
+    """Mutant 6 of 9: a module-level class statement no longer unbinds an
+    earlier import of its name. `raise Unbindable(...)` after
+    `from lender_a import Unbindable; class Unbindable(Exception)` reads as
+    the subclass again -- a site invented for a raise Python does not catch
+    as a refusal. The def's own rebinding is still read, so one row, not
+    two."""
+    mut = _scanner_with(
+        "                self._unbind_import(node.name)      # a class binds its name",
+        "")
+    files = _local_tree(tmp_path, {
+        "lender_a": SUBCLASS_LENDER, "borrower": BORROWER_SHADOWED,
+        "caller_borrowed": BORROWED_CALLER_TWO.format(first="at_module_level",
+                                                      second="after_own_import")})[0]
+    assert _mutant_rows(mut, files, "caller_borrowed") == [
+        ("borrower.at_module_level", "candidate-escape", ("lender_a",))]
+
+
+def test_with_the_def_local_class_unread_a_module_borrow_shines_through(tmp_path):
+    """Mutant 7 of 9: a def's own class no longer shadows in that def, so
+    the module-level borrow is read under it -- `over_the_module_borrow`
+    raises the def's `Unbindable(Exception)` and reads as the lender's
+    subclass. Without the def's own names the lookup falls through the
+    def's scope to the module, which is the fall-through `own` exists to
+    stop."""
+    mut = _scanner_with("                    b.own.add(node.name)", "                    pass")
+    files = _local_tree(tmp_path, {
+        "lender_a": SUBCLASS_LENDER, "borrower": BORROWER_SHADOWED_IN_DEF,
+        "caller_borrowed": BORROWED_CALLER_PLAIN.format(fn="over_the_module_borrow")})[0]
+    assert _mutant_rows(mut, files, "caller_borrowed") == [
+        ("borrower.over_the_module_borrow", "candidate-escape", ("lender_a",))]
+
+
+def test_with_the_dotted_credit_unguarded_a_borrowers_other_raises_invent_origins(tmp_path):
+    """Mutant 8 of 9: the old dotted credit let back onto a callee without a
+    family -- which is what the widened pre-filter does on its own.
+    `raise self.Error(...)` is an origin `self` and `lender_a.NotAClass`
+    an origin `lender_a`: two sites for raises that are no refusal, and the
+    second a false escape under the subclass's own handler."""
+    mut = _scanner_with('            elif "." in txt and mod.has_family:',
+                        '            elif "." in txt:')
+    files = _local_tree(tmp_path, {
+        "lender_a": SUBCLASS_LENDER, "borrower": BORROWER_OTHER_DOTTED,
+        "caller_borrowed": BORROWED_CALLER_TWO.format(first="of_self", second="of_the_lender")})[0]
+    assert _mutant_rows(mut, files, "caller_borrowed") == [
+        ("borrower.of_self", "candidate-escape", ("self",)),
+        ("borrower.of_the_lender", "candidate-escape", ("lender_a",))]
+
+
+def test_with_the_scopes_own_names_unread_a_shadowing_handler_covers_the_subclass(tmp_path):
+    """Mutant 9 of 9: the scope's own names no longer shadow, so the
+    handler's lookup falls through to the module's from-import and
+    `except Unbindable` -- the def's own class -- is credited for the
+    lender's subclass: `covered(exact)` where the interpreter lets the
+    refusal out. The false covered a merge of this raise side with a
+    handler reading that consults the import tables alone would ship."""
+    mut = _scanner_with("            if txt in b.imports or txt in b.own:",
+                        "            if txt in b.imports:")
+    files = _local_tree(tmp_path, {"lender_a": SUBCLASS_LENDER, "borrower": BORROWER,
+                                   "caller_borrowed": BORROWED_CALLER_DEF_LOCAL_GUARD})[0]
+    assert _mutant_rows(mut, files, "caller_borrowed") == [
+        ("borrower.by_name", "covered(exact)", ("lender_a",))]
