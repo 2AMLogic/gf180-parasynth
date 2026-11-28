@@ -8,6 +8,8 @@ write. Resolve module constants relative to __file__, including imported
 constants, pathlib joins and os.path.join. For json.dump, follow a direct
 open(..., "w") or its with-bound handle. Atomic sites use the project's
 write_json_atomic helper or a local write_json seam that forwards its path.
+An async helper or seam counts only where it is awaited: a bare call yields a
+coroutine that never writes, and await on a sync helper raises.
 
 INLINE takes precedence over atomic. Question marks denote candidate paths
 (a literal suffix in an unknown directory, or a dynamic name in a known
@@ -33,6 +35,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 SKIP = re.compile(r"(^|/)test_[^/]*\.py$|(^|/)tests/|^tools/run_all\.py$"
                   r"|^tools/audit_tracked_json_writers\.py$")
 UNKNOWN = "\0"  # impossible in a real path
+FUNCTION_NODES = (ast.FunctionDef, ast.AsyncFunctionDef)
 
 
 def tracked(suffix):
@@ -60,7 +63,7 @@ class Module:
             if isinstance(stmt, ast.Import):
                 for alias in stmt.names:
                     self.imports[alias.asname or alias.name] = alias.name
-            if isinstance(stmt, ast.FunctionDef) and len(stmt.body) == 1:
+            if isinstance(stmt, FUNCTION_NODES) and len(stmt.body) == 1:
                 if isinstance(stmt.body[0], ast.Return):
                     self.helpers[stmt.name] = stmt
             if isinstance(stmt, ast.Assign):
@@ -124,6 +127,10 @@ class Paths:
             parents = pathlib.PurePosixPath(base).parents
             if UNKNOWN not in base and node.slice.value < len(parents):
                 return str(parents[node.slice.value])
+        if isinstance(node, ast.Await):
+            if not isinstance(node.value, ast.Call):
+                return UNKNOWN
+            return self.helper(node.value, module, shadowed, seen, True)
         if isinstance(node, ast.Call):
             fn = ast.unparse(node.func)
             if fn == "os.path.join" and node.args:
@@ -135,11 +142,21 @@ class Paths:
                 return posixpath.dirname(base) if UNKNOWN not in base else UNKNOWN
             if isinstance(node.func, ast.Attribute) and node.func.attr == "resolve" and not node.args:
                 return path(node.func.value)
-            if fn in module.helpers and fn not in shadowed:
-                helper = module.helpers[fn]
-                params = {n.arg for n in ast.walk(helper.args) if isinstance(n, ast.arg)}
-                return self.resolve(helper.body[0].value, module, params, seen)
+            return self.helper(node, module, shadowed, seen, False)
         return UNKNOWN
+
+    def helper(self, call, module, shadowed, seen, awaited):
+        """Resolve a single-return helper when its call's await-ness matches it.
+
+        A bare call to an async helper yields a coroutine, not its return value,
+        and await on a sync helper raises: neither reaches the write.
+        """
+        fn = ast.unparse(call.func)
+        helper = module.helpers.get(fn)
+        if fn in shadowed or helper is None or isinstance(helper, ast.AsyncFunctionDef) != awaited:
+            return UNKNOWN
+        params = {n.arg for n in ast.walk(helper.args) if isinstance(n, ast.arg)}
+        return self.resolve(helper.body[0].value, module, params, seen)
 
 
 def matcher(path):
@@ -197,16 +214,20 @@ class WriterSites(ast.NodeVisitor):
         self.sites = []
         self.atomic_calls = {alias + ".write_json_atomic" for alias, name in module.imports.items()
                              if name == "run_all"}
+        self.awaited_atomic_calls = set()
         for stmt in module.tree.body:
-            if isinstance(stmt, ast.FunctionDef) and stmt.name == "write_json" and stmt.args.args:
+            if isinstance(stmt, FUNCTION_NODES) and stmt.name == "write_json" and stmt.args.args:
                 param = stmt.args.args[0].arg
                 body = stmt.body[1:] if ast.get_docstring(stmt) is not None else stmt.body
                 if len(body) == 1 and isinstance(body[0], (ast.Expr, ast.Return)):
                     call = body[0].value
+                    if isinstance(call, ast.Await):
+                        call = call.value
                     if isinstance(call, ast.Call) and ast.unparse(call.func) in self.atomic_calls:
                         dest = argument(call, 0, "path")
                         if dest and ast.unparse(dest) in (param, f"str({param})"):
-                            self.atomic_calls.add("write_json")
+                            (self.awaited_atomic_calls if isinstance(stmt, ast.AsyncFunctionDef)
+                             else self.atomic_calls).add("write_json")
 
     def visit_FunctionDef(self, node):
         # A local binding can hide a module path constant or an outer handle.
@@ -232,28 +253,39 @@ class WriterSites(ast.NodeVisitor):
         self.generic_visit(node)
         self.handles = previous
 
+    def visit_Await(self, node):
+        if isinstance(node.value, ast.Call):
+            self.credit(node.value, self.awaited_atomic_calls, inline=False)
+        self.generic_visit(node)
+
     def visit_Call(self, node):
+        self.credit(node, self.atomic_calls)
+        self.generic_visit(node)
+
+    def credit(self, node, atomic, inline=True):
+        """Record `node` as a site if it writes JSON through `atomic` or, when `inline`
+        allows, directly. An awaited call is visited twice; its inline forms are
+        credited once, by the visit that runs it."""
         func = ast.unparse(node.func)
         dest = None
         kind = None
-        if isinstance(node.func, ast.Attribute) and node.func.attr == "write_text":
+        if inline and isinstance(node.func, ast.Attribute) and node.func.attr == "write_text":
             data = argument(node, 0, "data")
             if data and any(isinstance(n, ast.Call) and ast.unparse(n.func) == "json.dumps"
                             for n in ast.walk(data)):
                 kind, dest = "inline", node.func.value
-        elif func == "json.dump":
+        elif inline and func == "json.dump":
             kind = "inline"
             stream = argument(node, 1, "fp")
             if isinstance(stream, ast.Name):
                 dest = self.handles.get(stream.id)
             else:
                 dest = opened_path(stream)
-        elif func in self.atomic_calls and func.split(".")[0] not in self.shadowed:
+        elif func in atomic and func.split(".")[0] not in self.shadowed:
             kind, dest = "atomic", argument(node, 0, "path")
         if kind:
             exact, pattern = matcher(self.paths.resolve(dest, self.module, self.shadowed))
             self.sites.append(Site(kind, f"{self.module.src}:{node.lineno}", exact, pattern))
-        self.generic_visit(node)
 
 
 def classify(hits):
