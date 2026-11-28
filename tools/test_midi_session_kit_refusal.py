@@ -348,7 +348,6 @@ def test_cli_still_plays_where_no_frozen_kit_read_refuses(image, drifted, tmp_pa
 
 @pytest.mark.parametrize("label,make,inject,exc", [
     ("a_corrupt_kit_file", _corrupt, "none", "json.decoder.JSONDecodeError"),
-    ("a_kit_file_without_its_writes_key", _without_writes, "none", "KeyError: 'writes'"),
     ("a_runtime_error_injected_at_the_kit_read", None, "image-kit-runtime-error",
      "RuntimeError: injected at the kit read"),
 ])
@@ -356,6 +355,19 @@ def test_cli_unrelated_errors_at_the_same_kit_read_still_exit_1(label, make, inj
     kit = make(tmp_path) if make else None
     p = _cli(*CLI_ARGS, "--image", "r1", kit=kit, inject=inject)
     _assert_execution_error(p, exc)
+
+
+def test_cli_a_kit_file_without_its_writes_key_refuses_2(tmp_path):
+    """#1621: this input was the `KeyError: 'writes'` row of the control above.
+    uart_host.r1_kit read `rec["writes"]` before the digest check that refuses
+    a drifted kit, so a partial kit file left as an execution error. The read
+    is now guarded by the function's own declared refusal (KitRefused), which
+    that handler names: a kit that cannot be read is REFUSED like a kit that
+    does not hash, and the refusal names the key."""
+    p = _cli(*CLI_ARGS, "--image", "r1", kit=_without_writes(tmp_path))
+    _assert_refused(p, "stderr")
+    assert "midi_session: REFUSED --" in p.stderr and "'writes'" in p.stderr, p.stderr[-600:]
+    assert "playing --" not in p.stdout, "a refused run must not start a session"
 
 
 # ---------------------------------------------------------------------------

@@ -187,3 +187,29 @@ def test_the_run_reports_whether_it_was_reused_and_why(tmp_path, fake_sim):
                               "why": fresh["reuse"]["why"]} and fresh["reuse"]["why"]
     again = vub.simulate_replay(cap, out, reuse="auto")
     assert again["reuse"]["reused"] is True and again["reuse"]["why"] == "identical run on disk"
+
+
+# ---- a capture plan that cannot be read is REFUSED before anything runs (#1621)
+
+@pytest.mark.parametrize("plan,names_rows", [
+    pytest.param({}, True, id="empty"),
+    pytest.param({"rows": None}, True, id="null-key"),
+    pytest.param([], False, id="list"),
+    pytest.param(5, False, id="number"),
+    pytest.param(None, False, id="null"),
+])
+def test_a_capture_plan_that_cannot_be_read_is_refused(tmp_path, capsys, fake_sim, plan, names_rows):
+    """`plan["rows"]` in rows_from_capture() was read with nothing checking the
+    plan, so a partial capture was a `KeyError` traceback out of main() (exit
+    1). simulate_replay's own refusal convention -- None, which the entry point
+    reports as 2 -- now covers it, before any tool runs."""
+    cap = str(tmp_path / "cap")
+    Path(cap + ".cmds").write_text("")
+    Path(cap + ".plan.json").write_text(json.dumps(plan))
+    out = tmp_path / "out"
+    rc = vub.main(["--replay", cap, "--outdir", str(out)])
+    text = capsys.readouterr().out
+    assert rc == 2 and "REFUSED" in text, text
+    assert ("'rows'" in text) is names_rows, text
+    assert fake_sim == []                                   # nothing was simulated
+    assert not (out / "replay" / "verification.json").exists()

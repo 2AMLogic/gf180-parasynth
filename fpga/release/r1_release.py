@@ -588,6 +588,8 @@ def stale_control(case: str, out: Path) -> int:
         raw = _need(MANIFEST).read_bytes()
         committed = json.loads(raw)
         stale = json.loads(raw)
+        import manifest as mf
+        mf.require_keys(stale, ("image", "host"), f"the manifest at {_rel(MANIFEST)}", refused=Refused)
         if case == "image":
             r0 = _json(R0_PUB_DIR / "publication.json")
             sub = {"image.bitstream_sha256": r0["bitstream_sha256"],

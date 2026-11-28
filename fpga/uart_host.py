@@ -162,7 +162,9 @@ def r1_kit() -> list:
     R1_KIT_SHA256."""
     import json
     import drums_fx as dx
+    import manifest as mf
     rec = json.loads(R1_KIT.read_text())
+    mf.require_keys(rec, "writes", f"R1's frozen kit at {R1_KIT}", refused=dx.KitRefused)
     kit = [(int(a), int(v)) for a, v in rec["writes"]]
     got = dx._kit_sha256(kit)
     if got != R1_KIT_SHA256 or rec.get("sha256") != R1_KIT_SHA256:
@@ -1926,17 +1928,22 @@ def main(argv=None, *, bridge_factory=None) -> int:
     # sounding key changes the note), its timed writes after the note-off
     fx_static, fx_events = [], []
     if a.cmd in ("play", "run"):
-        # the default is the FEASIBLE mode: a bare `run` is the held note and
-        # nothing else. bar808 was the default once; preflight refused it
-        # every time, so the advertised first playback failed by construction.
-        # The first phrase is `--fixture m5a` (bench-proven), never a default.
-        fixture = a.fixture or "none"
-        if fixture == "m5a":
-            fx_events, _end = phrase_events(fixture, a.image)
-        elif fixture != "none":
-            # the fixture's own structure: its load() image as live setup,
-            # everything after it as scheduled events
-            fx_static, fx_events, _end = phrase_static_and_events(fixture, a.image)
+        import drums_fx as dx
+        try:
+            # the default is the FEASIBLE mode: a bare `run` is the held note and
+            # nothing else. bar808 was the default once; preflight refused it
+            # every time, so the advertised first playback failed by construction.
+            # The first phrase is `--fixture m5a` (bench-proven), never a default.
+            fixture = a.fixture or "none"
+            if fixture == "m5a":
+                fx_events, _end = phrase_events(fixture, a.image)
+            elif fixture != "none":
+                # the fixture's own structure: its load() image as live setup,
+                # everything after it as scheduled events
+                fx_static, fx_events, _end = phrase_static_and_events(fixture, a.image)
+        except dx.KitRefused as exc:
+            print(f"uart_host: REFUSED -- {exc}", file=sys.stderr)
+            return 2
     fixture_image = a.cmd in ("play", "run") and (a.fixture or "none") != "none"
     if fixture_image and a.preset and not a.engineering:
         # the fixture programs its own patch over the preset: the player

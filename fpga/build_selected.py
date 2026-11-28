@@ -37,7 +37,10 @@ def sources():
 
 
 def simulation_evidence():
-    record = json.loads((ROOT / "docs/scorecard/results/M5A.json").read_text())
+    import manifest as mf
+    path = ROOT / "docs/scorecard/results/M5A.json"
+    record = json.loads(path.read_text())
+    mf.require_keys(record, "provenance", f"the scorecard record at {path}", refused=RuntimeError)
     transcript = ROOT / record["provenance"]["artefacts"]["spi_i2s"]
     content = transcript.read_bytes()
     expected = record["provenance"]["inputs"]["verification:SPI-I2S"].removeprefix("sha256:")

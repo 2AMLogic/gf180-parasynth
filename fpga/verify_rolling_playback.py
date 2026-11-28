@@ -62,6 +62,12 @@ import uart_host as uh                            # noqa: E402
 
 sys.path.insert(0, str(ROOT / "fpga" / "release"))
 import r1_candidate as r1c                        # noqa: E402
+import refusal                                    # noqa: E402
+
+
+class Refused(refusal.Refused):
+    """A record this bench must read that parses but cannot be read."""
+
 
 SR = uh.SR
 FIXTURES = ("bar808-full", "demo")
@@ -474,8 +480,12 @@ def rtl_replay(fixture: str, outdir: Path, reuse: bool = False, *,
         # the replay never ran: a control of it would simulate a second time
         # to answer for a run that does not exist (#1229)
         return out
-    with vub.image_config(target):
-        out["control"] = rtl_control(fixture, outdir, vub, work)
+    try:
+        with vub.image_config(target):
+            out["control"] = rtl_control(fixture, outdir, vub, work)
+    except Refused as exc:
+        out.update(state="REFUSED", reason=f"the due+1 control could not be built: {exc}")
+        return out
     if not out["control"]["caught"] and out["state"] == "PASS":
         out["state"] = "FAIL"
     return out
@@ -526,10 +536,12 @@ def rtl_control(fixture: str, outdir: Path, vub, work: str = "rolling-rtl") -> d
     frame later in the expectation (stimulus untouched) and re-analyse the
     same RTL run. It must report that event off its frame."""
     import shutil
+    import manifest as mf
     src = outdir / fixture
     ctl = outdir / f"{fixture}-control-due+1"
     shutil.copyfile(f"{src}.cmds", f"{ctl}.cmds")
     rec = json.loads(Path(f"{src}.plan.json").read_text())
+    mf.require_keys(rec, "rows", f"the RTL run's plan at {src}.plan.json", refused=Refused)
     evs = [r for r in rec["rows"] if r["kind"] == "event"]
     victim = evs[len(evs) // 2]
     victim["due"] += 1

@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import subprocess
 import sys
 from textwrap import dedent
@@ -61,3 +62,50 @@ def test_player_paths_work_without_scipy():
                                    "--note", "72", "--fixture", "none", "--image", "r1"]) == 0
     """)
     subprocess.run([sys.executable, "-E", "-c", player], cwd=preset.ROOT / "fpga", check=True)
+
+
+# ---- a reference manifest that cannot be read is REFUSED, not a traceback (#1621)
+
+@pytest.mark.parametrize("manifest,why", [
+    pytest.param({}, "'audio'", id="empty"),
+    pytest.param({"audio": None}, "'audio'", id="null-key"),
+    pytest.param([], "not a JSON object", id="list"),
+    pytest.param(5, "not a JSON object", id="number"),
+    pytest.param(None, "not a JSON object", id="null"),
+])
+def test_a_reference_manifest_lacking_audio_is_refused(monkeypatch, tmp_path, capsys, manifest, why):
+    """`manifest["audio"]` was read with nothing checking the manifest, so a
+    partial one was a `KeyError` traceback (exit 1) where this module's own
+    refusals are ValueError -- and the entry point reported neither."""
+    p = tmp_path / "manifest.json"
+    p.write_text(json.dumps(manifest))
+    monkeypatch.setattr(preset.score, "MANIFEST", p)
+    with pytest.raises(ValueError, match=why):
+        preset.definition("m5a-saw")
+    out = tmp_path / "preset.json"
+    rc = preset.main(["m5a-saw", "--out", str(out)])
+    assert rc == 2 and "REFUSED" in capsys.readouterr().out
+    assert not out.exists()
+
+
+def test_a_preset_whose_reference_audio_no_longer_hashes_is_refused_by_the_entry_point(
+        monkeypatch, tmp_path, capsys):
+    """The pre-existing refusal, now reported: the hash check's ValueError left
+    the `__main__` block as a traceback (exit 1). The audio is read beside the
+    manifest, so a stand-in file sits beside the scratch copy."""
+    record = json.loads(preset.score.MANIFEST.read_text())
+    p = tmp_path / "manifest.json"
+    audio = tmp_path / record["audio"]["file"]
+    audio.parent.mkdir(parents=True, exist_ok=True)
+    audio.write_bytes(b"not the reference audio")
+    p.write_text(json.dumps(record))
+    monkeypatch.setattr(preset.score, "MANIFEST", p)
+    out = tmp_path / "preset.json"
+    rc = preset.main(["m5a-saw", "--out", str(out)])
+    assert rc == 2 and "differs from frozen manifest" in capsys.readouterr().out
+    assert not out.exists()
+
+
+def test_the_committed_reference_manifest_carries_audio():
+    # the guard above must be satisfiable against the manifest that ships
+    assert json.loads(preset.score.MANIFEST.read_text())["audio"] is not None

@@ -82,6 +82,12 @@ _REFUSAL_TOOLS = str(ROOT / "tools")
 if _REFUSAL_TOOLS not in sys.path:
     sys.path.append(_REFUSAL_TOOLS)
 from exit_contract import FAIL, PASS, REFUSED  # noqa: E402
+import refusal                                    # noqa: E402
+
+
+class Refused(refusal.Refused):
+    """A record this bench must read that parses but cannot be read."""
+
 
 BENCH = ROOT / "rtl-sketch/tb_uart_bx.v"
 WRAPPER = ROOT / "fpga/rtl/arty_a7_top.v"
@@ -384,7 +390,9 @@ def rows_from_capture(prefix):
     are the bytes the CLI emitted -- the expectation is re-derived from the
     same packets, so the bench checks the CLI's schedule, not a lookalike."""
     import struct
+    import manifest as mf
     plan = json.loads(Path(prefix + ".plan.json").read_text())
+    mf.require_keys(plan, "rows", f"the CLI's capture plan at {prefix}.plan.json", refused=Refused)
     items, rows = [], []
     for r in plan["rows"]:
         pkt = bytes.fromhex(r["packet"])
@@ -497,7 +505,11 @@ def simulate_replay(prefix, outdir, inject=None, tail_frames=None,
     why_simulated = "no reuse asked"
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
-    items, planned_segments, _origin, _baud = rows_from_capture(prefix)
+    try:
+        items, planned_segments, _origin, _baud = rows_from_capture(prefix)
+    except Refused as exc:
+        print(f"verify_uart_bridge: REFUSED -- {exc}")
+        return None
     cmd_path = outdir / "uart_cmds.txt"
     previous = cmd_path.read_bytes() if (reuse and cmd_path.exists()) else None
     build_cmd_file(planned_segments, [], cmd_path)

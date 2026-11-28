@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
 
 import pytest
 
@@ -518,5 +519,59 @@ def test_a_run_replay_is_still_controlled_and_an_uncaught_control_fails(
                              replay_out={"state": "PASS"}, caught=True)
     assert vrp.rtl_replay("bar808", tmp_path)["state"] == "PASS"
     assert calls["control"] == 1
+
+
+# ---- a control plan that cannot be read refuses the replay (#1621) -----------
+
+def _plan_at(directory, plan):
+    """The RTL run's capture as rtl_control() finds it: <fixture>.cmds beside a
+    <fixture>.plan.json holding `plan`."""
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / "bar808.cmds").write_text("")
+    (directory / "bar808.plan.json").write_text(json.dumps(plan))
+
+
+def _stub_before_the_control(monkeypatch):
+    """Everything before rtl_control() stubbed as in _stub_rtl_replay; the
+    control itself, and the plan it reads, are real."""
+    monkeypatch.setattr(vrp, "run_cli", lambda *a, **kw: {})
+    monkeypatch.setattr(vrp, "check", lambda run: {"ok": True})
+    monkeypatch.setattr(vrp, "write_rtl_capture", lambda *a, **kw: {})
+    monkeypatch.setattr(vrp, "replay_and_analyze", lambda *a, **kw: {"state": "PASS"})
+
+
+@pytest.mark.parametrize("plan,names_rows", [
+    pytest.param({}, True, id="empty"),
+    pytest.param({"rows": None}, True, id="null-key"),
+    pytest.param([], False, id="list"),
+    pytest.param(5, False, id="number"),
+    pytest.param(None, False, id="null"),
+])
+def test_a_control_plan_that_cannot_be_read_refuses_the_rtl_replay(monkeypatch, tmp_path, plan,
+                                                                   names_rows):
+    """`rec["rows"]` in rtl_control() was read with nothing checking the plan,
+    so a partial one was a `KeyError` traceback out of main(). A replay whose
+    due+1 control cannot be built has not shown its comparison can fail:
+    REFUSED, which is neither a verdict nor the FAIL an uncaught control gets."""
+    _plan_at(tmp_path, plan)
+    _stub_before_the_control(monkeypatch)
+    out = vrp.rtl_replay("bar808", tmp_path)
+    assert out["state"] == "REFUSED", out
+    assert ("'rows'" in out["reason"]) is names_rows, out
+    assert "control" not in out
+
+
+def test_the_entry_point_reports_a_refused_control_as_no_verdict(monkeypatch, tmp_path):
+    _plan_at(tmp_path / "out" / "rtl-replay", {})
+    _stub_before_the_control(monkeypatch)
+    monkeypatch.setattr(vrp, "check", lambda run: {"ok": True, "timed_executed": 0,
+                                                   "timed_intended": 0, "static_executed": 0,
+                                                   "static_intended": 0})
+    monkeypatch.setattr(vrp, "run_control", lambda *a, **kw: {"caught": True, "reasons": []})
+    outdir = tmp_path / "out"
+    assert vrp.main(["--rtl", "bar808", "--outdir", str(outdir)]) == 2
+    record = json.loads((outdir / "verification.json").read_text())
+    assert record["state"] == "NO VERDICT"
+    assert "'rows'" in record["rtl"]["bar808"]["reason"]
 
 

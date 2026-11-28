@@ -290,3 +290,49 @@ def test_a_clean_build_stamp_is_cleared_so_the_refusal_above_is_the_stamps(tmp_p
     report = json.loads((out / "report.json").read_text())
     assert report["state"] == "REFUSED"
     assert "yosys" in report["reason"] and "simulation_evidence" in report
+
+
+# ---- a scorecard record that cannot be read is REFUSED, not a traceback (#1621)
+
+def _record_is(monkeypatch, tmp_path, record):
+    """The scratch tree of the tests above with its M5A.json replaced by `record`:
+    the transcript, the core files and every tool are as they are there."""
+    _stored_simulation(monkeypatch, tmp_path, _committed_transcript())
+    (tmp_path / "docs/scorecard/results/M5A.json").write_text(json.dumps(record))
+
+
+@pytest.mark.parametrize("record,why", [
+    pytest.param({}, "'provenance'", id="empty"),
+    pytest.param({"provenance": None}, "'provenance'", id="null-key"),
+    pytest.param([], "not a JSON object", id="list"),
+    pytest.param(5, "not a JSON object", id="number"),
+    pytest.param(None, "not a JSON object", id="null"),
+])
+def test_a_scorecard_record_lacking_provenance_refuses_the_build(monkeypatch, tmp_path, record, why):
+    """Through `main()`: `record["provenance"]` was read before anything checked
+    the record, so a partial M5A.json was a `KeyError` traceback past the
+    handler (exit 1, not 2). The handler catches RuntimeError, which is this
+    tool's refusal on this path."""
+    _record_is(monkeypatch, tmp_path, record)
+    out = tmp_path / "out"
+    assert build.main(["--out", str(out)]) == 2
+    report = json.loads((out / "report.json").read_text())
+    assert report["state"] == "REFUSED" and why in report["reason"], report["reason"]
+
+
+def test_a_scorecard_record_missing_exactly_provenance_names_only_it(monkeypatch, tmp_path):
+    _record_is(monkeypatch, tmp_path, json.loads(COMMITTED.read_text()))
+    path = tmp_path / "docs/scorecard/results/M5A.json"
+    record = json.loads(path.read_text())
+    record.pop("provenance")
+    path.write_text(json.dumps(record))
+    out = tmp_path / "out"
+    assert build.main(["--out", str(out)]) == 2
+    report = json.loads((out / "report.json").read_text())
+    assert report["state"] == "REFUSED"
+    assert re.findall(r"'[^']+'", report["reason"]) == ["'provenance'"], report["reason"]
+
+
+def test_the_committed_scorecard_record_carries_provenance():
+    # the guard above must be satisfiable against the record that ships
+    assert json.loads(COMMITTED.read_text())["provenance"] is not None

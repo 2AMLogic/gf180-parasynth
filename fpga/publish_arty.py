@@ -291,6 +291,9 @@ def rederive_dsp(publication: Path) -> dict:
     directory carries no routed.dcp): what it says is what it derives."""
     path = publication / "publication.json"
     summary = json.loads(path.read_text())
+    import manifest as mf
+    mf.require_keys(summary, "original_artifact_sha256", f"the publication record at {path}",
+                    refused=ValueError)
     record = {"artifact_sha256": summary["original_artifact_sha256"]}
     apply_dsp(summary, dsp_disposition(publication, record))
     path.write_text(json.dumps(summary, indent=2) + "\n")
@@ -299,6 +302,9 @@ def rederive_dsp(publication: Path) -> dict:
 
 def publish(artifact, output):
     record = json.loads((artifact / "report.json").read_text())
+    import manifest as mf
+    mf.require_keys(record, ("script_sha256", "vivado_version", "seconds"),
+                    f"the build report at {artifact / 'report.json'}", refused=ValueError)
     expected = {str(p.relative_to(ROOT)): build.sha(p)
                 for p in build.sources() + build.roms() + [build.XDC]}
     # the image the build names (build_arty --image; a record without one is
@@ -491,17 +497,26 @@ def inspect_reports(directory, design="arty_a7_top"):
             "hardware_playback_tested": False}
 
 
-if __name__ == "__main__":
+def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("artifact", type=Path)
     parser.add_argument("--out", type=Path)
     parser.add_argument("--rederive-dsp", action="store_true",
                         help="re-derive the DSP disposition of the committed "
                              "publication directory ARTIFACT in place")
-    args = parser.parse_args()
-    if args.rederive_dsp:
-        print(json.dumps(rederive_dsp(args.artifact)["dsp_disposition"], indent=2))
-    elif args.out is None:
-        parser.error("--out is required to publish")
-    else:
-        print(json.dumps(publish(args.artifact, args.out), indent=2))
+    args = parser.parse_args(argv)
+    try:
+        if args.rederive_dsp:
+            print(json.dumps(rederive_dsp(args.artifact)["dsp_disposition"], indent=2))
+        elif args.out is None:
+            parser.error("--out is required to publish")
+        else:
+            print(json.dumps(publish(args.artifact, args.out), indent=2))
+    except ValueError as exc:
+        print(f"publish_arty: REFUSED -- {exc}")
+        return 2
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
