@@ -16,7 +16,10 @@ is not a site), the repo-relative `candidates` format, and the shadowed-alias
 blind spot #1188's test plan named but never pinned. The #1573 section pins
 function-local imports: an `import x as y` written inside a function bound
 nothing, so its call site was ABSENT from the census (#1569's defect shape),
-and the scoping that keeps a function's import out of its siblings.
+and the scoping that keeps a function's import out of its siblings. The
+#1641 section pins the CLI boundary reached through a `_cli()` wrapper the
+dispatch calls -- the placement hh_probe5's first repair used, which the
+census read as no guard -- and the inputs that must not be credited as one.
 """
 from __future__ import annotations
 
@@ -1260,11 +1263,15 @@ def test_family_borrowed_inside_a_function_is_still_invisible(tmp_path):
 # the dispatch, so the census still listed both repaired sites as escapes
 # while every exit-status control was green; they cleared (85 -> 83) only once
 # the try moved into `__main__`. The boundary now also credits a try directly
-# in a module-level function that the dispatch or `main()` calls by bare name,
-# ONE level only. The positive controls started red against the unwidened
-# scanner. The negative controls are green before and after the widening:
-# each pins an input that would defeat it (verification-rules rule 8), so a
-# scanner that credited any module-level try turns them red.
+# in a module-level function that the DISPATCH calls by bare name, ONE level
+# only. The two positive controls started red against the unwidened scanner.
+# The negative controls are green before and after the widening: each pins an
+# input that would defeat it (verification-rules rule 8), so a scanner that
+# credited any module-level try turns them red. One of them is the half of
+# the issue's acceptance criterion the tree falsified: a wrapper `main()`
+# calls was tried as boundary and flipped ten escaping sites to `covered`
+# (the row-by-row table is #1656; the pin is
+# `test_a_wrapper_main_calls_is_not_the_boundary`).
 
 WRAPPER_CLI_HEAD = '''
 import sys
@@ -1320,14 +1327,21 @@ def test_wrapper_called_by_a_bare_statement_is_cli_base(tmp_path):
     assert s["classification"] == "covered(cli-base)", s
 
 
-def test_base_guard_in_a_wrapper_main_calls_is_cli_base(tmp_path):
-    """`main()` is the other entry the boundary reads: a wrapper IT calls by
-    bare name is the boundary too."""
+def test_a_wrapper_main_calls_is_not_the_boundary(tmp_path):
+    """A wrapper `main()` calls by bare name is NOT credited, though it is
+    the same `_cli()` shape. `main()` fans out to sibling helpers and a
+    sibling's try guards its own branch alone, so crediting it covers every
+    site in the module: tried during #1641, it turned ten escaping sites
+    into `covered` (cymbal_low_tail, lead_drive_337, r0_capture -- the
+    row-by-row table is #1656). The dispatch's callees are frames every CLI
+    path passes through; main's are not. A conservative false escape is the
+    harmless direction."""
     s = _wrapper_scan(tmp_path, WRAPPER_BASE_GUARD + '''
 def main(argv=None):
     return _cli(argv)
 ''', "    sys.exit(main())\n")
-    assert s["classification"] == "covered(cli-base)", s
+    assert s["classification"] == "candidate-escape", s
+    assert s["uncovered"] == ["mod_a"], s
 
 
 def test_uncalled_wrapper_leaves_the_site_an_escape(tmp_path):
@@ -1373,15 +1387,15 @@ def _cli(argv=None):
     assert s["classification"] == "candidate-escape", s
 
 
-def test_wrapper_called_from_a_nested_def_is_two_frames_in(tmp_path):
-    """`main()` calls `inner()`; `inner` calls the wrapper. A call written in
-    a def nested in the boundary is that def's, not the boundary's own."""
-    s = _wrapper_scan(tmp_path, WRAPPER_BASE_GUARD + '''
-def main():
+def test_a_call_written_in_a_def_nested_in_the_dispatch_is_not_its_own(tmp_path):
+    """The dispatch defines `inner` and calls it; `inner` calls the wrapper.
+    A call written in a def of the boundary's own is that def's, one frame
+    further in."""
+    s = _wrapper_scan(tmp_path, WRAPPER_BASE_GUARD, '''
     def inner():
         return _cli()
-    return inner()
-''', "    sys.exit(main())\n")
+    sys.exit(inner())
+''')
     assert s["classification"] == "candidate-escape", s
 
 
@@ -1398,19 +1412,18 @@ def test_wrapper_called_only_from_a_handler_is_not_entry(tmp_path):
 
 
 def test_helper_with_an_unrelated_try_changes_nothing(tmp_path):
-    """`main()` calls a helper whose try is not about refusals: the helper is
-    on the boundary's call list, its `except OSError` is shape `other`, and
-    the unguarded site stays what it was."""
+    """A dispatch-called helper whose try is not about refusals is on the
+    boundary's call list; its `except OSError` is shape `other`, and the
+    unguarded site stays what it was."""
     s = _wrapper_scan(tmp_path, '''
 def helper():
     try:
         return open("x")
     except OSError:
         return None
-
-def main():
+''', '''
     helper()
-    return go()
-''', "    sys.exit(main())\n")
+    sys.exit(go())
+''')
     assert s["classification"] == "candidate-escape", s
     assert s["uncovered"] == ["mod_a"], s
