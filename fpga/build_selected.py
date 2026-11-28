@@ -18,6 +18,14 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFINES = ("VOICE_OSC_2X", "VOICE_FILTER_2X")
+_TOOLS = str(ROOT / "tools")
+if _TOOLS not in sys.path:
+    sys.path.append(_TOOLS)
+import i2s_transcript                                             # noqa: E402
+
+# The question that is this gate's own; whether the transcript is one clean,
+# un-injected PASS from a named simulator is `i2s_transcript`'s.
+M5A_SPI_I2S_VERIFIED = "M5A path verified from SPI pins through the production voice and I2S pins"
 
 
 def sources():
@@ -38,7 +46,19 @@ def simulation_evidence():
     config = record["provenance"]["config"]
     if not config["oscillator_oversample_2x"] or not config["filter_rate_converted"]:
         raise RuntimeError("stored simulation does not select both 2x paths")
-    commit = re.search(rb"built from ([0-9a-f]+)", content).group(1).decode()
+    text = content.decode("utf-8", errors="replace")
+    decoded = record["provenance"]["inputs"].get("decoded:I2S")
+    if not decoded:
+        raise RuntimeError("stored simulation records no decoded I2S WAV digest")
+    i2s_transcript.validate_clean_pass(text, wav_sha256=decoded.removeprefix("sha256:"), refuse=RuntimeError)
+    if M5A_SPI_I2S_VERIFIED not in text:
+        raise RuntimeError("stored SPI-I2S transcript does not verify the M5A path from the SPI pins")
+    stamp = re.search(r"built from ([0-9a-f]+)(-dirty)?", text)
+    if stamp is None:
+        raise RuntimeError("stored SPI-I2S transcript does not say which commit built it")
+    if stamp.group(2):
+        raise RuntimeError(f"stored SPI-I2S transcript was built from a dirty tree: {stamp.group(1)}-dirty")
+    commit = stamp.group(1)
     files = sources()[1:] + sorted((ROOT / "rtl-sketch").glob("*.hex"))
     for path in files:
         old = subprocess.check_output(["git", "show", f"{commit}:{path.relative_to(ROOT)}"],

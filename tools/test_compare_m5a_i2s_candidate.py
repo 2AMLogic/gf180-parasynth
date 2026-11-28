@@ -1,5 +1,7 @@
 import copy
 import json
+import subprocess
+import sys
 
 import pytest
 
@@ -171,3 +173,126 @@ def test_rejects_candidate_that_loses_a_per_note_alias_pass_hidden_by_pulse():
     assert result["comparison"]["lost_per_note_passes"] == [{
         "wave": "saw", "midi": 84, "property": "Foldback energy",
         "baseline_error": 0.0, "candidate_error": 3.01, "limit": 3.0}]
+
+
+def _event_index(record, wave, midi):
+    [index] = [n for n, event in enumerate(record["diagnostics"]["events"])
+               if (event["wave"], event["midi"]) == (wave, midi)]
+    return index
+
+
+def _set_partial(record, index, value):
+    record["diagnostics"]["events"][index]["harmonic_error_db_model_minus_reference"]["h2"] = value
+
+
+#: #1680: `filter_gate._compare_incremental` reads the harmonic partials
+#: before `_event_errors` does. Each value below raised out of its unguarded
+#: `float()` -- a traceback, exit 1, which tools/exit_contract.py defines as
+#: FAIL -- where the foldback excess above REFUSES the same value.
+_UNREADABLE_PARTIALS = [pytest.param(10**400, id="beyond-float"),
+                        pytest.param(-(10**400), id="beyond-float-negative"),
+                        pytest.param(None, id="null"),
+                        pytest.param("not-a-number", id="non-numeric-string")]
+
+
+@pytest.mark.parametrize("side", ["baseline", "candidate"])
+@pytest.mark.parametrize("value", _UNREADABLE_PARTIALS)
+def test_refuses_a_harmonic_partial_that_float_cannot_read(scored_records, side, value):
+    baseline, candidate = scored_records
+    record = baseline if side == "baseline" else candidate
+    _set_partial(record, _event_index(record, "saw", 84), value)
+    with pytest.raises(m5a.Refused,
+                       match=rf"{side} saw/84 harmonic partial h2 cannot be read as a float"):
+        compare.compare_records(baseline, candidate)
+
+
+@pytest.mark.parametrize("integer", [3, 10**300], ids=["small", "large-in-range"])
+def test_a_readable_integer_partial_is_still_compared(scored_records, integer):
+    """The other half of the control above: a repair that refused every
+    integer partial would satisfy it as easily."""
+    baseline, candidate = scored_records
+    _set_partial(candidate, _event_index(candidate, "pulse", 84), integer)
+    comparison = compare.compare_records(baseline, candidate)["comparison"]
+    assert comparison["regressed_components"] == ["partial:2:pulse:84:h2"]
+    assert comparison["accepts_incremental_improvement"] is False
+    assert {"wave": "pulse", "midi": 84, "property": "Harmonic shape/h2",
+            "baseline_error": 0.4802, "candidate_error": float(integer),
+            "limit": 1.0} in comparison["lost_per_note_passes"]
+
+
+@pytest.mark.parametrize("side", ["baseline", "candidate"])
+@pytest.mark.parametrize("number", [float("nan"), float("inf"), float("-inf")],
+                         ids=["nan", "inf", "-inf"])
+def test_a_non_finite_partial_is_refused_by_the_second_read(scored_records, side, number):
+    """The adversary of the first read's guard: `float()` raises nothing for
+    a non-finite number, so that guard never sees it. `compare_records` reads
+    the partials twice and `_event_errors` refuses it there. Only the identity
+    is matched, so the control outlives the shared record gate's wording."""
+    baseline, candidate = scored_records
+    record = baseline if side == "baseline" else candidate
+    _set_partial(record, _event_index(record, "saw", 84), number)
+    with pytest.raises(m5a.Refused, match=rf"{side}:saw/84"):
+        compare.compare_records(baseline, candidate)
+
+
+def _sandbox_repository(root, files):
+    """A throwaway git repository holding `files`, so the shipped command can
+    write its report inside the tree it describes."""
+    for rel, body in files.items():
+        target = root / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(body)
+    env = ("-c", "user.email=t@t", "-c", "user.name=t")
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    subprocess.run(["git", "-C", str(root), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(root), *env, "commit", "-qm", "sandbox"], check=True)
+
+
+@pytest.mark.parametrize("partial, verdict", [(10**400, 2), (3, 0)],
+                         ids=["beyond-float-is-refused", "in-range-is-reported"])
+def test_main_refuses_a_partial_beyond_float_range_and_reports_one_in_range(
+        scored_records, tmp_path, monkeypatch, capsys, partial, verdict):
+    """Through `main`, with a report path inside the tree: the refusal writes
+    no report, and the same apparatus does write one for a readable partial
+    that regresses -- so "no report" is the refusal and not the out path."""
+    baseline, candidate = scored_records
+    _set_partial(candidate, _event_index(candidate, "pulse", 84), partial)
+    _sandbox_repository(tmp_path, {rel: f"# {rel}\n" for rel in compare.SOURCES})
+    monkeypatch.setattr(compare, "ROOT", tmp_path)
+    baseline_path, candidate_path = tmp_path / "baseline.json", tmp_path / "candidate.json"
+    baseline_path.write_text(json.dumps(baseline))
+    candidate_path.write_text(json.dumps(candidate))
+    report = tmp_path / "out" / "delta.json"
+
+    rc = compare.main([str(baseline_path), str(candidate_path), "--out", "out/delta.json"])
+
+    assert rc == verdict
+    if verdict == 2:
+        assert ("compare_m5a_i2s_candidate: REFUSED -- candidate pulse/84 harmonic partial h2 "
+                "cannot be read as a float") in capsys.readouterr().out
+        assert not report.exists()
+    else:
+        comparison = json.loads(report.read_text())["comparison"]
+        assert comparison["regressed_components"] == ["partial:2:pulse:84:h2"]
+        assert comparison["accepts_incremental_improvement"] is False
+
+
+def test_cli_refuses_a_harmonic_partial_beyond_float_range_with_exit_2(scored_records, tmp_path):
+    """#1680's repro, as the shipped command: exit 2, no traceback, no report.
+    The reason is asserted, not only the word REFUSED: an `--out` outside the
+    repository is refused with that word after the comparison has run."""
+    baseline, candidate = scored_records
+    _set_partial(candidate, _event_index(candidate, "saw", 84), 10**400)
+    baseline_path, candidate_path = tmp_path / "baseline.json", tmp_path / "candidate.json"
+    baseline_path.write_text(json.dumps(baseline))
+    candidate_path.write_text(json.dumps(candidate))
+    report = tmp_path / "delta.json"
+    done = subprocess.run(
+        [sys.executable, str(compare.ROOT / "tools" / "compare_m5a_i2s_candidate.py"),
+         str(baseline_path), str(candidate_path), "--out", str(report)],
+        capture_output=True, text=True)
+    assert done.returncode == 2, done.stderr
+    assert "Traceback" not in done.stderr
+    assert ("compare_m5a_i2s_candidate: REFUSED -- candidate saw/84 harmonic partial h2 "
+            "cannot be read as a float") in done.stdout
+    assert not report.exists()

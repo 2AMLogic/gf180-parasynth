@@ -2,9 +2,14 @@ import subprocess
 import sys
 import hashlib
 import json
+import pathlib
+import re
 import pytest
 
 import build_selected as build
+
+COMMITTED = pathlib.Path(__file__).resolve().parents[1] / "docs/scorecard/results/M5A.json"
+VERIFIED = "M5A path verified from SPI pins through the production voice and I2S pins"
 
 
 def _raising(exc):
@@ -114,29 +119,20 @@ def test_git_failure_under_the_handler_is_refused_with_what_git_said(tmp_path, m
     stored-simulation record built for the test. REFUSED, and the reason carries
     git's stderr -- bytes, because the call has no text=True -- which str() of
     the exception leaves out."""
-    (tmp_path / "docs/scorecard/results").mkdir(parents=True)
-    transcript = tmp_path / "transcript.txt"
-    transcript.write_bytes(b"SPI-to-I2S transcript, built from abc123\n")
-    (tmp_path / "docs/scorecard/results/M5A.json").write_text(json.dumps({"provenance": {
-        "artefacts": {"spi_i2s": str(transcript)},
-        "inputs": {"verification:SPI-I2S": "sha256:" + hashlib.sha256(
-            transcript.read_bytes()).hexdigest()},
-        "config": {"oscillator_oversample_2x": True, "filter_rate_converted": True}}}))
-    (tmp_path / "top.v").write_bytes(b"module top;\n")
-    core = tmp_path / "core.v"
-    core.write_bytes(b"module core;\n")
-    monkeypatch.setattr(build, "ROOT", tmp_path)
-    monkeypatch.setattr(build, "sources", lambda: [tmp_path / "top.v", core])
-    check_output, calls = _git_that_fails(b"fatal: bad object abc123", ["show", "abc123:core.v"])
+    text = _committed_transcript()
+    stamp = _stamp(text)
+    _stored_simulation(monkeypatch, tmp_path, text)
+    failing = ["show", f"{stamp}:rtl-sketch/synth_top.v"]
+    check_output, calls = _git_that_fails(b"fatal: bad object " + stamp.encode(), failing)
     monkeypatch.setattr(build.subprocess, "check_output", check_output)
     assert build.main(["--out", str(tmp_path / "out")]) == 2
-    assert [c for c, _ in calls] == [["rev-parse", "HEAD"], ["show", "abc123:core.v"]]
+    assert [c for c, _ in calls] == [["rev-parse", "HEAD"], failing]
     assert calls[1][1] == {"cwd": tmp_path, "stderr": subprocess.PIPE}
     report = json.loads((tmp_path / "out" / "report.json").read_text())
     assert report["state"] == "REFUSED"
     assert report["source_commit"] == "deadbeef"
-    assert "git', 'show', 'abc123:core.v" in report["reason"]
-    assert report["reason"].endswith("fatal: bad object abc123")
+    assert f"git', 'show', '{stamp}:rtl-sketch/synth_top.v" in report["reason"]
+    assert report["reason"].endswith("fatal: bad object " + stamp)
     assert [p.name for p in (tmp_path / "out").iterdir()] == ["report.json"]
 
 
@@ -147,3 +143,150 @@ def test_an_execution_error_at_the_source_commit_is_not_refused(tmp_path, monkey
     with pytest.raises(TypeError, match="genuine bug"):
         build.main(["--out", str(tmp_path)])
     assert not (tmp_path / "report.json").exists()
+
+# ---- simulation_evidence(): one transcript gate, a checked build stamp -------
+
+def _committed_transcript() -> str:
+    record = json.loads(COMMITTED.read_text())
+    return (COMMITTED.parent.parent / record["provenance"]["artefacts"]["spi_i2s"]
+            .removeprefix("docs/scorecard/")).read_text()
+
+
+def _without(prefix: str) -> str:
+    return "".join(line for line in _committed_transcript().splitlines(keepends=True)
+                   if not line.startswith(prefix))
+
+
+def _stored_simulation(monkeypatch, tmp_path, text: str, *, decoded="keep"):
+    """The committed M5A record on a scratch ROOT, its transcript replaced by `text`.
+
+    The recorded commit's core answer `git show` with the scratch tree's own
+    bytes, so the core-file comparison -- not what these tests are about --
+    passes and only the transcript can refuse. Every other tool call is a
+    non-zero exit, so `main()` cannot run past its evidence check."""
+    record = json.loads(COMMITTED.read_text())
+    content = text.encode()
+    (tmp_path / "verification.txt").write_bytes(content)
+    record["provenance"]["artefacts"]["spi_i2s"] = "verification.txt"
+    record["provenance"]["inputs"]["verification:SPI-I2S"] = "sha256:" + hashlib.sha256(content).hexdigest()
+    if decoded != "keep":
+        if decoded is None:
+            record["provenance"]["inputs"].pop("decoded:I2S")
+        else:
+            record["provenance"]["inputs"]["decoded:I2S"] = decoded
+    (tmp_path / "docs/scorecard/results").mkdir(parents=True)
+    (tmp_path / "docs/scorecard/results/M5A.json").write_text(json.dumps(record))
+    core = tmp_path / "rtl-sketch/synth_top.v"
+    core.parent.mkdir()
+    core.write_bytes(b"module synth_top; endmodule\n")
+    top = tmp_path / "fpga/rtl/ulx3s_top.v"
+    top.parent.mkdir(parents=True)
+    top.write_bytes(b"module ulx3s_top; endmodule\n")
+    monkeypatch.setattr(build, "ROOT", tmp_path)
+    monkeypatch.setattr(build, "sources", lambda: [top, core])
+
+    def git_or_refuse(command, *args, **kwargs):
+        if command[:2] == ["git", "show"]:
+            return core.read_bytes()
+        if command[:2] == ["git", "rev-parse"]:
+            return "abc1234\n"
+        raise subprocess.CalledProcessError(1, command)
+    monkeypatch.setattr(build.subprocess, "check_output", git_or_refuse)
+
+
+def _stamp(text: str) -> str:
+    return re.search(r"built from ([0-9a-f]+)", text).group(1)
+
+
+def test_the_committed_m5a_transcript_is_the_simulation_evidence(monkeypatch, tmp_path):
+    """The precondition of every refusal below, on the record the repository
+    committed: one clean run, bound to the WAV it digests, verifying the M5A
+    path, built from a clean commit."""
+    text = _committed_transcript()
+    _stored_simulation(monkeypatch, tmp_path, text)
+    evidence = build.simulation_evidence()
+    assert evidence["commit"] == _stamp(text)
+    assert evidence["core_files_and_roms_identical"] is True
+
+
+@pytest.mark.parametrize("text,why", [
+    pytest.param(_committed_transcript().replace(
+        "compile defines: VOICE_OSC_2X, VOICE_FILTER_2X",
+        "compile defines: VOICE_OSC_2X, INJECT_BUG_SPI_ADDR7"),
+        "mutation runs", id="injected-control"),
+    pytest.param(_committed_transcript().replace(
+        "verify_synth_top: PASS --",
+        "verify_synth_top: FAIL -- 68 writes reached the register port, 67 were sent\n"
+        "verify_synth_top: PASS --", 1),
+        "it contains FAIL --", id="pass-beside-fail"),
+    pytest.param(_committed_transcript() + "verify_synth_top: REFUSED -- partial run\n",
+                 "it contains REFUSED", id="pass-beside-refused"),
+    pytest.param(_without("verify_synth_top: PASS --"), "no PASS -- line", id="no-pass-line"),
+    pytest.param(_without("verify_synth_top: simulator backend"),
+                 "omits the simulator backend", id="no-simulator"),
+    pytest.param(_committed_transcript().replace(VERIFIED, "M5A path verified"), "M5A path", id="no-verified-line"),
+    pytest.param(_committed_transcript().replace("built from " + _stamp(_committed_transcript()) + ",",
+                                                 "built from " + _stamp(_committed_transcript()) + "-dirty,"),
+                 "dirty tree", id="dirty-build-stamp"),
+    pytest.param(_without("verify_synth_top: built from"), "which commit", id="no-build-stamp"),
+])
+def test_a_transcript_that_is_not_one_clean_m5a_pass_is_no_simulation_evidence(
+        tmp_path, monkeypatch, text, why):
+    """START RED (#1595). `simulation_evidence()` read no verdict, no verified
+    line and no simulator from the transcript; it stripped `-dirty` off the
+    build stamp, treating a simulation of a dirty tree as one of the clean
+    commit, and an absent stamp was an `AttributeError` past the refusal
+    handler (exit 1, not 2)."""
+    assert text != _committed_transcript()
+    _stored_simulation(monkeypatch, tmp_path, text)
+    with pytest.raises(RuntimeError, match=why):
+        build.simulation_evidence()
+
+
+def test_the_transcript_must_bind_the_decoded_wav_the_record_names(tmp_path, monkeypatch):
+    """START RED. `decoded:I2S` was on the record and never read."""
+    _stored_simulation(monkeypatch, tmp_path, _committed_transcript(),
+                       decoded="sha256:" + "0" * 64)
+    with pytest.raises(RuntimeError, match="does not bind"):
+        build.simulation_evidence()
+
+
+def test_a_record_with_no_decoded_wav_digest_is_no_simulation_evidence(tmp_path, monkeypatch):
+    """The scorer always records `decoded:I2S` (`tools/score_m5a_i2s.py`), so a
+    record without it did not come from scoring the WAV, and there is nothing
+    to bind the transcript to."""
+    _stored_simulation(monkeypatch, tmp_path, _committed_transcript(), decoded=None)
+    with pytest.raises(RuntimeError, match="no decoded I2S WAV digest"):
+        build.simulation_evidence()
+
+
+@pytest.mark.parametrize("stamp,why", [
+    pytest.param("built from " + _stamp(_committed_transcript()) + "-dirty,", "dirty tree",
+                 id="dirty-build-stamp"),
+    pytest.param("built from ?,", "which commit", id="no-commit"),
+    pytest.param("", "which commit", id="no-build-stamp"),
+])
+def test_an_unusable_build_stamp_refuses_the_build_as_no_evidence(tmp_path, monkeypatch, stamp, why):
+    """Through `main()`: the stamp is refused before any tool runs, the report
+    says `REFUSED` with the stamp's reason, and the exit status is 2."""
+    text = _committed_transcript().replace("built from " + _stamp(_committed_transcript()) + ",", stamp)
+    assert text != _committed_transcript()
+    _stored_simulation(monkeypatch, tmp_path, text)
+    out = tmp_path / "out"
+    assert build.main(["--out", str(out)]) == 2
+    report = json.loads((out / "report.json").read_text())
+    assert report["state"] == "REFUSED"
+    assert why in report["reason"]
+
+
+def test_a_clean_build_stamp_is_cleared_so_the_refusal_above_is_the_stamps(tmp_path, monkeypatch):
+    """The control for the test above: on the committed transcript
+    `simulation_evidence()` passes, and `main()` is then refused by the next
+    tool (`yosys -V`, made to fail here) -- so a stamp refusal can only be the
+    stamp."""
+    _stored_simulation(monkeypatch, tmp_path, _committed_transcript())
+    out = tmp_path / "out"
+    assert build.main(["--out", str(out)]) == 2
+    report = json.loads((out / "report.json").read_text())
+    assert report["state"] == "REFUSED"
+    assert "yosys" in report["reason"] and "simulation_evidence" in report
