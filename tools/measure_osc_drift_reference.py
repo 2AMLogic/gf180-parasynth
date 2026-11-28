@@ -190,8 +190,8 @@ def _clip(case: str, name: str, want_sha: str | None, *, reach_s: float = 0.0,
         want = rec.get(where[1]) if isinstance(rec, dict) else None
         if type(want) is not int:
             return {"verdict": odp.REFUSED, "refusal": "CLIP_LENGTH",
-                    "refusal_detail": f"{name}: record says samples={want!r}, not a "
-                                      f"frame count; the clip holds {n} frames"}
+                    "refusal_detail": f"{name}: its record says {where[0]}.{where[1]}={want!r}, "
+                                      f"not a frame count; the clip holds {n} frames"}
         if n != want:
             return {"verdict": odp.REFUSED, "refusal": "CLIP_LENGTH",
                     "refusal_detail": f"{name}: {n} frames, its record says {want} samples"}

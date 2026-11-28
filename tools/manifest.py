@@ -508,8 +508,10 @@ def load_render(render_id: str, *, runs_dir: pathlib.Path = RUNS_DIR,
     x, sr = _read_wav16(wav_path)
     n = manifest.get("n_samples")
     if type(n) is not int:
+        stated = ("declares no n_samples" if "n_samples" not in manifest
+                  else f"records n_samples={n!r}")
         raise Refused(
-            f"{manifest_path} records n_samples={n!r}, not a sample count, for "
+            f"{manifest_path} {stated}, not a sample count, for "
             f"{wav_path} ({len(x)} samples on disk) -- the hash says these are the "
             f"bytes render() produced and nothing says how many there should be, "
             f"so this WAV cannot be checked against its record; regenerate the "
