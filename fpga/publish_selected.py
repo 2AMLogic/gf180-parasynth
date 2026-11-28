@@ -1,4 +1,9 @@
-"""Validate and preserve the completed 85F CI artifact, including failures."""
+"""Validate and preserve the completed 85F CI artifact, including failures.
+
+Exit 0: a qualified bitstream, published. Exit 2: a NO-VERDICT or FAIL summary
+that was published (stdout carries it), or REFUSED -- a precondition of
+publication was not met, its reason is on stderr and nothing was written.
+An execution error is a traceback at exit 1, never a verdict."""
 from __future__ import annotations
 
 import argparse
@@ -16,6 +21,13 @@ import build_selected
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 import setup_ci_oss_cad as toolchain_pin
+import exit_contract
+import refusal
+
+
+class Refused(refusal.Refused, ValueError):
+    """A precondition of publication is not met (#1663): nothing was published
+    and no verdict exists, which a traceback at exit 1 misreports as a FAIL."""
 
 
 def timing_summary(report):
@@ -56,30 +68,30 @@ def sha256(path):
 
 def publish(artifact: Path, output: Path, workflow_url: str, *, historical=False):
     if output.exists() and any(output.iterdir()):
-        raise ValueError("publication directory must be empty; refuse stale artifacts")
+        raise Refused("publication directory must be empty; refuse stale artifacts")
     reports = list(artifact.rglob("report.json"))
     toolchains = list(artifact.rglob("toolchain.json"))
     if len(reports) != 1 or len(toolchains) != 1:
-        raise ValueError("expected one build report and one pinned toolchain record")
+        raise Refused("expected one build report and one pinned toolchain record")
     report = json.loads(reports[0].read_text())
     toolchain = json.loads(toolchains[0].read_text())
     if toolchain["sha256"] != toolchain_pin.SHA256 or toolchain["release"] != toolchain_pin.VERSION:
-        raise ValueError("toolchain identity does not match the pinned suite")
+        raise Refused("toolchain identity does not match the pinned suite")
     build = reports[0].parent
     expected_config = {"OSC2X": 1, "FILTER2X": 1, "pulse_duty_percent": 47.90}
     if report["configuration"] != expected_config or report["device"] != "85k":
-        raise ValueError("artifact is not the selected 85F baseline")
+        raise Refused("artifact is not the selected 85F baseline")
     commit = report["source_commit"]
     changed_sources = []
     for name, digest in report["source_sha256"].items():
         saved = subprocess.check_output(["git", "show", f"{commit}:{name}"], cwd=ROOT,
                                         stderr=subprocess.PIPE)
         if hashlib.sha256(saved).hexdigest() != digest:
-            raise ValueError(f"build source differs: {name}")
+            raise Refused(f"build source differs: {name}")
         if not (ROOT / name).is_file() or sha256(ROOT / name) != digest:
             changed_sources.append(name)
             if not historical:
-                raise ValueError(f"current source differs: {name}; use --historical for the recorded build")
+                raise Refused(f"current source differs: {name}; use --historical for the recorded build")
     # LPF/ROM contents are also build inputs, though the original runner's
     # source map records Verilog only. Bind them to the CI source commit here.
     inputs = dict(report["source_sha256"])
@@ -88,7 +100,7 @@ def publish(artifact: Path, output: Path, workflow_url: str, *, historical=False
         saved = subprocess.check_output(["git", "show", f"{commit}:{name}"], cwd=ROOT,
                                         stderr=subprocess.PIPE)
         if path.read_bytes() != saved and not historical:
-            raise ValueError(f"build input differs: {name}")
+            raise Refused(f"build input differs: {name}")
         inputs[name] = hashlib.sha256(saved).hexdigest()
     sim_refusal = None
     if historical:
@@ -97,26 +109,26 @@ def publish(artifact: Path, output: Path, workflow_url: str, *, historical=False
             ["git", "show", f"{commit}:{simulation['transcript']}"],
             cwd=ROOT, stderr=subprocess.PIPE)
         if hashlib.sha256(transcript).hexdigest() != simulation["sha256"]:
-            raise ValueError("historical simulation transcript differs")
+            raise Refused("historical simulation transcript differs")
         for name, digest in inputs.items():
             if name.startswith("rtl-sketch/"):
                 simulated = subprocess.check_output(
                     ["git", "show", f"{simulation['commit']}:{name}"],
                     cwd=ROOT, stderr=subprocess.PIPE)
                 if hashlib.sha256(simulated).hexdigest() != digest:
-                    raise ValueError(f"historical core differs from simulation: {name}")
+                    raise Refused(f"historical core differs from simulation: {name}")
     else:
         try:
             simulation = build_selected.simulation_evidence()
         except RuntimeError as exc:
             simulation, sim_refusal = None, str(exc)
     if sim_refusal is None and simulation != report["simulation_evidence"]:
-        raise ValueError("core simulation binding differs")
+        raise Refused("core simulation binding differs")
     original_hashes = {p.name: sha256(p) for p in build.iterdir() if p.is_file()}
     for stage in report["stages"].values():
         digest = stage.get("artifact_sha256")
         if digest and original_hashes.get(Path(stage["artifact"]).name) != digest:
-            raise ValueError("stage artifact hash differs")
+            raise Refused("stage artifact hash differs")
     summary = {"workflow_url": workflow_url, "source_commit": commit,
                "configuration": {"OSC2X": 1, "FILTER2X": 1, "PULSE2X": 0},
                "device": "85k", "package": report["package"],
@@ -167,8 +179,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
     try:
         result = publish(args.artifact, args.out, args.workflow_url, historical=args.historical)
+    except Refused as exc:
+        print(f"REFUSED: {exc}", file=sys.stderr)
+        raise SystemExit(exit_contract.REFUSED)
     except subprocess.CalledProcessError as exc:
         print(f"REFUSED: {build_selected.child_failure(exc)}", file=sys.stderr)
-        raise SystemExit(2)
+        raise SystemExit(exit_contract.REFUSED)
     print(json.dumps(result, indent=2))
     raise SystemExit(0 if result["bitstream_qualified"] else 2)
