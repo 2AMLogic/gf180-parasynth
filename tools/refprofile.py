@@ -173,6 +173,20 @@ class Refused(refusal.Refused, Exception):
     outcome here, distinct from pass and from fail."""
 
 
+class NotQualified(Refused):
+    """The one refusal from `require_capability` that IS an answer: the
+    capability was measured, and the answer is no.
+
+    Everything else it refuses on is a question it cannot answer -- a rig it
+    does not know, a host the verdict is not scoped to, a capability nobody
+    has defined or measured -- and a handler that books those as a FAILED
+    verdict publishes a measurement that was never taken (#1873, the shape
+    #1854 was filed for). The split is at the type so a handler never has to
+    read the message to tell a verdict from a gap. `except Refused` still
+    catches this, so `run_case.capability_refusal` and every other handler
+    that wants the refusal's WORDS is unchanged."""
+
+
 def _rel(p) -> str:
     """A path for a human, and one that CANNOT raise. `relative_to` throws for
     anything outside the repository, and every use of it here is inside a
@@ -659,7 +673,13 @@ def require_capability(rig: str, host: str, capability: str) -> dict:
     missing qualification run, and the true statement -- "Mini V3 is not
     qualified for envelope timing; it IS qualified for pitch, waveform and
     sustained filter" -- sends them to the one calibration that is actually
-    missing. The first wording parked 32 cases."""
+    missing. The first wording parked 32 cases.
+
+    The refusal has two types, and the difference is the caller's exit code
+    (`capability_pack`): `NotQualified` when the capability was MEASURED and
+    rejected -- a verdict, which a gate may FAIL on -- and plain `Refused`
+    when there is no verdict to report, which a gate must REFUSE on and never
+    FAIL."""
     v = verdict_for(rig, host, capability)
     q = v["qualified"]
     if q is True:
@@ -668,10 +688,12 @@ def require_capability(rig: str, host: str, capability: str) -> dict:
              else "has NO VERDICT for (nobody has measured it)")
     ok = [c for c in CAPABILITIES
           if (v.get("capabilities") or {}).get(c) is True]
-    raise Refused(
-        f"{rig} under {host} {state} {capability}. "
-        f"It IS qualified for: {', '.join(ok) or '(nothing)'}. "
-        f"Why: {v.get('why') or '(no reason recorded)'}")
+    msg = (f"{rig} under {host} {state} {capability}. "
+           f"It IS qualified for: {', '.join(ok) or '(nothing)'}. "
+           f"Why: {v.get('why') or '(no reason recorded)'}")
+    if q is False:
+        raise NotQualified(msg)
+    raise Refused(msg)
 
 
 def qualified_rigs(host: str | None = None, capability: str | None = None) -> list:

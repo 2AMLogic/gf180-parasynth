@@ -28,6 +28,7 @@ the verdict table.
 """
 from __future__ import annotations
 
+import dataclasses
 import math
 import pathlib
 import sys
@@ -162,6 +163,80 @@ def test_the_cli_separates_FAIL_from_REFUSED():
     assert cp.main(["--list"]) == cp.OK
     assert cp.main(["--gate"]) == cp.OK
     assert cp.main(["--gate", "--pack", cp.MINIV3_ENVELOPE_PACK.name]) == cp.FAIL
+
+
+def test_a_measured_NO_still_FAILs_and_says_FAIL_not_REFUSED(capsys):
+    """The other half of the split (#1873). `envelope_timing` is `False` for
+    Mini V3 -- MEASURED ABSENT -- so the gate answered, and its answer is no.
+    That is FAIL, it must stay FAIL, and the line it prints must not say
+    "refuses" on the way to a measured failure."""
+    assert cp.main(["--gate", "--pack", cp.MINIV3_ENVELOPE_PACK.name]) == cp.FAIL
+    out = capsys.readouterr().out
+    assert "FAIL" in out and "envelope_timing" in out, out
+    assert "REFUSE" not in out.upper(), out
+
+
+# ---------------------------------------------------------------------------
+# a gate that CANNOT answer is REFUSED; a gate that answers NO is FAIL
+# ---------------------------------------------------------------------------
+#
+# WRONG BEFORE IT WAS RIGHT (#1873, the shape #1854's closing search found).
+# Both `cmd_gate` and `cmd_run` caught `rp.Refused` and returned FAIL, so a
+# pack whose rig was unknown, whose host did not match, or whose capability
+# nobody had measured exited 1: a measured failure where nothing was measured,
+# under a line that said "GATE REFUSES" in its own words. A caller that reads
+# only the exit status (`make`, `tools/run_all.py`) cannot see the words.
+#
+# Each case below is driven through `main()` -- the thing that ships -- and the
+# pack is put in `PACKS` by name so the CLI lookup is the real one.
+CANNOT_ANSWER = {
+    "unknown-rig": dict(name="control-unknown-rig", rig="nonesuch"),
+    "host-mismatch": dict(name="control-host-mismatch", host="pedalboard"),
+    "unmeasured-capability": dict(
+        name="control-unmeasured-capability",
+        requires=("pitch", "waveform", "sustained_filter", "pitch_causality")),
+    "undefined-capability": dict(
+        name="control-undefined-capability",
+        requires=("pitch", "waveform", "sustained_filter", "loudness")),
+}
+
+
+def _in_cli(monkeypatch, **changes):
+    pack = dataclasses.replace(cp.MINIV3_PACK, **changes)
+    monkeypatch.setitem(cp.PACKS, pack.name, pack)
+    return pack
+
+
+@pytest.mark.parametrize("case", sorted(CANNOT_ANSWER))
+def test_the_cannot_answer_cases_raise_a_refusal_that_is_not_a_verdict(case):
+    """The split is at the TYPE level, so a handler never reads the message."""
+    pack = dataclasses.replace(cp.MINIV3_PACK, **CANNOT_ANSWER[case])
+    with pytest.raises(rp.Refused) as e:
+        cp.gate(pack)
+    assert not isinstance(e.value, rp.NotQualified), str(e.value)
+    assert "NOT QUALIFIED" not in str(e.value), str(e.value)
+
+
+@pytest.mark.parametrize("case", sorted(CANNOT_ANSWER))
+@pytest.mark.parametrize("flag", ["--gate", "--run"])
+def test_a_gate_that_cannot_answer_is_REFUSED_and_not_FAIL(
+        monkeypatch, capsys, flag, case):
+    """`--run` too: the gate is asked first there, and it must refuse before
+    the plugin host is ever reached -- so this holds with or without one."""
+    pack = _in_cli(monkeypatch, **CANNOT_ANSWER[case])
+    assert cp.main([flag, "--pack", pack.name]) == cp.REFUSED
+    out = capsys.readouterr().out
+    assert "REFUSED" in out, out
+    assert "FAIL" not in out.upper(), out
+
+
+def test_a_shipped_control_for_the_cannot_answer_case_is_REACHABLE():
+    """The REFUSED control ships beside the FAIL control: a gate nobody has
+    seen refuse-for-no-answer is as untrusted as one nobody has seen reject."""
+    pack = cp.MINIV3_UNMEASURED_PACK
+    assert pack.name in cp.PACKS
+    assert rp.capability_verdict(pack.rig, pack.host, "pitch_causality") is None
+    assert cp.main(["--gate", "--pack", pack.name]) == cp.REFUSED
 
 
 def test_a_run_without_the_plugin_host_REFUSES_and_does_not_fail():
