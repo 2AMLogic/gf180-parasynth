@@ -9,8 +9,11 @@ that must go red.
 from __future__ import annotations
 
 import os
+import hashlib
 import pathlib
+import subprocess
 import sys
+import types
 
 import numpy as np
 import pytest
@@ -364,3 +367,132 @@ def test_control_the_restored_retry_loop_turns_the_regression_red(monkeypatch):
 def test_missing_bitstream_is_refused(tmp_path):
     with pytest.raises(ba.Refused, match="no bitstream"):
         ba.require_bitstream(tmp_path / "absent.bit", "0" * 64)
+
+
+# ------------------------------------- a child that never finishes (#1690) ----
+# Three of the bench's children run with a deadline: openFPGALoader (600 s),
+# uart_host status (60 s) and uart_host run (180 s). One that had not finished
+# by it left main() as a TimeoutExpired traceback. main() is driven for real
+# with the board supplied: subprocess.run is replaced by a board whose one child
+# named by the scenario hangs, the wall clock advances in exact 40 ms ticks (25
+# status samples 1.92 s apart, the span the real measurement used) so the frame
+# counter reads 48,000 frames per second by construction, and the port exists.
+class _Clock:
+    """The wall clock in exact 40 ms ticks, so the frame counter the board
+    reports is a whole number of frames per tick: 48 kHz by construction."""
+
+    def __init__(self):
+        self.ticks = 0
+
+    def time(self):
+        self.ticks += 1
+        return 1_800_000_000.0 + self.ticks * 0.04
+
+    def sleep(self, seconds):
+        self.ticks += round(seconds / 0.04)
+
+
+class _Board:
+    """subprocess.run replacement. The probes answer; a child the scenario says
+    hangs never finishes, which is TimeoutExpired with nothing captured; a child
+    it says fails exits 1. Every call is recorded with its deadline."""
+
+    def __init__(self, clock, *, hangs=lambda cmd: False, fails=lambda cmd: False):
+        self.clock, self.hangs, self.fails, self.calls = clock, hangs, fails, []
+
+    def __call__(self, cmd, **kwargs):
+        self.calls.append((list(cmd), kwargs.get("timeout")))
+        if self.hangs(cmd):
+            raise subprocess.TimeoutExpired(cmd, kwargs.get("timeout"))
+        out = ""
+        if cmd[0] == "which":
+            out = "/opt/homebrew/bin/openFPGALoader\n"
+        elif cmd[0] == "openFPGALoader":
+            out = "done 1\n"
+        elif "status" in cmd:
+            out = f"uart_host: STATUS frame {self.clock.ticks * 1920 & 0xFFFF}\n"
+        elif self.fails(cmd):
+            return subprocess.CompletedProcess(cmd, 1, stdout="",
+                                               stderr="uart_host: no reply from the device\n")
+        else:
+            raise AssertionError(f"unexpected child {cmd}")
+        return subprocess.CompletedProcess(cmd, 0, stdout=out, stderr="")
+
+
+SERIAL = "210319C088B7"
+
+
+def _bringup(tmp_path, monkeypatch, board, *argv):
+    """bringup_arty.main() for real, with the board supplied. Returns its exit
+    status, so a refusal is a 2 and the historical escape is the exception."""
+    bit = tmp_path / "top.bit"
+    bit.write_bytes(b"the image whose evidence is cited")
+    monkeypatch.setattr(ba.subprocess, "run", board)
+    monkeypatch.setattr(ba, "time", board.clock)
+    monkeypatch.setattr(ba, "os", types.SimpleNamespace(
+        path=types.SimpleNamespace(exists=lambda _port: True)))
+    monkeypatch.setitem(sys.modules, "serial", types.ModuleType("serial"))
+    return ba.main(["--bit", str(bit), "--sha256", hashlib.sha256(bit.read_bytes()).hexdigest(),
+                    "--serial", SERIAL, *argv])
+
+
+PORT = f"/dev/cu.usbserial-{SERIAL}1"
+_STATUS_CHILD = f"'fpga/uart_host.py', '--port', '{PORT}', 'status'"
+_NOTE_CHILD = (f"'fpga/uart_host.py', '--port', '{PORT}', '--image', 'r1', "
+               "'run', '--note', '45'")
+
+_HANGS = [
+    pytest.param(lambda cmd: cmd[0] == "openFPGALoader", [], "board: Digilent " + SERIAL,
+                 "Command '['openFPGALoader', ", 600, 2, id="flash"),
+    pytest.param(lambda cmd: "status" in cmd, ["--no-flash"], "port: " + PORT,
+                 _STATUS_CHILD, 60, 2, id="status"),
+    pytest.param(lambda cmd: "run" in cmd, ["--no-flash"], "frame counter: 48,000.0 Hz",
+                 _NOTE_CHILD, 180, 27, id="note"),
+]
+
+
+@pytest.mark.parametrize("hangs, argv, reached, command, deadline, calls", _HANGS)
+def test_a_child_that_never_finishes_is_refused(
+        tmp_path, monkeypatch, capsys, hangs, argv, reached, command, deadline, calls):
+    """The bench did not complete, so nothing was measured -- whether the board
+    configured, the link answered or a note was delivered is unknown, not 'no'.
+    REFUSED at exit 2 naming the child and its deadline; no count of notes
+    delivered, and no child after the hung one (the note case: the probe, 25
+    status reads and ONE run -- the three notes behind the hung one are not
+    attempted)."""
+    board = _Board(_Clock(), hangs=hangs)
+    assert _bringup(tmp_path, monkeypatch, board, *argv) == 2
+    out = capsys.readouterr().out
+    assert reached in out
+    refused = [line for line in out.splitlines() if line.startswith("REFUSED -- ")]
+    assert len(refused) == 1
+    assert command in refused[0] and f"timed out after {deadline} seconds" in refused[0]
+    assert "notes delivered" not in out
+    assert len(board.calls) == calls
+    assert board.calls[-1][1] == deadline
+
+
+def test_a_note_the_host_fails_to_deliver_is_a_result_not_a_refusal(tmp_path, monkeypatch, capsys):
+    """The distinction the row rests on. A child that answers 'not delivered'
+    was measured: FAIL at exit 1 with the count. A child that never answers was
+    not: the count is withheld and the exit is 2."""
+    board = _Board(_Clock(), fails=lambda cmd: "run" in cmd)
+    assert _bringup(tmp_path, monkeypatch, board, "--no-flash", "--notes", "45") == 1
+    out = capsys.readouterr().out
+    assert "--- 0/1 notes delivered ---" in out
+    assert "REFUSED" not in out
+
+
+@pytest.mark.parametrize("hangs, argv, reached, command, deadline, calls", _HANGS)
+def test_control_the_unguarded_child_turns_the_hang_test_red(
+        tmp_path, monkeypatch, hangs, argv, reached, command, deadline, calls):
+    """The defect as it shipped: the child called with no handler. The same
+    scenario must then leave main() as the TimeoutExpired it always did -- the
+    historical traceback -- and the failure must be that child's timeout, not
+    another assertion."""
+    def unguarded(child, *, timeout, cwd=None):
+        return subprocess.run(child, capture_output=True, text=True, timeout=timeout, cwd=cwd)
+    monkeypatch.setattr(ba, "run_child", unguarded)
+    board = _Board(_Clock(), hangs=hangs)
+    with pytest.raises(subprocess.TimeoutExpired, match=f"timed out after {deadline} seconds"):
+        _bringup(tmp_path, monkeypatch, board, *argv)
