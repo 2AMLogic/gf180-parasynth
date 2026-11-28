@@ -55,8 +55,14 @@ What was folded, and what was deliberately not:
   guard are unchanged; that is the only change to either file since the rescue
   described above.
 - `hh_probe3.py`, `hh_probe4.py`, `combo.py` and `patch_q.py` had no helpers of
-  their own that overlap the harness -- they import `hh_probe`'s -- so they are
-  untouched.
+  their own that overlap the harness -- they import `hh_probe`'s -- so the
+  harness left them untouched. `hh_probe3.py` has changed once since, for a
+  different reason: its `__main__` block catches
+  `audio_measure.InsufficientEvidence` and exits REFUSED (2) instead of an
+  exit-1 traceback (#1914; controls in `test_hh_probe3_refused.py`). As
+  shipped it still refuses at its first T20 -- a 2.0 s render cannot hold the
+  shipped CY's 0.9 s decay -- and writes its result only to the author's Mac
+  (#1965).
 - `hh_probe.py`'s renderer, filter derivations and `fast_band_energy` are
   hi-hat/cymbal apparatus, not validation methodology, and stay here.
 - `hh_probe5.py` (added after #104 was filed) keeps its own `Refused`
