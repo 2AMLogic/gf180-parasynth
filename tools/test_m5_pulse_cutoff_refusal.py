@@ -32,26 +32,47 @@ skips its own fundamental search and has exactly two ways to refuse --
 first, then refuses short, off-pitch, octave-down, DC and fundamental-free
 records on its own account. Thirteen inputs were run through the pair below:
 eleven are refused by `refine_f0`; the two that pass it (a tone at the note; a
-600-sample tone, 13 periods) pass `harmonic_signature` too. `harmonic_signature`
-refuses only the two silent ones -- the other nine it would have ACCEPTED with
-`f0` given -- so the gate refuses a strict superset, and nothing is refused by
-the guarded estimator alone.
+600-sample tone, 13 periods) pass `harmonic_signature` too.
+
+THE GATE IS NOT A SUPERSET, AND THIS FILE ONCE SAID IT WAS (Judge, #1951). The
+two refusal sets OVERLAP; neither contains the other. `windowed_tone_amplitude`
+refuses a record under `min_periods` = 12 periods (`audio_measure.py:2342`);
+`refine_f0` has no 12-period requirement of its own (its length gate is
+`dominant_frequency`'s `sel.sum() < 4`, ~220 samples at note 84) and, when its
+`a1` projection refuses for too few periods, SKIPS the sub-octave test and
+returns ok (`:2609-2616`). So a clean tone at the note of ~200-555 samples
+(4.4-11.99 periods) is `refine_f0` ok and `harmonic_signature` RAISES. The old
+13-input list stepped from 100 samples straight to 600 and never saw that
+window; it is a row now (`test_defeating_input_*`).
+
+WHAT KEEPS IT UNREACHABLE is the SLICE, not the gate. `measure()` hands the
+estimators `ours[int((on+0.12)*SR):int((off-0.08)*SR)]`, and every event in
+the frozen M5A and M5B manifests has `gate_s` = 0.6 s: 19200 samples, 209-837
+periods at the notes used, 17x-70x above the 12-period floor. The premise is
+"the frozen score's gate is 0.6 s", and `test_manifest_slices_clear_the_period_floor`
+pins it, so editing a score to a ~0.21 s gate turns something red instead of
+silently making the row live. On those full-length slices the gate refuses
+everything `harmonic_signature` would -- NOT for every input.
 
 THE VERDICT: unreachable, so `main()`'s handler is deliberately left narrow
 (issue AC#4: "If no input can reach the refusal (an earlier gate stops it),
 no code change"). `tools/measure_m5_pulse_cutoff.py` is not in this change.
 
 WHAT THESE ROWS PIN:
-  the gate      `refine_f0` refuses every refusal-shaped input, on the real
-                estimators, so the census site cannot raise on its own
+  the gate      `refine_f0` refuses every refusal-shaped input in the list, on
+                the real estimators
+  the defeat    the input shape where the gate is NOT a superset (4.4-11.99
+                periods), asserted as it actually behaves
+  the premise   every manifest-derived slice is >= 12 periods, so that window
+                is unreachable from `measure()` today
   the dispatch  a `refusal.Refused` from `measure` is REFUSED (2) through this
                 tool's `main`, by name, with nothing written and `probe` unreached
   control       a plain `AssertionError` from the same seam is still exit 1 at
                 `__main__` (AC#3 -- holds with or without a wider handler)
   the row       `InsufficientEvidence` from the same seam is exit 1 today. That
                 is the recorded verdict, not an oversight: it flips to REFUSED
-                only together with an input the gate lets through, and the gate
-                row above is what fails first if one appears.
+                only together with an input the slice premise lets through, and
+                the premise row above is what fails first if one appears.
 
 ONE THING THE GATE DOES NOT COVER, recorded so it is not re-traced:
 `_stage_diagnostics` (`mono_m5a_score.py:219`) hands the four STAGE slices
@@ -65,11 +86,19 @@ output is already a healthy in-tune note; and the shipping chain
 output would be the ladder's free ring at a 14-21.6 kHz cutoff, which
 `refine_f0` rejects as off-pitch. That last step is READ, not run.
 
-GUARD-DEFEAT STATEMENT (verification-rules rule 8): the gate row pins the
-census site only. A NEW estimator call added to this tool, outside `measure`,
-needs its own row -- none of these tests can see it.
+GUARD-DEFEAT STATEMENT (verification-rules rule 8): two defeats are named.
+(a) A NEW estimator call added to this tool, outside `measure`, needs its own
+row -- none of these tests can see it. (b) A score with a short gate: the
+defeating-input rows show the gate does not cover a <12-period slice, and the
+premise row is what goes red -- its control (a 0.21 s gate) proves it can.
 
-WRONG-THEN-RIGHT (5, all caught by running, none by reading):
+TRANSFER: this trace is cited for the sibling pulse/saw-cutoff and drive
+tools that go through the same `measure()` (#1898, #1900, #1901, #1902, #1907,
+#1908, #1923, `lead_drive_337.py`, `measure_m5a_saw_cutoff.py`). It transfers on
+the MANIFEST premise above (same `MANIFESTS`, same 0.6 s gates), not on a
+superset claim, which is false.
+
+WRONG-THEN-RIGHT (6; 1-5 caught by running, #6 by the Judge's probe):
   1. The first red run passed a `pathlib.Path` to `main()`, and the traceback
      was argparse's (`'PosixPath' object is not subscriptable`) -- a harness
      fault rendered where the tool's result belonged. `main` takes strings.
@@ -87,6 +116,13 @@ WRONG-THEN-RIGHT (5, all caught by running, none by reading):
   5. The same row's silent `osc` was a bare array where the trace keeps a
      1-tuple (`trace["osc"][0]`), so it raised IndexError at :218 -- a harness
      shape fault, not the refusal being pinned.
+  6. "The gate refuses a strict superset, and nothing is refused by the
+     guarded estimator alone" -- written as a general fact, held up by a
+     hand-picked list that skipped 4.4-11.99 periods. False: a 300-sample tone
+     is `refine_f0` ok and `harmonic_signature` raises. The correct statement
+     is the manifest-premise one above. Four sites asserted it (THE GATE, WHAT
+     THESE ROWS PIN, the guard-defeat statement by omission, and the implication
+     row's name + docstring); no other instance in this file.
 """
 from __future__ import annotations
 
@@ -165,17 +201,67 @@ def test_gate_refuses_every_refusal_shaped_input(name):
 
 
 @pytest.mark.parametrize("name", list(_cases()))
-def test_nothing_is_refused_by_the_guarded_estimator_alone(name):
-    """The implication the verdict rests on, over the whole list: wherever
-    `harmonic_signature(f0=given)` would raise, `refine_f0` already refused.
-    The two inputs it does refuse are named here so the row cannot pass
-    vacuously on a list the guarded estimator accepts outright."""
+def test_on_the_listed_inputs_nothing_is_refused_by_the_guarded_estimator_alone(name):
+    """The implication, over THE LISTED INPUTS ONLY (not a general fact -- see
+    THE GATE IS NOT A SUPERSET): wherever `harmonic_signature(f0=given)` would
+    raise, `refine_f0` already refused. The two it does refuse are named so the
+    row cannot pass vacuously. The input shape that breaks it is pinned in
+    `test_defeating_input_*`; why it is unreachable, in the manifest row."""
     x = _cases()[name]
     guarded = _guarded_estimator_refuses(x)
     gate_refused = not am.refine_f0(x, F0, SR).ok
     assert not guarded or gate_refused, (name, "UNGATED: harmonic_signature raises past refine_f0")
     if name in ("digital silence", "under the 1e-9 floor"):
         assert guarded, "the guarded estimator's own refusal must be exercised on the list"
+
+
+# The input that defeats the superset claim: a clean tone at the note, shorter
+# than 12 periods (550.4 samples at note 84) and long enough for refine_f0.
+@pytest.mark.parametrize("n", [200, 300, 450, 550])
+def test_defeating_input_refine_f0_ok_but_harmonic_signature_raises(n):
+    x = 0.5 * np.sin(2 * np.pi * F0 * np.arange(n) / SR)
+    eo = am.refine_f0(x, F0, SR)
+    assert eo.ok, (n, eo.reason)
+    with pytest.raises(am.InsufficientEvidence, match="too few periods"):
+        am.harmonic_signature(x, SR, f0=eo.value, kmax=12)
+
+
+def _min_periods() -> float:
+    import inspect
+    return inspect.signature(am.windowed_tone_amplitude).parameters["min_periods"].default
+
+
+def _manifest_slice_periods(manifest) -> list[tuple[int, float]]:
+    """(note, periods) per event, with `measure()`'s own slice arithmetic
+    (`mono_m5a_score.py:455`: `int((on+0.12)*SR) .. int((off-0.08)*SR)`)."""
+    out = []
+    for seg in manifest["timeline"]["segments"]:
+        for ev in seg["midi_events"]:
+            on, off = float(ev["on_s"]), float(ev["on_s"] + ev["gate_s"])
+            n = int((off - 0.08) * SR) - int((on + 0.12) * SR)
+            out.append((int(ev["note"]), n * score.vf.note_hz(int(ev["note"])) / SR))
+    return out
+
+
+@pytest.mark.parametrize("case", sorted(score.MANIFESTS))
+def test_manifest_slices_clear_the_period_floor(case):
+    """THE PREMISE that keeps the defeating window unreachable: every event's
+    slice is >= `windowed_tone_amplitude`'s period floor at its own note."""
+    import json
+    events = _manifest_slice_periods(json.loads(score.MANIFESTS[case].read_text()))
+    assert events, "no events read -- the premise row would pass vacuously"
+    floor = _min_periods()
+    assert floor == 12.0, "the floor this file's docstring cites moved"
+    short = [(n, p) for n, p in events if p < floor]
+    assert not short, (case, "slice shorter than the period floor", short)
+
+
+def test_manifest_premise_control_a_short_gate_goes_red():
+    """Injected defect: a 0.21 s gate (slice = gate - 0.2 s = 10 ms, ~10.5 periods at note 84) must
+    be seen as short by the same helper, else the premise row could never fail."""
+    manifest = {"timeline": {"segments": [{"midi_events": [{"note": 84, "on_s": 0.0, "gate_s": 0.21}]}]}}
+    (note, periods), = _manifest_slice_periods(manifest)
+    assert note == 84 and periods < _min_periods(), periods
 
 
 @pytest.mark.parametrize("name", PASSES_BOTH)
