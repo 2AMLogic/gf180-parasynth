@@ -1,7 +1,8 @@
 """Known-answer exit-status controls for `hh_probe5.py`'s CLI boundary (#1611).
 
-THE DEFECT, AS REPRODUCED RED-FIRST on `origin/main` @ `0a6b0861` (6 failed,
-4 passed, 74.69 s; the run this file records): the probe's `main()` had no
+THE DEFECT, AS REPRODUCED RED-FIRST: this file, run with the unfixed
+`hh_probe5.py` of `origin/main` @ `0a6b0861` (a detached checkout, cwd
+asserted), gave 5 failed, 6 passed in 68.77 s. The probe's `main()` had no
 boundary handler, and the one `except Refused` it has (the surrogate sweep's
 `cy_kit` row) catches only the module's OWN class. `scorecard_record` hands the
 development reference to `run_case.prepare`, whose refusal is
@@ -20,6 +21,20 @@ MRO -- so `SystemExit.__init__` never runs and the instance's `code` stays
 None. CPython's top-level SystemExit handling reads `code`, finds None, and
 exits 0 silently. A refusal rendered as PASS. Neither statement was ever
 checked by an uncaught run; the #815 pins catch the class in-process.
+
+WRONG, THEN RIGHT (caught by running the repository's own census, not by
+reading): the first fix put the handler in a `_cli()` wrapper. Every control
+below went green and `tools/refusal_sibling_scan.py` -- the census the #1576
+tracer reads its rows from -- still classed both `rc.prepare` sites
+`candidate-escape`, because it credits a guard only when its try sits in
+`main()` or in the `__main__` dispatch. The handler now sits in that block, and
+the last control pins the census to the behaviour.
+
+THE SIX THAT PASS ON THE UNFIXED TREE do so by design; they are what the fix
+must not move: the unreadable-WAV exit-1 control, the class-relation pin, the
+two fixture self-checks, and the two `__main__`-block controls for behaviour
+the fix leaves alone (a returning `main` exits with its own status; a
+`ValueError` propagates).
 
 THE KNOWN ANSWERS, independent of anything this repository models:
 
@@ -45,10 +60,10 @@ on the full grid). The subprocess controls run the real CLI with
 `--quick --seconds 0.05` -- one shipped-setting render per arm, 50 ms each --
 so nothing between `if __name__` and `run_case.prepare` is stubbed; the four
 2.0-3.6 s renders the preconditions and the control arm pin are what remain
-(27-38 s per control on a host at load 13). The absent-corpus control refuses
-before any render. The four in-process controls drive `_cli()` alone, with
-`main` replaced, to pin the print format and the no-`except Exception` rule
-without a render.
+(27-41 s per control on a host at load 13). The absent-corpus control refuses
+before any render. The in-process controls execute the shipped `__main__` block
+with `main` replaced, which is the only way to reach its success path without
+the corpus-wide knob-law fit the real `main()` ends with.
 """
 from __future__ import annotations
 
@@ -133,6 +148,17 @@ def _probe(refs: pathlib.Path, outdir: pathlib.Path) -> subprocess.CompletedProc
         capture_output=True, text=True, timeout=600, env=env, cwd=str(ROOT))
 
 
+def _run_main_block(monkeypatch, main_stub) -> None:
+    """Execute the shipped `if __name__ == "__main__":` block with `main`
+    replaced, in the imported module's own namespace. The block is the
+    boundary; a returning stub reaches its success path with no render."""
+    src = (HERE / "hh_probe5.py").read_text()
+    block = src[src.index('if __name__ == "__main__":'):]
+    monkeypatch.setattr(hh_probe5, "main", main_stub)
+    monkeypatch.setitem(hh_probe5.__dict__, "__name__", "__main__")
+    exec(compile(block, str(HERE / "hh_probe5.py"), "exec"), hh_probe5.__dict__)
+
+
 # ---------------------------------------------------------------------------
 # the class relations the fix rests on, and the fixtures' own known answers
 # ---------------------------------------------------------------------------
@@ -198,43 +224,54 @@ def test_unreadable_reference_is_an_execution_error_not_a_refusal(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# the boundary itself, driven in-process: what it passes through, what it
-# maps, and the one thing it must never catch
+# the boundary in-process, no render: the format it prints, the status it
+# passes through, and the one thing it must never catch
 # ---------------------------------------------------------------------------
-def test_boundary_passes_a_returning_main_status_through(monkeypatch, capsys):
-    monkeypatch.setattr(hh_probe5, "main", lambda argv=None: exit_contract.PASS)
-    assert hh_probe5._cli([]) == exit_contract.PASS
+def test_a_foreign_refusal_is_printed_once_and_is_refused_2(capsys):
+    e = pc.Refused("the reference recording begins at or above 2 % of its own peak")
+    assert hh_probe5._refused_exit(e) == exit_contract.REFUSED
+    out = capsys.readouterr()
+    assert out.out == ("REFUSED  the reference recording begins at or above "
+                       "2 % of its own peak\n"), out.out
+    assert out.err == ""
+
+
+def test_the_local_refusal_is_printed_once_and_is_refused_2(capsys):
+    e = hh_probe5.Refused("the apparatus precondition failed")
+    assert str(e) == "REFUSED: the apparatus precondition failed"     # what #815 pins
+    assert hh_probe5._refused_exit(e) == exit_contract.REFUSED
+    out = capsys.readouterr()
+    assert out.out == "REFUSED  the apparatus precondition failed\n", out.out
+    assert out.err == ""
+
+
+def test_main_block_passes_a_returning_main_status_through(monkeypatch, capsys):
+    with pytest.raises(SystemExit) as caught:
+        _run_main_block(monkeypatch, lambda: exit_contract.PASS)
+    assert caught.value.code == exit_contract.PASS
     assert capsys.readouterr().out == ""
 
 
-def test_boundary_maps_a_foreign_refusal_to_refused_2(monkeypatch, capsys):
-    def refuse(argv=None):
-        raise pc.Refused("the reference recording begins at or above 2 % of its own peak")
-
-    monkeypatch.setattr(hh_probe5, "main", refuse)
-    assert hh_probe5._cli([]) == exit_contract.REFUSED
-    out = capsys.readouterr()
-    assert out.out.strip() == ("REFUSED  the reference recording begins at or "
-                               "above 2 % of its own peak"), out.out
-    assert out.err == ""
-
-
-def test_boundary_maps_the_local_refusal_to_refused_2_printed_once(monkeypatch, capsys):
-    def refuse(argv=None):
-        raise hh_probe5.Refused("the apparatus precondition failed")
-
-    monkeypatch.setattr(hh_probe5, "main", refuse)
-    assert hh_probe5._cli([]) == exit_contract.REFUSED
-    out = capsys.readouterr()
-    assert out.out.strip() == "REFUSED  the apparatus precondition failed", out.out
-    assert out.err == ""
-
-
-def test_boundary_does_not_relabel_an_execution_error(monkeypatch, capsys):
-    def boom(argv=None):
+def test_main_block_does_not_relabel_an_execution_error(monkeypatch, capsys):
+    def boom():
         raise ValueError("File format not supported.")
 
-    monkeypatch.setattr(hh_probe5, "main", boom)
     with pytest.raises(ValueError, match="File format not supported"):
-        hh_probe5._cli([])
+        _run_main_block(monkeypatch, boom)
     assert capsys.readouterr().out == ""
+
+
+# ---------------------------------------------------------------------------
+# the repository's own census must agree that the site is covered
+# ---------------------------------------------------------------------------
+def test_the_sibling_census_classes_the_prepare_sites_as_covered():
+    import refusal_sibling_scan as rss
+
+    files = rss.tracked_files()
+    idx = rss.build_index(files)
+    rows = [s for s in rss.scan(files, idx)
+            if s["site"].startswith("tools/probes/hihat/hh_probe5.py:")]
+    prepare = [s for s in rows if s["callee"] == "run_case.prepare"]
+    assert len(prepare) == 2, rows
+    assert {s["classification"] for s in prepare} == {"covered(cli-base)"}, prepare
+    assert not [s for s in rows if s["classification"] == "candidate-escape"], rows
