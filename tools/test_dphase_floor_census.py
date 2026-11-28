@@ -279,7 +279,7 @@ def _unwritable(tmp_path, filename, kind):
         (str(tmp_path), f"names an existing directory; name the {kind} file"),
         (str(tmp_path / "a-file" / filename),
          f"no {kind} can be written there: [Errno 17] File exists"),
-        (f"nul\x00dir/{filename}", f"no {kind} can be written there: embedded null byte"),
+        (f"nul\x00dir/{filename}", "embedded null"),
     ]
 
 

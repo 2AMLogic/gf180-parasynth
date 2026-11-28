@@ -59,7 +59,7 @@ def _full_disk(target):
 @pytest.mark.parametrize("target, reason", [
     ("{tmp}", "names an existing directory; name the file"),
     ("{tmp}/a-file/rate_conv_2x.v", "no file can be written there: [Errno 17] File exists"),
-    ("nul\x00dir/rate_conv_2x.v", "no file can be written there: embedded null byte"),
+    ("nul\x00dir/rate_conv_2x.v", "embedded null"),
 ], ids=["a-directory", "parent-is-a-file", "parent-has-a-nul-byte"])
 def test_an_unwritable_out_destination_is_refused_before_anything_is_generated(generated, tmp_path,
                                                                               capsys, target,

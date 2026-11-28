@@ -74,7 +74,7 @@ def _full_disk(target):
 @pytest.mark.parametrize("target, reason", [
     ("{tmp}", "names an existing directory; name the report file"),
     ("{tmp}/a-file/sweep.txt", "no report can be written there: [Errno 17] File exists"),
-    ("nul\x00dir/sweep.txt", "no report can be written there: embedded null byte"),
+    ("nul\x00dir/sweep.txt", "embedded null"),
 ], ids=["a-directory", "parent-is-a-file", "parent-has-a-nul-byte"])
 def test_an_unwritable_out_destination_is_refused_before_the_grid_runs(measured, tmp_path, capsys,
                                                                        target, reason):

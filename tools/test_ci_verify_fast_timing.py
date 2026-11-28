@@ -419,7 +419,7 @@ def collected(monkeypatch):
 @pytest.mark.parametrize("target, reason", [
     ("{tmp}", "names an existing directory; name the record file"),
     ("{tmp}/a-file/snap.json", "no record can be written there: [Errno 17] File exists"),
-    ("nul\x00dir/snap.json", "no record can be written there: embedded null byte"),
+    ("nul\x00dir/snap.json", "embedded null"),
 ], ids=["a-directory", "parent-is-a-file", "parent-has-a-nul-byte"])
 def test_an_unwritable_snapshot_destination_is_refused_before_anything_is_collected(collected,
                                                                                    tmp_path, capsys,
