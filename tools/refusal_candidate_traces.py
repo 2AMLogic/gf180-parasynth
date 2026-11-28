@@ -316,15 +316,15 @@ def vlm_kit_drift(ws: pathlib.Path) -> dict:
     return tampered(ws, drop_kit_writes, lambda root: run(
         "fpga/verify_live_midi.py", ["--outdir", str(SCRATCH / "out" / "vlm-kit-drift"), "--sustained-s", "1"],
         root=root, timeout=1500, share="vlm-kit-drift",
-        expect="escape, but not from here: MidiSession.__init__ reads the kit first (midi_session.py:352)"))
+        expect="NOT-REACHED at :138: MidiSession.__init__ reads the kit first (midi_session.py:352), and that escapes"))
 
 
 def vlm_presets_drift(ws: pathlib.Path) -> dict:
     return tampered(ws, drop_kit_presets, lambda root: run(
         "fpga/verify_live_midi.py", ["--outdir", str(SCRATCH / "out" / "vlm-presets-drift"), "--sustained-s", "1"],
         root=root, timeout=1500, share="vlm-presets-drift",
-        expect="escape from midi_session.py:355: the session under test reads the sound table before "
-               "the oracle does"))
+        expect="NOT-REACHED at :107; the run escapes from midi_session.py:355, where the session under "
+               "test reads the same sound table first"))
 
 
 def midi_sim(ws: pathlib.Path) -> dict:
@@ -483,8 +483,9 @@ except Exception as e:
                                 timeout=3000, note="the shortest phrase that has notes: dense_drums has none, "
                                                    "so model_render never makes a voice for it"),
          refusing=None,
-         boundary=[lambda ws: run("tools/performance_suite.py", ["--backend", "model", "--engine", "r2"],
-                                  expect="REFUSED, exit 2: --engine selects the synthtop backend only"),
+         boundary=[lambda ws: run("tools/performance_suite.py", ["--backend", "model", "--engine", "pulse2x"],
+                                  note="a VALID --engine choice with the model backend: the tool's own boundary, "
+                                       "not argparse's (an invalid choice is rejected before main() runs)"),
                    lambda ws: script(ws, "make-voice-arms", """\
 import mono_artifact_probe as mp
 print("make_voice('r1') ->", type(mp.make_voice("r1")).__name__)
