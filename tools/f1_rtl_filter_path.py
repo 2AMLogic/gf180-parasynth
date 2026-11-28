@@ -35,7 +35,12 @@ PRECONDITIONS, ASSERTED AT THE POINT OF USE (each REFUSES, never reports):
     (`VoiceFx.patch_regs`) and are constant over the curve, because the bench
     drives one coefficient set per run and a varying one would be silently
     mis-driven;
-  * vvp produced exactly one output frame per input frame, none undefined.
+  * vvp produced exactly one output frame per input frame, none undefined;
+  * a `--json` destination is a file path whose parent can be made -- checked
+    before anything is compiled, so a bad path costs seconds and measures
+    nothing. A write that fails after the comparison is refused too, with the
+    verdict printed and the record named as not written: a comparison without
+    its evidence is neither a PASS nor a FAIL (#2040).
 
 WHAT IS *NOT* A REFUSAL: the RTL disagreeing with the model. That is the
 finding this instrument exists to be able to make, so a mismatch is counted,
@@ -402,6 +407,38 @@ class RtlFilterChainPath:
         return base
 
 
+def _record_path(name: str | None) -> None:
+    """Check the `--json` destination BEFORE the comparison runs, or REFUSED.
+
+    A missing parent directory is created here, as `fpga/selected_preset.py`
+    creates `--out`'s. A destination that is a directory, or whose parent
+    cannot be made, is refused now -- it costs seconds and runs nothing --
+    rather than by `OSError` from the write after the comparison, which
+    exited 1 with a traceback: FAIL, "the comparison ran and disagreed", for
+    a comparison that had passed, with its record lost (#2040).
+
+    What this cannot see -- a parent that exists but is not writable, a disk
+    that fills -- is left to the guard around the write.
+    """
+    if not name:
+        return
+    out = pathlib.Path(name)
+    try:
+        is_dir = out.is_dir()
+        if not is_dir:
+            out.parent.mkdir(parents=True, exist_ok=True)
+    except ValueError as exc:
+        # The wording of CPython's NUL-byte error differs by patch release
+        # ("embedded null byte" vs "mkdir: embedded null character in path"),
+        # so the reason is this module's own, not the interpreter's.
+        raise Refused(f"--json {name!r}: no record can be written there: "
+                      "the path contains a NUL character") from exc
+    except OSError as exc:
+        raise Refused(f"--json {name!r}: no record can be written there: {exc}") from exc
+    if is_dir:
+        raise Refused(f"--json {name!r} names an existing directory; name the record file")
+
+
 def main(argv=None) -> int:
     """A standalone smoke/control run: one curve, model versus RTL."""
     ap = argparse.ArgumentParser(description="drive the F1 filter chain in RTL and compare "
@@ -415,11 +452,13 @@ def main(argv=None) -> int:
                     help="compile a defect into the RTL; the comparison must turn red")
     ap.add_argument("--expect-mismatch", action="store_true",
                     help="exit 0 only when the RTL differs from the model (control mode)")
-    ap.add_argument("--json", default=None)
+    ap.add_argument("--json", default=None,
+                     help="write the curve record here (a missing parent directory is created)")
     a = ap.parse_args(argv)
     sys.path.insert(0, str(ROOT / "tools"))
     import refprofile as rp
     try:
+        _record_path(a.json)
         path = RtlFilterChainPath(inject=a.inject, frames=a.frames or None)
         freqs = np.asarray(_profile_freqs(), dtype=np.float64)
         db, info = path.curve(freqs, a.cut_hz, a.res, rp.PROBE_AMP)
@@ -436,11 +475,18 @@ def main(argv=None) -> int:
     print("  RTL response dB: " + ", ".join(f"{v:+.2f}" for v in db[:8])
           + (" ..." if len(db) > 8 else ""))
     if a.json:
-        pathlib.Path(a.json).write_text(json.dumps(
-            {"cut_hz": a.cut_hz, "res": a.res, "inject": a.inject,
-             "response_db": [float(v) for v in db],
-             "info": {k: v for k, v in info.items() if k != "simulator_report"}},
-            indent=2) + "\n")
+        try:
+            pathlib.Path(a.json).write_text(json.dumps(
+                {"cut_hz": a.cut_hz, "res": a.res, "inject": a.inject,
+                 "response_db": [float(v) for v in db],
+                 "info": {k: v for k, v in info.items() if k != "simulator_report"}},
+                indent=2) + "\n")
+        except OSError as exc:
+            # The verdict is on stdout above; its record is the evidence, and
+            # without it neither 0 nor 1 is true (#2040).
+            print(f"f1_rtl_filter_path: REFUSED -- comparison verdict printed above; "
+                  f"record not written: {exc}")
+            return 2
     if a.expect_mismatch:
         if agree["bit_exact"]:
             print("f1_rtl_filter_path: CONTROL NOT CAUGHT -- the injected RTL defect "
