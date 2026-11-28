@@ -115,7 +115,6 @@ _REFUSAL_TOOLS = str(Path(__file__).resolve().parents[1] / "tools")
 if _REFUSAL_TOOLS not in sys.path:
     sys.path.append(_REFUSAL_TOOLS)
 import refusal  # noqa: E402
-import manifest as mf  # noqa: E402
 
 # ---- the device contract (mirror of rtl-sketch/uart_bridge.v) ---------------
 CLK_HZ = 12_288_000
@@ -163,6 +162,7 @@ def r1_kit() -> list:
     R1_KIT_SHA256."""
     import json
     import drums_fx as dx
+    import manifest as mf
     rec = json.loads(R1_KIT.read_text())
     mf.require_keys(rec, "writes", f"R1's frozen kit at {R1_KIT}", refused=dx.KitRefused)
     kit = [(int(a), int(v)) for a, v in rec["writes"]]

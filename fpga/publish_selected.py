@@ -16,7 +16,6 @@ import build_selected
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 import setup_ci_oss_cad as toolchain_pin
-import manifest as mf
 
 
 def timing_summary(report):
@@ -64,6 +63,7 @@ def publish(artifact: Path, output: Path, workflow_url: str, *, historical=False
         raise ValueError("expected one build report and one pinned toolchain record")
     report = json.loads(reports[0].read_text())
     toolchain = json.loads(toolchains[0].read_text())
+    import manifest as mf
     mf.require_keys(toolchain, ("sha256", "release"), f"the toolchain record at {toolchains[0]}",
                     refused=ValueError)
     mf.require_keys(report, ("configuration", "device", "source_commit", "source_sha256",

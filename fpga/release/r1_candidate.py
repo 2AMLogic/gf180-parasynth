@@ -69,7 +69,6 @@ _REFUSAL_TOOLS = str(Path(__file__).resolve().parents[2] / "tools")
 if _REFUSAL_TOOLS not in sys.path:
     sys.path.append(_REFUSAL_TOOLS)
 import refusal  # noqa: E402
-import manifest as mf  # noqa: E402
 
 RECORD = HERE / "r1-candidate.json"
 EVIDENCE_DIR = ROOT / "fpga/reports/r1-candidate"
@@ -200,6 +199,7 @@ def emitted_setup(argv: list) -> tuple:
         if rc != 0:
             raise Refused(f"the CLI refused {argv} (exit {rc})")
         plan = json.loads(Path(prefix + ".plan.json").read_text())
+        import manifest as mf
         mf.require_keys(plan, "rows", f"the CLI's capture plan at {prefix}.plan.json", refused=Refused)
     ws = []
     for r in plan["rows"]:

@@ -7,13 +7,13 @@ ROOT=os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 B=os.path.join(ROOT,'rtl-sketch','build','area')
 sys.path.insert(0,os.path.join(ROOT,'tools'))
 import refusal
-import manifest as mf
 class Refused(refusal.Refused):
     """A synthesis result that parses but cannot be read."""
 def dff(t):
     return subprocess.run(['grep','-oE','gf180mcu_fd_sc_mcu7t5v0__dff[a-z]*_[0-9]+',
         os.path.join(B,t,'netlist.v')],capture_output=True,text=True).stdout.count('\n')
 def row(t):
+    import manifest as mf
     path=os.path.join(B,t,'result.json')
     d=json.load(open(path))
     mf.require_keys(d,('total_cells','total_area_um2'),f"the synthesis result at {path}",refused=Refused)

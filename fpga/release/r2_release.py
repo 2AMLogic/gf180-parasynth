@@ -50,7 +50,6 @@ for _p in (HERE, ROOT / "fpga", ROOT / "model", ROOT / "audition", ROOT / "rtl-s
 
 import r1_release as r1r                                    # noqa: E402
 import refusal                                              # noqa: E402
-import manifest as mf                                       # noqa: E402
 
 MANIFEST = HERE / "r2-2025.1.json"
 PUB_DIR = ROOT / "fpga/reports/arty/r2-2025.1"
@@ -360,6 +359,7 @@ def stale_control(case: str, out: Path) -> int:
         raw = _need(MANIFEST).read_bytes()
         committed = json.loads(raw)
         stale = json.loads(raw)
+        import manifest as mf
         mf.require_keys(stale, ("image", "host"), f"the manifest at {_rel(MANIFEST)}", refused=Refused)
         if case == "image":
             r1 = _json(R1_MANIFEST)["image"]

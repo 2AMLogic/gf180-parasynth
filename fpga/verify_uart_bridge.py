@@ -83,7 +83,6 @@ if _REFUSAL_TOOLS not in sys.path:
     sys.path.append(_REFUSAL_TOOLS)
 from exit_contract import FAIL, PASS, REFUSED  # noqa: E402
 import refusal                                    # noqa: E402
-import manifest as mf                             # noqa: E402
 
 
 class Refused(refusal.Refused):
@@ -391,6 +390,7 @@ def rows_from_capture(prefix):
     are the bytes the CLI emitted -- the expectation is re-derived from the
     same packets, so the bench checks the CLI's schedule, not a lookalike."""
     import struct
+    import manifest as mf
     plan = json.loads(Path(prefix + ".plan.json").read_text())
     mf.require_keys(plan, "rows", f"the CLI's capture plan at {prefix}.plan.json", refused=Refused)
     items, rows = [], []

@@ -63,7 +63,6 @@ import uart_host as uh                            # noqa: E402
 sys.path.insert(0, str(ROOT / "fpga" / "release"))
 import r1_candidate as r1c                        # noqa: E402
 import refusal                                    # noqa: E402
-import manifest as mf                             # noqa: E402
 
 
 class Refused(refusal.Refused):
@@ -537,6 +536,7 @@ def rtl_control(fixture: str, outdir: Path, vub, work: str = "rolling-rtl") -> d
     frame later in the expectation (stimulus untouched) and re-analyse the
     same RTL run. It must report that event off its frame."""
     import shutil
+    import manifest as mf
     src = outdir / fixture
     ctl = outdir / f"{fixture}-control-due+1"
     shutil.copyfile(f"{src}.cmds", f"{ctl}.cmds")

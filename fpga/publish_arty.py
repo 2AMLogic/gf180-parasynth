@@ -24,16 +24,11 @@ import math
 from pathlib import Path
 import re
 import shutil
-import sys
 import build_arty as build
 import ext_io_timing as iotime
 import xdc_bindings as xb
 
 ROOT = Path(__file__).resolve().parents[1]
-_TOOLS = str(ROOT / "tools")
-if _TOOLS not in sys.path:
-    sys.path.append(_TOOLS)
-import manifest as mf
 
 # wrapper top -> the digital proof bound to it. Not a free-form argument:
 # a wrapper absent from this map has NO evidence and publication refuses.
@@ -296,6 +291,7 @@ def rederive_dsp(publication: Path) -> dict:
     directory carries no routed.dcp): what it says is what it derives."""
     path = publication / "publication.json"
     summary = json.loads(path.read_text())
+    import manifest as mf
     mf.require_keys(summary, "original_artifact_sha256", f"the publication record at {path}",
                     refused=ValueError)
     record = {"artifact_sha256": summary["original_artifact_sha256"]}
@@ -306,6 +302,7 @@ def rederive_dsp(publication: Path) -> dict:
 
 def publish(artifact, output):
     record = json.loads((artifact / "report.json").read_text())
+    import manifest as mf
     mf.require_keys(record, ("script_sha256", "vivado_version", "seconds"),
                     f"the build report at {artifact / 'report.json'}", refused=ValueError)
     expected = {str(p.relative_to(ROOT)): build.sha(p)

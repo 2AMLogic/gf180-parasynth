@@ -12,7 +12,6 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "model"), str(ROOT / "tools")]
 import mono_m5a_score as score
 import voice_fx as vf
-import manifest as mf
 
 NAMES = ("m5a-saw", "m5a-pulse")
 
@@ -20,6 +19,7 @@ NAMES = ("m5a-saw", "m5a-pulse")
 def definition(name):
     if name not in NAMES:
         raise ValueError(f"unknown selected preset: {name}")
+    import manifest as mf
     manifest = json.loads(score.MANIFEST.read_text())
     mf.require_keys(manifest, "audio", f"the reference manifest at {score.MANIFEST}", refused=ValueError)
     audio = score.MANIFEST.parent / manifest["audio"]["file"]
