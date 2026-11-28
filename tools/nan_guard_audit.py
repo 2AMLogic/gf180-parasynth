@@ -1197,19 +1197,19 @@ AGGREGATE_VERDICTS: dict[tuple, tuple] = {
            ("`pairs` is the record's `diagnostics.events[*].attack_10_90_ms.{model,reference}`, a "
             "json.loads that refuses decode errors only -- the reader #2019 marked for this same "
             "function (L149). A NaN key is never the greatest, so that event stops being 'its own "
-            "worst event'.")),
+            "worst event'. Filed with the follow-up.")),
     ('tools/cymbal_low_tail.py', 'max', 'summarise', 'max(v, key=v.get)'):
         _v(REACHABLE,
-           "the `argmax` half of the entry above; same file, same reader."),
+           "the `argmax` half of the entry above; same file, same reader, same follow-up."),
     ('tools/cymbal_low_tail.py', 'min', 'summarise', 'min(v, key=v.get)'):
         _v(REACHABLE,
            ("`v` is the result file's `windows.<w>.fischer.<k>.rho.<band>.<depth>`, a json.loads "
-            "(L913) whose `is not None` test (L891) admits a NaN; a NaN key is never the least, so "
-            "`argmin` names another 808.")),
+            "(L960) whose `is not None` test (L891) admits a NaN; a NaN key is never the least, so "
+            "`argmin` names another 808. Filed with the follow-up.")),
     # --- UNREACHABLE: the entry cites the type, the grammar, the guard or the absence of a reader
     ('tools/analyse_m1a_phase_cycle.py', 'max', 'summarise', 'max(binned)'):
         _v(UNDETERMINED,
-           ("computed in process: `binned` is `_pmean` of each window's `levels_dbfs` (L177); whether "
+           ("computed in process: `binned` is `_pmean` of each window's `levels_dbfs` (L175); whether "
             "the level estimator can emit a non-finite value was not analysed. What would settle it: "
             "a NaN in one window's `levels_dbfs` and `range_db` read beside it.")),
     ('tools/analyse_m1a_phase_cycle.py', 'min', 'summarise', 'min(binned)'):
@@ -1230,7 +1230,7 @@ AGGREGATE_VERDICTS: dict[tuple, tuple] = {
     ('tools/capture_m1a_phase_cycle.py', 'max', 'click_report', 'max(CLICK_K * mad, CLICK_FLOOR_DB)'):
         _v(UNREACHABLE,
            ("first position: a non-finite `mad` would be RETURNED, not dropped, and what it then "
-            "meets is `res > thr` (L157), which is #1929's shape and outside both of its regexes; the "
+            "meets is `res > thr` (L159), which is #1929's shape and outside both of its regexes; the "
             "second argument is a module constant.")),
     ('tools/capture_m1a_phase_cycle.py', 'max', 'sum_check', 'max(am.rms(r), 1e-30)'):
         _v(UNREACHABLE,
@@ -1274,8 +1274,8 @@ AGGREGATE_VERDICTS: dict[tuple, tuple] = {
             "one band's gain and property 8 read beside it.")),
     ('tools/cymbal_tone_nodal.py', 'max', 'properties', 'max(gain, fixed - track)'):
         _v(UNDETERMINED,
-           ("the running worst of the two entries above' difference; property 6's `ok` is `gain <= "
-            "TRACK_TOL_DB`.")),
+           ("the running worst of the difference of the two entries above; property 6's `ok` is `gain "
+            "<= TRACK_TOL_DB`.")),
     ('tools/cymbal_tone_nodal.py', 'max', 'properties', 'max(math.log2(lo / p) if p < lo else 0.0, math.log2(p / hi) if p > hi else 0.0)'):
         _v(UNREACHABLE,
            ("each argument is `math.log2` of a positive ratio, which raises on a non-positive one, or "
@@ -1320,7 +1320,7 @@ AGGREGATE_VERDICTS: dict[tuple, tuple] = {
     ('tools/cymbal_tone_nodal.py', 'min', 'properties', 'min(abs(p - q) for q in net)'):
         _v(UNDETERMINED,
            ("computed in process: `p` a pole of `chosen()`'s realisation and `q` one of "
-            "`network_poles()`'s (L527-531). Whether either can emit one was not analysed. What would "
+            "`network_poles()`'s (L528-531). Whether either can emit one was not analysed. What would "
             "settle it: a NaN pole and property 5 read beside it.")),
     ('tools/cymbal_tone_nodal.py', 'min', 'properties', 'min(g[c][b] for c in CODES)'):
         _v(UNDETERMINED,
@@ -1364,15 +1364,15 @@ AGGREGATE_VERDICTS: dict[tuple, tuple] = {
             "text, which is written when no row is in the box.")),
     ('tools/cymbal_vca_drive.py', 'max', 'envelope_properties', 'max(per_duty[str(d)]["short"] for d in ENV_DUTY)'):
         _v(UNDETERMINED,
-           ("computed in process: the per-duty peaks of the entries above (L1285); property 12's "
-            "ceiling.")),
+           ("computed in process: the short band's per-duty peaks of the `min(worst, d)` entry "
+            "(L1248-1249); property 12's ceiling.")),
     ('tools/cymbal_vca_drive.py', 'max', 'envelope_properties', 'max(times["short"], 1e-9)'):
         _v(UNREACHABLE,
            ("first position, and the other argument is a literal: a NaN time is returned, not "
             "dropped.")),
     ('tools/cymbal_vca_drive.py', 'max', 'envelope_properties', 'max(worst_decay, dd)'):
         _v(UNDETERMINED,
-           "computed in process: the DECAY band's collector peak (L1251); property 11b's `ok`."),
+           "computed in process: the DECAY band's collector peak (L1252); property 11b's `ok`."),
     ('tools/cymbal_vca_drive.py', 'max', 'properties', 'max(abs(f0 - HH1["f0_hz"]) / HH1["f0_hz"], abs(q - HH1["q"]) / HH1["q"] * (F0_TOL / Q_TOL))'):
         _v(UNREACHABLE,
            ("nothing reads it: `rel` is deleted on the next line (L1180 `del rel`) and property 4's "
@@ -1412,10 +1412,10 @@ AGGREGATE_VERDICTS: dict[tuple, tuple] = {
             "in one event and `rule_failures()` (L81) read beside it.")),
     ('tools/measure_mono_m1a_reference.py', 'max', 'qualify_attack_basis', 'max(abs(o["error_ms"]) for o in observations)'):
         _v(UNDETERMINED,
-           ("computed in process: `attack_fit()`'s `attack_10_90_ms` less the known span (L313). A "
-            "dropped NaN understates `max_known_error` and the known-signal gate (L319) stays green. "
-            "Whether `attack_fit()` can emit one was not analysed. What would settle it: a NaN fit in "
-            "one case and the gate read beside it.")),
+           ("computed in process: `attack_fit()`'s `attack_10_90_ms` less the known span (L313-314). "
+            "A dropped NaN understates `max_known_error` and the known-signal gate (L320) stays "
+            "green. Whether `attack_fit()` can emit one was not analysed. What would settle it: a NaN "
+            "fit in one case and the gate read beside it.")),
     ('tools/measure_mono_m1a_reference.py', 'max', 'qualify_attack_basis', 'max(lead_errors)'):
         _v(UNDETERMINED,
            ("computed in process: the same timing off a 5 ms window (L349-350); the premise check at "
@@ -1424,12 +1424,12 @@ AGGREGATE_VERDICTS: dict[tuple, tuple] = {
         _v(UNDETERMINED,
            ("computed in process: `ref.envelope_timing()`'s `release_t20_ms` off `rms_envelope` of a "
             "closed-form release (L391-392). A dropped NaN lets the bass window pass the gate at "
-            "L396. Whether `envelope_timing()` can emit one was not analysed. What would settle it: a "
+            "L395. Whether `envelope_timing()` can emit one was not analysed. What would settle it: a "
             "NaN release in one event and the gate read beside it.")),
     ('tools/measure_mono_m1a_reference.py', 'min', 'qualify_attack_basis', 'min(abs(r["error_ms"]) for r in window_rows)'):
         _v(UNDETERMINED,
-           ("computed in process: `ref.envelope_timing()`'s attack off a 40 ms RMS window (L334); the "
-            "control at L338 must stay red.")),
+           ("computed in process: `ref.envelope_timing()`'s attack off a 40 ms RMS window (L332-334); "
+            "the control at L338 must stay red.")),
     ('tools/measure_mono_m1a_reference.py', 'min', 'qualify_attack_basis', 'min(o["explained_ratio"] for o in observations)'):
         _v(UNDETERMINED,
            ("computed in process: `attack_fit()`'s `explained_ratio`, reported as "
@@ -1437,21 +1437,21 @@ AGGREGATE_VERDICTS: dict[tuple, tuple] = {
     ('tools/measure_partial_balance.py', 'max', 'cmd_validate', 'max(worst, abs(got - truth))'):
         _v(UNDETERMINED,
            ("computed in process: `got` is `math.log10` of an amplitude ratio out of `balance_traj()` "
-            "(L150) and `truth` a closed-form finite value; a NaN needs inf/inf or 0/0 in that ratio, "
+            "(L151) and `truth` a closed-form finite value; a NaN needs inf/inf or 0/0 in that ratio, "
             "which log10 passes through. Whether `balance_traj()` can produce one was not analysed. "
             "What would settle it: a NaN amplitude and the printed worst error read beside it.")),
     ('tools/measure_repeatability.py', 'max', 'audit', 'max(v)'):
         _v(UNDETERMINED,
-           ("computed in process: `measure_all()`'s metrics over the TONE settings (L558), None "
+           ("computed in process: `measure_all()`'s metrics over the TONE settings (L550-551), None "
             "skipped; the reported `span`.")),
     ('tools/measure_repeatability.py', 'min', 'audit', 'min(v)'):
         _v(UNDETERMINED,
            "the other end of the same span."),
     ('tools/measure_saw_alias_after_2x.py', 'max', 'assert_report_instrument', 'max(worst, d)'):
         _v(UNREACHABLE,
-           ("`want['value']` is `float()` of a `-?\\d+\\.\\d+` capture (L375), a grammar with no nan or "
+           ("`want['value']` is `float()` of a `-?\\d+\\.\\d+` capture (L380), a grammar with no nan or "
             "inf spelling; `got` is `inharmonic_fraction_db`'s `log10` of a positive energy ratio "
-            "over a signal `_as_float` vouched for (audio_measure.py:1656), or a Refused.")),
+            "over a signal `_as_float` vouched for (audio_measure.py:1657), or a Refused.")),
     ('tools/measure_saw_alias_after_2x.py', 'max', 'verdict', 'max(ms)'):
         _v(UNREACHABLE,
            "the other end of the same margins."),
@@ -1459,10 +1459,10 @@ AGGREGATE_VERDICTS: dict[tuple, tuple] = {
         _v(UNREACHABLE,
            ("`improvement_db` is the difference of two `round(float(est.value), 2)` (L441, L461) with "
             "the estimator's `ok` required, or None -- which raises here; the value is `log10` of a "
-            "positive energy ratio (audio_measure.py:1656).")),
+            "positive energy ratio (audio_measure.py:1657).")),
     ('tools/measure_saw_alias_after_2x.py', 'min', 'verdict', 'min(ms)'):
         _v(UNREACHABLE,
-           ("each margin is that same `got` less a `-?\\d+\\.\\d+` token (L506), or None, which L657 "
+           ("each margin is that same `got` less a `-?\\d+\\.\\d+` token (L501), or None, which L657 "
             "filters.")),
     ('tools/measure_saw_alias_after_2x.py', 'min', 'verdict', 'min(r["improvement_db"] for r in alias_rows)'):
         _v(UNREACHABLE,
@@ -1473,11 +1473,12 @@ AGGREGATE_VERDICTS: dict[tuple, tuple] = {
     ('tools/mono_artifact_probe.py', 'min', 'summarize', 'min(v)'):
         _v(UNDETERMINED,
            ("computed in process: the candidate-less-baseline differences of the probe's measurements "
-            "(`p[prop]`, L740) and of the intended level (L742), reported as each tally's min.")),
+            "(`p[prop]`, L737-740) and of the intended level (L741-742), reported as each tally's "
+            "min.")),
     ('tools/mono_m1a_score.py', 'max', 'qualify_envelope_basis', 'max(abs(v - expected) for v in values)'):
         _v(UNDETERMINED,
            ("computed in process: `envelope_timing()`'s `release_t20_ms` off `lead.am.rms_envelope` "
-            "of a closed-form release (L185-186); the gate at L190. Whether `envelope_timing()` can "
+            "of a closed-form release (L183-185); the gate at L188. Whether `envelope_timing()` can "
             "emit one was not analysed. What would settle it: a NaN release in one event and the gate "
             "read beside it.")),
     ('tools/mono_m5a_score.py', 'max', 'harmonic_summary', 'max(f0_model, f0_reference)'):
@@ -1488,7 +1489,7 @@ AGGREGATE_VERDICTS: dict[tuple, tuple] = {
             "read beside it.")),
     ('tools/mono_m5a_score.py', 'max', 'harmonic_summary', 'max(measured)'):
         _v(UNDETERMINED,
-           ("computed in process: `_harmonic_error()`'s absolute errors (L176); the returned "
+           ("computed in process: `_harmonic_error()`'s absolute errors (L169); the returned "
             "`max_abs_error`.")),
     ('tools/noise_stage_attribution.py', 'max', 'prediction_check', 'max(s["gate_nonlinearity"]["centroid"], s["gate_level"]["centroid"])'):
         _v(UNDETERMINED,
@@ -1542,7 +1543,7 @@ AGGREGATE_VERDICTS: dict[tuple, tuple] = {
             "NaN objective in one grid point and `evaluate()` read beside it.")),
     ('tools/verify_attack_context_model.py', 'max', 'verify', 'max(rms_max_delta, abs(value - recorded))'):
         _v(UNREACHABLE,
-           ("`math.isclose(value, recorded, ...)` is asserted on the line above (L131) and is False "
+           ("`math.isclose(value, recorded, ...)` is asserted on the line above (L132) and is False "
             "for a NaN on either side, so the assert raises first.")),
     ('tools/werner_fig9.py', 'max', 'check', 'max(float(np.max(d)) for v in data.values() for _, d in v["curves"])'):
         _v(UNDETERMINED,
@@ -1621,7 +1622,7 @@ def aggregates_main(gate: bool, ref: str | None, root: pathlib.Path = ROOT) -> i
         verdict, why, control = AGGREGATE_VERDICTS.get(s.key, ("<no verdict>", "", None))
         mark = " +" if control else ""
         print(f"{s.path}:{s.lineno} [{s.shape}] {s.func}: {verdict}{mark}  {why}")
-    refusing = [s for s in sites if s.named == "refuses"]
+    refusing = [s for s in sites if s.named == "refuses" and not (s.is_test or s.in_probes)]
     if refusing:
         funcs = sorted({f"{s.path}:{s.func}" for s in refusing})
         print(f"\nNOT GATED ({len(refusing)}): in {len(funcs)} functions under "
@@ -1629,7 +1630,7 @@ def aggregates_main(gate: bool, ref: str | None, root: pathlib.Path = ROOT) -> i
               "for neither a verdict nor a property -- the name filter is the filed walk's. "
               "Register a function in AGGREGATE_REGISTRY to gate its sites.")
         print("  " + " ".join(funcs))
-    out = [s for s in sites if not s.in_scope and s.named != "refuses"]
+    out = [s for s in sites if s.is_test or s.in_probes]
     if out:
         print(f"\nnot in scope, not triaged ({len(out)}): "
               + " ".join(f"{s.path}:{s.lineno}" for s in out))

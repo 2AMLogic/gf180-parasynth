@@ -351,8 +351,8 @@ def _agg(**extra):
     src.update(extra)
     return nga.aggregate_sites(src)
 
-def _measure_sites(src=AGG_TOOL):
-    return [s for s in nga.aggregate_sites({"tools/agg.py": src})[0] if s.func == "level_report"]
+def _measure_sites(src=AGG_TOOL, func="level_report"):
+    return [s for s in nga.aggregate_sites({"tools/agg.py": src})[0] if s.func == func]
 
 def _arg0(expr: str):
     call = ast.parse(expr, mode="eval").body
@@ -466,3 +466,107 @@ def test_python_drops_a_nan_that_is_not_first_and_returns_one_that_is():
     assert math.isnan(max([], default=nan))    # default= is what is left when all is
     assert min(1.0, float("inf")) == 1.0       # an infinity compares, and is kept ...
     assert max(1.0, float("inf")) == float("inf")
+
+
+# ---------------------------------------------------------------------------
+# The gate: `--aggregates --check`
+# ---------------------------------------------------------------------------
+
+
+def test_the_committed_aggregate_table_is_complete_fresh_and_its_controls_exist():
+    """The standing gate of #2014. Every builtin max()/min() with a non-literal
+    argument in a function named for a verdict (or registered) on this tree has
+    a verdict, every verdict still names a call, every control a verdict cites
+    exists as a test, and every verdict is one of the three words."""
+    sites, unparsed = nga.aggregate_sites(nga.py_sources(roots=nga.AGGREGATE_ROOTS))
+    assert unparsed == []
+    assert sites, "the search found nothing; it is not running"
+    assert nga.aggregate_gaps(sites) == []
+    assert {v[0] for v in nga.AGGREGATE_VERDICTS.values()} == set(nga.VERDICTS)
+    # the name filter's blind spot is a number on every run, never hidden
+    assert any(s.named == "refuses" for s in sites)
+    # a REACHABLE verdict either cites a control or says where its repair is
+    for key, (verdict, why, control) in nga.AGGREGATE_VERDICTS.items():
+        if verdict == nga.REACHABLE and control is None:
+            assert "Repair in flight" in why or "follow-up" in why, key
+
+
+def test_the_aggregate_cli_check_exits_zero_on_this_tree():
+    script = str(pathlib.Path(nga.__file__))
+    p = subprocess.run([sys.executable, script, "--aggregates", "--check"],
+                       capture_output=True, text=True)
+    assert p.returncode == 0, p.stdout[-600:] + p.stderr[-600:]
+    assert "every in-scope site has a verdict" in p.stdout
+    assert "NaN-blind max()/min() sites, read from " in p.stdout
+
+
+def test_a_max_or_min_added_with_no_verdict_is_a_gap_that_names_the_call(monkeypatch):
+    """CONTROL (verification rule 8). The input that defeats the gate is a call
+    nobody triaged: it must turn the gate red, name the line, and print the key
+    to paste. A function that refuses but is named for neither a verdict nor a
+    property is not gated, and the gap list says nothing about it."""
+    monkeypatch.setattr(nga, "AGGREGATE_VERDICTS", {})
+    sites, _ = _agg()
+    gaps = nga.aggregate_gaps(sites, root=NOWHERE)
+    assert len(gaps) == 10                        # the fixture's; quiet_level's is not gated
+    assert gaps[0] == (
+        f"UNTRIAGED tools/agg.py:{L_ACC} [max] check: max(worst, abs(rows[0] - rows[1]))\n"
+        "    add an entry to tools/nan_guard_audit.py::AGGREGATE_VERDICTS keyed\n"
+        "    ('tools/agg.py', 'max', 'check', 'max(worst, abs(rows[0] - rows[1]))')")
+    text = "\n".join(gaps)
+    assert "quiet_level" not in text
+    assert "STALE" not in text
+
+
+def test_an_edited_call_loses_its_verdict_and_is_asked_for_again(monkeypatch):
+    """CONTROL. A floor edit changes the key, and so does the same call under
+    another function name: the old verdict no longer applies and the call must
+    be read again."""
+    monkeypatch.setattr(nga, "AGGREGATE_VERDICTS",
+                        {KEY_MEASURE: nga._v(nga.UNREACHABLE, "first position")})
+    assert nga.aggregate_gaps(_measure_sites(), root=NOWHERE) == []
+    edited = AGG_TOOL.replace("1e-15)", "1e-9)")
+    assert edited != AGG_TOOL
+    gaps = nga.aggregate_gaps(_measure_sites(edited), root=NOWHERE)
+    assert [g.splitlines()[0] for g in gaps] == [
+        f"UNTRIAGED tools/agg.py:{L_MEASURE} [max] level_report: max(float(np.max(x)), 1e-9)",
+        f"STALE verdict names a line that is no longer a site: {KEY_MEASURE}"]
+    renamed = AGG_TOOL.replace("def level_report(x):", "def audit_level(x):")
+    gaps = nga.aggregate_gaps(_measure_sites(renamed, "audit_level"), root=NOWHERE)
+    assert [g.splitlines()[0] for g in gaps] == [
+        f"UNTRIAGED tools/agg.py:{L_MEASURE} [max] audit_level: max(float(np.max(x)), 1e-15)",
+        f"STALE verdict names a line that is no longer a site: {KEY_MEASURE}"]
+
+
+def test_the_aggregate_gate_checks_the_controls_a_verdict_cites(tmp_path, monkeypatch):
+    """A REACHABLE verdict's control must be there when the gate runs, not only
+    when the verdict was written: a cited test that was renamed or deleted is a
+    gap, and one that exists is not."""
+    table = {KEY_MEASURE: nga._v(nga.REACHABLE, "path", "tools/test_x.py::test_it_is_red")}
+    (tmp_path / "tools").mkdir()
+    (tmp_path / "tools" / "test_x.py").write_text("def test_it_is_red():\n    assert False\n")
+    monkeypatch.setattr(nga, "AGGREGATE_VERDICTS", table)
+    assert nga.aggregate_gaps(_measure_sites(), root=tmp_path) == []
+    table[KEY_MEASURE] = nga._v(nga.REACHABLE, "path", "tools/test_x.py::test_renamed")
+    gaps = nga.aggregate_gaps(_measure_sites(), root=tmp_path)
+    assert len(gaps) == 1 and gaps[0].startswith("CONTROL-MISSING tools/test_x.py::test_renamed")
+
+
+def test_the_aggregate_report_names_its_tree_the_filed_subtotal_and_what_it_does_not_gate(capsys):
+    assert nga.aggregates_main(False, None) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("NaN-blind max()/min() sites, read from working tree @ ")
+    assert "the filed walk's own test (first argument a population): " in out
+    assert "beyond that test: " in out
+    assert "NOT GATED (" in out and "AGGREGATE_REGISTRY" in out
+    # tests and probes are out of scope by path, not hidden by the name filter
+    gated_out = out.split("\nNOT GATED (", 1)[1].splitlines()[1]
+    assert "test_" not in gated_out and "/probes/" not in gated_out and "tools/" in gated_out
+    # one line per SITE, so count sites, not keys
+    live = [s for s in nga.aggregate_sites(nga.py_sources(roots=nga.AGGREGATE_ROOTS))[0]
+            if s.in_scope and nga.AGGREGATE_VERDICTS[s.key][0] == nga.REACHABLE]
+    marked = [l for l in out.splitlines() if " REACHABLE + " in l]
+    assert len(marked) == sum(1 for s in live if nga.AGGREGATE_VERDICTS[s.key][2])
+    unmarked = [l for l in out.splitlines() if " REACHABLE  " in l]
+    assert len(unmarked) == sum(1 for s in live if not nga.AGGREGATE_VERDICTS[s.key][2])
+    assert len(marked) + len(unmarked) == len(live) == 12
