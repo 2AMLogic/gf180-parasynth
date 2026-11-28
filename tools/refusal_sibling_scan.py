@@ -149,6 +149,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SCAN_ROOTS = ("tools", "model", "pnr", "fpga", "rtl-sketch", "audition")   # tools/ includes tools/probes/
 FAMILY_NAME = "Refused"
+BASE_STEM = "refusal"                   # the module defining the common base class
 # a node whose body is a scope of its own: an import inside one binds that
 # scope's name, not the enclosing function's (nor the module's)
 SCOPE_NODES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
@@ -172,13 +173,19 @@ def _bind(stmt: ast.stmt, imports: dict[str, str],
     if isinstance(stmt, ast.Import):
         for a in stmt.names:
             stem = a.name.split(".")[0]
-            imports[a.asname or stem] = stem
+            nm = a.asname or stem
+            # a later plain import rebinds the name away from any earlier
+            # from-import of it: the last binding wins across BOTH forms
+            from_imports.pop(nm, None)
+            imports[nm] = stem
     elif isinstance(stmt, ast.ImportFrom) and stmt.module and stmt.level == 0:
         stem = stmt.module.split(".")[0]
         for a in stmt.names:
+            nm = a.asname or a.name
+            imports.pop(nm, None)                 # ... and the reverse
             # the ORIGINAL name is kept (`from x import f as g`):
             # a `g()` call resolves to f's def, not to a missing g
-            from_imports[a.asname or a.name] = (stem, a.name)
+            from_imports[nm] = (stem, a.name)
 
 
 class _Bindings:
@@ -269,6 +276,9 @@ class ModInfo:
         for node in self.tree.body:
             if isinstance(node, (ast.Import, ast.ImportFrom)):
                 _bind(node, self.imports, self.from_imports)
+                if isinstance(node, ast.Import):
+                    for a in node.names:
+                        self.refused_names.pop(a.asname or a.name.split(".")[0], None)
                 if isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
                     stem = node.module.split(".")[0]
                     for a in node.names:
@@ -361,8 +371,15 @@ def origin_of(by_stem: dict[str, list[ModInfo]], stem: str,
     return origin_of(by_stem, ro, seen | {stem})
 
 
-def raise_origins(mod: ModInfo, fname: str) -> set[str]:
-    """The family origins the named def of `mod` raises itself."""
+def raise_origins(mod: ModInfo, fname: str,
+                  by_stem: dict[str, list[ModInfo]] | None = None) -> set[str]:
+    """The family origins the named def of `mod` raises itself. Given
+    `by_stem`, a re-exported class resolves to the module that DEFINES it, as
+    `handler_origins` resolves the guard side: both sides must name one class
+    by one origin or a re-export reads as two."""
+    def defining(stem: str) -> str:
+        return (origin_of(by_stem, stem) if by_stem is not None else None) or stem
+
     f = mod.funcs.get(fname)
     if f is None:
         return set()
@@ -375,11 +392,11 @@ def raise_origins(mod: ModInfo, fname: str) -> set[str]:
             txt = ast.unparse(exc)
             fam = mod.family_name_at(txt, node)
             if fam is not None:
-                out.add(fam)
+                out.add(defining(fam))
             elif "." in txt:
                 head = txt.split(".")[0]
                 stem = mod.resolve_head(head, node) or head
-                out.add(stem)
+                out.add(defining(stem) if txt.endswith(f".{FAMILY_NAME}") else stem)
     return out
 
 
@@ -425,7 +442,8 @@ def handler_origins(mod: ModInfo, by_stem: dict[str, list[ModInfo]],
             if txt.endswith(f".{FAMILY_NAME}"):
                 o = origin_of(by_stem, stem) or stem
                 origins.add(o)
-                shapes.add("exact")
+                # `import refusal as rf; except rf.Refused` is the base too
+                shapes.add("base" if o == BASE_STEM else "exact")
             else:
                 shapes.add("other")
         else:
@@ -436,6 +454,12 @@ def handler_origins(mod: ModInfo, by_stem: dict[str, list[ModInfo]],
                 o = origin_of(by_stem, fam)
                 if o:
                     origins.add(o)
+                if (o or fam) == BASE_STEM:
+                    # a name bound to the common base, module level or inside
+                    # the def (`from refusal import Refused as R`), catches
+                    # every subclass: the base guard, not an exact one
+                    shapes.add("base")
+                    continue
                 # shape: `local` only for a class DEFINED in this module; a
                 # borrowed or assigned name is the lender's own class, so the
                 # handler is exact (#1193)
@@ -524,7 +548,7 @@ def scan(files: list[pathlib.Path], idx: dict[str, ModInfo]) -> list[dict]:
                 # this callee cannot refuse under ANY resolution, so it is
                 # not a site at all -- the multi-candidate mirror of the
                 # single-callee filters below (#1214).
-                if not any(c.has_family and raise_origins(c, fname or "")
+                if not any(c.has_family and raise_origins(c, fname or "", by_stem)
                            for c in cands):
                     continue
                 ashapes = []
@@ -547,7 +571,7 @@ def scan(files: list[pathlib.Path], idx: dict[str, ModInfo]) -> list[dict]:
             callee = cands[0]
             if not callee.has_family:
                 continue                      # callee has no family at all
-            origins = raise_origins(callee, fname or "")
+            origins = raise_origins(callee, fname or "", by_stem)
             if not origins:
                 continue                      # this function raises no refusal
             covered, shapes = set(), []

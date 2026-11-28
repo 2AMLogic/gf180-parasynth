@@ -1598,3 +1598,154 @@ def test_drum_solo_refusal_from_a_sibling_class_escapes_that_handler(monkeypatch
     sibling = type("Refused", (Exception,), {})
     with pytest.raises(sibling, match="stubbed refusal for BD"):
         _drum_solo_report(monkeypatch, _run_case_stub(raise_cls=sibling))()
+
+
+# ---------------------------------------------------------------------------
+# #1598 review: three places the census disagreed with Python on the family
+# lookup. Each control states the Python behaviour it pins, then the census.
+# ---------------------------------------------------------------------------
+MIXED_FORMS_BORROWER = '''
+def mixed(p):
+    import math as R
+    from mod_a import Refused as R      # the LAST binding of R: mod_a's class
+    raise R("x")
+'''
+
+MIXED_FORMS_REVERSED = '''
+from mod_a import Refused as R
+import math as R                        # the LAST binding of R: the math module
+
+def mixed(p):
+    return R.floor(p)
+'''
+
+MIXED_FORMS_REVERSED_RAISING = '''
+from mod_a import Refused as R
+import math as R                        # R is math here, and `R(...)` is not a refusal
+
+def mixed(p):
+    raise R("x")
+'''
+
+MIXED_CALLER = '''
+import {mod}
+
+def go(p):
+    {mod}.mixed(p)
+'''
+
+
+def test_mixed_import_forms_last_binding_wins_so_the_refusal_is_not_hidden(tmp_path):
+    """Python: `import math as R` then `from mod_a import Refused as R` binds
+    R to mod_a's class, so `raise R()` escapes an unguarded caller. The two
+    import maps both kept R and the plain import won at lookup, so the census
+    omitted the call entirely."""
+    files, idx = _local_tree(tmp_path, {
+        "borrow_mixed": MIXED_FORMS_BORROWER,
+        "caller_mixed": MIXED_CALLER.format(mod="borrow_mixed")})
+    got = _sites_for(files, idx, "caller_mixed")
+    assert len(got) == 1, got
+    assert got[0]["origins"] == ["mod_a"], got[0]
+    assert got[0]["classification"] == "candidate-escape", got[0]
+
+
+def test_mixed_import_forms_reversed_unbinds_the_family_name(tmp_path):
+    """The negative control, in the other order: the plain import is the last
+    binding, R is `math`, and `raise R()` is no refusal. Without the unbinding
+    the stale family name would invent an escape."""
+    files, idx = _local_tree(tmp_path, {
+        "borrow_rev": MIXED_FORMS_REVERSED_RAISING,
+        "caller_rev": MIXED_CALLER.format(mod="borrow_rev")})
+    assert idx[str(tmp_path / "borrow_rev.py")].refused_names == {}, "R is math at module level"
+    assert _sites_for(files, idx, "caller_rev") == []
+
+
+RELAY = '''
+from mod_a import Refused               # a re-export: the lender's own class
+'''
+
+RELAY_RAISER = '''
+from relay import Refused as R
+
+def boom(p):
+    raise R("x")
+'''
+
+RELAY_CALLER = '''
+from {lender} import Refused as R
+import relay_raiser
+
+def go(p):
+    try:
+        relay_raiser.boom(p)
+    except R:
+        return None
+'''
+
+
+def test_reexported_class_resolves_to_one_origin_on_both_sides(tmp_path):
+    """Python: `relay.Refused` IS `mod_a.Refused`, so a handler naming it
+    catches a raise of it. The raise side kept the re-exporter's stem
+    (`relay`) while the handler side resolved to the definer (`mod_a`), so
+    the census read one class as two and reported an escape."""
+    files, idx = _local_tree(tmp_path, {
+        "relay": RELAY, "relay_raiser": RELAY_RAISER,
+        "caller_relay": RELAY_CALLER.format(lender="relay")})
+    got = _sites_for(files, idx, "caller_relay")
+    assert len(got) == 1, got
+    assert got[0]["origins"] == ["mod_a"], got[0]
+    assert got[0]["classification"] == "covered(exact)", got[0]
+
+
+def test_reexport_control_a_sibling_handler_still_leaves_the_escape(tmp_path):
+    """The negative control for the re-export fix: the handler names mod_b's
+    class, a sibling of mod_a's, so the raise still escapes it."""
+    files, idx = _local_tree(tmp_path, {
+        "relay": RELAY, "relay_raiser": RELAY_RAISER,
+        "caller_relay_sib": RELAY_CALLER.format(lender="mod_b")})
+    got = _sites_for(files, idx, "caller_relay_sib")
+    assert len(got) == 1 and got[0]["classification"] == "candidate-escape", got
+    assert got[0]["uncovered"] == ["mod_a"], got[0]
+
+
+BASE_RAISER = '''
+from mod_a import Refused
+
+def boom(p):
+    raise Refused("x")
+'''
+
+BASE_LOCAL_CALLER = '''
+import base_raiser
+
+def go(p):
+    from {lender} import Refused as R
+    try:
+        base_raiser.boom(p)
+    except R:
+        return None
+'''
+
+
+def test_locally_imported_common_base_covers_every_subclass(tmp_path):
+    """Python: `from refusal import Refused as R` inside the def and `except
+    R` catches a raise of any subclass, mod_a's included. The census took the
+    name for an exact guard on `refusal` and listed mod_a as uncovered."""
+    files, idx = _local_tree(tmp_path, {
+        "base_raiser": BASE_RAISER,
+        "caller_base_local": BASE_LOCAL_CALLER.format(lender="refusal")})
+    got = _sites_for(files, idx, "caller_base_local")
+    assert len(got) == 1, got
+    assert got[0]["classification"] == "covered(base)", got[0]
+    assert got[0]["uncovered"] == [], got[0]
+
+
+def test_locally_imported_sibling_is_not_a_base_guard(tmp_path):
+    """The negative control: the same shape naming mod_b's class, a sibling
+    of the raised mod_a class, covers nothing it was not named for."""
+    files, idx = _local_tree(tmp_path, {
+        "base_raiser": BASE_RAISER,
+        "caller_base_sib": BASE_LOCAL_CALLER.format(lender="mod_b")})
+    got = _sites_for(files, idx, "caller_base_sib")
+    assert len(got) == 1 and got[0]["classification"] == "candidate-escape", got
+    assert got[0]["uncovered"] == ["mod_a"], got[0]
