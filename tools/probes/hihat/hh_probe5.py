@@ -91,6 +91,15 @@ proposes and the exact rule accepts; that is necessary and it is not sufficient,
 because the rule accepts a COMPARISON and the surrogate was picking both sides
 of it. Whatever proposes candidates must not be the only thing that proposes the
 baseline.
+
+EXIT CONTRACT (tools/exit_contract.py; decided in the `__main__` block, #1611)
+----------------------------------------------------------------
+    0   the probe ran to its decision
+    2   REFUSED: a precondition was not met, so nothing was measured. Printed
+        as `REFUSED  <reason>` on stdout, for this module's own refusals AND
+        for any other module's -- a reference `run_case.prepare` cannot
+        prepare refuses the whole probe, it does not traceback
+    1   an execution error, as a traceback
 """
 from __future__ import annotations
 
@@ -117,6 +126,7 @@ from modal_fixed import RAW, BP, HP     # noqa: E402
 _REFUSAL_TOOLS = str(pathlib.Path(__file__).resolve().parents[3] / "tools")
 if _REFUSAL_TOOLS not in sys.path:
     sys.path.append(_REFUSAL_TOOLS)
+import exit_contract  # noqa: E402
 import refusal  # noqa: E402
 
 # The five-band split every earlier probe in this directory reports, kept so
@@ -937,5 +947,32 @@ def main(argv=None) -> int:
     return 0
 
 
+def _refused_exit(e: refusal.Refused) -> int:
+    """Print a refusal's reason once and return `exit_contract.REFUSED`.
+
+    This module's own class prefixes its message (`test_hh_probe5_refused.py`
+    pins that); every other module's does not."""
+    reason = str(e)
+    if reason.startswith("REFUSED: "):
+        reason = reason[len("REFUSED: "):]
+    say(f"REFUSED  {reason}")
+    return exit_contract.REFUSED
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    # The BASE class, not the local sibling (#1611), and in this block rather
+    # than a wrapper: tools/refusal_sibling_scan.py credits a guard only when
+    # its try sits in main() or in this dispatch, so a handler anywhere else
+    # leaves the site classed `candidate-escape` after it is fixed.
+    # `scorecard_record` reaches run_case.prepare, whose refusal is
+    # preparation_contract.Refused -- a sibling of the local class -- so a
+    # recording cut into the strike escaped as an exit-1 traceback after the
+    # whole surrogate sweep had run. The local class was no better uncaught:
+    # it also subclasses SystemExit, but Exception.__init__ is what its MRO
+    # runs, so `code` stayed None and the interpreter exited 0, printing
+    # nothing. An execution error is still a traceback and exit 1: never
+    # `except Exception` here.
+    try:
+        sys.exit(main())
+    except refusal.Refused as e:
+        sys.exit(_refused_exit(e))
