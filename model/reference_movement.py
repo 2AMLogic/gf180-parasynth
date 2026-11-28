@@ -8,6 +8,12 @@
     .venv/bin/python model/reference_movement.py --stage plugins --out /tmp/refmove
     .venv/bin/python model/reference_movement.py --stage all --out /tmp/refmove
 
+Exit status follows `tools/exit_contract.py`. The five `ours`-only stages
+exit 0. `plugins` (and `all`) exits 0 when at least one requested device was
+measured; 2 (REFUSED, one `REFUSED:` line on stdout) when none was, every
+device being unavailable or not answerable on this host; and 1 (FAIL) when a
+device failed to BUILD, which is a defect and not a missing plugin.
+
 Every other filter measurement in this repository holds the cutoff STILL.
 Zipper noise is by definition a thing that only happens while a control moves,
 so none of them can see it -- and the appeal of a Moog filter is largely in
@@ -69,11 +75,13 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "..", "audition"))
+sys.path.append(os.path.join(HERE, "..", "tools"))
 
 import audio_measure as am                                          # noqa: E402
 import dsp                                                          # noqa: E402
 import reference_rigs as rr                                         # noqa: E402
 import voice_fx as vf                                               # noqa: E402
+from exit_contract import FAIL, PASS, REFUSED                       # noqa: E402
 from fixed import LadderFx                                          # noqa: E402
 
 SR = rr.SR
@@ -680,6 +688,27 @@ def stage_audio_rate_mod():
     return dict(controls=controls, separation_db=sep, rows=rows, attribution=attr)
 
 
+def _plugins_exit(rows) -> int:
+    """The plugins stage's exit status (`tools/exit_contract.py`).
+
+    A row is measured when it carries no `status`: only a build that failed,
+    or a device that could not answer, gets one. PASS if any device was
+    measured -- a partial sweep is a result. Otherwise FAIL if any row is a
+    build `error`, a defect (#610) that must not read as "this host lacks a
+    plugin"; REFUSED for everything else, which is the host's doing."""
+    if any("status" not in r for r in rows):
+        return PASS
+    head = f"--stage plugins measured nothing: 0 of {len(rows)} requested device(s) answered"
+    errors = [f"{r['device']} ({r['error_type']})" for r in rows if r["status"] == "error"]
+    if errors:
+        print(f"FAIL: {head}; BUILD ERROR (a defect, not unavailability) in: "
+              f"{', '.join(errors)}", flush=True)
+        return FAIL
+    print(f"REFUSED: {head}; unavailable or not answerable here: "
+          f"{', '.join(r['device'] for r in rows) or 'no device was requested'}", flush=True)
+    return REFUSED
+
+
 # ===========================================================================
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
@@ -719,7 +748,7 @@ def main(argv=None) -> int:
     for k, v in out.items():
         json.dump(v, open(os.path.join(a.out, f"{k}.json"), "w"), indent=1, default=str)
     json.dump(cache, open(cp, "w"), indent=1)
-    return 0
+    return _plugins_exit(out["plugins"]) if "plugins" in out else PASS
 
 
 if __name__ == "__main__":
