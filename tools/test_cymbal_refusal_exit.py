@@ -175,6 +175,7 @@ def test_cymbal_low_tail_full_run_records_prepare_refusal_not_traceback(tmp_path
     rc_ = clt.main(["--refs", str(refs), "--out", str(out)])
     assert rc_ == 0, "the designed per-file degradation; controls still pass"
     res = json.loads(out.read_text())
+    assert res["controls_pass"] is True
     entry = res["windows"]["1.5s"]["fischer"]["CY5025"]
     assert "refused" in entry and "cut into the strike" in entry["refused"], entry
     assert "refused" in res["noise_floor_control"], res["noise_floor_control"]
