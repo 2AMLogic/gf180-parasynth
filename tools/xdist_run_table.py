@@ -292,9 +292,14 @@ def render_summary(runs: list[Run]) -> str:
 def main(argv: list[str]) -> int:
     jobs = None
     dirs = list(argv)
-    if argv and argv[0].endswith(".json"):
-        jobs = read_jobs(argv[0])
-        dirs = argv[1:]
+    try:
+        if argv and argv[0].endswith(".json"):
+            jobs = read_jobs(argv[0])
+            dirs = argv[1:]
+    except (Refusal, OSError, KeyError, json.JSONDecodeError, UnicodeDecodeError,
+            TypeError) as exc:
+        print(f"REFUSED: {exc}", file=sys.stderr)
+        return 2
     if not dirs:
         print(__doc__, file=sys.stderr)
         print("REFUSED: no run directories given", file=sys.stderr)

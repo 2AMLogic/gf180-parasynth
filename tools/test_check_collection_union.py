@@ -525,3 +525,97 @@ def test_cli_refuses_unknown_inputs(clean, tmp_path):
     assert cu.main(["--junit", str(clean["junit"])]) == 2          # no expected side
     assert cu.main(["--expected", str(tmp_path / "nope.txt"),
                     "--junit", str(clean["junit"])]) == 2
+
+
+# ---- a missing precondition is REFUSED (2), never a traceback with FAIL's exit
+# code (#2152). main() guarded input loading only: control() sat outside every
+# guard, and so did one xpass_ids() call in check(), so a bad --pytest-log or
+# --expected reached a shell as "Traceback ... rc=1" -- the code that means a
+# control was not caught.
+def test_check_refuses_an_xpass_line_naming_no_collected_test(clean, tmp_path, capsys):
+    """A log whose ``XPASS`` line names an id the collection never listed
+    cannot be bound to this run. It used to escape check() as an exception;
+    the baseline_log guard already refuses the same input, and both must
+    read the same way."""
+    bad = clean["log"] + "XPASS pkg/test_alpha.py::test_never_collected - expected to fail\n"
+    r = cu.check(collect_text=clean["collect_text"], cases=cases_of(clean), log=bad)
+    assert r.verdict == cu.REFUSED and r.property == "summary", r.render()
+    assert r.expected == 13 and "test_never_collected" in r.reason, r.reason
+    base = cu.check(collect_text=clean["collect_text"], cases=cases_of(clean),
+                    log=clean["log"], baseline_cases=cases_of(clean), baseline_log=bad)
+    assert base.verdict == cu.REFUSED and base.property == "summary", base.render()
+
+    expected = tmp_path / "collect.txt"
+    expected.write_text(clean["collect_text"])
+    log = tmp_path / "bad-xpass.log"
+    log.write_text(bad)
+    assert cu.main(["--expected", str(expected), "--junit", str(clean["junit"]),
+                    "--pytest-log", str(log)]) == 2
+    assert capsys.readouterr().out.startswith("REFUSED [summary]:")
+
+
+def test_control_refuses_a_log_with_no_summary_line(clean, clean_baseline, tmp_path, capsys):
+    """The issue's repro: every input real except --pytest-log, a one-line
+    file with no summary line. _rewrite_summary raises Refusal inside
+    control(), which was one call past main()'s guard."""
+    expected = tmp_path / "collect.txt"
+    expected.write_text(clean["collect_text"])
+    bad, base_log = tmp_path / "bad.log", tmp_path / "base.log"
+    bad.write_text("this log has no summary line\n")
+    base_log.write_text(clean_baseline["log"])
+    argv = ["control", "--expected", str(expected), "--junit", str(clean["junit"]),
+            "--pytest-log", str(bad), "--baseline-junit", str(clean_baseline["junit"]),
+            "--baseline-log", str(base_log)]
+    assert cu.main(argv) == 2
+    out = capsys.readouterr().out
+    assert out.startswith("REFUSED [summary]:"), out
+    assert "Traceback" not in out and "NOT CAUGHT" not in out
+
+
+def test_control_refuses_a_broken_collection_or_an_ambiguous_key(clean, tmp_path, capsys):
+    """control() parses --expected and builds the key table itself, outside
+    check(); each refusal used to escape main() as a traceback."""
+    expected = tmp_path / "collect.txt"
+    argv = ["control", "--expected", str(expected), "--junit", str(clean["junit"])]
+    ids = cu.parse_collect_output(clean["collect_text"])
+    expected.write_text(clean["collect_text"].replace(ids[3] + "\n", ""))   # one id line lost
+    assert cu.main(argv) == 2
+    assert capsys.readouterr().out.startswith("REFUSED [collection]:")
+
+    expected.write_text("a.b/test_x.py::test_y\na/b/test_x.py::test_y\n"
+                        "2 tests collected in 0.01s\n")
+    assert cu.main(argv) == 2
+    assert capsys.readouterr().out.startswith("REFUSED [key]:")
+
+
+def test_control_still_exits_1_when_a_control_is_genuinely_not_caught(
+        clean, tmp_path, capsys, monkeypatch):
+    """The guard must not turn an uncaught control into REFUSED: with the
+    missing-test comparison disabled (as in
+    test_control_matrix_goes_red_when_a_guard_is_disabled) the matrix prints
+    NOT CAUGHT and the exit code stays 1."""
+    monkeypatch.setattr(cu, "missing_tests", lambda expected, seen: [])
+    expected = tmp_path / "collect.txt"
+    expected.write_text(clean["collect_text"])
+    assert cu.main(["control", "--expected", str(expected),
+                    "--junit", str(clean["junit"])]) == 1
+    assert capsys.readouterr().out.count("NOT CAUGHT") == 1
+
+
+def test_the_shipped_cli_control_exits_2_without_a_traceback(clean, clean_baseline, tmp_path):
+    """What a shell sees. The tests above drive main(); this drives
+    ``python tools/check_collection_union.py`` and reads the exit status and
+    stderr, which is where the issue's traceback was."""
+    expected, bad, base_log = (tmp_path / n for n in ("collect.txt", "bad.log", "base.log"))
+    expected.write_text(clean["collect_text"])
+    bad.write_text("this log has no summary line\n")
+    base_log.write_text(clean_baseline["log"])
+    r = subprocess.run(
+        [sys.executable, str(pathlib.Path(cu.__file__)), "control",
+         "--expected", str(expected), "--junit", str(clean["junit"]),
+         "--pytest-log", str(bad), "--baseline-junit", str(clean_baseline["junit"]),
+         "--baseline-log", str(base_log)],
+        capture_output=True, text=True)
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert "Traceback" not in r.stderr, r.stderr
+    assert "REFUSED [summary]:" in r.stdout, r.stdout

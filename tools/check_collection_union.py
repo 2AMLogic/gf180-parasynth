@@ -444,8 +444,8 @@ def check(collect_text: str | None = None, expected: list[str] | None = None,
 
     outcomes = m.outcomes
     if log is not None:
-        outcomes = _mark_xpass(outcomes, xpass_ids(log, ids))
         try:
+            outcomes = _mark_xpass(outcomes, xpass_ids(log, ids))
             r.summary = _check_summary(outcomes, log, ids)
         except Refusal as exc:
             return Report(REFUSED, str(exc), exc.prop, expected=len(ids))
@@ -679,7 +679,11 @@ def main(argv: list[str]) -> int:
         print(f"REFUSED [{exc.prop}]: {exc}")
         return EXIT[REFUSED]
     if args.mode == "control":
-        rows = control(collect_text, cases, log, baseline_cases, baseline_log)
+        try:
+            rows = control(collect_text, cases, log, baseline_cases, baseline_log)
+        except Refusal as exc:
+            print(f"REFUSED [{exc.prop}]: {exc}")
+            return EXIT[REFUSED]
         print(render_matrix(rows))
         return control_exit(rows)
     r = check(collect_text=collect_text, cases=cases, log=log,
