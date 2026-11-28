@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import plistlib
 import sys
 import types
 
@@ -61,6 +62,7 @@ class FakeRig:
 
     def __init__(self, path=rv.PATH_MINIV4, block=rv.BLOCK, engine=None):
         self.path = path
+        self.block = block
         self.notes = []
 
     def identity(self):
@@ -179,6 +181,114 @@ def test_a_case_outside_the_suite_is_refused(monkeypatch, capsys, rig_ready):
     code = rv.main(["--render", "D01A", "--licence-established", GOOD_LICENCE])
     assert code == rv.REFUSED
     assert "not a case in the suite" in capsys.readouterr().out
+
+
+# ===========================================================================
+# the environment tuple: one recorder, the rig's own path and block (#1363)
+# ===========================================================================
+def test_a_binaryless_bundle_is_refused_before_any_render(monkeypatch, capsys,
+                                                          tmp_path):
+    """A bundle whose Info.plist claims 4.0.4.6366 but which has no binary
+    under Contents/MacOS has no binary_sha256 to record: the run refuses
+    before the rig is built or any file is written. `main` used to print
+    PASS for exactly this bundle, because its own tuple builder never
+    asked for the hash."""
+    bundle = tmp_path / "Mini V4.vst3"
+    (bundle / "Contents").mkdir(parents=True)
+    (bundle / "Contents" / "Info.plist").write_bytes(plistlib.dumps({
+        "CFBundleShortVersionString": rs.V4_REQUIRED_VERSION,
+        "CFBundleIdentifier": "com.Arturia.Mini-V4.vst",
+    }))
+
+    class MustNotBuild:
+        host = "dawdreamer"
+
+        def __init__(self, *a, **k):
+            raise AssertionError(
+                "a binary-less bundle must refuse before the rig is built")
+
+    monkeypatch.setattr(rv, "PATH_MINIV4", str(bundle))
+    monkeypatch.setattr(rv, "_Rig", MustNotBuild)
+    out = tmp_path / "renders"
+    code = rv.main(["--render", "M1B", "--licence-established", GOOD_LICENCE,
+                    "--out", str(out)])
+    assert code == rv.REFUSED
+    assert "binary_sha256" in capsys.readouterr().out
+    assert not out.exists()
+
+
+class PinnedBlockRig:
+    """A rig whose note is a sine at the commanded pitch, pinned to a block
+    size `render_case` must record rather than substitute its own."""
+
+    host = "dawdreamer"
+
+    def __init__(self, block):
+        self.block = block
+        self.notes = []
+
+    def identity(self):
+        return good_identity()
+
+    def render_note(self, note, seconds, velocity=rv.VELOCITY, note_at=0.02):
+        self.notes.append((note, seconds))
+        n = int(seconds * SR)
+        t = np.arange(n) / SR
+        return 0.5 * np.sin(2 * np.pi * dsp.note_hz(note) * t)
+
+
+@pytest.mark.parametrize("block, rate", [(16, 3000.0), (512, 93.75)])
+def test_render_case_records_the_rigs_block_and_its_rate(tmp_path, block, rate):
+    """The 512-sample entry is the 94 Hz lesson: dawdreamer's default block
+    moves parameter automation at 93.75 Hz, and a recorder that hard-codes
+    the module constant hides that the rig was actually run that way."""
+    suite = rs.load_v4_suite()
+    case = next(c for c in suite["cases"] if c["case_id"] == "M1B")
+    rec = rv.render_case(case, PinnedBlockRig(block), "licence stated",
+                         tmp_path / f"renders-{block}")
+    assert rec["environment"]["block"] == block
+    assert rec["environment"]["block_rate_hz"] == rate
+
+
+def test_render_case_refuses_a_non_positive_block_before_rendering(tmp_path):
+    suite = rs.load_v4_suite()
+    case = next(c for c in suite["cases"] if c["case_id"] == "M1B")
+    rig = PinnedBlockRig(0)
+    with pytest.raises(rv.Refused, match="not a size"):
+        rv.render_case(case, rig, "licence stated", tmp_path / "renders-zero")
+    assert not rig.notes
+    assert not (tmp_path / "renders-zero").exists()
+
+
+def test_rig_identity_hashes_the_bundle_it_loaded_not_the_module_constant(
+        monkeypatch):
+    """`_Rig(path=alt)` loads alt, so `identity()` must hash alt: a rig
+    pointed at an alternate bundle used to hash the module constant, so the
+    record vouched for a binary the rig never loaded."""
+    fake_daw = types.ModuleType("dawdreamer")
+
+    class FakeEngine:
+        def __init__(self, sr, block):
+            pass
+
+        def make_plugin_processor(self, name, path):
+            return types.SimpleNamespace(name=name)
+
+        def load_graph(self, graph):
+            pass
+
+    fake_daw.RenderEngine = FakeEngine
+    monkeypatch.setitem(sys.modules, "dawdreamer", fake_daw)
+    seen = {}
+
+    def capture(vst3_path):
+        seen["path"] = vst3_path
+        return good_identity()
+
+    monkeypatch.setattr(refprofile, "plugin_identity", capture)
+    alt = "/opt/elsewhere/Mini V4.vst3"
+    rv._Rig(alt, block=16).identity()
+    assert seen["path"] == alt
 
 
 # ===========================================================================
