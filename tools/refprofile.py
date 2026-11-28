@@ -173,6 +173,13 @@ class Refused(refusal.Refused, Exception):
     outcome here, distinct from pass and from fail."""
 
 
+class Unverifiable(Refused):
+    """A refusal in which NOTHING WAS COMPARED: the evidence a verdict needs
+    is not on this disk. A plain `Refused` also covers a comparison that ran
+    and disagreed, so `verify()` tells the two apart by this class and never
+    by the wording of the message (#1859)."""
+
+
 def _rel(p) -> str:
     """A path for a human, and one that CANNOT raise. `relative_to` throws for
     anything outside the repository, and every use of it here is inside a
@@ -1173,7 +1180,7 @@ def load_clip(clip_id: str, profile: dict | None = None) -> tuple[np.ndarray, in
                       f"({len(prof.get('clips', {}))} clips; see tools/refprofile.py --list)")
     p = clip_path(meta)
     if not p.exists():
-        raise Refused(
+        raise Unverifiable(
             f"the frozen reference audio for {clip_id!r} is not in the cache "
             f"({_rel(p)}). Restore the frozen audio without a plugin: "
             f"tools/refprofile_restore.py")
@@ -1248,14 +1255,12 @@ def verify(profile: dict | None = None) -> tuple[int, list[str]]:
         try:
             load_clip(cid, prof)
             lines.append(f"OK       {cid}")
+        except Unverifiable:
+            missing += 1
+            lines.append(f"ABSENT   {cid}")
         except Refused as why:
-            s = str(why)
-            if "not in the cache" in s:
-                missing += 1
-                lines.append(f"ABSENT   {cid}")
-            else:
-                bad += 1
-                lines.append(f"FAIL     {cid}\n         {s}")
+            bad += 1
+            lines.append(f"FAIL     {cid}\n         {why}")
     lines.append(f"{len(clips) - bad - missing} verified, {bad} failed, {missing} absent")
     if bad:
         return FAIL, lines
