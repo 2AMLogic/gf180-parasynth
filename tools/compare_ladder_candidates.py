@@ -443,6 +443,46 @@ def stage_cost(names, **kw) -> dict:
 # ===========================================================================
 # the controls: start red, then inject defects
 # ===========================================================================
+#: what an injected-defect move reads when a side of it measured nothing: the
+#: word the START RED block prints for a stage that refused. Deliberately not
+#: named `REFUSED`, which at module level in this repository is an exit status
+#: (`tools/exit_contract.py`).
+UNMEASURED = "REFUSED"
+
+
+def _tally(row: dict, rows: str) -> str:
+    """`<refused>/<total>` over a stage row's operating points."""
+    return f"{row['refused']}/{len(row[rows])}"
+
+
+def _moved(d: dict, b: dict, key: str, ndigits: int, rows: str):
+    """The move of one injected defect on one stage summary: `abs(d - b)`
+    rounded to `ndigits`, or `UNMEASURED` when either side measured nothing
+    (#2141).
+
+    Two signals are read, because each can be defeated where the other cannot.
+    A stage leaves its summary `nan` when every point refused, and `nan`
+    passes through a subtraction without a word -- with every ladder dead this
+    block printed `moved_cents=nan`. So the summary must be a finite number,
+    checked rather than compared, since every comparison against `nan` is
+    False (#134). And the points are counted too, because a summary can be
+    finite over nothing: each stage derives it from the points it scored,
+    which is one edit away from no longer being so. A side with no operating
+    points at all is refused the same way -- it refused nothing because there
+    was nothing to refuse -- and is counted FIRST, before any summary is
+    read: over an empty grid even `0.0` is not a measurement.
+
+    `d` and `b` are the defective and baseline rows the stage returned, `key`
+    the summary compared, and `rows` the key of a row's operating points
+    (`points`; `sweeps` for the movement stage)."""
+    if any(row["refused"] == len(row[rows]) for row in (d, b)):
+        return UNMEASURED
+    if not all(isinstance(v, (int, float)) and not isinstance(v, bool)
+               and math.isfinite(v) for v in (d[key], b[key])):
+        return UNMEASURED
+    return round(abs(d[key] - b[key]), ndigits)
+
+
 def stage_controls(cuts, resonances, ring_cuts, ring_res) -> dict:
     """Rules 1 and 2 of `docs/verification-rules.md`, as a stage that runs in
     the same report as the result it guards.
@@ -479,21 +519,19 @@ def stage_controls(cuts, resonances, ring_cuts, ring_res) -> dict:
     # is recorded as one; a MIXTURE of refusals and small moves would be the
     # suspicious result, so both halves are reported.
     d = stage_linear([base], cuts, resonances, stages=3)[base]
-    n_pts = len(d["points"])
-    moved = {}
-    if d["refused"] < n_pts:            # some points still scored -- use them
-        moved = dict(moved_peak_db=round(
-            abs(d["worst_peak_db"] - ref["worst_peak_db"]), 2),
-            moved_cents=round(abs(d["worst_cents"] - ref["worst_cents"]), 1))
     inj["dropped-pole"] = dict(
         dimension="linear/resonance",
-        moved_refused_points=f"{d['refused']}/{n_pts}",
-        baseline_refused_points=f"{ref['refused']}/{len(ref['points'])}",
-        **moved)
+        moved_refused_points=_tally(d, "points"),
+        baseline_refused_points=_tally(ref, "points"),
+        moved_peak_db=_moved(d, ref, "worst_peak_db", 2, "points"),
+        moved_cents=_moved(d, ref, "worst_cents", 1, "points"))
     # a 6 % cutoff skew: the tuning defect DR 0011 guards with
     d = stage_linear([base], cuts, resonances, cut_skew=1.06)[base]
     inj["cutoff-skew-6pct"] = dict(
-        dimension="linear", moved_cents=round(abs(d["worst_cents"] - ref["worst_cents"]), 1))
+        dimension="linear",
+        moved_refused_points=_tally(d, "points"),
+        baseline_refused_points=_tally(ref, "points"),
+        moved_cents=_moved(d, ref, "worst_cents", 1, "points"))
     # a 4-entry tanh: a deliberately crude nonlinearity
     d = stage_drive([base], cfg=dict(tanh_entries=4))[base]
     b = stage_drive([base])[base]
@@ -508,7 +546,9 @@ def stage_controls(cuts, resonances, ring_cuts, ring_res) -> dict:
     m = stage_movement([base])[base]
     inj["control-quantum-32hz"] = dict(
         dimension="movement",
-        moved_residual_db=round(abs(d["worst_residual_db"] - m["worst_residual_db"]), 2))
+        moved_refused_points=_tally(d, "sweeps"),
+        baseline_refused_points=_tally(m, "sweeps"),
+        moved_residual_db=_moved(d, m, "worst_residual_db", 2, "sweeps"))
     return dict(start_red=red, injected=inj,
                 baseline=dict(linear=ref, resonance=ring))
 
