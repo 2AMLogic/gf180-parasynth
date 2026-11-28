@@ -531,6 +531,23 @@ def test_a_registry_naming_an_absent_record_refuses(root):
     assert code == 2 and "does not exist" in text
 
 
+@pytest.mark.parametrize("registry", [
+    {"schema": sens.REGISTRY_SCHEMA},
+    {"schema": sens.REGISTRY_SCHEMA, "records": []},
+    {"schema": sens.REGISTRY_SCHEMA, "records": None},
+    {"schema": sens.REGISTRY_SCHEMA, "records": "drum-kit-modes.json"},
+])
+def test_a_registry_that_lists_no_records_is_refused(root, registry):
+    """#1623 classed load_registry's `reg["records"]` read GUARDED ELSEWHERE
+    and repaired nothing; this pins the guard. The same statement's
+    `not isinstance(reg.get("records"), list) or not reg["records"]`
+    short-circuits, so the `[]` read runs only when the key is present and is
+    a list: a registry without it was REFUSED (exit 2), never a KeyError."""
+    (root / "docs/sensitivity/registry.json").write_text(json.dumps(registry))
+    code, text = run(root)
+    assert code == 2 and "no records listed" in text
+
+
 def test_show_refuses_an_unregistered_parameter():
     assert sens.main(["show", "not-a-parameter"]) == 2
     assert sens.main(["show", "drum-kit-modes"]) == 0

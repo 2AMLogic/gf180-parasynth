@@ -30,6 +30,7 @@ the index is a FAIL -- the file on disk must be the file the index describes.
 from __future__ import annotations
 import json, os, pathlib, shlex, subprocess, sys
 import refusal
+import manifest as mf
 import refaudio_local as rl
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
@@ -42,7 +43,9 @@ class Refused(refusal.Refused, Exception):
 
 
 def known_archives() -> set[str]:
-    cat = json.loads((REFAUDIO / "catalog.json").read_text(encoding="utf-8"))
+    path = REFAUDIO / "catalog.json"
+    cat = json.loads(path.read_text(encoding="utf-8"))
+    mf.require_keys(cat, "packs", f"the reference-audio catalog at {path}", refused=Refused)
     return {p["archive"] for p in cat["packs"]}
 
 
