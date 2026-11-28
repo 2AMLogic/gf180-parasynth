@@ -15,11 +15,16 @@ put it -- so what has to be tested is the bound, not a fit:
     sweep reports the garbage that motivated the refusal;
   * that `main` answers a failed shared control with the declared REFUSED
     status, not with a measured FAIL (#1789), and that passing controls do
-    not refuse.
+    not refuse;
+  * that a refusal RAISED inside the work -- a non-finite `--taus` reaching
+    `run_case.prepare` -- is the same REFUSED status with its reason as the
+    only line printed, while an execution error at the same boundary still
+    exits 1 (#1891).
 """
 import json
 import math
 import pathlib
+import subprocess
 import sys
 
 import numpy as np
@@ -30,7 +35,8 @@ import cymbal_m_origin as mo  # noqa: E402
 import cymbal_low_tail as lt  # noqa: E402
 from exit_contract import PASS, REFUSED  # noqa: E402
 
-RESULT = pathlib.Path(__file__).resolve().parents[1] / "docs/scorecard/cymbal-369/low-tail/low-tail.json"
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+RESULT = ROOT / "docs/scorecard/cymbal-369/low-tail/low-tail.json"
 
 
 # --------------------------------------------------------------------------
@@ -242,3 +248,92 @@ def test_control_passing_controls_do_not_refuse(monkeypatch, capsys, tmp_path):
     out = capsys.readouterr().out
     assert rc == PASS
     assert "REFUSED: the shared instrument's own controls do not pass" not in out
+
+
+# --------------------------------------------------------------------------
+# a refusal RAISED inside the work, not returned by `lt.check()` (#1891)
+# --------------------------------------------------------------------------
+@pytest.mark.parametrize("taus", ["nan,0.5,0.1", "0,0.5,0.1"], ids=["nan-parses", "zero-tau"])
+def test_main_refuses_a_non_finite_taus_rather_than_traceback(monkeypatch, capsys, taus):
+    """Red first on ff1532c5. `float("nan")` parses, and a tau of 0 makes `-t/0`
+    NaN at t=0, so `envelope()` returns NaN, `mixture()`'s `peak <= 0`
+    silent-check is False (NaN compares False against any bound, #133), and
+    `run_case.prepare` refuses the mix as non-finite audio. That is a
+    `preparation_contract.Refused` -- a SIBLING of this module's own `Refused`,
+    sharing only the base -- and it left `main` as an uncaught exit-1 traceback
+    AFTER all 15 lines of the energy report had printed, "the chain is SHORT by
+    9.36 dB" among them: a refusal rendered as FAIL, with a verdict on top.
+    Now the REFUSED line IS the report, so exit status and stdout agree that
+    nothing was measured (tools/exit_contract.py)."""
+    monkeypatch.setattr(mo.lt, "check", lambda: (True, []))
+    rc = mo.main(["--taus", taus, "--no-grid"])
+    out = capsys.readouterr().out
+    assert rc == REFUSED
+    lines = out.splitlines()
+    assert len(lines) == 1 and lines[0].startswith("REFUSED: "), out
+    assert "non-finite" in lines[0] and "NaN" in lines[0], lines[0]
+
+
+def test_main_refuses_on_a_sibling_modules_refusal_too(monkeypatch, capsys):
+    """The handler catches the family BASE, not just the two classes #1891
+    met. `band_energies` reaches `cymbal_tone_realisation.level_corner_hz`,
+    whose `Refused` is a third sibling (#1878's escape); with the handler
+    narrowed to the local class and `preparation_contract.Refused`, every other
+    test here would still pass and that path would traceback again. Planted at
+    the callee by name; the real artifact preconditions are #1878's to drive."""
+    monkeypatch.setattr(mo.lt, "check", lambda: (True, []))
+
+    def _artifact_absent(*args, **kwargs):
+        raise mo.tr.Refused("injected: werner_fig4 is absent")
+
+    monkeypatch.setattr(mo.tr, "level_corner_hz", _artifact_absent)
+    rc = mo.main(["--no-grid"])
+    assert rc == REFUSED
+    assert capsys.readouterr().out == "REFUSED: injected: werner_fig4 is absent\n"
+
+
+def test_control_a_plain_assertion_error_is_not_refused(monkeypatch, capsys):
+    """The injected defect for the test above: a handler written as
+    `except Exception` would pass it. Forced where the refusal is raised -- in
+    `mixture`, called from inside the guarded region -- a plain `AssertionError`
+    must propagate out of `main` untouched: through `raise SystemExit(main())`
+    that is exit 1 with a traceback, an EXECUTION ERROR, and nothing prints
+    REFUSED (tools/refusal.py's "inverse defect")."""
+    monkeypatch.setattr(mo.lt, "check", lambda: (True, []))
+
+    def _not_a_refusal(*args, **kwargs):
+        raise AssertionError("injected: an execution error, not a refusal")
+
+    monkeypatch.setattr(mo, "mixture", _not_a_refusal)
+    with pytest.raises(AssertionError, match="injected"):
+        mo.main(["--no-grid"])
+    assert "REFUSED" not in capsys.readouterr().out
+
+
+def test_control_a_malformed_taus_is_not_refused(monkeypatch, capsys):
+    """`--taus 1,2` names two bands and `zip` truncates silently, so -- contrary
+    to the issue's expectation -- the parse does not raise. The `KeyError` for
+    the missing `short` band surfaces INSIDE the guarded region, in `envelope`,
+    which is exactly where an over-wide handler would relabel it.
+    (`--taus a,b,c` is a `ValueError` at the parse, before the handler.)"""
+    monkeypatch.setattr(mo.lt, "check", lambda: (True, []))
+    with pytest.raises(KeyError, match="short"):
+        mo.main(["--taus", "1,2", "--no-grid"])
+    assert "REFUSED" not in capsys.readouterr().out
+
+
+def test_cli_refuses_a_non_finite_taus_with_exit_2_through_the_real_entry_point(tmp_path):
+    """The same input through `__main__` and `raise SystemExit(main())`, with
+    the real `lt.check()` (synthetic controls, no render), because the exit
+    STATUS is what `tools/run_all.py` reads: 2, not 1. A refused run must also
+    leave no `--out` result behind -- a file is data."""
+    out_file = tmp_path / "result.json"
+    p = subprocess.run(
+        [sys.executable, str(ROOT / "tools" / "cymbal_m_origin.py"),
+         "--taus", "nan,0.5,0.1", "--no-grid", "--out", str(out_file)],
+        capture_output=True, text=True, timeout=600, cwd=str(ROOT))
+    assert p.returncode == REFUSED, (p.returncode, p.stdout[-400:], p.stderr[-400:])
+    assert "Traceback" not in p.stderr, p.stderr[-400:]
+    lines = p.stdout.splitlines()
+    assert len(lines) == 1 and lines[0].startswith("REFUSED: "), p.stdout[-400:]
+    assert not out_file.exists(), "a refused run wrote a result file"
