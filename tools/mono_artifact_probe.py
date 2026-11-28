@@ -392,6 +392,7 @@ PROPERTIES = {
     "output_rail_samples": lambda r: r["clip"]["output_rail_samples"],
     "dropout_depth_db": lambda r: r["dropout_depth_db"],
 }
+OUTPUT_FIELDS = ("unwanted_dbfs", "image_dbfs", "residual_dbfs", "upper_wanted_rel_db")
 EXPECTED = {   # the property each control exists to move
     "ALIAS_NOBLEP": "image_dbfs", "DARKEN_LP4K": "upper_wanted_rel_db",
     "SPUR_M70": "residual_dbfs", "CLIP_2XFS": "output_rail_samples",
@@ -418,13 +419,29 @@ def _moved_way(prop, clean, dirty, sign) -> bool:
     return (dirty - clean) * sign > 0
 
 
+def _output_refusal(stage) -> str | None:
+    """Why a MEASURED row's output stage cannot feed the control matrix, else
+    None. measure_point keeps the row MEASURED while a stage refuses, so the
+    stage's own text is returned for a refusal; a stage holding no number
+    for a field the matrix reads is named instead."""
+    if not isinstance(stage, dict):
+        return f"output stage is {type(stage).__name__}, not a measurement"
+    if "refused" in stage:
+        return str(stage["refused"])
+    missing = [f for f in OUTPUT_FIELDS if stage.get(f) is None]
+    return f"output stage lacks {', '.join(missing)}" if missing else None
+
+
 def controls(engine="r1", note=84, wave="saw") -> dict:
     """Run every injection on one canary; exit status says whether each control
-    moved its intended property on a clean baseline that itself measured."""
+    moved its intended property on a clean baseline whose output stage measured."""
     patch = held_patch(waves=(wave,) * 3)
     clean = measure_point(engine, note, patch)
     if clean["verdict"] != "MEASURED":
         raise Refused("clean control baseline did not measure")
+    why = _output_refusal(clean["stages"].get("output"))
+    if why is not None:
+        raise Refused(f"clean control baseline output stage refused: {why}")
     matrix, caught = {}, {}
     for inj in INJECTIONS:
         dirty = measure_point(engine, note, patch, inject=inj)

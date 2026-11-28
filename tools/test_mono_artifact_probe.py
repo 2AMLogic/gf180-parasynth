@@ -7,8 +7,10 @@ exercise the voice only to show the controls turn the probe red.
 """
 from __future__ import annotations
 
+import json
 import math
 import pathlib
+import re
 import sys
 
 import numpy as np
@@ -147,6 +149,79 @@ def test_pulse2x_engine_changes_pulse():
 def test_every_control_moves_its_property():
     res = p.controls("r1", 84, "saw")
     assert res["all_caught"], res["caught"]
+
+
+# ---- controls: a clean baseline whose output stage refused is REFUSED, never BLIND
+# measure_point marks a row MEASURED while its stages refuse, so a reader that
+# indexes stages["output"] through .get() reads None and calls the control BLIND.
+OUTPUT_KEYS = ("unwanted_dbfs", "image_dbfs", "residual_dbfs", "upper_wanted_rel_db")
+STAGE_TEXT = "f0 16.35 Hz is 12.3 bins; need >= 16"
+
+
+def _measured_row(output) -> dict:
+    """A row measure_point marks MEASURED whatever its output stage holds."""
+    return {"verdict": "MEASURED", "stages": {"output": output},
+            "clip": {"output_rail_samples": 0}, "dropout_depth_db": -0.1}
+
+
+def test_controls_refuse_when_the_clean_output_stage_refused(monkeypatch):
+    monkeypatch.setattr(p, "measure_point",
+                        lambda engine, note, patch, inject="": _measured_row({"refused": STAGE_TEXT}))
+    with pytest.raises(p.Refused) as e:
+        p.controls("r1", 12, "saw")
+    assert str(e.value) == f"clean control baseline output stage refused: {STAGE_TEXT}"
+
+
+@pytest.mark.parametrize("how", ["absent", "none"])
+@pytest.mark.parametrize("field", OUTPUT_KEYS)
+def test_controls_refuse_when_the_clean_output_stage_lacks_a_field(monkeypatch, field, how):
+    stage = {k: -60.0 for k in OUTPUT_KEYS}
+    if how == "absent":
+        del stage[field]
+    else:
+        stage[field] = None
+    monkeypatch.setattr(p, "measure_point", lambda engine, note, patch, inject="": _measured_row(stage))
+    with pytest.raises(p.Refused, match=f"output stage refused: output stage lacks {field}$"):
+        p.controls("r1", 84, "saw")
+
+
+def test_controls_refuse_when_the_clean_output_stage_is_not_a_measurement(monkeypatch):
+    monkeypatch.setattr(p, "measure_point", lambda engine, note, patch, inject="": _measured_row(None))
+    with pytest.raises(p.Refused, match="output stage refused: output stage is NoneType"):
+        p.controls("r1", 84, "saw")
+
+
+def test_output_fields_are_the_output_stage_fields_the_matrix_reads():
+    read = set()
+
+    class Recording(dict):
+        def get(self, key, default=None):
+            read.add(key)
+            return None
+
+    row = {"stages": {"output": Recording()}, "clip": {"output_rail_samples": 0},
+           "dropout_depth_db": -0.1}
+    for get in p.PROPERTIES.values():
+        get(row)
+    assert read == set(p.OUTPUT_FIELDS) == set(OUTPUT_KEYS)
+
+
+def test_controls_cli_refuses_a_low_note_and_writes_no_report(tmp_path, capsys):
+    out = tmp_path / "controls-12.json"
+    rc = p.main(["controls", "--note", "12", "--out", str(out)])
+    assert rc == 2
+    assert re.fullmatch(r"REFUSED: clean control baseline output stage refused: "
+                        r"f0 \d+\.\d\d Hz is \d+\.\d bins; need >= 16", capsys.readouterr().out.strip())
+    assert not out.exists()
+
+
+def test_controls_cli_at_the_default_note_is_unchanged(tmp_path, capsys):
+    out = tmp_path / "controls-84.json"
+    rc = p.main(["controls", "--out", str(out)])
+    lines = capsys.readouterr().out.splitlines()
+    assert rc == 0
+    assert lines[:6] == [f"{inj:14s} CAUGHT  expected {p.EXPECTED[inj]}" for inj in p.INJECTIONS]
+    assert json.loads(out.read_text())["caught"] == {inj: True for inj in p.INJECTIONS}
 
 
 def test_out_of_domain_stimuli_refuse():
