@@ -646,6 +646,26 @@ def test_reference_gate_refuses_a_malformed_manifest(tmp_path, manifest):
     assert g["status"] == "REFUSED" and g["dc"] == "REFUSED" and g["reasons"], g
 
 
+# #1777: the one deliberately-total handler in `reference_gate`, and why it
+# stays total. Its try is two stdlib calls (`read_text`, `json.loads`) on a
+# path `is_file()` has just asserted, and every exception they raise reports
+# the FILE, so nothing is narrowed there. This pins that the handler is
+# load-bearing: a manifest that is not JSON, or not text at all, is REFUSED
+# with the reason that names it, never a traceback. Narrowed to
+# `except refusal.Refused`, both controls go red (checked by mutation).
+@pytest.mark.parametrize("write", [
+    lambda p: p.write_text("{not json"),
+    lambda p: p.write_bytes(b"\xff\xfe\x00binary")],
+    ids=["not-json", "not-utf8"])
+def test_reference_gate_refuses_a_manifest_it_cannot_read(tmp_path, write):
+    root = pathlib.Path(_corpus(tmp_path))
+    write(root / "manifest.json")
+    g = R.reference_gate(str(root), environ={})
+    assert g["status"] == "REFUSED" and g["dc"] == "REFUSED", g
+    assert len(g["reasons"]) == 1, g
+    assert g["reasons"][0].startswith("manifest unreadable: "), g
+
+
 # ==== #618: the output stage's final quantisation (same-accumulator apparatus) ======
 # ONE int64 accumulator is retained per render; floor (production) and exact
 # integer round-half-even are derived from THAT accumulator. Every expected

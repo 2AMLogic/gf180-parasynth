@@ -236,6 +236,14 @@ def filter_record(path: pathlib.Path | None = None) -> dict:
                       "decay": wf.fit_structure(*curves["Hh2"], "hp2")["gain_db"],
                       "short": wf.fit_structure(*curves["Hh3"], "hp3")["gain_db"]}
         except Exception as exc:                       # noqa: BLE001
+            # Deliberately total, and safe: `wf.peak` and `wf.fit_structure`
+            # raise no `Refused` of their own. A curve that cannot be read as a
+            # filter -- a non-finite level, 0 Hz, a pass band outside the fit's
+            # bounds -- surfaces as numpy's or scipy's own exception, and this
+            # handler is what turns it into the refusal the docstring promises;
+            # narrowed to the refusal classes, those would exit 1 with a
+            # traceback. The bound: a bug in those two functions would be
+            # filed the same way (#1777).
             raise Refused(f"{p}'s curves could not be read as band-pass peaks "
                           f"/ high-pass pass bands: {exc}") from None
         want_peak = dict(cc.BP_PEAK_DB)

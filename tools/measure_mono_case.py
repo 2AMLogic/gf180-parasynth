@@ -101,7 +101,16 @@ def _apparatus() -> dict:
         # osc_tone calls select_osc, which renders and checks oscillator type,
         # shape, width and unison readbacks before returning audio.
         ref = rig.osc_tone(WAVE, NOTE, SECONDS)
-    except Exception as exc:  # pragma: no cover - host-specific
+    except (refusal.Refused, RuntimeError, AssertionError) as exc:
+        # The callee's refusal vocabulary, and nothing wider. `reference_rigs`
+        # refuses construction in RuntimeError (a pin, a name or a readback
+        # that does not hold) and in bare-`assert` readback checks, the battery
+        # in RigRefusal and the estimators in InsufficientEvidence -- both
+        # AssertionError subclasses (#1751, #1763). A bug is still an execution
+        # error: the common ones (KeyError, TypeError, ValueError, IndexError,
+        # AttributeError) propagate with their traceback. The bound, stated: a
+        # bug that raises RuntimeError or AssertionError is still filed here as
+        # a refusal, because this callee refuses in those types (#1777).
         raise Refused(f"qualified Surge apparatus refused: {exc}") from exc
     if len(ref) < int(0.5 * SR) or not np.isfinite(ref).all() or np.max(np.abs(ref)) < 1e-5:
         raise Refused("Surge returned short, non-finite, or silent reference audio")

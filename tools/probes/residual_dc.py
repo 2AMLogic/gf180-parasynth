@@ -563,6 +563,13 @@ def reference_gate(path=None, environ=None):
     try:
         m = json.loads(mf.read_text())
     except Exception as e:                                   # noqa: BLE001
+        # Deliberately total, and safe: the try is two stdlib calls on a path
+        # `is_file()` has just asserted -- `read_text()` (OSError; a
+        # UnicodeDecodeError, which is a ValueError) and `json.loads`
+        # (JSONDecodeError, a ValueError; RecursionError on nesting Python
+        # cannot decode). Every one of them reports the FILE, and nothing of
+        # this repository's own logic is under the try, so no estimator bug can
+        # be filed as this refusal (#1777).
         return dict(status="REFUSED", dc="REFUSED", root=str(root), reasons=[f"manifest unreadable: {e}"])
     if not isinstance(m, dict):
         return dict(status="REFUSED", dc="REFUSED", root=str(root), reasons=["manifest is not a JSON object"])

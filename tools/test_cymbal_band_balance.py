@@ -298,6 +298,35 @@ def test_the_filter_record_refuses_when_absent_or_malformed(tmp_path):
     assert "Hbp2" in str(e.value)
 
 
+def _artifact(tmp_path, name, curve, field, value):
+    """The committed werner-fig4 artifact with one curve's ordinates replaced."""
+    curves, _blob = wf.from_artifact()
+    moved = {k: {"hz": [float(v) for v in h], "db": [float(v) for v in d]}
+             for k, (h, d) in curves.items()}
+    moved[curve][field] = [value] * len(moved[curve][field])
+    p = tmp_path / name
+    p.write_text(json.dumps({"curves": moved}))
+    return p
+
+
+# #1777: `filter_record`'s one total handler, and why it stays total. `wf.peak`
+# and `wf.fit_structure` raise no `Refused` of their own: a curve that cannot
+# be read as a filter surfaces as numpy's or scipy's own exception (a
+# non-finite level, or 0 Hz, makes `least_squares` refuse its initial guess or
+# its SVD), and this handler is what turns that into the refusal the docstring
+# promises. Narrowing it to the refusal classes would make these exit 1 with a
+# traceback -- checked by mutation: narrowed to `wf.Refused`, both controls
+# go red. The length guards above (5 points, equal) let both through.
+@pytest.mark.parametrize("curve, field, value", [
+    ("Hh2", "db", math.inf), ("Hh1", "hz", 0.0)],
+    ids=["non-finite-level", "zero-frequency"])
+def test_the_filter_record_refuses_a_curve_that_cannot_be_read_as_a_filter(tmp_path, curve, field, value):
+    with np.errstate(all="ignore"):
+        with pytest.raises(bb.Refused, match="could not be read as band-pass peaks") as e:
+            bb.filter_record(_artifact(tmp_path, "unreadable.json", curve, field, value))
+    assert str(e.value).startswith(str(tmp_path / "unreadable.json")), str(e.value)
+
+
 def test_the_filter_record_refuses_a_curve_that_disagrees_with_the_pinned_constants(tmp_path):
     """A well-formed artifact carrying an obviously wrong peak must move the
     gate, not just a missing one -- the control CLAUDE.md asks for: hand it a

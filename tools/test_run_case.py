@@ -2812,3 +2812,65 @@ def test_a_bench_that_exited_nonzero_is_refused_whatever_it_printed(tmp_path, mo
     res = _m5a_run(monkeypatch, tmp_path, _smoke_report, returncode=1)
     assert _board(res) == sb.NO_VERDICT
     assert "did not pass" in res["note"], res["note"]
+
+
+# ---------------------------------------------------------------------------
+# #1777: `_measure_case`'s guard. An execution error is not a refusal.
+#
+# The guard filed whatever was not one of three named refusal classes as
+# `REFUSED: <type>: ...`, so a bug in a case's measurement read as a missing
+# precondition -- and a refusal of a FOURTH family was filed the same way,
+# with a traceback, which `main()` counts as an unexpected internal error.
+# RED FIRST against the unfixed guard (2026-11-28, origin/main @ 1c56aaf6):
+# the three execution-error controls failed on the note (`REFUSED:
+# KeyError: ...`) and the `holdout` control on `REFUSED: Refused: injected:
+# ...` plus a traceback. With the fix: 7 passed. By mutation: the old
+# three-class tuple put back turns the `holdout` control red alone, and the
+# old label put back turns the three execution-error controls red.
+# ---------------------------------------------------------------------------
+#: One refusal class per family `_measure_case` can meet. `holdout` is the one
+#: the old refusal handler did not name.
+REFUSAL_FAMILIES = {"run_case": rc.Refused, "refprofile": rp.Refused,
+                    "mono_m5a_score": rc.mono_m5a.Refused, "holdout": rc.holdout.Refused}
+
+
+def _measure_with(monkeypatch, tmp_path, exc):
+    """One drum case through the real `_measure_case`, with the family runner
+    raising `exc`: everything up to and including the handlers under test is
+    the shipped code."""
+    def callee(*_a, **_k):
+        raise exc
+    monkeypatch.setattr(rc, "run_drum_case", callee)
+    case = next(c for c in rc.load_cases() if rc.plan_for(c["case_id"]) == "drum")
+    return case, rc._measure_case(case, tmp_path, "", False, results_dir=str(tmp_path))
+
+
+@pytest.mark.parametrize("bug", [
+    KeyError("injected bug"), TypeError("injected bug"), AttributeError("injected bug")],
+    ids=["KeyError", "TypeError", "AttributeError"])
+def test_measure_case_files_a_bug_as_an_execution_error_not_a_refusal(monkeypatch, tmp_path, bug):
+    """#1777's injected-bug control. The guard filed whatever it caught as
+    `REFUSED: <type>: ...`, so a bug in a case's measurement read as a missing
+    precondition. It still catches -- one case's crash must not abandon the
+    cases after it -- but under its own label, with the traceback on the
+    record and no number in the metrics."""
+    case, res = _measure_with(monkeypatch, tmp_path, bug)
+    assert res["note"] == f"EXECUTION ERROR: {type(bug).__name__}: {bug}", res["note"]
+    assert "injected bug" in res["traceback"], res["traceback"]
+    assert res["metrics"] and all(not m.get("valid", True) for m in res["metrics"].values())
+    assert sb.evaluate(case, res)["state"] == sb.NO_VERDICT
+
+
+@pytest.mark.parametrize("family", sorted(REFUSAL_FAMILIES))
+def test_measure_case_files_every_familys_refusal_as_refused(monkeypatch, tmp_path, family):
+    """Its paired positive control: a refusal raised under the try is `REFUSED:`
+    with no traceback, whichever module raised it. The refusal handler named
+    three classes, so the fourth family (`holdout`) fell to the guard, which
+    wrote `REFUSED: Refused: ...` WITH a traceback -- and `main()` counts a
+    record carrying one as an unexpected internal error."""
+    cls = REFUSAL_FAMILIES[family]
+    case, res = _measure_with(monkeypatch, tmp_path, cls("injected: a stated missing precondition"))
+    assert res["note"] == "REFUSED: injected: a stated missing precondition", res["note"]
+    assert "traceback" not in res, res.get("traceback")
+    assert res["metrics"] and all(not m.get("valid", True) for m in res["metrics"].values())
+    assert sb.evaluate(case, res)["state"] == sb.NO_VERDICT
