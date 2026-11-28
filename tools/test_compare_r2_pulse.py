@@ -12,12 +12,17 @@ import compare_r2_pulse as c  # noqa: E402
 import mono_artifact_probe as probe
 
 
-def _row(engine, drive, unw=-60.0, rel=-50.0, up=-15.0, nominal_drive=None):
+_UNMEASURED = object()
+
+
+def _row(engine, drive, unw=-60.0, rel=-50.0, up=-15.0, nominal_drive=None, dropout=-0.1):
     r = {"engine": engine, "note": 84, "verdict": "MEASURED",
          "patch": {"waves": ["pulse29"] * 3, "cutoff": [20000, 20000], "q": 0.0, "drive": drive},
          "stages": {"output": {"unwanted_dbfs": unw, "unwanted_rel_db": rel, "upper_wanted_rel_db": up,
                                "intended_dbfs": -12.0, "residual_dbfs": -80.0}},
-         "clip": {"output_rail_samples": 0}, "dropout_depth_db": -0.1}
+         "clip": {"output_rail_samples": 0}, "dropout_depth_db": dropout}
+    if dropout is _UNMEASURED:
+        del r["dropout_depth_db"]
     if nominal_drive is not None:
         r["nominal"] = {"waves": ["pulse29"] * 3, "cutoff": [20000, 20000], "q": 0.0, "drive": nominal_drive}
     return r
@@ -41,6 +46,71 @@ def test_1_02_db_worse_fails_a_1_00_db_band():
 def test_darker_is_the_adverse_direction_for_brightness():
     recs, _ = c.compare([_row("r1", 0.75, up=-15.0), _row("pulse2x", 0.75, up=-16.5)])
     assert recs[0]["fails_declared_rule"] == ["upper_wanted_rel_db"]
+
+
+def test_exact_zero_candidate_block_is_a_new_dropout():
+    recs, counts = c.compare([_row("r1", 0.75), _row("pulse2x", 0.75, dropout=None)])
+    assert counts == {"measured": 1, "refused": 0, "not_run": 0}
+    assert recs[0]["verdict"] == "FAIL"
+    assert recs[0]["fails_declared_rule"] == ["new dropout"]
+    assert recs[0]["dropout_depth_db"] == {"r1": -0.1, "candidate": None}
+    assert c.tally(recs)["new_dropout"] == 1
+    assert c.tally(recs)["dropout_no_verdict"] == 0
+
+
+@pytest.mark.parametrize("candidate", [-40.0, None])
+@pytest.mark.parametrize("baseline", [-40.0, None])
+def test_a_dropout_the_baseline_already_had_is_not_new(baseline, candidate):
+    recs, _ = c.compare([_row("r1", 0.75, dropout=baseline), _row("pulse2x", 0.75, dropout=candidate)])
+    assert recs[0]["verdict"] == "PASS"
+    assert recs[0]["dropout_depth_db"] == {"r1": baseline, "candidate": candidate}
+    assert c.tally(recs)["new_dropout"] == 0
+
+
+def test_absent_dropout_key_is_unmeasured_and_is_not_a_present_null():
+    def single(base, cand):
+        recs, _ = c.compare([_row("r1", 0.75, dropout=base), _row("pulse2x", 0.75, dropout=cand)])
+        return recs[0], c.tally(recs)
+
+    present, tallied = single(-0.1, None)
+    absent, _ = single(-0.1, _UNMEASURED)
+    assert present["dropout_depth_db"]["candidate"] is None
+    assert absent["dropout_depth_db"]["candidate"] is None
+    assert present["verdict"] == "FAIL" and absent["verdict"] == "PASS"
+    assert absent["dropout_depth_db"] == {"r1": -0.1, "candidate": None, "verdict": "NO VERDICT"}
+    baseline_absent, _ = single(_UNMEASURED, None)
+    both_absent, _ = single(_UNMEASURED, _UNMEASURED)
+    for rec in (baseline_absent, both_absent):
+        assert rec["verdict"] == "PASS"
+        assert rec["dropout_depth_db"]["verdict"] == "NO VERDICT"
+    assert baseline_absent["dropout_depth_db"] == {"r1": None, "candidate": None, "verdict": "NO VERDICT"}
+    assert both_absent["dropout_depth_db"] == {"r1": None, "candidate": None, "verdict": "NO VERDICT"}
+    assert tallied["new_dropout"] == 1 and tallied["dropout_no_verdict"] == 0
+    _, tallied = single(_UNMEASURED, _UNMEASURED)
+    assert tallied["new_dropout"] == 0 and tallied["dropout_no_verdict"] == 1
+
+
+@pytest.mark.parametrize("baseline, candidate", [(-0.1, "REFUSED"), ("REFUSED", -0.1), ("REFUSED", "REFUSED")])
+def test_refused_dropout_depth_in_an_archived_row_is_unmeasured_not_a_crash(baseline, candidate):
+    recs, _ = c.compare([_row("r1", 0.75, dropout=baseline), _row("pulse2x", 0.75, dropout=candidate)])
+    assert recs[0]["verdict"] == "PASS"
+    assert recs[0]["dropout_depth_db"] == {"r1": baseline, "candidate": candidate, "verdict": "NO VERDICT"}
+    assert c.tally(recs)["dropout_no_verdict"] == 1
+
+
+@pytest.mark.parametrize(
+    "baseline, candidate, new, no_verdict",
+    [(-0.1, None, 1, 0), (-0.1, -40.0, 1, 0), (-40.0, None, 0, 0), (None, None, 0, 0),
+     (-0.1, "REFUSED", 0, 1), (_UNMEASURED, None, 0, 1), (-0.1, _UNMEASURED, 0, 1)],
+)
+def test_summary_new_dropouts_follow_the_same_rule(tmp_path, baseline, candidate, new, no_verdict):
+    record = tmp_path / "sweep.json"
+    record.write_text(json.dumps({"rows": [_row("r1", 0.75, dropout=baseline),
+                                           _row("pulse2x", 0.75, dropout=candidate)]}))
+    confirmation = probe.summarize([record])["confirmation"]
+    assert confirmation["development"]["new_dropouts"] == new
+    assert confirmation["development"]["dropout_no_verdict"] == no_verdict
+    assert confirmation["untouched"]["new_dropouts"] == 0
 
 
 @pytest.mark.parametrize(

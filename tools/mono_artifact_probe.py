@@ -188,8 +188,12 @@ def split_spectrum(x, sr: float, f0: float, *, band_hz: float | None = None,
     }
 
 
-def dropout_depth_db(x) -> float:
-    """Worst 5 ms block RMS relative to the median block, in dB (0 = steady)."""
+def dropout_depth_db(x) -> float | None:
+    """Worst 5 ms block RMS relative to the median block, in dB (0 = steady).
+
+    None when the worst block is exactly zero: no finite ratio exists. The
+    20*log10(1e-12 / median) this used to print for that case was the floor,
+    not a reading."""
     x = np.asarray(x, dtype=np.float64)
     m = len(x) // DROPOUT_BLOCK
     if m < 8:
@@ -199,7 +203,40 @@ def dropout_depth_db(x) -> float:
     med = float(np.median(r))
     if med <= 0:
         raise Refused("silent: median block RMS is zero")
-    return round(20.0 * math.log10(max(float(r.min()), 1e-12) / med), 3)
+    worst = float(r.min())
+    if worst == 0.0:
+        return None
+    return round(20.0 * math.log10(worst / med), 3)
+
+
+def is_dropout(db) -> bool | None:
+    """The one rule every reader of `dropout_depth_db` applies.
+
+    True: a dropout -- an exactly-zero block (`dropout_depth_db` is None, for
+    which no finite dB exists) or a block DROPOUT_DB under the median. False:
+    measured, no dropout. None: nothing to judge -- the value is not a number
+    (an archived "REFUSED", a NaN), which is neither a pass nor a fail."""
+    if db is None:
+        return True
+    if isinstance(db, bool) or not isinstance(db, (int, float)):
+        return None
+    if isinstance(db, float) and math.isnan(db):
+        return None
+    return db < DROPOUT_DB
+
+
+def new_dropout(base_row, cand_row) -> bool | None:
+    """The dropout clause of the declared rule for one paired point: True only
+    when both rows carry a measured `dropout_depth_db` and the candidate has a
+    dropout the baseline has not. None when either row lacks the measurement
+    (key absent, or not a number): NO VERDICT, never a pass."""
+    key = "dropout_depth_db"
+    if key not in base_row or key not in cand_row:
+        return None
+    base, cand = is_dropout(base_row[key]), is_dropout(cand_row[key])
+    if base is None or cand is None:
+        return None
+    return cand and not base
 
 
 # ---- rendering -----------------------------------------------------------------
@@ -381,6 +418,12 @@ def _moved(prop, clean, dirty) -> bool:
 
 
 def _moved_way(prop, clean, dirty, sign) -> bool:
+    """Whether a control moved `prop` by more than MOVE_DB in the direction
+    `sign`. For the dropout depth None is an exactly-zero block, which ranks
+    below every measured block."""
+    if prop == "dropout_depth_db":
+        clean = -math.inf if clean is None else clean
+        dirty = -math.inf if dirty is None else dirty
     if not _moved(prop, clean, dirty) or clean is None or dirty is None:
         return False
     return (dirty - clean) * sign > 0
@@ -667,7 +710,9 @@ def summarize(paths) -> dict:
                                                 round(o_c["upper_wanted_rel_db"] - o_b["upper_wanted_rel_db"], 3)),
                       "base_rail": base["clip"]["output_rail_samples"],
                       "cand_rail": cand["clip"]["output_rail_samples"],
-                      "base_dropout_db": base["dropout_depth_db"], "cand_dropout_db": cand["dropout_depth_db"]})
+                      "base_dropout_db": base.get("dropout_depth_db"),
+                      "cand_dropout_db": cand.get("dropout_depth_db"),
+                      "new_dropout": new_dropout(base, cand)})
 
     def tally(sel):
         t = {"points": len(sel)}
@@ -680,7 +725,8 @@ def summarize(paths) -> dict:
         v = [p["d_intended_db"] for p in sel]
         t["d_intended_db"] = {"min": min(v) if v else None, "max": max(v) if v else None}
         t["new_rail_samples"] = sum(1 for p in sel if p["cand_rail"] > p["base_rail"])
-        t["new_dropouts"] = sum(1 for p in sel if p["cand_dropout_db"] < DROPOUT_DB <= p["base_dropout_db"])
+        t["new_dropouts"] = sum(1 for p in sel if p["new_dropout"] is True)
+        t["dropout_no_verdict"] = sum(1 for p in sel if p["new_dropout"] is None)
         return t
     return {"refused": refused,
             "localization": loc, "pulse2x_vs_r1": pairs,

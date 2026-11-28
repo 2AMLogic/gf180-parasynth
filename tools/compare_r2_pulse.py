@@ -18,7 +18,10 @@ fails) on
   * absolute unwanted energy (dBFS),
   * unwanted energy relative to the intended signal,
   * upper wanted power relative to intended (darker is worse),
-or when the candidate adds output rail samples or a dropout. Internal rails
+or when the candidate adds output rail samples or a dropout. An exactly-zero
+5 ms block is `dropout_depth_db: null`; it is a dropout, not a missing value.
+A row without the key (or with a non-number in it) is NO VERDICT for that
+clause and is counted as such, never dropped. Internal rails
 (oscillator, mixer, reconstruction, decimation) are reported per point and
 counted; they are not part of the declared rule and are not made so here.
 A point whose output is inactive or whose stage refused is NO VERDICT for the
@@ -89,7 +92,10 @@ def compare(rows, dev=mp.DEV_CONDITIONS):
             fails.append("new output rail samples")
         db, dc = base.get("dropout_depth_db"), cand.get("dropout_depth_db")
         rec["dropout_depth_db"] = {"r1": db, "candidate": dc}
-        if dc is not None and db is not None and dc < mp.DROPOUT_DB <= db:
+        dropout = mp.new_dropout(base, cand)
+        if dropout is None:
+            rec["dropout_depth_db"]["verdict"] = "NO VERDICT"
+        elif dropout:
             fails.append("new dropout")
         rec["fails_declared_rule"] = fails
         rec["verdict"] = "FAIL" if fails else "PASS"
@@ -109,6 +115,7 @@ def tally(recs):
                    "worst_adverse": max((x["delta"] for x in v), key=lambda d: d * dict(PROPS)[prop], default=None)}
     t["new_output_rail"] = sum(1 for r in meas if "new output rail samples" in r["fails_declared_rule"])
     t["new_dropout"] = sum(1 for r in meas if "new dropout" in r["fails_declared_rule"])
+    t["dropout_no_verdict"] = sum(1 for r in meas if r["dropout_depth_db"].get("verdict") == "NO VERDICT")
     for rail in ("oscillator_rail_samples", "mixer_rail_samples", "reconstruction_would_clip",
                  "decimation_would_clip"):
         t[f"points_with_more_{rail}"] = sum(
